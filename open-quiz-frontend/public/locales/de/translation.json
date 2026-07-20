@@ -1,0 +1,16 @@
+{
+  "app-name": "Open Quiz",
+  "professor-space": "Lehrerbereich",
+
+  "join-quiz-title": "An einem Quiz teilnehmen",
+  "join-quiz-instructions": "Gib die Informationen ein, die du von deiner Lehrkraft erhalten hast",
+  "student-id": "Schülerkennung",
+  "quiz-id": "Quiz-ID",
+
+  "sign-in": "Anmelden",
+  "legal": "Impressum",
+  "privacy": "Datenschutz",
+  "accessibility": "Barrierefreiheit",
+  "cookies": "Cookie-Einstellungen",
+  "signal": "Ein Problem melden"
+}
