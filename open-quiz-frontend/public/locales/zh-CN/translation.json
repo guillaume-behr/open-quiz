@@ -1,0 +1,16 @@
+{
+  "app-name": "Open Quiz",
+  "professor-space": "教师专区",
+
+  "join-quiz-title": "加入测验",
+  "join-quiz-instructions": "请输入老师提供的信息",
+  "student-id": "学生编号",
+  "quiz-id": "测验编号",
+
+  "sign-in": "登录",
+  "legal": "法律声明",
+  "privacy": "个人数据",
+  "accessibility": "无障碍",
+  "cookies": "Cookie 管理",
+  "signal": "报告问题"
+}

@@ -1,3 +1,16 @@
 {
-  "app-name": "Open Quiz"
+    "app-name": "Open Quiz",
+    "professor-space": "Espace professeur",
+    
+    "join-quiz-title": "Rejoindre un Quiz",
+    "join-quiz-instructions": "Saisissez les informations transmises par votre enseignant",
+    "student-id": "Identifiant",
+    "quiz-id": "Identifiant du Quiz",
+
+    "sign-in": "Se connecter",
+    "legal": "Mentions légales",
+    "privacy": "Données personnelles",
+    "accessibility": "Accessibilité",
+    "cookies": "Gestion des cookies",
+    "signal": "Signaler un problème"
 }
