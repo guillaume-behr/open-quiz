@@ -2,6 +2,16 @@
     root * /srv
     encode zstd gzip
 
+    header {
+        -Server
+        Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'"
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Resource-Policy "same-origin"
+        Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Content-Type-Options "nosniff"
+    }
+
     try_files {path} /index.html
     file_server
 }

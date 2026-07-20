@@ -3,6 +3,13 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
+    networks:
+      - open-quiz
     restart: unless-stopped
+
+networks:
+  open-quiz:
+    name: open-quiz
+    internal: true
