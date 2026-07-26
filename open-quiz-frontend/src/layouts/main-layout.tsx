@@ -1,10 +1,28 @@
 import { LanguageSelector } from "@/components/langage/langage-selector"
 import { ThemeSelector } from "@/components/theme/theme-selector"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Outlet } from "react-router"
+import { Link, Outlet, useLocation } from "react-router"
 
 export function MainLayout() {
     const { t } = useTranslation()
+
+    const [link, setLink] = useState({
+        text: "",
+        url: "",
+    })
+
+    const location = useLocation()
+    useEffect(() => {
+        switch (location.pathname) {
+            case "/":
+                setLink({ text: "professor-space", url: "/dashboard" })
+                break
+            case "/dashboard":
+                setLink({ text: "homepage", url: "/" })
+                break
+        }
+    }, [location])
 
     return (
         <div className="flex h-screen flex-col items-center justify-between">
@@ -12,12 +30,12 @@ export function MainLayout() {
                 <p className="text-3xl font-extrabold text-primary">
                     {t("app-name")}
                 </p>
-                <a
+                <Link
+                    to={link.url}
                     className="cursor-pointer font-bold text-primary underline"
-                    href=""
                 >
-                    {t("professor-space")}
-                </a>
+                    {t(link.text)}
+                </Link>
             </header>
 
             <main className="flex min-h-0 w-full flex-1">
@@ -28,23 +46,23 @@ export function MainLayout() {
             <ThemeSelector className="absolute right-2 bottom-1/13" />
 
             <footer className="flex h-1/15 w-full items-center justify-between bg-sidebar-primary px-10">
-                <p className="text-sm">© 2026 Open Quiz</p>
+                <p className="text-sm">v 2026.01</p>
                 <div className="flex items-center gap-4">
-                    <a className="cursor-pointer text-sm underline" href="">
+                    <Link className="cursor-pointer text-sm underline" to="">
                         {t("legal")}
-                    </a>
-                    <a className="cursor-pointer text-sm underline" href="">
+                    </Link>
+                    <Link className="cursor-pointer text-sm underline" to="">
                         {t("privacy")}
-                    </a>
-                    <a className="cursor-pointer text-sm underline" href="">
+                    </Link>
+                    <Link className="cursor-pointer text-sm underline" to="">
                         {t("accessibility")}
-                    </a>
-                    <a className="cursor-pointer text-sm underline" href="">
+                    </Link>
+                    <Link className="cursor-pointer text-sm underline" to="">
                         {t("cookies")}
-                    </a>
-                    <a className="cursor-pointer text-sm underline" href="">
+                    </Link>
+                    <Link className="cursor-pointer text-sm underline" to="">
                         {t("signal")}
-                    </a>
+                    </Link>
                 </div>
             </footer>
         </div>
