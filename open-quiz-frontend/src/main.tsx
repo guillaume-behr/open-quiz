@@ -1,4 +1,4 @@
-import { StrictMode, useEffect } from "react"
+import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { BrowserRouter, Route, Routes } from "react-router"
 
@@ -7,34 +7,29 @@ import { ThemeProvider } from "@/components/theme/theme-provider.tsx"
 
 import "./lib/i18n.ts"
 
-import { useTranslation } from "react-i18next"
-
 import { MainLayout } from "./layouts/main-layout.tsx"
 import { HomePage } from "./pages/HomePage.tsx"
 
-function DocumentLanguage() {
-    const { i18n } = useTranslation()
-    const language = i18n.resolvedLanguage ?? i18n.language
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { LanguageDirection } from "./components/langage/langage-direction.tsx"
+import { Dashboard } from "./pages/Dashboard.tsx"
 
-    useEffect(() => {
-        document.documentElement.lang = language
-        document.documentElement.dir = i18n.dir(language)
-    }, [language, i18n])
-
-    return null
-}
+const queryClient = new QueryClient()
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
-        <ThemeProvider>
-            <DocumentLanguage />
-            <BrowserRouter>
-                <Routes>
-                    <Route path="/" element={<MainLayout />}>
-                        <Route index element={<HomePage />} />
-                    </Route>
-                </Routes>
-            </BrowserRouter>
-        </ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+            <ThemeProvider>
+                <BrowserRouter>
+                    <Routes>
+                        <Route path="/" element={<MainLayout />}>
+                            <Route index element={<HomePage />} />
+                            <Route path="dashboard" element={<Dashboard />} />
+                        </Route>
+                    </Routes>
+                </BrowserRouter>
+                <LanguageDirection />
+            </ThemeProvider>
+        </QueryClientProvider>
     </StrictMode>
 )
