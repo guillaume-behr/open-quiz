@@ -1,4 +1,5 @@
 from time import time
+from urllib.parse import urlparse
 
 import jwt
 from cryptography.fernet import InvalidToken
@@ -47,8 +48,23 @@ def client_ip(request: Request) -> str:
 
 def validate_origin(request: Request) -> None:
     origin = request.headers.get("origin")
-    expected = request.app.state.settings.frontend_origin.rstrip("/")
-    if origin is None or origin.rstrip("/") != expected:
+    settings = request.app.state.settings
+    expected = settings.frontend_origin.rstrip("/")
+    is_allowed = origin is not None and origin.rstrip("/") == expected
+    if origin is not None and settings.environment == "development":
+        parsed_origin = urlparse(origin)
+        is_local_development = (
+            parsed_origin.scheme in {"http", "https"}
+            and parsed_origin.hostname in {"localhost", "127.0.0.1", "::1"}
+            and parsed_origin.path in {"", "/"}
+            and not parsed_origin.username
+            and not parsed_origin.password
+            and not parsed_origin.query
+            and not parsed_origin.fragment
+        )
+        is_allowed = is_allowed or is_local_development
+
+    if not is_allowed:
         audit_event(
             "auth.origin_rejected",
             ip=client_ip(request),

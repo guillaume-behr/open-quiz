@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -130,6 +131,186 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert client.get("/api/quizzes", headers=teacher_headers).json() == []
         assert (
             client.get("/api/admin/users", headers=teacher_headers).status_code == 403
+        )
+
+        first_bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": " 5e ", "chapter": " Les   fractions "},
+        )
+        assert first_bank.status_code == 201
+        assert first_bank.json()["grade_level"] == "5e"
+        assert first_bank.json()["chapter"] == "Les fractions"
+
+        second_bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "4e", "chapter": "Calcul littéral"},
+        )
+        assert second_bank.status_code == 201
+
+        question_banks = client.get(
+            "/api/question-banks",
+            headers=teacher_headers,
+        )
+        assert question_banks.status_code == 200
+        assert [
+            (bank["grade_level"], bank["chapter"])
+            for bank in question_banks.json()
+        ] == [("4e", "Calcul littéral"), ("5e", "Les fractions")]
+
+        duplicate = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "5e", "chapter": "Les fractions"},
+        )
+        assert duplicate.status_code == 409
+        assert (
+            client.get("/api/question-banks", headers=headers).status_code == 403
+        )
+
+        question_payload = {
+            "prompt": "Quelle fraction est égale à un demi ?",
+            "difficulty": "easy",
+            "answer_mode": "single",
+            "answer_mode_disclosed": False,
+            "correction_mode": "automatic",
+            "code_language": "python",
+            "code_content": "def half(value):\n    return value / 2",
+            "choices": [
+                {"label": "1/2", "is_correct": True},
+                {"label": "1/3", "is_correct": False},
+            ],
+        }
+        created_question = client.post(
+            f"/api/question-banks/{first_bank.json()['id']}/questions",
+            headers=teacher_headers,
+            data={"payload": json.dumps(question_payload)},
+            files={
+                "image": (
+                    "fraction.png",
+                    b"\x89PNG\r\n\x1a\nquestion-image",
+                    "image/png",
+                )
+            },
+        )
+        assert created_question.status_code == 201
+        question = created_question.json()
+        assert question["has_image"] is True
+        assert question["answer_mode_disclosed"] is False
+        assert question["code_language"] == "python"
+        assert "return value / 2" in question["code_content"]
+        assert [choice["is_correct"] for choice in question["choices"]] == [
+            True,
+            False,
+        ]
+        bank_with_question = next(
+            bank
+            for bank in client.get(
+                "/api/question-banks",
+                headers=teacher_headers,
+            ).json()
+            if bank["id"] == first_bank.json()["id"]
+        )
+        assert bank_with_question["question_count"] == 1
+
+        listed_questions = client.get(
+            f"/api/question-banks/{first_bank.json()['id']}/questions",
+            headers=teacher_headers,
+        )
+        assert listed_questions.status_code == 200
+        assert listed_questions.json()[0]["prompt"] == question_payload["prompt"]
+
+        image = client.get(
+            f"/api/question-banks/questions/{question['id']}/image",
+            headers=teacher_headers,
+        )
+        assert image.status_code == 200
+        assert image.headers["content-type"] == "image/png"
+        assert image.content.startswith(b"\x89PNG")
+
+        invalid_automatic_question = {
+            **question_payload,
+            "choices": [
+                {"label": "1/2", "is_correct": False},
+                {"label": "1/3", "is_correct": False},
+            ],
+        }
+        invalid_question = client.post(
+            f"/api/question-banks/{first_bank.json()['id']}/questions",
+            headers=teacher_headers,
+            data={"payload": json.dumps(invalid_automatic_question)},
+        )
+        assert invalid_question.status_code == 422
+
+        exported = client.get(
+            f"/api/question-banks/{first_bank.json()['id']}/export",
+            headers=teacher_headers,
+        )
+        assert exported.status_code == 200
+        assert "attachment;" in exported.headers["content-disposition"]
+        exported_batch = exported.json()
+        assert exported_batch["version"] == 1
+        assert exported_batch["question_bank"] == {
+            "grade_level": "5e",
+            "chapter": "Les fractions",
+        }
+        assert exported_batch["questions"][0]["image"]["content_type"] == "image/png"
+        assert exported_batch["questions"][0]["code_language"] == "python"
+
+        imported = client.post(
+            f"/api/question-banks/{second_bank.json()['id']}/import",
+            headers=teacher_headers,
+            json=exported_batch,
+        )
+        assert imported.status_code == 201
+        assert len(imported.json()) == 1
+        assert imported.json()[0]["prompt"] == question_payload["prompt"]
+        assert imported.json()[0]["has_image"] is True
+
+        example = client.get(
+            "/api/question-banks/example",
+            headers=teacher_headers,
+        )
+        assert example.status_code == 200
+        example_batch = example.json()
+        assert example_batch["version"] == 1
+        assert {
+            (item["answer_mode"], item["correction_mode"])
+            for item in example_batch["questions"]
+        } == {
+            ("single", "automatic"),
+            ("multiple", "automatic"),
+            ("single", "manual"),
+            ("multiple", "manual"),
+        }
+        assert any(item["image"] for item in example_batch["questions"])
+        assert any(item["code_content"] for item in example_batch["questions"])
+
+        updated_payload = {
+            **question_payload,
+            "prompt": "Quelle fraction représente exactement la moitié ?",
+            "difficulty": "medium",
+            "code_language": "javascript",
+            "code_content": "const half = (value) => value / 2;",
+            "remove_image": True,
+        }
+        updated = client.post(
+            f"/api/question-banks/questions/{question['id']}/update",
+            headers=teacher_headers,
+            data={"payload": json.dumps(updated_payload)},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["prompt"] == updated_payload["prompt"]
+        assert updated.json()["difficulty"] == "medium"
+        assert updated.json()["code_language"] == "javascript"
+        assert updated.json()["has_image"] is False
+        assert (
+            client.get(
+                f"/api/question-banks/questions/{question['id']}/image",
+                headers=teacher_headers,
+            ).status_code
+            == 404
         )
 
 
@@ -282,6 +463,34 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
         rejected = client.post(
             "/api/auth/login",
             headers={"Origin": "https://attacker.example"},
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        assert rejected.status_code == 403
+
+
+def test_development_accepts_local_vite_origin_on_another_port(
+    tmp_path: Path,
+) -> None:
+    app_settings = settings_for(
+        tmp_path / "development.db",
+        environment="development",
+    )
+    with TestClient(
+        create_app(app_settings),
+        headers={"Origin": "http://localhost:5174"},
+    ) as client:
+        accepted = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        assert accepted.status_code == 200
+
+    with TestClient(
+        create_app(app_settings),
+        headers={"Origin": "http://attacker.example"},
+    ) as client:
+        rejected = client.post(
+            "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
         )
         assert rejected.status_code == 403

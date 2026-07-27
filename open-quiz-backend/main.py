@@ -14,7 +14,7 @@ from app.config import Settings, get_settings
 from app.database import build_session_factory
 from app.models import RefreshSession, RefreshSessionFamily, SecurityState, User
 from app.rate_limit import LoginRateLimiter
-from app.routers import admin, auth, health, quizzes, users
+from app.routers import admin, auth, health, question_banks, quizzes, users
 from app.security import hash_password, verify_password
 
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
@@ -186,6 +186,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin],
+        allow_origin_regex=(
+            r"https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?"
+            if settings.environment == "development"
+            else None
+        ),
         allow_credentials=True,
         allow_methods=["GET", "POST"],
         allow_headers=["Authorization", "Content-Type"],
@@ -195,6 +200,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def security_headers(request: Request, call_next):
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             response = None
+            request_size_limit = settings.max_request_body_bytes
+            if (
+                request.method == "POST"
+                and request.url.path.startswith("/api/question-banks/")
+                and (
+                    request.url.path.endswith("/questions")
+                    or request.url.path.endswith("/import")
+                    or request.url.path.endswith("/update")
+                )
+            ):
+                request_size_limit = max(request_size_limit, 20 * 1024 * 1024)
             content_length = request.headers.get("content-length")
             try:
                 declared_length = int(content_length) if content_length else None
@@ -206,7 +222,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 declared_length = None
             if response is None and (
                 declared_length is not None
-                and declared_length > settings.max_request_body_bytes
+                and declared_length > request_size_limit
             ):
                 response = JSONResponse(
                     status_code=413,
@@ -217,7 +233,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 received_bytes = 0
                 async for chunk in request.stream():
                     received_bytes += len(chunk)
-                    if received_bytes > settings.max_request_body_bytes:
+                    if received_bytes > request_size_limit:
                         response = JSONResponse(
                             status_code=413,
                             content={"detail": "Request body is too large"},
@@ -247,6 +263,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users.router)
     app.include_router(admin.router)
     app.include_router(quizzes.router)
+    app.include_router(question_banks.router)
     return app
 
 
