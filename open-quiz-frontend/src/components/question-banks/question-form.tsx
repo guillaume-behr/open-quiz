@@ -22,7 +22,13 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Code2, ImagePlus, LoaderCircle, Plus, Trash2 } from "lucide-react"
-import { type FormEvent, useState } from "react"
+import {
+    type FormEvent,
+    type KeyboardEvent,
+    useEffect,
+    useMemo,
+    useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 type EditableChoice = {
@@ -65,6 +71,56 @@ function encodeImage(file: File): Promise<EncodedImage> {
             })
         }
         reader.readAsDataURL(file)
+    })
+}
+
+function SelectedImagePreview({
+    image,
+    alt,
+    className,
+}: {
+    image: File
+    alt: string
+    className: string
+}) {
+    const imageUrl = useMemo(() => URL.createObjectURL(image), [image])
+
+    useEffect(() => {
+        return () => URL.revokeObjectURL(imageUrl)
+    }, [imageUrl])
+
+    return <img src={imageUrl} alt={alt} className={className} />
+}
+
+function indentCode(
+    event: KeyboardEvent<HTMLTextAreaElement>,
+    value: string,
+    onChange: (value: string) => void
+): void {
+    if (event.key !== "Tab") return
+
+    event.preventDefault()
+    const textarea = event.currentTarget
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1
+
+    if (start !== end) {
+        const selectedCode = value.slice(lineStart, end)
+        const indentedCode = selectedCode.replace(/^/gm, "\t")
+        onChange(value.slice(0, lineStart) + indentedCode + value.slice(end))
+        requestAnimationFrame(() => {
+            textarea.setSelectionRange(
+                start + 1,
+                end + (indentedCode.length - selectedCode.length)
+            )
+        })
+        return
+    }
+
+    onChange(value.slice(0, start) + "\t" + value.slice(end))
+    requestAnimationFrame(() => {
+        textarea.setSelectionRange(start + 1, start + 1)
     })
 }
 
@@ -131,6 +187,8 @@ export function QuestionForm({
     const [codeContent, setCodeContent] = useState(question?.code_content ?? "")
     const [isCreating, setIsCreating] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const hasQuestionImage =
+        Boolean(image) || Boolean(question?.has_image && !removeImage)
 
     function updateChoice(
         index: number,
@@ -313,35 +371,37 @@ export function QuestionForm({
                     />
                     <Button
                         type="button"
-                        variant="outline"
+                        variant={hasQuestionImage ? "secondary" : "outline"}
                         className="w-fit"
-                        onClick={() =>
-                            document.getElementById("question-image")?.click()
-                        }
+                        onClick={() => {
+                            if (image) {
+                                setImage(undefined)
+                                setRemoveImage(false)
+                                const input = document.getElementById(
+                                    "question-image"
+                                ) as HTMLInputElement | null
+                                if (input) input.value = ""
+                            } else if (question?.has_image && !removeImage) {
+                                setRemoveImage(true)
+                            } else {
+                                document
+                                    .getElementById("question-image")
+                                    ?.click()
+                            }
+                        }}
                     >
-                        <ImagePlus />
-                        {t("question-image")}
+                        {hasQuestionImage ? <Trash2 /> : <ImagePlus />}
+                        {t(
+                            hasQuestionImage ? "remove-image" : "question-image"
+                        )}
                     </Button>
                     {image && (
-                        <p className="text-sm text-muted-foreground">
-                            {image.name}
-                        </p>
+                        <SelectedImagePreview
+                            image={image}
+                            alt={t("question-image")}
+                            className="max-h-64 w-full rounded-lg border object-contain"
+                        />
                     )}
-                    {question?.has_image && !image && (
-                        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <input
-                                type="checkbox"
-                                checked={removeImage}
-                                onChange={(event) =>
-                                    setRemoveImage(event.target.checked)
-                                }
-                            />
-                            {t("remove-current-image")}
-                        </label>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                        {t("question-image-help")}
-                    </p>
                 </Field>
 
                 <Field>
@@ -380,33 +440,20 @@ export function QuestionForm({
                                     ))}
                                 </select>
                             </div>
-                            <div>
-                                <FieldLabel htmlFor="question-code">
-                                    {t("source-code")}
-                                </FieldLabel>
-                                <Textarea
-                                    id="question-code"
-                                    className="min-h-40 font-mono text-sm whitespace-pre"
-                                    value={codeContent}
-                                    onChange={(event) =>
-                                        setCodeContent(event.target.value)
-                                    }
-                                    maxLength={20000}
-                                    spellCheck={false}
-                                    required
-                                />
-                            </div>
-                            {codeContent.trim() && (
-                                <div>
-                                    <p className="mb-2 text-sm font-medium">
-                                        {t("code-preview")}
-                                    </p>
-                                    <CodeBlock
-                                        code={codeContent}
-                                        language={codeLanguage}
-                                    />
-                                </div>
-                            )}
+                            <CodeBlock
+                                code={codeContent}
+                                language={codeLanguage}
+                                runnable
+                                editable
+                                onCodeChange={setCodeContent}
+                                onCodeKeyDown={(event) =>
+                                    indentCode(
+                                        event,
+                                        codeContent,
+                                        setCodeContent
+                                    )
+                                }
+                            />
                         </div>
                     )}
                 </Field>
@@ -603,42 +650,63 @@ export function QuestionForm({
                                         />
                                         <Button
                                             type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="w-fit"
-                                            onClick={() =>
-                                                document
-                                                    .getElementById(
-                                                        `choice-image-${index}`
-                                                    )
-                                                    ?.click()
+                                            variant={
+                                                choice.image ||
+                                                (choice.has_image &&
+                                                    !choice.remove_image)
+                                                    ? "secondary"
+                                                    : "outline"
                                             }
+                                            size="sm"
+                                            className="w-56 justify-start"
+                                            onClick={() => {
+                                                if (choice.image) {
+                                                    updateChoice(index, {
+                                                        image: undefined,
+                                                        remove_image: false,
+                                                    })
+                                                    const input =
+                                                        document.getElementById(
+                                                            `choice-image-${index}`
+                                                        ) as HTMLInputElement | null
+                                                    if (input) input.value = ""
+                                                } else if (
+                                                    choice.has_image &&
+                                                    !choice.remove_image
+                                                ) {
+                                                    updateChoice(index, {
+                                                        remove_image: true,
+                                                    })
+                                                } else {
+                                                    document
+                                                        .getElementById(
+                                                            `choice-image-${index}`
+                                                        )
+                                                        ?.click()
+                                                }
+                                            }}
                                         >
-                                            <ImagePlus />
-                                            {t("choice-image")}
+                                            {choice.image ||
+                                            (choice.has_image &&
+                                                !choice.remove_image) ? (
+                                                <Trash2 />
+                                            ) : (
+                                                <ImagePlus />
+                                            )}
+                                            {t(
+                                                choice.image ||
+                                                    (choice.has_image &&
+                                                        !choice.remove_image)
+                                                    ? "remove-image"
+                                                    : "choice-image"
+                                            )}
                                         </Button>
                                         {choice.image && (
-                                            <p className="text-xs text-muted-foreground">
-                                                {choice.image.name}
-                                            </p>
-                                        )}
-                                        {choice.has_image && !choice.image && (
-                                            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={
-                                                        choice.remove_image
-                                                    }
-                                                    onChange={(event) =>
-                                                        updateChoice(index, {
-                                                            remove_image:
-                                                                event.target
-                                                                    .checked,
-                                                        })
-                                                    }
-                                                />
-                                                {t("remove-choice-image")}
-                                            </label>
+                                            <SelectedImagePreview
+                                                image={choice.image}
+                                                alt={t("choice-image")}
+                                                className="max-h-48 w-full rounded-md border object-contain"
+                                            />
                                         )}
                                     </div>
                                     <div className="space-y-2">
@@ -650,7 +718,7 @@ export function QuestionForm({
                                                     : "outline"
                                             }
                                             size="sm"
-                                            className="w-fit"
+                                            className="w-56 justify-start"
                                             onClick={() =>
                                                 updateChoice(index, {
                                                     hasCode: !choice.hasCode,
@@ -698,33 +766,35 @@ export function QuestionForm({
                                                         )
                                                     )}
                                                 </select>
-                                                <Textarea
-                                                    className="min-h-28 font-mono text-sm whitespace-pre"
-                                                    value={choice.codeContent}
-                                                    onChange={(event) =>
+                                                <CodeBlock
+                                                    code={choice.codeContent}
+                                                    language={
+                                                        choice.codeLanguage
+                                                    }
+                                                    runnable
+                                                    editable
+                                                    editorClassName="min-h-28"
+                                                    onCodeChange={(
+                                                        codeContent
+                                                    ) =>
                                                         updateChoice(index, {
-                                                            codeContent:
-                                                                event.target
-                                                                    .value,
+                                                            codeContent,
                                                         })
                                                     }
-                                                    maxLength={20000}
-                                                    spellCheck={false}
-                                                    placeholder={t(
-                                                        "source-code"
-                                                    )}
-                                                    required
+                                                    onCodeKeyDown={(event) =>
+                                                        indentCode(
+                                                            event,
+                                                            choice.codeContent,
+                                                            (codeContent) =>
+                                                                updateChoice(
+                                                                    index,
+                                                                    {
+                                                                        codeContent,
+                                                                    }
+                                                                )
+                                                        )
+                                                    }
                                                 />
-                                                {choice.codeContent.trim() && (
-                                                    <CodeBlock
-                                                        code={
-                                                            choice.codeContent
-                                                        }
-                                                        language={
-                                                            choice.codeLanguage
-                                                        }
-                                                    />
-                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -757,11 +827,11 @@ export function QuestionForm({
                         <Plus />
                         {t("add-choice")}
                     </Button>
-                    <p className="text-xs text-muted-foreground">
-                        {correctionMode === "automatic"
-                            ? t("select-correct-answers")
-                            : t("manual-correction-help")}
-                    </p>
+                    {correctionMode === "manual" && (
+                        <p className="text-xs text-muted-foreground">
+                            {t("manual-correction-help")}
+                        </p>
+                    )}
                 </Field>
 
                 {error && <FieldError>{error}</FieldError>}

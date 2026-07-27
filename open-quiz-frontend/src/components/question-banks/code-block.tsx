@@ -1,52 +1,172 @@
 import type { CodeLanguage } from "@/api/api"
+import { Button } from "@/components/ui/button"
+import { LoaderCircle, Play } from "lucide-react"
+import { loadPyodide } from "pyodide"
 import { Highlight, themes } from "prism-react-renderer"
+import { type KeyboardEvent, type UIEvent, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+
+let pythonRuntime: ReturnType<typeof loadPyodide> | undefined
+
+function getPythonRuntime() {
+    pythonRuntime ??= loadPyodide({ indexURL: "/pyodide/" })
+    return pythonRuntime
+}
 
 type CodeBlockProps = {
     code: string
     language: CodeLanguage
+    runnable?: boolean
+    editable?: boolean
+    onCodeChange?: (code: string) => void
+    onCodeKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void
+    editorClassName?: string
 }
 
-export function CodeBlock({ code, language }: CodeBlockProps) {
+export function CodeBlock({
+    code,
+    language,
+    runnable = false,
+    editable = false,
+    onCodeChange,
+    onCodeKeyDown,
+    editorClassName = "min-h-40",
+}: CodeBlockProps) {
+    const { t } = useTranslation()
+    const [isRunning, setIsRunning] = useState(false)
+    const [result, setResult] = useState<string | null>(null)
+    const highlightedCodeRef = useRef<HTMLPreElement>(null)
+
+    const canRun = runnable && language === "python"
+
+    function syncCodeScroll(event: UIEvent<HTMLTextAreaElement>) {
+        const highlightedCode = highlightedCodeRef.current
+        if (!highlightedCode) return
+        highlightedCode.scrollTop = event.currentTarget.scrollTop
+        highlightedCode.scrollLeft = event.currentTarget.scrollLeft
+    }
+
+    async function runPython() {
+        setIsRunning(true)
+        setResult(null)
+        try {
+            const runtime = await getPythonRuntime()
+            const output: string[] = []
+            runtime.setStdout({ batched: (line) => output.push(line) })
+            runtime.setStderr({ batched: (line) => output.push(line) })
+            const value = await runtime.runPythonAsync(code)
+            if (value !== undefined) output.push(String(value))
+            setResult(output.join("\n") || t("python-no-output"))
+        } catch (error) {
+            setResult(
+                `${t("python-run-error")}\n${
+                    error instanceof Error ? error.message : String(error)
+                }`
+            )
+        } finally {
+            setIsRunning(false)
+        }
+    }
+
+    function changeCode(value: string) {
+        setResult(null)
+        onCodeChange?.(value)
+    }
+
     return (
-        <Highlight theme={themes.vsDark} code={code} language={language}>
-            {({
-                className,
-                style,
-                tokens,
-                getLineProps,
-                getTokenProps,
-            }) => (
-                <pre
-                    className={`${className} overflow-x-auto rounded-xl border p-4 text-sm leading-6`}
-                    style={style}
-                    tabIndex={0}
-                >
-                    <code>
-                        {tokens.map((line, lineIndex) => (
-                            <span
-                                key={lineIndex}
-                                {...getLineProps({ line })}
-                                className="table-row"
+        <div className="overflow-hidden rounded-xl border">
+            <Highlight theme={themes.vsDark} code={code} language={language}>
+                {({
+                    className,
+                    style,
+                    tokens,
+                    getLineProps,
+                    getTokenProps,
+                }) => (
+                    <div className="relative">
+                        {canRun && (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                className="absolute top-2 right-2 z-20"
+                                onClick={() => void runPython()}
+                                disabled={isRunning}
                             >
-                                <span
-                                    className="table-cell pr-4 text-right text-white/40 select-none"
-                                    aria-hidden="true"
-                                >
-                                    {lineIndex + 1}
-                                </span>
-                                <span className="table-cell">
-                                    {line.map((token, tokenIndex) => (
+                                {isRunning ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <Play />
+                                )}
+                                {t(isRunning ? "running-python" : "run-python")}
+                            </Button>
+                        )}
+                        <pre
+                            ref={highlightedCodeRef}
+                            className={`${className} p-4 font-mono text-sm leading-6 ${
+                                editable
+                                    ? `overflow-hidden ${editorClassName}`
+                                    : "overflow-x-auto"
+                            } ${canRun ? "pr-28" : ""}`}
+                            style={style}
+                            tabIndex={0}
+                        >
+                            <code>
+                                {tokens.map((line, lineIndex) => (
+                                    <span
+                                        key={lineIndex}
+                                        {...getLineProps({ line })}
+                                        className="table-row"
+                                    >
                                         <span
-                                            key={tokenIndex}
-                                            {...getTokenProps({ token })}
-                                        />
-                                    ))}
-                                </span>
-                            </span>
-                        ))}
-                    </code>
-                </pre>
+                                            className="table-cell w-10 pr-3 text-right text-white/40 select-none"
+                                            aria-hidden="true"
+                                        >
+                                            {lineIndex + 1}
+                                        </span>
+                                        <span className="table-cell">
+                                            {line.map((token, tokenIndex) => (
+                                                <span
+                                                    key={tokenIndex}
+                                                    {...getTokenProps({
+                                                        token,
+                                                    })}
+                                                />
+                                            ))}
+                                        </span>
+                                    </span>
+                                ))}
+                            </code>
+                        </pre>
+                        {editable && (
+                            <textarea
+                                className={`absolute inset-0 z-10 h-full w-full resize-none overflow-auto border-0 bg-transparent pt-4 pr-4 pb-4 pl-14 font-mono text-sm leading-6 text-transparent caret-white outline-none selection:bg-primary/40 ${
+                                    canRun ? "pr-28" : ""
+                                }`}
+                                value={code}
+                                onChange={(event) =>
+                                    changeCode(event.target.value)
+                                }
+                                onKeyDown={onCodeKeyDown}
+                                onScroll={syncCodeScroll}
+                                maxLength={20000}
+                                spellCheck={false}
+                                aria-label={t("source-code")}
+                            />
+                        )}
+                    </div>
+                )}
+            </Highlight>
+            {result !== null && (
+                <div className="border-t bg-muted/40 p-3">
+                    <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                        {t("execution-result")}
+                    </p>
+                    <pre className="overflow-x-auto font-mono text-sm whitespace-pre-wrap">
+                        {result}
+                    </pre>
+                </div>
             )}
-        </Highlight>
+        </div>
     )
 }
