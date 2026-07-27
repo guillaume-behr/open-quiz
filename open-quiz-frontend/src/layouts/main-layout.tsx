@@ -1,28 +1,16 @@
 import { LanguageSelector } from "@/components/langage/langage-selector"
 import { ThemeSelector } from "@/components/theme/theme-selector"
-import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, Outlet, useLocation } from "react-router"
 
 export function MainLayout() {
     const { t } = useTranslation()
 
-    const [link, setLink] = useState({
-        text: "",
-        url: "",
-    })
-
     const location = useLocation()
-    useEffect(() => {
-        switch (location.pathname) {
-            case "/":
-                setLink({ text: "professor-space", url: "/dashboard" })
-                break
-            case "/dashboard":
-                setLink({ text: "homepage", url: "/" })
-                break
-        }
-    }, [location])
+    const link =
+        location.pathname === "/"
+            ? { text: "professor-space", url: "/dashboard" }
+            : { text: "homepage", url: "/" }
 
     return (
         <div className="flex h-screen flex-col items-center justify-between">
