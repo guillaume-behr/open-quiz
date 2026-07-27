@@ -32,7 +32,7 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-MAX_QUESTION_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_QUESTION_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 def downloadable_json(content: object, filename: str) -> Response:

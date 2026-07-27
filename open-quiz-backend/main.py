@@ -210,7 +210,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     or request.url.path.endswith("/update")
                 )
             ):
-                request_size_limit = max(request_size_limit, 20 * 1024 * 1024)
+                request_size_limit = max(request_size_limit, 64 * 1024 * 1024)
             content_length = request.headers.get("content-length")
             try:
                 declared_length = int(content_length) if content_length else None

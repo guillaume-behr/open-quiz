@@ -84,7 +84,7 @@ CodeLanguage = Literal[
 
 class QuestionImportImage(BaseModel):
     content_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
-    data_base64: str = Field(min_length=1, max_length=6_000_000)
+    data_base64: str = Field(min_length=1, max_length=28_000_000)
 
 
 class QuestionChoiceCreate(BaseModel):
