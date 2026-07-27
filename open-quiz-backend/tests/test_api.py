@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from time import time
 from typing import Any
 
@@ -14,6 +16,7 @@ from scripts.reset_two_factor import reset
 JWT_SECRET = "test-secret-that-is-at-least-32-bytes-long"
 TOTP_ENCRYPTION_KEY = "test-totp-key-that-is-at-least-32-bytes"
 ADMIN_PASSWORD = "a-strong-test-password"
+FRONTEND_ORIGIN = "http://localhost:5173"
 
 
 def settings_for(database: Path, **overrides: Any) -> Settings:
@@ -23,12 +26,19 @@ def settings_for(database: Path, **overrides: Any) -> Settings:
         "totp_encryption_key": TOTP_ENCRYPTION_KEY,
         "admin_username": "root-admin",
         "admin_password": ADMIN_PASSWORD,
-        "frontend_origin": "http://localhost:5173",
+        "frontend_origin": FRONTEND_ORIGIN,
         "access_token_minutes": 5,
         "environment": "test",
     }
     values.update(overrides)
     return Settings(**values)
+
+
+def make_client(settings: Settings) -> TestClient:
+    return TestClient(
+        create_app(settings),
+        headers={"Origin": FRONTEND_ORIGIN},
+    )
 
 
 def complete_first_login(
@@ -81,7 +91,7 @@ def login_admin(client: TestClient) -> dict[str, str]:
 
 
 def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
-    with TestClient(create_app(settings_for(tmp_path / "test.db"))) as client:
+    with make_client(settings_for(tmp_path / "test.db")) as client:
         headers = login_admin(client)
         created = client.post(
             "/api/admin/users",
@@ -121,8 +131,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
 
 
 def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
-    with TestClient(create_app(settings_for(tmp_path / "test.db"))) as client:
-        login_admin(client)
+    with make_client(settings_for(tmp_path / "test.db")) as client:
+        _, secret = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
         first_refresh = client.cookies.get(REFRESH_COOKIE)
         assert first_refresh
 
@@ -135,12 +145,29 @@ def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
         assert client.post("/api/auth/refresh").status_code == 401
 
         client.cookies.set(REFRESH_COOKIE, second_refresh, path="/api/auth")
+        assert client.post("/api/auth/refresh").status_code == 401
+
+        challenge = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        ).json()
+        next_code = pyotp.TOTP(secret).at(time() + 30)
+        assert (
+            client.post(
+                "/api/auth/2fa/verify",
+                json={
+                    "challenge_token": challenge["challenge_token"],
+                    "code": next_code,
+                },
+            ).status_code
+            == 200
+        )
         assert client.post("/api/auth/logout").status_code == 204
         assert client.post("/api/auth/refresh").status_code == 401
 
 
 def test_later_login_requires_two_factor_code(tmp_path: Path) -> None:
-    with TestClient(create_app(settings_for(tmp_path / "test.db"))) as client:
+    with make_client(settings_for(tmp_path / "test.db")) as client:
         _, secret = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
         assert client.post("/api/auth/logout").status_code == 204
 
@@ -176,12 +203,12 @@ def test_later_login_requires_two_factor_code(tmp_path: Path) -> None:
 def test_two_factor_recovery_requires_new_setup(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     app_settings = settings_for(database)
-    with TestClient(create_app(app_settings)) as client:
+    with make_client(app_settings) as client:
         complete_first_login(client, "root-admin", ADMIN_PASSWORD)
 
     assert reset("root-admin", app_settings)
 
-    with TestClient(create_app(app_settings)) as client:
+    with make_client(app_settings) as client:
         login_response = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -191,7 +218,7 @@ def test_two_factor_recovery_requires_new_setup(tmp_path: Path) -> None:
 
 def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
     app_settings = settings_for(tmp_path / "test.db", login_attempts=3)
-    with TestClient(create_app(app_settings)) as client:
+    with make_client(app_settings) as client:
         for _ in range(3):
             response = client.post(
                 "/api/auth/login",
@@ -206,7 +233,19 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
         assert limited.status_code == 429
         assert int(limited.headers["retry-after"]) > 0
 
+    with make_client(app_settings) as client:
+        still_limited = client.post(
+            "/api/auth/login",
+            json={"username": "unknown", "password": "incorrect-password"},
+        )
+        assert still_limited.status_code == 429
+
     with TestClient(create_app(settings_for(tmp_path / "origin.db"))) as client:
+        missing = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        assert missing.status_code == 403
         rejected = client.post(
             "/api/auth/login",
             headers={"Origin": "https://attacker.example"},
@@ -216,20 +255,24 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
 
 
 def test_admin_routes_require_authentication(tmp_path: Path) -> None:
-    with TestClient(create_app(settings_for(tmp_path / "test.db"))) as client:
+    with make_client(settings_for(tmp_path / "test.db")) as client:
         assert client.get("/api/admin/users").status_code == 401
 
 
 def test_environment_password_rotation_updates_existing_admin(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
-    with TestClient(create_app(settings_for(database))):
-        pass
+    with make_client(settings_for(database)) as client:
+        complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        previous_refresh = client.cookies.get(REFRESH_COOKIE)
 
     rotated = settings_for(
         database,
         admin_password="a-different-strong-password",
+        jwt_secret="a-different-jwt-secret-that-is-at-least-32-bytes",
     )
-    with TestClient(create_app(rotated)) as client:
+    with make_client(rotated) as client:
+        client.cookies.set(REFRESH_COOKIE, previous_refresh, path="/api/auth")
+        assert client.post("/api/auth/refresh").status_code == 401
         old_login = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -243,6 +286,89 @@ def test_environment_password_rotation_updates_existing_admin(tmp_path: Path) ->
         )
         assert old_login.status_code == 401
         assert new_login.status_code == 200
+
+
+def test_environment_admin_rename_moves_managed_account(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    with make_client(settings_for(database)) as client:
+        headers, secret = complete_first_login(
+            client,
+            "root-admin",
+            ADMIN_PASSWORD,
+        )
+        original = client.get("/api/users/me", headers=headers).json()
+
+    renamed = settings_for(database, admin_username="renamed-admin")
+    with make_client(renamed) as client:
+        old_login = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        new_login = client.post(
+            "/api/auth/login",
+            json={"username": "renamed-admin", "password": ADMIN_PASSWORD},
+        )
+        assert old_login.status_code == 401
+        assert new_login.status_code == 200
+        verified = client.post(
+            "/api/auth/2fa/verify",
+            json={
+                "challenge_token": new_login.json()["challenge_token"],
+                "code": pyotp.TOTP(secret).at(time() + 30),
+            },
+        )
+        renamed_user = client.get(
+            "/api/users/me",
+            headers={
+                "Authorization": f"Bearer {verified.json()['access_token']}"
+            },
+        ).json()
+        assert renamed_user["id"] == original["id"]
+        assert renamed_user["username"] == "renamed-admin"
+
+
+def test_two_factor_code_and_challenge_are_consumed_atomically(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "test.db")) as client:
+        _, secret = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        assert client.post("/api/auth/logout").status_code == 204
+        challenge = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        ).json()["challenge_token"]
+        code = pyotp.TOTP(secret).at(time() + 30)
+        barrier = Barrier(2)
+
+        def verify() -> int:
+            barrier.wait()
+            return client.post(
+                "/api/auth/2fa/verify",
+                json={"challenge_token": challenge, "code": code},
+            ).status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            statuses = sorted(
+                future.result()
+                for future in (pool.submit(verify), pool.submit(verify))
+            )
+        assert statuses == [200, 401]
+
+
+def test_request_size_and_authenticated_cache_controls(tmp_path: Path) -> None:
+    app_settings = settings_for(tmp_path / "test.db", max_request_body_bytes=1024)
+    with make_client(app_settings) as client:
+        oversized = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": "x" * 2048},
+        )
+        assert oversized.status_code == 413
+        assert oversized.headers["cache-control"] == "no-store"
+
+        headers = login_admin(client)
+        users = client.get("/api/admin/users", headers=headers)
+        assert users.status_code == 200
+        assert users.headers["cache-control"] == "no-store"
 
 
 def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> None:

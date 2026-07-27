@@ -19,7 +19,9 @@ class Settings:
     access_token_minutes: int = 15
     refresh_token_days: int = 7
     login_attempts: int = 5
+    login_account_attempts: int = 20
     login_window_seconds: int = 900
+    max_request_body_bytes: int = 65536
     environment: str = "development"
 
     @property
@@ -45,8 +47,17 @@ class Settings:
             raise ValueError("REFRESH_TOKEN_DAYS must be between 1 and 30")
         if not 3 <= self.login_attempts <= 20:
             raise ValueError("LOGIN_ATTEMPTS must be between 3 and 20")
+        if not self.login_attempts < self.login_account_attempts <= 100:
+            raise ValueError(
+                "LOGIN_ACCOUNT_ATTEMPTS must be greater than LOGIN_ATTEMPTS "
+                "and no more than 100"
+            )
         if self.login_window_seconds < 60:
             raise ValueError("LOGIN_WINDOW_SECONDS must be at least 60")
+        if not 1024 <= self.max_request_body_bytes <= 1048576:
+            raise ValueError(
+                "MAX_REQUEST_BODY_BYTES must be between 1024 and 1048576"
+            )
 
         origin = urlparse(self.frontend_origin)
         if origin.scheme not in {"http", "https"} or not origin.netloc:
@@ -82,6 +93,8 @@ def get_settings() -> Settings:
         access_token_minutes=int(os.getenv("ACCESS_TOKEN_MINUTES", "15")),
         refresh_token_days=int(os.getenv("REFRESH_TOKEN_DAYS", "7")),
         login_attempts=int(os.getenv("LOGIN_ATTEMPTS", "5")),
+        login_account_attempts=int(os.getenv("LOGIN_ACCOUNT_ATTEMPTS", "20")),
         login_window_seconds=int(os.getenv("LOGIN_WINDOW_SECONDS", "900")),
-        environment=os.getenv("APP_ENV", "development"),
+        max_request_body_bytes=int(os.getenv("MAX_REQUEST_BODY_BYTES", "65536")),
+        environment=required_environment("APP_ENV"),
     )

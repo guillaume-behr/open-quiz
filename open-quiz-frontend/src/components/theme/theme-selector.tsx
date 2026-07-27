@@ -7,7 +7,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useTheme } from "@/components/theme/theme-provider"
+import { useTheme } from "@/components/theme/theme-context"
 import { useTranslation } from "react-i18next"
 
 export function ThemeSelector({ className }: React.ComponentProps<"div">) {

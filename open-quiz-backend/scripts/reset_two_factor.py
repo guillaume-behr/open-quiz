@@ -4,7 +4,13 @@ from sqlalchemy import delete, select
 
 from app.config import Settings, get_settings
 from app.database import build_session_factory
-from app.models import RefreshSession, TwoFactorCredential, User
+from app.models import (
+    AuthenticationChallenge,
+    RefreshSession,
+    RefreshSessionFamily,
+    TwoFactorCredential,
+    User,
+)
 
 
 def reset(username: str, settings: Settings | None = None) -> bool:
@@ -14,7 +20,20 @@ def reset(username: str, settings: Settings | None = None) -> bool:
         user = session.scalar(select(User).where(User.username == username))
         if user is None:
             return False
+        refresh_session_ids = select(RefreshSession.id).where(
+            RefreshSession.user_id == user.id
+        )
+        session.execute(
+            delete(RefreshSessionFamily).where(
+                RefreshSessionFamily.session_id.in_(refresh_session_ids)
+            )
+        )
         session.execute(delete(RefreshSession).where(RefreshSession.user_id == user.id))
+        session.execute(
+            delete(AuthenticationChallenge).where(
+                AuthenticationChallenge.user_id == user.id
+            )
+        )
         session.execute(
             delete(TwoFactorCredential).where(TwoFactorCredential.user_id == user.id)
         )

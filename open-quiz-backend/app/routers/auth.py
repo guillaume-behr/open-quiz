@@ -3,12 +3,18 @@ from time import time
 import jwt
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.audit import audit_event
 from app.dependencies import DbSession
-from app.models import RefreshSession, TwoFactorCredential, User
+from app.models import (
+    AuthenticationChallenge,
+    RefreshSession,
+    RefreshSessionFamily,
+    TwoFactorCredential,
+    User,
+)
 from app.schemas import (
     LoginRequest,
     LoginResponse,
@@ -41,8 +47,12 @@ def client_ip(request: Request) -> str:
 def validate_origin(request: Request) -> None:
     origin = request.headers.get("origin")
     expected = request.app.state.settings.frontend_origin.rstrip("/")
-    if origin and origin.rstrip("/") != expected:
-        audit_event("auth.origin_rejected", ip=client_ip(request), origin=origin)
+    if origin is None or origin.rstrip("/") != expected:
+        audit_event(
+            "auth.origin_rejected",
+            ip=client_ip(request),
+            origin=origin or "<missing>",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid origin"
         )
@@ -62,15 +72,25 @@ def set_refresh_cookie(response: Response, token: str, request: Request) -> None
 
 
 def issue_session(
-    user: User, request: Request, response: Response, session: Session
+    user: User,
+    request: Request,
+    response: Response,
+    session: Session,
+    *,
+    family_id: str | None = None,
+    parent_session_id: int | None = None,
 ) -> TokenResponse:
     settings = request.app.state.settings
     now = int(time())
+    expired_session_ids = select(RefreshSession.id).where(
+        RefreshSession.expires_at <= now
+    )
     session.execute(
-        delete(RefreshSession).where(
-            RefreshSession.expires_at <= now,
+        delete(RefreshSessionFamily).where(
+            RefreshSessionFamily.session_id.in_(expired_session_ids)
         )
     )
+    session.execute(delete(RefreshSession).where(RefreshSession.expires_at <= now))
     older_session_ids = list(
         session.scalars(
             select(RefreshSession.id)
@@ -89,11 +109,18 @@ def issue_session(
             .values(revoked_at=now)
         )
     refresh_token = create_refresh_token()
+    refresh_session = RefreshSession(
+        token_hash=hash_refresh_token(refresh_token),
+        user_id=user.id,
+        expires_at=now + settings.refresh_token_days * 86400,
+    )
+    session.add(refresh_session)
+    session.flush()
     session.add(
-        RefreshSession(
-            token_hash=hash_refresh_token(refresh_token),
-            user_id=user.id,
-            expires_at=now + settings.refresh_token_days * 86400,
+        RefreshSessionFamily(
+            session_id=refresh_session.id,
+            family_id=family_id or hash_refresh_token(create_refresh_token()),
+            parent_session_id=parent_session_id,
         )
     )
     session.commit()
@@ -103,6 +130,65 @@ def issue_session(
             user.id, settings.jwt_secret, settings.access_token_minutes
         )
     )
+
+
+def issue_two_factor_challenge(
+    user_id: int,
+    purpose: str,
+    request: Request,
+    session: Session,
+) -> str:
+    now = int(time())
+    session.execute(
+        update(AuthenticationChallenge)
+        .where(
+            AuthenticationChallenge.user_id == user_id,
+            AuthenticationChallenge.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    session.execute(
+        delete(AuthenticationChallenge).where(
+            AuthenticationChallenge.expires_at <= now
+        )
+    )
+    token, token_id_hash, expires_at = create_two_factor_token(
+        user_id,
+        request.app.state.settings.jwt_secret,
+        purpose,
+    )
+    session.add(
+        AuthenticationChallenge(
+            token_id_hash=token_id_hash,
+            user_id=user_id,
+            purpose=purpose,
+            expires_at=expires_at,
+        )
+    )
+    return token
+
+
+def revoke_refresh_family(
+    session: Session,
+    session_id: int,
+    now: int,
+) -> bool:
+    family = session.get(RefreshSessionFamily, session_id)
+    if family is None:
+        return False
+    family_session_ids = select(RefreshSessionFamily.session_id).where(
+        RefreshSessionFamily.family_id == family.family_id
+    )
+    session.execute(
+        update(RefreshSession)
+        .where(
+            RefreshSession.id.in_(family_session_ids),
+            RefreshSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+    session.commit()
+    return True
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -115,7 +201,7 @@ def login(
     validate_origin(request)
     ip_address = client_ip(request)
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.retry_after(ip_address, payload.username)
+    retry_after = limiter.retry_after(session, ip_address, payload.username)
     if retry_after:
         audit_event("auth.login_rate_limited", ip=ip_address)
         raise HTTPException(
@@ -128,7 +214,7 @@ def login(
     encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_valid = verify_password(payload.password, encoded_password)
     if user is None or not user.is_active or not password_valid:
-        limiter.record_failure(ip_address, payload.username)
+        limiter.record_failure(session, ip_address, payload.username)
         audit_event("auth.login_failed", ip=ip_address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -152,27 +238,32 @@ def login(
         else:
             two_factor.encrypted_secret = encrypted_secret
             two_factor.last_counter = None
+        challenge_token = issue_two_factor_challenge(
+            user.id,
+            "two_factor_setup",
+            request,
+            session,
+        )
         session.commit()
         audit_event("auth.two_factor_setup_started", ip=ip_address, user_id=user.id)
         return LoginResponse(
             status="setup_required",
-            challenge_token=create_two_factor_token(
-                user.id,
-                settings.jwt_secret,
-                "two_factor_setup",
-            ),
+            challenge_token=challenge_token,
             secret=secret,
             provisioning_uri=provisioning_uri(secret, user.username),
         )
 
     audit_event("auth.two_factor_challenge_started", ip=ip_address, user_id=user.id)
+    challenge_token = issue_two_factor_challenge(
+        user.id,
+        "two_factor_verification",
+        request,
+        session,
+    )
+    session.commit()
     return LoginResponse(
         status="verification_required",
-        challenge_token=create_two_factor_token(
-            user.id,
-            settings.jwt_secret,
-            "two_factor_verification",
-        ),
+        challenge_token=challenge_token,
     )
 
 
@@ -188,7 +279,7 @@ def verify_two_factor(
     ip_address = client_ip(request)
     settings = request.app.state.settings
     try:
-        user_id, purpose = decode_two_factor_token(
+        user_id, purpose, token_id_hash = decode_two_factor_token(
             payload.challenge_token,
             settings.jwt_secret,
         )
@@ -200,6 +291,8 @@ def verify_two_factor(
 
     user = session.get(User, user_id)
     two_factor = session.get(TwoFactorCredential, user_id)
+    now = int(time())
+    challenge = session.get(AuthenticationChallenge, token_id_hash)
     expected_purpose = (
         "two_factor_verification"
         if two_factor is not None and two_factor.confirmed
@@ -210,6 +303,11 @@ def verify_two_factor(
         or not user.is_active
         or two_factor is None
         or purpose != expected_purpose
+        or challenge is None
+        or challenge.user_id != user_id
+        or challenge.purpose != purpose
+        or challenge.used_at is not None
+        or challenge.expires_at <= now
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -217,7 +315,7 @@ def verify_two_factor(
         )
 
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.retry_after(ip_address, user.username)
+    retry_after = limiter.retry_after(session, ip_address, user.username)
     if retry_after:
         audit_event("auth.two_factor_rate_limited", ip=ip_address, user_id=user.id)
         raise HTTPException(
@@ -244,16 +342,47 @@ def verify_two_factor(
         two_factor.last_counter,
     )
     if matched_counter is None:
-        limiter.record_failure(ip_address, user.username)
+        limiter.record_failure(session, ip_address, user.username)
         audit_event("auth.two_factor_failed", ip=ip_address, user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication code",
         )
 
-    limiter.clear(ip_address, user.username)
-    two_factor.confirmed = True
-    two_factor.last_counter = matched_counter
+    counter_result = session.execute(
+        update(TwoFactorCredential)
+        .where(
+            TwoFactorCredential.user_id == user.id,
+            or_(
+                TwoFactorCredential.last_counter.is_(None),
+                TwoFactorCredential.last_counter < matched_counter,
+            ),
+        )
+        .values(confirmed=True, last_counter=matched_counter)
+        .execution_options(synchronize_session=False)
+    )
+    if counter_result.rowcount != 1:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or already used authentication code",
+        )
+    challenge_result = session.execute(
+        update(AuthenticationChallenge)
+        .where(
+            AuthenticationChallenge.token_id_hash == token_id_hash,
+            AuthenticationChallenge.used_at.is_(None),
+        )
+        .values(used_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if challenge_result.rowcount != 1:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or already used two-factor challenge",
+        )
+    limiter.clear(session, ip_address, user.username)
     audit_event("auth.two_factor_succeeded", ip=ip_address, user_id=user.id)
     return issue_session(user, request, response, session)
 
@@ -277,17 +406,33 @@ def refresh(
         else None
     )
     now = int(time())
-    if (
-        stored_session is None
-        or stored_session.revoked_at is not None
-        or stored_session.expires_at <= now
-    ):
+    if stored_session is None or stored_session.expires_at <= now:
         audit_event("auth.refresh_rejected", ip=client_ip(request))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh session",
         )
+    if stored_session.revoked_at is not None:
+        family_revoked = revoke_refresh_family(session, stored_session.id, now)
+        audit_event(
+            "auth.refresh_reuse_detected",
+            ip=client_ip(request),
+            user_id=stored_session.user_id,
+            family_revoked=family_revoked,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh session",
+        )
 
+    family = session.get(RefreshSessionFamily, stored_session.id)
+    if family is None:
+        family = RefreshSessionFamily(
+            session_id=stored_session.id,
+            family_id=hash_refresh_token(create_refresh_token()),
+        )
+        session.add(family)
+        session.flush()
     result = session.execute(
         update(RefreshSession)
         .where(
@@ -298,6 +443,13 @@ def refresh(
     )
     if result.rowcount != 1:
         session.rollback()
+        family_revoked = revoke_refresh_family(session, stored_session.id, now)
+        audit_event(
+            "auth.refresh_reuse_detected",
+            ip=client_ip(request),
+            user_id=stored_session.user_id,
+            family_revoked=family_revoked,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh session",
@@ -311,6 +463,14 @@ def refresh(
         or two_factor is None
         or not two_factor.confirmed
     ):
+        session.execute(
+            update(RefreshSession)
+            .where(
+                RefreshSession.user_id == stored_session.user_id,
+                RefreshSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
         session.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -318,7 +478,14 @@ def refresh(
         )
 
     audit_event("auth.refresh_succeeded", ip=client_ip(request), user_id=user.id)
-    return issue_session(user, request, response, session)
+    return issue_session(
+        user,
+        request,
+        response,
+        session,
+        family_id=family.family_id,
+        parent_session_id=stored_session.id,
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

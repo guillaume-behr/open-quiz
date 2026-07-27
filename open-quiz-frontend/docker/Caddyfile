@@ -13,6 +13,21 @@
         X-Content-Type-Options "nosniff"
     }
 
-    try_files {path} /index.html
-    file_server
+    handle /api/* {
+        request_body {
+            max_size 64KB
+        }
+        reverse_proxy open-quiz-backend:8000 {
+            header_up X-Forwarded-Proto https
+            transport http {
+                dial_timeout 2s
+                response_header_timeout 10s
+            }
+        }
+    }
+
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
 }

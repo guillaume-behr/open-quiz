@@ -1,10 +1,49 @@
 services:
+    open-quiz-backend:
+        build:
+            context: ../open-quiz-backend
+            dockerfile: Dockerfile
+        env_file:
+            - ../open-quiz-backend/.env
+        environment:
+            APP_ENV: production
+            DATABASE_URL: sqlite:////data/open-quiz.db
+        expose:
+            - "8000"
+        networks:
+            - open-quiz
+        volumes:
+            - open-quiz-data:/data
+        read_only: true
+        tmpfs:
+            - /tmp
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "/app/.venv/bin/python",
+                    "-c",
+                    "import urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/api/health', headers={'X-Forwarded-Proto':'https'}); urllib.request.urlopen(request, timeout=2)",
+                ]
+            interval: 30s
+            timeout: 3s
+            retries: 3
+            start_period: 10s
+        restart: unless-stopped
+
     open-quiz-frontend:
         build:
             context: .
             dockerfile: docker/Dockerfile
         expose:
             - "8080"
+        depends_on:
+            open-quiz-backend:
+                condition: service_healthy
         networks:
             - open-quiz
         read_only: true
@@ -21,3 +60,6 @@ networks:
     open-quiz:
         name: open-quiz
         internal: true
+
+volumes:
+    open-quiz-data:

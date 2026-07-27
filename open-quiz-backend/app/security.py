@@ -42,26 +42,35 @@ def decode_access_token(token: str, secret: str) -> int:
     return int(payload["sub"])
 
 
-def create_two_factor_token(user_id: int, secret: str, purpose: str) -> str:
+def create_two_factor_token(
+    user_id: int, secret: str, purpose: str
+) -> tuple[str, str, int]:
     now = datetime.now(UTC)
-    return jwt.encode(
+    token_id = token_urlsafe(32)
+    expires_at = now + timedelta(minutes=5)
+    token = jwt.encode(
         {
             "sub": str(user_id),
             "type": purpose,
+            "jti": token_id,
             "iat": now,
-            "exp": now + timedelta(minutes=5),
+            "exp": expires_at,
         },
         secret,
         algorithm="HS256",
     )
+    return token, sha256(token_id.encode()).hexdigest(), int(expires_at.timestamp())
 
 
-def decode_two_factor_token(token: str, secret: str) -> tuple[int, str]:
+def decode_two_factor_token(token: str, secret: str) -> tuple[int, str, str]:
     payload = jwt.decode(token, secret, algorithms=["HS256"])
     purpose = payload["type"]
     if purpose not in {"two_factor_setup", "two_factor_verification"}:
         raise jwt.InvalidTokenError("Unexpected token type")
-    return int(payload["sub"]), purpose
+    token_id = payload["jti"]
+    if not isinstance(token_id, str) or not token_id:
+        raise jwt.InvalidTokenError("Missing token identifier")
+    return int(payload["sub"]), purpose, sha256(token_id.encode()).hexdigest()
 
 
 def generate_totp_secret() -> str:
