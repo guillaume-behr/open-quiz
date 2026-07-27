@@ -8,11 +8,13 @@ import {
 } from "@/api/api"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
+import { QuestionBanksPanel } from "@/components/question-banks/question-banks-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
     ChartColumn,
     ClipboardList,
+    LibraryBig,
     LoaderCircle,
     LogOut,
     UsersRound,
@@ -22,7 +24,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 
-type DashboardSection = "students" | "quizzes" | "results"
+type DashboardSection = "students" | "quizzes" | "question-banks" | "results"
 
 type DashboardEntry = {
     id: DashboardSection
@@ -52,6 +54,12 @@ export function Dashboard() {
             icon: ClipboardList,
             label: t("quiz-management"),
             description: t("quiz-management-help"),
+        },
+        {
+            id: "question-banks",
+            icon: LibraryBig,
+            label: t("question-banks"),
+            description: t("question-banks-help"),
         },
         {
             id: "results",
@@ -203,6 +211,9 @@ export function Dashboard() {
                             </p>
                         </div>
                     </div>
+                    {activeSection === "question-banks" && (
+                        <QuestionBanksPanel />
+                    )}
                 </section>
             </div>
         </div>

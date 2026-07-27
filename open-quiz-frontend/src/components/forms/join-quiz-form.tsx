@@ -48,7 +48,7 @@ export function JoinQuizForm() {
                 </Field>
 
                 <Button className="text-md py-7 shadow" type="submit">
-                    {t("sign-in")}
+                    {t("join-quiz-button")}
                 </Button>
             </FieldGroup>
         </form>
