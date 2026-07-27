@@ -13,7 +13,7 @@ RUN pnpm build
 
 FROM caddy:2.11.4-alpine
 
-COPY docker/Caddyfile /etc/caddy/Caddyfile
+COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
 
 USER caddy

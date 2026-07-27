@@ -48,7 +48,7 @@
 ### Conteneurisation et déploiement
 
 - Docker
-- Docker Compose
+- Docker Compose depuis le fichier `docker-compose.yml` à la racine du dépôt
 - Node.js pour la compilation
 - Caddy comme serveur web statique
 - Réseau Docker interne dédié

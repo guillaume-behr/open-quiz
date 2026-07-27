@@ -1,10 +1,10 @@
 services:
     open-quiz-backend:
         build:
-            context: ../open-quiz-backend
+            context: ./open-quiz-backend
             dockerfile: Dockerfile
         env_file:
-            - ../open-quiz-backend/.env
+            - ./open-quiz-backend/.env
         environment:
             APP_ENV: production
             DATABASE_URL: sqlite:////data/open-quiz.db
@@ -37,10 +37,10 @@ services:
 
     open-quiz-frontend:
         build:
-            context: .
-            dockerfile: docker/Dockerfile
-        expose:
-            - "8080"
+            context: ./open-quiz-frontend
+            dockerfile: Dockerfile
+        ports:
+            - "127.0.0.1:7800:8080"
         depends_on:
             open-quiz-backend:
                 condition: service_healthy
