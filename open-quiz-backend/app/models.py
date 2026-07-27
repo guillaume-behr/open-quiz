@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     LargeBinary,
@@ -96,6 +97,11 @@ class QuestionChoice(Base):
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True)
     label: Mapped[str] = mapped_column(Text)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False)
+    points: Mapped[float] = mapped_column(Float, default=0.0)
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    image_content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    code_language: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    code_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     position: Mapped[int] = mapped_column(Integer)
 
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=256)
+    audience: Literal["professor", "admin"] | None = None
 
 
 class TokenResponse(BaseModel):
@@ -66,9 +67,35 @@ class QuestionBankResponse(BaseModel):
     question_count: int = 0
 
 
+CodeLanguage = Literal[
+    "javascript",
+    "typescript",
+    "python",
+    "java",
+    "csharp",
+    "cpp",
+    "markup",
+    "css",
+    "sql",
+    "bash",
+    "json",
+]
+
+
+class QuestionImportImage(BaseModel):
+    content_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
+    data_base64: str = Field(min_length=1, max_length=6_000_000)
+
+
 class QuestionChoiceCreate(BaseModel):
+    id: int | None = None
     label: str = Field(min_length=1, max_length=500)
     is_correct: bool = False
+    points: float = Field(default=0, ge=0, le=1000)
+    image: QuestionImportImage | None = None
+    remove_image: bool = False
+    code_language: CodeLanguage | None = None
+    code_content: str | None = Field(default=None, max_length=20000)
 
     @field_validator("label")
     @classmethod
@@ -78,6 +105,20 @@ class QuestionChoiceCreate(BaseModel):
             raise ValueError("A choice cannot be empty")
         return normalized
 
+    @field_validator("code_content")
+    @classmethod
+    def normalize_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+        return normalized if normalized.strip() else None
+
+    @model_validator(mode="after")
+    def validate_code(self) -> "QuestionChoiceCreate":
+        if (self.code_language is None) != (self.code_content is None):
+            raise ValueError("Code language and content must be provided together")
+        return self
+
 
 class QuestionCreate(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
@@ -86,19 +127,7 @@ class QuestionCreate(BaseModel):
     answer_mode_disclosed: bool = True
     correction_mode: Literal["automatic", "manual"]
     choices: list[QuestionChoiceCreate] = Field(min_length=2, max_length=12)
-    code_language: Literal[
-        "javascript",
-        "typescript",
-        "python",
-        "java",
-        "csharp",
-        "cpp",
-        "markup",
-        "css",
-        "sql",
-        "bash",
-        "json",
-    ] | None = None
+    code_language: CodeLanguage | None = None
     code_content: str | None = Field(default=None, max_length=20000)
 
     @field_validator("prompt")
@@ -121,6 +150,9 @@ class QuestionCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_correct_choices(self) -> "QuestionCreate":
+        for choice in self.choices:
+            if "points" not in choice.model_fields_set:
+                choice.points = 1 if choice.is_correct else 0
         correct_count = sum(choice.is_correct for choice in self.choices)
         if self.answer_mode == "single" and correct_count > 1:
             raise ValueError("A single-choice question can have one correct answer")
@@ -131,6 +163,20 @@ class QuestionCreate(BaseModel):
                 raise ValueError(
                     "Automatic single-choice correction requires one correct answer"
                 )
+            if any(
+                choice.points <= 0
+                for choice in self.choices
+                if choice.is_correct
+            ):
+                raise ValueError("Every correct answer must award points")
+            if any(
+                choice.points != 0
+                for choice in self.choices
+                if not choice.is_correct
+            ):
+                raise ValueError("An incorrect answer cannot award points")
+        elif correct_count:
+            raise ValueError("Manual correction cannot define correct answers")
         if (self.code_language is None) != (self.code_content is None):
             raise ValueError("Code language and content must be provided together")
         return self
@@ -142,7 +188,11 @@ class QuestionChoiceResponse(BaseModel):
     id: int
     label: str
     is_correct: bool
+    points: float
     position: int
+    has_image: bool
+    code_language: str | None
+    code_content: str | None
 
 
 class QuestionResponse(BaseModel):
@@ -160,11 +210,6 @@ class QuestionResponse(BaseModel):
     created_at: datetime
 
 
-class QuestionImportImage(BaseModel):
-    content_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
-    data_base64: str = Field(min_length=1, max_length=6_000_000)
-
-
 class QuestionUpdate(QuestionCreate):
     remove_image: bool = False
 
@@ -175,4 +220,10 @@ class QuestionImportItem(QuestionCreate):
 
 class QuestionBatchImport(BaseModel):
     version: Literal[1]
-    questions: list[QuestionImportItem] = Field(min_length=1, max_length=100)
+    question_bank: QuestionBankCreate
+    questions: list[QuestionImportItem]
+
+
+class QuestionBatchImportResponse(BaseModel):
+    question_bank: QuestionBankResponse
+    questions: list[QuestionResponse]

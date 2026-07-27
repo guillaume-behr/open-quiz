@@ -252,7 +252,28 @@ def login(
             detail="Invalid username or password",
         )
     limiter.release(session, ip_address, payload.username)
-
+    if payload.audience == "professor" and user.is_admin:
+        audit_event(
+            "auth.login_wrong_audience",
+            ip=ip_address,
+            user_id=user.id,
+            audience=payload.audience,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator accounts cannot access the professor space",
+        )
+    if payload.audience == "admin" and not user.is_admin:
+        audit_event(
+            "auth.login_wrong_audience",
+            ip=ip_address,
+            user_id=user.id,
+            audience=payload.audience,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access required",
+        )
     settings = request.app.state.settings
     two_factor = session.get(TwoFactorCredential, user.id)
     if two_factor is None or not two_factor.confirmed:

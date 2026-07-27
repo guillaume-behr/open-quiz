@@ -203,7 +203,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request_size_limit = settings.max_request_body_bytes
             if (
                 request.method == "POST"
-                and request.url.path.startswith("/api/question-banks/")
+                and request.url.path.startswith("/api/question-banks")
                 and (
                     request.url.path.endswith("/questions")
                     or request.url.path.endswith("/import")

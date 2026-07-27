@@ -11,7 +11,6 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +22,9 @@ from app.schemas import (
     QuestionBankCreate,
     QuestionBankResponse,
     QuestionBatchImport,
+    QuestionBatchImportResponse,
     QuestionCreate,
+    QuestionImportImage,
     QuestionImportItem,
     QuestionResponse,
     QuestionUpdate,
@@ -34,6 +35,16 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_QUESTION_IMAGE_BYTES = 4 * 1024 * 1024
 
 
+def downloadable_json(content: object, filename: str) -> Response:
+    return Response(
+        content=json.dumps(content, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
 @router.get("", response_model=list[QuestionBankResponse])
 def list_question_banks(
     professor: ProfessorUser,
@@ -42,13 +53,13 @@ def list_question_banks(
     """Return question banks owned by the authenticated professor."""
     rows = session.execute(
         select(QuestionBank, func.count(Question.id))
-            .outerjoin(
-                Question,
-                Question.question_bank_id == QuestionBank.id,
-            )
-            .where(QuestionBank.owner_id == professor.id)
-            .group_by(QuestionBank.id)
-            .order_by(QuestionBank.grade_level, QuestionBank.chapter)
+        .outerjoin(
+            Question,
+            Question.question_bank_id == QuestionBank.id,
+        )
+        .where(QuestionBank.owner_id == professor.id)
+        .group_by(QuestionBank.id)
+        .order_by(QuestionBank.grade_level, QuestionBank.chapter)
     )
     return [
         QuestionBankResponse.model_validate(question_bank).model_copy(
@@ -143,7 +154,19 @@ def question_response(
         has_image=question.image_content_type is not None,
         code_language=code.language if code else None,
         code_content=code.content if code else None,
-        choices=choices,
+        choices=[
+            {
+                "id": choice.id,
+                "label": choice.label,
+                "is_correct": choice.is_correct,
+                "points": choice.points,
+                "position": choice.position,
+                "has_image": choice.image_content_type is not None,
+                "code_language": choice.code_language,
+                "code_content": choice.code_content,
+            }
+            for choice in choices
+        ],
         created_at=question.created_at,
     )
 
@@ -155,7 +178,12 @@ def add_question(
     *,
     image_data: bytes | None = None,
     image_content_type: str | None = None,
+    choice_images: list[tuple[bytes | None, str | None]] | None = None,
 ) -> tuple[Question, list[QuestionChoice], QuestionCode | None]:
+    if choice_images is None:
+        choice_images = [
+            decode_image_payload(choice.image) for choice in payload.choices
+        ]
     question = Question(
         question_bank_id=question_bank_id,
         prompt=payload.prompt,
@@ -173,9 +201,17 @@ def add_question(
             question_id=question.id,
             label=choice.label,
             is_correct=choice.is_correct,
+            points=choice.points,
+            image_data=choice_image_data,
+            image_content_type=choice_image_content_type,
+            code_language=choice.code_language,
+            code_content=choice.code_content,
             position=position,
         )
-        for position, choice in enumerate(payload.choices)
+        for position, (
+            choice,
+            (choice_image_data, choice_image_content_type),
+        ) in enumerate(zip(payload.choices, choice_images, strict=True))
     ]
     session.add_all(choices)
     code = None
@@ -216,6 +252,7 @@ def list_questions(
     }
     for choice in session.scalars(
         select(QuestionChoice)
+        .options(defer(QuestionChoice.image_data))
         .where(QuestionChoice.question_id.in_(question_ids))
         .order_by(QuestionChoice.question_id, QuestionChoice.position)
     ):
@@ -239,7 +276,7 @@ def list_questions(
 
 
 @router.get("/example")
-def download_import_example(_: ProfessorUser) -> JSONResponse:
+def download_import_example(_: ProfessorUser) -> Response:
     """Download a complete versioned example of the question batch format."""
     example = {
         "version": 1,
@@ -255,8 +292,22 @@ def download_import_example(_: ProfessorUser) -> JSONResponse:
                 "answer_mode_disclosed": True,
                 "correction_mode": "automatic",
                 "choices": [
-                    {"label": "Paris", "is_correct": True},
-                    {"label": "Lyon", "is_correct": False},
+                    {
+                        "label": "Paris",
+                        "is_correct": True,
+                        "points": 1,
+                        "image": None,
+                        "code_language": None,
+                        "code_content": None,
+                    },
+                    {
+                        "label": "Lyon",
+                        "is_correct": False,
+                        "points": 0,
+                        "image": None,
+                        "code_language": None,
+                        "code_content": None,
+                    },
                 ],
                 "code_language": None,
                 "code_content": None,
@@ -269,9 +320,42 @@ def download_import_example(_: ProfessorUser) -> JSONResponse:
                 "answer_mode_disclosed": False,
                 "correction_mode": "automatic",
                 "choices": [
-                    {"label": "2", "is_correct": True},
-                    {"label": "3", "is_correct": True},
-                    {"label": "4", "is_correct": False},
+                    {
+                        "label": "2",
+                        "is_correct": True,
+                        "points": 0.5,
+                        "image": None,
+                        "code_language": "python",
+                        "code_content": "print(2)",
+                    },
+                    {
+                        "label": "3",
+                        "is_correct": True,
+                        "points": 0.5,
+                        "image": {
+                            "content_type": "image/png",
+                            "data_base64": (
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
+                                "AAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="
+                            ),
+                        },
+                        "code_language": None,
+                        "code_content": None,
+                    },
+                    {
+                        "label": "4",
+                        "is_correct": False,
+                        "points": 0,
+                        "image": {
+                            "content_type": "image/png",
+                            "data_base64": (
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
+                                "AAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="
+                            ),
+                        },
+                        "code_language": "javascript",
+                        "code_content": "console.log(4)",
+                    },
                 ],
                 "code_language": None,
                 "code_content": None,
@@ -284,8 +368,16 @@ def download_import_example(_: ProfessorUser) -> JSONResponse:
                 "answer_mode_disclosed": True,
                 "correction_mode": "manual",
                 "choices": [
-                    {"label": "Réponse proposée A", "is_correct": False},
-                    {"label": "Réponse proposée B", "is_correct": False},
+                    {
+                        "label": "Réponse proposée A",
+                        "is_correct": False,
+                        "points": 2,
+                    },
+                    {
+                        "label": "Réponse proposée B",
+                        "is_correct": False,
+                        "points": 1,
+                    },
                 ],
                 "code_language": "python",
                 "code_content": "values = [1, 2, 3]\nprint(sum(values))",
@@ -298,8 +390,8 @@ def download_import_example(_: ProfessorUser) -> JSONResponse:
                 "answer_mode_disclosed": True,
                 "correction_mode": "manual",
                 "choices": [
-                    {"label": "Élément A", "is_correct": False},
-                    {"label": "Élément B", "is_correct": False},
+                    {"label": "Élément A", "is_correct": False, "points": 1},
+                    {"label": "Élément B", "is_correct": False, "points": 1},
                 ],
                 "code_language": None,
                 "code_content": None,
@@ -313,13 +405,9 @@ def download_import_example(_: ProfessorUser) -> JSONResponse:
             },
         ],
     }
-    return JSONResponse(
-        content=example,
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="open-quiz-questions-example.json"'
-            )
-        },
+    return downloadable_json(
+        example,
+        "open-quiz-questions-example.json",
     )
 
 
@@ -328,7 +416,7 @@ def export_questions(
     question_bank_id: int,
     professor: ProfessorUser,
     session: DbSession,
-) -> JSONResponse:
+) -> Response:
     """Export every question in a bank as a versioned JSON document."""
     question_bank = owned_question_bank(question_bank_id, professor, session)
     questions = list(
@@ -372,6 +460,20 @@ def export_questions(
                     {
                         "label": choice.label,
                         "is_correct": choice.is_correct,
+                        "points": choice.points,
+                        "image": (
+                            {
+                                "content_type": choice.image_content_type,
+                                "data_base64": b64encode(
+                                    choice.image_data
+                                ).decode(),
+                            }
+                            if choice.image_data is not None
+                            and choice.image_content_type is not None
+                            else None
+                        ),
+                        "code_language": choice.code_language,
+                        "code_content": choice.code_content,
                     }
                     for choice in choices_by_question[question.id]
                 ],
@@ -388,8 +490,8 @@ def export_questions(
                 ),
             }
         )
-    return JSONResponse(
-        content={
+    return downloadable_json(
+        {
             "version": 1,
             "question_bank": {
                 "grade_level": question_bank.grade_level,
@@ -397,21 +499,17 @@ def export_questions(
             },
             "questions": exported_questions,
         },
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="question-bank-{question_bank.id}.json"'
-            )
-        },
+        f"question-bank-{question_bank.id}.json",
     )
 
 
-def decode_import_image(
-    payload: QuestionImportItem,
+def decode_image_payload(
+    image: QuestionImportImage | None,
 ) -> tuple[bytes | None, str | None]:
-    if payload.image is None:
+    if image is None:
         return None, None
     try:
-        image_data = b64decode(payload.image.data_base64, validate=True)
+        image_data = b64decode(image.data_base64, validate=True)
     except (Base64Error, ValueError):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -422,44 +520,76 @@ def decode_import_image(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="An imported image is empty or too large",
         )
-    return image_data, payload.image.content_type
+    return image_data, image.content_type
+
+
+def decode_import_image(
+    payload: QuestionImportItem,
+) -> tuple[bytes | None, str | None]:
+    return decode_image_payload(payload.image)
 
 
 @router.post(
-    "/{question_bank_id}/import",
-    response_model=list[QuestionResponse],
+    "/import",
+    response_model=QuestionBatchImportResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def import_questions(
-    question_bank_id: int,
+def import_question_bank(
     payload: QuestionBatchImport,
     professor: ProfessorUser,
     session: DbSession,
-) -> list[QuestionResponse]:
-    """Atomically import a batch of questions into a professor's bank."""
-    owned_question_bank(question_bank_id, professor, session)
+) -> QuestionBatchImportResponse:
+    """Create a bank from a JSON batch and atomically import its questions."""
     decoded_images = [decode_import_image(question) for question in payload.questions]
+    decoded_choice_images = [
+        [decode_image_payload(choice.image) for choice in question.choices]
+        for question in payload.questions
+    ]
+    question_bank = QuestionBank(
+        owner_id=professor.id,
+        grade_level=payload.question_bank.grade_level,
+        chapter=payload.question_bank.chapter,
+    )
+    session.add(question_bank)
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A question bank already exists for this grade level and chapter",
+        ) from None
+
     created = [
         add_question(
-            question_bank_id,
+            question_bank.id,
             question,
             session,
             image_data=image_data,
             image_content_type=image_content_type,
+            choice_images=choice_images,
         )
-        for question, (image_data, image_content_type) in zip(
+        for question, (image_data, image_content_type), choice_images in zip(
             payload.questions,
             decoded_images,
+            decoded_choice_images,
             strict=True,
         )
     ]
     session.commit()
+    session.refresh(question_bank)
     for question, _, _ in created:
         session.refresh(question)
-    return [
+    questions = [
         question_response(question, choices, code)
         for question, choices, code in created
     ]
+    return QuestionBatchImportResponse(
+        question_bank=QuestionBankResponse.model_validate(question_bank).model_copy(
+            update={"question_count": len(questions)}
+        ),
+        questions=questions,
+    )
 
 
 @router.post(
@@ -565,6 +695,41 @@ async def update_question(
         question.image_data = None
         question.image_content_type = None
 
+    existing_choices = list(
+        session.scalars(
+            select(QuestionChoice).where(
+                QuestionChoice.question_id == question.id
+            )
+        )
+    )
+    existing_choices_by_id = {choice.id: choice for choice in existing_choices}
+    submitted_choice_ids = {
+        choice.id for choice in question_payload.choices if choice.id is not None
+    }
+    if not submitted_choice_ids.issubset(existing_choices_by_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid answer choice",
+        )
+    replacement_choice_images = []
+    for choice in question_payload.choices:
+        new_image_data, new_image_content_type = decode_image_payload(choice.image)
+        existing_choice = (
+            existing_choices_by_id.get(choice.id)
+            if choice.id is not None
+            else None
+        )
+        if (
+            new_image_data is None
+            and not choice.remove_image
+            and existing_choice is not None
+        ):
+            new_image_data = existing_choice.image_data
+            new_image_content_type = existing_choice.image_content_type
+        replacement_choice_images.append(
+            (new_image_data, new_image_content_type)
+        )
+
     session.execute(
         delete(QuestionChoice).where(QuestionChoice.question_id == question.id)
     )
@@ -576,9 +741,23 @@ async def update_question(
             question_id=question.id,
             label=choice.label,
             is_correct=choice.is_correct,
+            points=choice.points,
+            image_data=choice_image_data,
+            image_content_type=choice_image_content_type,
+            code_language=choice.code_language,
+            code_content=choice.code_content,
             position=position,
         )
-        for position, choice in enumerate(question_payload.choices)
+        for position, (
+            choice,
+            (choice_image_data, choice_image_content_type),
+        ) in enumerate(
+            zip(
+                question_payload.choices,
+                replacement_choice_images,
+                strict=True,
+            )
+        )
     ]
     session.add_all(choices)
     code = None
@@ -624,4 +803,35 @@ def get_question_image(
     return Response(
         content=question.image_data,
         media_type=question.image_content_type,
+    )
+
+
+@router.get("/choices/{choice_id}/image")
+def get_choice_image(
+    choice_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> Response:
+    """Return a private image attached to one answer choice."""
+    choice = session.scalar(
+        select(QuestionChoice)
+        .join(Question, Question.id == QuestionChoice.question_id)
+        .join(QuestionBank, QuestionBank.id == Question.question_bank_id)
+        .where(
+            QuestionChoice.id == choice_id,
+            QuestionBank.owner_id == professor.id,
+        )
+    )
+    if (
+        choice is None
+        or choice.image_data is None
+        or choice.image_content_type is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Answer image not found",
+        )
+    return Response(
+        content=choice.image_data,
+        media_type=choice.image_content_type,
     )

@@ -133,6 +133,26 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             client.get("/api/admin/users", headers=teacher_headers).status_code == 403
         )
 
+        professor_login = client.post(
+            "/api/auth/login",
+            json={
+                "username": "root-admin",
+                "password": ADMIN_PASSWORD,
+                "audience": "professor",
+            },
+        )
+        assert professor_login.status_code == 403
+
+        admin_login = client.post(
+            "/api/auth/login",
+            json={
+                "username": "teacher.one",
+                "password": "another-strong-password",
+                "audience": "admin",
+            },
+        )
+        assert admin_login.status_code == 403
+
         first_bank = client.post(
             "/api/question-banks",
             headers=teacher_headers,
@@ -178,8 +198,18 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "code_language": "python",
             "code_content": "def half(value):\n    return value / 2",
             "choices": [
-                {"label": "1/2", "is_correct": True},
-                {"label": "1/3", "is_correct": False},
+                {
+                    "label": "1/2",
+                    "is_correct": True,
+                    "points": 2.5,
+                    "image": {
+                        "content_type": "image/png",
+                        "data_base64": "iVBORw0KGgoAY2hvaWNlLWltYWdl",
+                    },
+                    "code_language": "python",
+                    "code_content": "print(1 / 2)",
+                },
+                {"label": "1/3", "is_correct": False, "points": 0},
             ],
         }
         created_question = client.post(
@@ -204,6 +234,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             True,
             False,
         ]
+        assert [choice["points"] for choice in question["choices"]] == [2.5, 0]
+        assert question["choices"][0]["has_image"] is True
+        assert question["choices"][0]["code_language"] == "python"
+        assert question["choices"][0]["code_content"] == "print(1 / 2)"
         bank_with_question = next(
             bank
             for bank in client.get(
@@ -228,6 +262,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert image.status_code == 200
         assert image.headers["content-type"] == "image/png"
         assert image.content.startswith(b"\x89PNG")
+        choice_image = client.get(
+            f"/api/question-banks/choices/{question['choices'][0]['id']}/image",
+            headers=teacher_headers,
+        )
+        assert choice_image.status_code == 200
+        assert choice_image.headers["content-type"] == "image/png"
+        assert choice_image.content.startswith(b"\x89PNG")
 
         invalid_automatic_question = {
             **question_payload,
@@ -243,12 +284,39 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert invalid_question.status_code == 422
 
+        invalid_points_question = {
+            **question_payload,
+            "choices": [
+                {"label": "1/2", "is_correct": True, "points": 1},
+                {"label": "1/3", "is_correct": False, "points": 1},
+            ],
+        }
+        invalid_points = client.post(
+            f"/api/question-banks/{first_bank.json()['id']}/questions",
+            headers=teacher_headers,
+            data={"payload": json.dumps(invalid_points_question)},
+        )
+        assert invalid_points.status_code == 422
+
+        invalid_manual_question = {
+            **question_payload,
+            "correction_mode": "manual",
+        }
+        invalid_manual = client.post(
+            f"/api/question-banks/{first_bank.json()['id']}/questions",
+            headers=teacher_headers,
+            data={"payload": json.dumps(invalid_manual_question)},
+        )
+        assert invalid_manual.status_code == 422
+
         exported = client.get(
             f"/api/question-banks/{first_bank.json()['id']}/export",
             headers=teacher_headers,
         )
         assert exported.status_code == 200
         assert "attachment;" in exported.headers["content-disposition"]
+        assert exported.text.startswith('{\n  "version": 1,')
+        assert '"prompt": "Quelle fraction' in exported.text
         exported_batch = exported.json()
         assert exported_batch["version"] == 1
         assert exported_batch["question_bank"] == {
@@ -257,22 +325,85 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         }
         assert exported_batch["questions"][0]["image"]["content_type"] == "image/png"
         assert exported_batch["questions"][0]["code_language"] == "python"
+        assert exported_batch["questions"][0]["choices"][0]["points"] == 2.5
+        assert exported_batch["questions"][0]["choices"][0]["image"] is not None
+        assert (
+            exported_batch["questions"][0]["choices"][0]["code_content"]
+            == "print(1 / 2)"
+        )
 
+        exported_batch["question_bank"] = {
+            "grade_level": "3e",
+            "chapter": "Fractions importées",
+        }
         imported = client.post(
-            f"/api/question-banks/{second_bank.json()['id']}/import",
+            "/api/question-banks/import",
             headers=teacher_headers,
             json=exported_batch,
         )
         assert imported.status_code == 201
-        assert len(imported.json()) == 1
-        assert imported.json()[0]["prompt"] == question_payload["prompt"]
-        assert imported.json()[0]["has_image"] is True
+        imported_payload = imported.json()
+        assert imported_payload["question_bank"]["grade_level"] == "3e"
+        assert imported_payload["question_bank"]["chapter"] == "Fractions importées"
+        assert imported_payload["question_bank"]["question_count"] == 1
+        assert len(imported_payload["questions"]) == 1
+        assert imported_payload["questions"][0]["prompt"] == question_payload["prompt"]
+        assert imported_payload["questions"][0]["has_image"] is True
+        assert imported_payload["questions"][0]["choices"][0]["has_image"] is True
+        assert (
+            imported_payload["questions"][0]["choices"][0]["code_language"]
+            == "python"
+        )
+
+        duplicate_import = client.post(
+            "/api/question-banks/import",
+            headers=teacher_headers,
+            json=exported_batch,
+        )
+        assert duplicate_import.status_code == 409
+
+        legacy_batch = json.loads(json.dumps(exported_batch))
+        legacy_batch["question_bank"] = {
+            "grade_level": "2de",
+            "chapter": "Import sans points",
+        }
+        for imported_question in legacy_batch["questions"]:
+            for choice in imported_question["choices"]:
+                choice.pop("points")
+        legacy_import = client.post(
+            "/api/question-banks/import",
+            headers=teacher_headers,
+            json=legacy_batch,
+        )
+        assert legacy_import.status_code == 201
+        assert [
+            choice["points"]
+            for choice in legacy_import.json()["questions"][0]["choices"]
+        ] == [1, 0]
+
+        empty_import = client.post(
+            "/api/question-banks/import",
+            headers=teacher_headers,
+            json={
+                "version": 1,
+                "question_bank": {
+                    "grade_level": "6e",
+                    "chapter": "Banque vide",
+                },
+                "questions": [],
+            },
+        )
+        assert empty_import.status_code == 201
+        assert empty_import.json()["question_bank"]["question_count"] == 0
+        assert empty_import.json()["questions"] == []
 
         example = client.get(
             "/api/question-banks/example",
             headers=teacher_headers,
         )
         assert example.status_code == 200
+        assert example.text.startswith('{\n  "version": 1,')
+        assert '"prompt": "Quelle est la capitale' in example.text
         example_batch = example.json()
         assert example_batch["version"] == 1
         assert {
@@ -286,6 +417,16 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         }
         assert any(item["image"] for item in example_batch["questions"])
         assert any(item["code_content"] for item in example_batch["questions"])
+        assert any(
+            choice["image"]
+            for item in example_batch["questions"]
+            for choice in item["choices"]
+        )
+        assert any(
+            choice["code_content"]
+            for item in example_batch["questions"]
+            for choice in item["choices"]
+        )
 
         updated_payload = {
             **question_payload,
@@ -294,6 +435,17 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "code_language": "javascript",
             "code_content": "const half = (value) => value / 2;",
             "remove_image": True,
+            "choices": [
+                {
+                    **question_payload["choices"][0],
+                    "id": question["choices"][0]["id"],
+                    "image": None,
+                },
+                {
+                    **question_payload["choices"][1],
+                    "id": question["choices"][1]["id"],
+                },
+            ],
         }
         updated = client.post(
             f"/api/question-banks/questions/{question['id']}/update",
@@ -305,6 +457,16 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert updated.json()["difficulty"] == "medium"
         assert updated.json()["code_language"] == "javascript"
         assert updated.json()["has_image"] is False
+        updated_choice = updated.json()["choices"][0]
+        assert updated_choice["has_image"] is True
+        assert updated_choice["code_content"] == "print(1 / 2)"
+        assert (
+            client.get(
+                f"/api/question-banks/choices/{updated_choice['id']}/image",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
         assert (
             client.get(
                 f"/api/question-banks/questions/{question['id']}/image",
@@ -312,6 +474,37 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             ).status_code
             == 404
         )
+
+
+def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
+    database_path = tmp_path / "legacy-question-choices.db"
+    with sqlite3.connect(database_path) as database:
+        database.execute(
+            """
+            CREATE TABLE question_choices (
+                id INTEGER PRIMARY KEY,
+                question_id INTEGER NOT NULL,
+                label TEXT NOT NULL,
+                is_correct BOOLEAN NOT NULL DEFAULT 0,
+                position INTEGER NOT NULL
+            )
+            """
+        )
+
+    create_app(settings_for(database_path))
+
+    with sqlite3.connect(database_path) as database:
+        columns = {
+            row[1]
+            for row in database.execute("PRAGMA table_info(question_choices)")
+        }
+    assert {
+        "points",
+        "image_data",
+        "image_content_type",
+        "code_language",
+        "code_content",
+    }.issubset(columns)
 
 
 def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
