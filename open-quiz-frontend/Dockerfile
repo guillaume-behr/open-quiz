@@ -13,7 +13,8 @@ RUN pnpm build
 
 FROM caddy:2.11.4-alpine
 
-RUN addgroup -S openquiz \
+RUN setcap -r /usr/bin/caddy \
+    && addgroup -S openquiz \
     && adduser -S -D -H -G openquiz openquiz
 
 COPY Caddyfile /etc/caddy/Caddyfile
