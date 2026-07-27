@@ -59,7 +59,6 @@ services:
 networks:
     open-quiz:
         name: open-quiz
-        internal: true
 
 volumes:
     open-quiz-data:
