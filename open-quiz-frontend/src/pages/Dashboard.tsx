@@ -96,7 +96,7 @@ export function Dashboard() {
     }, [])
 
     async function handleLogin(username: string, password: string) {
-        setChallenge(await login(username, password))
+        setChallenge(await login(username, password, "professor"))
     }
 
     async function handleTwoFactor(code: string) {
@@ -139,7 +139,7 @@ export function Dashboard() {
     }
 
     return (
-        <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-3 py-2 sm:px-4">
+        <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-10 py-2">
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold">

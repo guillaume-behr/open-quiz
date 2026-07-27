@@ -56,7 +56,7 @@ export function AdminDashboard() {
     }, [t])
 
     async function handleLogin(username: string, password: string) {
-        setChallenge(await login(username, password))
+        setChallenge(await login(username, password, "admin"))
     }
 
     async function handleTwoFactor(code: string) {
@@ -132,7 +132,7 @@ export function AdminDashboard() {
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-5">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto px-10 py-2">
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <p className="text-sm font-medium text-primary">

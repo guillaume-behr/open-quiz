@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next"
 import { availableLangages } from "@/lib/i18n"
 
 export function LanguageSelector({ className }: React.ComponentProps<"div">) {
-    const { i18n } = useTranslation()
+    const { i18n, t } = useTranslation()
 
     return (
         <div className={className}>
@@ -21,13 +21,15 @@ export function LanguageSelector({ className }: React.ComponentProps<"div">) {
                     render={<Button variant="outline" size="icon" />}
                 >
                     <Languages />
+                    <span className="sr-only">{t("language")}</span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top">
                     {availableLangages.map((value) => {
                         return (
                             <DropdownMenuItem
+                                key={value}
                                 onClick={() => {
-                                    i18n.changeLanguage(value)
+                                    void i18n.changeLanguage(value)
                                 }}
                             >
                                 {value}

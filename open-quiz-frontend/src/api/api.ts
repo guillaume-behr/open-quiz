@@ -31,6 +31,11 @@ export type NewQuestionBank = {
     chapter: string
 }
 
+export type QuestionBankImportResult = {
+    question_bank: QuestionBank
+    questions: Question[]
+}
+
 export type QuestionDifficulty = "easy" | "medium" | "hard"
 export type AnswerMode = "single" | "multiple"
 export type CorrectionMode = "automatic" | "manual"
@@ -51,7 +56,16 @@ export type QuestionChoice = {
     id: number
     label: string
     is_correct: boolean
+    points: number
     position: number
+    has_image: boolean
+    code_language: CodeLanguage | null
+    code_content: string | null
+}
+
+export type EncodedImage = {
+    content_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif"
+    data_base64: string
 }
 
 export type Question = {
@@ -78,8 +92,14 @@ export type NewQuestion = {
     code_language: CodeLanguage | null
     code_content: string | null
     choices: Array<{
+        id?: number
         label: string
         is_correct: boolean
+        points: number
+        image?: EncodedImage | null
+        remove_image?: boolean
+        code_language: CodeLanguage | null
+        code_content: string | null
     }>
 }
 
@@ -89,6 +109,16 @@ export type QuestionUpdate = NewQuestion & {
 
 type TokenResponse = {
     access_token: string
+}
+
+export class ApiError extends Error {
+    readonly status: number
+
+    constructor(message: string, status: number) {
+        super(message)
+        this.name = "ApiError"
+        this.status = status
+    }
 }
 
 export type TwoFactorChallenge = {
@@ -102,7 +132,10 @@ async function errorFrom(response: Response): Promise<Error> {
     const body = (await response.json().catch(() => ({}))) as {
         detail?: string
     }
-    return new Error(body.detail ?? "Une erreur est survenue.")
+    return new ApiError(
+        body.detail ?? "Une erreur est survenue.",
+        response.status
+    )
 }
 
 async function refreshAccessToken(): Promise<boolean> {
@@ -161,14 +194,15 @@ async function request<T>(
 
 export async function login(
     username: string,
-    password: string
+    password: string,
+    audience: "professor" | "admin"
 ): Promise<TwoFactorChallenge> {
     accessToken = null
     return request<TwoFactorChallenge>(
         "/api/auth/login",
         {
             method: "POST",
-            body: JSON.stringify({ username, password }),
+            body: JSON.stringify({ username, password, audience }),
         },
         false
     )
@@ -298,6 +332,31 @@ export async function getQuestionImage(questionId: number): Promise<Blob> {
     return fetchImage(true)
 }
 
+export async function getChoiceImage(choiceId: number): Promise<Blob> {
+    async function fetchImage(allowRefresh: boolean): Promise<Blob> {
+        const response = await fetch(
+            `${API_URL}/api/question-banks/choices/${choiceId}/image`,
+            {
+                credentials: "include",
+                headers: accessToken
+                    ? { Authorization: `Bearer ${accessToken}` }
+                    : {},
+            }
+        )
+        if (
+            response.status === 401 &&
+            allowRefresh &&
+            (await refreshAccessToken())
+        ) {
+            return fetchImage(false)
+        }
+        if (!response.ok) throw await errorFrom(response)
+        return response.blob()
+    }
+
+    return fetchImage(true)
+}
+
 async function downloadAuthenticatedFile(path: string): Promise<Blob> {
     async function download(allowRefresh: boolean): Promise<Blob> {
         const response = await fetch(`${API_URL}${path}`, {
@@ -320,9 +379,7 @@ async function downloadAuthenticatedFile(path: string): Promise<Blob> {
     return download(true)
 }
 
-export function downloadQuestionBank(
-    questionBankId: number
-): Promise<Blob> {
+export function downloadQuestionBank(questionBankId: number): Promise<Blob> {
     return downloadAuthenticatedFile(
         `/api/question-banks/${questionBankId}/export`
     )
@@ -333,14 +390,10 @@ export function downloadQuestionBatchExample(): Promise<Blob> {
 }
 
 export async function importQuestionBatch(
-    questionBankId: number,
     file: File
-): Promise<Question[]> {
-    return request<Question[]>(
-        `/api/question-banks/${questionBankId}/import`,
-        {
-            method: "POST",
-            body: await file.text(),
-        }
-    )
+): Promise<QuestionBankImportResult> {
+    return request<QuestionBankImportResult>("/api/question-banks/import", {
+        method: "POST",
+        body: await file.text(),
+    })
 }
