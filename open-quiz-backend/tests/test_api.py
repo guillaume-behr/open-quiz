@@ -209,7 +209,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     "code_language": "python",
                     "code_content": "print(1 / 2)",
                 },
-                {"label": "1/3", "is_correct": False, "points": 0},
+                {"label": "1/3", "is_correct": False, "points": -0.5},
             ],
         }
         created_question = client.post(
@@ -234,7 +234,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             True,
             False,
         ]
-        assert [choice["points"] for choice in question["choices"]] == [2.5, 0]
+        assert [choice["points"] for choice in question["choices"]] == [2.5, -0.5]
         assert question["choices"][0]["has_image"] is True
         assert question["choices"][0]["code_language"] == "python"
         assert question["choices"][0]["code_content"] == "print(1 / 2)"

@@ -212,7 +212,7 @@ export function QuestionForm({
                         ...choice,
                         is_correct: isSelected,
                         points: isSelected
-                            ? choice.points || previousPoints || 1
+                            ? Math.max(0, choice.points || previousPoints || 1)
                             : 0,
                     }
                 }
@@ -220,7 +220,7 @@ export function QuestionForm({
                 return {
                     ...choice,
                     is_correct: checked,
-                    points: checked ? choice.points || 1 : 0,
+                    points: checked ? Math.max(0, choice.points || 1) : 0,
                 }
             })
         })
@@ -238,7 +238,7 @@ export function QuestionForm({
                     is_correct: index === Math.max(0, firstCorrectIndex),
                     points:
                         index === Math.max(0, firstCorrectIndex)
-                            ? choice.points || 1
+                            ? Math.max(0, choice.points || 1)
                             : 0,
                 }))
             )
@@ -261,7 +261,7 @@ export function QuestionForm({
                 return {
                     ...choice,
                     is_correct: isCorrect,
-                    points: isCorrect ? choice.points || 1 : 0,
+                    points: isCorrect ? Math.max(0, choice.points || 1) : 0,
                 }
             })
         })
@@ -279,7 +279,8 @@ export function QuestionForm({
                 return remaining.map((choice, choiceIndex) => ({
                     ...choice,
                     is_correct: choiceIndex === 0,
-                    points: choiceIndex === 0 ? choice.points || 1 : 0,
+                    points:
+                        choiceIndex === 0 ? Math.max(0, choice.points || 1) : 0,
                 }))
             }
             return remaining
@@ -592,19 +593,26 @@ export function QuestionForm({
                                             type="number"
                                             className="w-20"
                                             value={choice.points}
-                                            min={0}
+                                            min={choice.is_correct ? 0 : -1000}
                                             max={1000}
                                             step="0.25"
-                                            disabled={
-                                                correctionMode ===
-                                                    "automatic" &&
-                                                !choice.is_correct
-                                            }
                                             onChange={(event) =>
                                                 updateChoice(index, {
-                                                    points: Number(
-                                                        event.target.value
-                                                    ),
+                                                    points: choice.is_correct
+                                                        ? Math.max(
+                                                              0,
+                                                              Number(
+                                                                  event.target
+                                                                      .value
+                                                              )
+                                                          )
+                                                        : Math.min(
+                                                              0,
+                                                              Number(
+                                                                  event.target
+                                                                      .value
+                                                              )
+                                                          ),
                                                 })
                                             }
                                             aria-label={t(

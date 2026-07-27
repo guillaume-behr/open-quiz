@@ -91,7 +91,7 @@ class QuestionChoiceCreate(BaseModel):
     id: int | None = None
     label: str = Field(min_length=1, max_length=500)
     is_correct: bool = False
-    points: float = Field(default=0, ge=0, le=1000)
+    points: float = Field(default=0, ge=-1000, le=1000)
     image: QuestionImportImage | None = None
     remove_image: bool = False
     code_language: CodeLanguage | None = None
@@ -164,17 +164,17 @@ class QuestionCreate(BaseModel):
                     "Automatic single-choice correction requires one correct answer"
                 )
             if any(
-                choice.points <= 0
+                choice.points < 0
                 for choice in self.choices
                 if choice.is_correct
             ):
-                raise ValueError("Every correct answer must award points")
+                raise ValueError("A correct answer cannot deduct points")
             if any(
-                choice.points != 0
+                choice.points > 0
                 for choice in self.choices
                 if not choice.is_correct
             ):
-                raise ValueError("An incorrect answer cannot award points")
+                raise ValueError("An incorrect answer cannot award positive points")
         elif correct_count:
             raise ValueError("Manual correction cannot define correct answers")
         if (self.code_language is None) != (self.code_content is None):
