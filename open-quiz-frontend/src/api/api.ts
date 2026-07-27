@@ -37,7 +37,7 @@ export type QuestionBankImportResult = {
 }
 
 export type QuestionDifficulty = "easy" | "medium" | "hard"
-export type AnswerMode = "single" | "multiple"
+export type AnswerMode = "single" | "multiple" | "written"
 export type CorrectionMode = "automatic" | "manual"
 export type CodeLanguage =
     | "javascript"

@@ -89,7 +89,7 @@ class QuestionImportImage(BaseModel):
 
 class QuestionChoiceCreate(BaseModel):
     id: int | None = None
-    label: str = Field(min_length=1, max_length=500)
+    label: str = Field(min_length=1, max_length=4000)
     is_correct: bool = False
     points: float = Field(default=0, ge=-1000, le=1000)
     image: QuestionImportImage | None = None
@@ -100,7 +100,7 @@ class QuestionChoiceCreate(BaseModel):
     @field_validator("label")
     @classmethod
     def normalize_label(cls, value: str) -> str:
-        normalized = " ".join(value.split())
+        normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
         if not normalized:
             raise ValueError("A choice cannot be empty")
         return normalized
@@ -123,10 +123,10 @@ class QuestionChoiceCreate(BaseModel):
 class QuestionCreate(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     difficulty: Literal["easy", "medium", "hard"]
-    answer_mode: Literal["single", "multiple"]
+    answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool = True
-    correction_mode: Literal["automatic", "manual"]
-    choices: list[QuestionChoiceCreate] = Field(min_length=2, max_length=12)
+    correction_mode: Literal["automatic"]
+    choices: list[QuestionChoiceCreate] = Field(min_length=1, max_length=12)
     code_language: CodeLanguage | None = None
     code_content: str | None = Field(default=None, max_length=20000)
 
@@ -154,12 +154,16 @@ class QuestionCreate(BaseModel):
             if "points" not in choice.model_fields_set:
                 choice.points = 1 if choice.is_correct else 0
         correct_count = sum(choice.is_correct for choice in self.choices)
-        if self.answer_mode == "single" and correct_count > 1:
+        if self.answer_mode in {"single", "written"} and correct_count > 1:
             raise ValueError("A single-choice question can have one correct answer")
         if self.correction_mode == "automatic":
+            if self.answer_mode != "written" and len(self.choices) < 2:
+                raise ValueError("Automatic correction requires at least two choices")
+            if self.answer_mode == "written" and len(self.choices) != 1:
+                raise ValueError("A written answer requires one response")
             if correct_count == 0:
                 raise ValueError("Automatic correction requires a correct answer")
-            if self.answer_mode == "single" and correct_count != 1:
+            if self.answer_mode in {"single", "written"} and correct_count != 1:
                 raise ValueError(
                     "Automatic single-choice correction requires one correct answer"
                 )
@@ -175,8 +179,6 @@ class QuestionCreate(BaseModel):
                 if not choice.is_correct
             ):
                 raise ValueError("An incorrect answer cannot award positive points")
-        elif correct_count:
-            raise ValueError("Manual correction cannot define correct answers")
         if (self.code_language is None) != (self.code_content is None):
             raise ValueError("Code language and content must be provided together")
         return self
@@ -200,7 +202,7 @@ class QuestionResponse(BaseModel):
     question_bank_id: int
     prompt: str
     difficulty: Literal["easy", "medium", "hard"]
-    answer_mode: Literal["single", "multiple"]
+    answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool
     correction_mode: Literal["automatic", "manual"]
     has_image: bool
