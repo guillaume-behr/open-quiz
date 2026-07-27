@@ -13,9 +13,12 @@ RUN pnpm build
 
 FROM caddy:2.11.4-alpine
 
+RUN addgroup -S openquiz \
+    && adduser -S -D -H -G openquiz openquiz
+
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
 
-USER caddy
+USER openquiz
 
 EXPOSE 8080
