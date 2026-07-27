@@ -98,6 +98,33 @@ def create_question_bank(
     return question_bank
 
 
+@router.delete(
+    "/{question_bank_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_question_bank(
+    question_bank_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> None:
+    """Delete a question bank and every question it contains."""
+    owned_question_bank(question_bank_id, professor, session)
+    question_ids = select(Question.id).where(
+        Question.question_bank_id == question_bank_id
+    )
+    session.execute(
+        delete(QuestionChoice).where(QuestionChoice.question_id.in_(question_ids))
+    )
+    session.execute(
+        delete(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
+    )
+    session.execute(
+        delete(Question).where(Question.question_bank_id == question_bank_id)
+    )
+    session.execute(delete(QuestionBank).where(QuestionBank.id == question_bank_id))
+    session.commit()
+
+
 def owned_question_bank(
     question_bank_id: int,
     professor: ProfessorUser,

@@ -1,6 +1,7 @@
 import {
     ApiError,
     createQuestionBank,
+    deleteQuestionBank,
     downloadQuestionBank,
     downloadQuestionBatchExample,
     getQuestionBanks,
@@ -32,10 +33,15 @@ import {
     Pencil,
     Plus,
     Settings2,
+    Trash2,
     Upload,
 } from "lucide-react"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+
+const DEFAULT_GRADE_LEVELS = ["2de", "1re", "Terminale"]
+const selectClassName =
+    "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 function compareQuestionBanks(
     first: QuestionBank,
@@ -68,11 +74,24 @@ function exportFilename(bank: QuestionBank): string {
     return `banque-${safeName || bank.id}.json`
 }
 
-export function QuestionBanksPanel() {
+type QuestionBanksPanelProps = {
+    isCreateDialogOpen: boolean
+    onCreateDialogOpenChange: (open: boolean) => void
+}
+
+export function QuestionBanksPanel({
+    isCreateDialogOpen,
+    onCreateDialogOpenChange,
+}: QuestionBanksPanelProps) {
     const { t } = useTranslation()
     const [questionBanks, setQuestionBanks] = useState<QuestionBank[]>([])
     const [gradeLevel, setGradeLevel] = useState("")
-    const [chapter, setChapter] = useState("")
+    const [title, setTitle] = useState("")
+    const [titleFilter, setTitleFilter] = useState("")
+    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
+    const [gradeLevels, setGradeLevels] = useState(DEFAULT_GRADE_LEVELS)
+    const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
+    const [newGradeLevel, setNewGradeLevel] = useState("")
     const [isLoading, setIsLoading] = useState(true)
     const [isCreating, setIsCreating] = useState(false)
     const [createError, setCreateError] = useState<string | null>(null)
@@ -92,6 +111,9 @@ export function QuestionBanksPanel() {
     const [importError, setImportError] = useState<string | null>(null)
     const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
     const [importFile, setImportFile] = useState<File | null>(null)
+    const [bankToDelete, setBankToDelete] = useState<QuestionBank | null>(null)
+    const [isDeletingBank, setIsDeletingBank] = useState(false)
+    const [deleteBankError, setDeleteBankError] = useState<string | null>(null)
     const importInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
@@ -99,7 +121,18 @@ export function QuestionBanksPanel() {
 
         getQuestionBanks()
             .then((banks) => {
-                if (isActive) setQuestionBanks(banks)
+                if (!isActive) return
+                setQuestionBanks(banks)
+                setGradeLevels((levels) => [
+                    ...levels,
+                    ...Array.from(
+                        new Set(
+                            banks
+                                .map((bank) => bank.grade_level)
+                                .filter((level) => !levels.includes(level))
+                        )
+                    ),
+                ])
             })
             .catch(() => {
                 if (isActive) setLoadError(t("question-banks-load-error"))
@@ -141,13 +174,14 @@ export function QuestionBanksPanel() {
         try {
             const created = await createQuestionBank({
                 grade_level: gradeLevel.trim(),
-                chapter: chapter.trim(),
+                chapter: title.trim(),
             })
             setQuestionBanks((banks) =>
                 [...banks, created].sort(compareQuestionBanks)
             )
             setGradeLevel("")
-            setChapter("")
+            setTitle("")
+            onCreateDialogOpenChange(false)
         } catch (caughtError) {
             setCreateError(
                 caughtError instanceof ApiError && caughtError.status === 409
@@ -159,9 +193,30 @@ export function QuestionBanksPanel() {
         }
     }
 
+    function addGradeLevel(): void {
+        const normalizedLevel = newGradeLevel.trim()
+        if (!normalizedLevel) return
+        setGradeLevels((levels) =>
+            levels.includes(normalizedLevel)
+                ? levels
+                : [...levels, normalizedLevel]
+        )
+        setGradeLevel(normalizedLevel)
+        setNewGradeLevel("")
+        setIsAddingGradeLevel(false)
+    }
+
     const selectedBank = questionBanks.find(
         (bank) => bank.id === selectedBankId
     )
+    const filteredQuestionBanks = questionBanks.filter((bank) => {
+        const matchesGradeLevel =
+            !gradeLevelFilter || bank.grade_level === gradeLevelFilter
+        const matchesTitle = bank.chapter
+            .toLocaleLowerCase("fr")
+            .includes(titleFilter.trim().toLocaleLowerCase("fr"))
+        return matchesGradeLevel && matchesTitle
+    })
 
     function openQuestions(bankId: number): void {
         setAreQuestionsLoading(true)
@@ -196,6 +251,28 @@ export function QuestionBanksPanel() {
             setBatchError(t("json-export-error"))
         } finally {
             setIsBatchBusy(false)
+        }
+    }
+
+    async function handleDeleteBank(): Promise<void> {
+        if (!bankToDelete) return
+
+        setDeleteBankError(null)
+        setIsDeletingBank(true)
+        try {
+            await deleteQuestionBank(bankToDelete.id)
+            setQuestionBanks((banks) =>
+                banks.filter((bank) => bank.id !== bankToDelete.id)
+            )
+            if (selectedBankId === bankToDelete.id) {
+                setSelectedBankId(null)
+                setIsQuestionsDialogOpen(false)
+            }
+            setBankToDelete(null)
+        } catch {
+            setDeleteBankError(t("question-bank-delete-error"))
+        } finally {
+            setIsDeletingBank(false)
         }
     }
 
@@ -243,62 +320,59 @@ export function QuestionBanksPanel() {
 
     return (
         <div className="mt-6">
-            <div className="grid gap-5 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
-                <form
-                    className="h-fit rounded-xl border bg-background p-4"
-                    onSubmit={handleSubmit}
-                >
-                    <h3 className="font-semibold">
-                        {t("create-question-bank")}
-                    </h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        {t("create-question-bank-help")}
-                    </p>
-
+            <div className="grid gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                <aside className="h-fit rounded-xl border bg-background p-4">
+                    <h3 className="font-semibold">{t("filters")}</h3>
                     <FieldGroup className="mt-4 gap-4">
                         <Field>
-                            <FieldLabel htmlFor="question-bank-grade-level">
-                                {t("grade-level")}
+                            <FieldLabel htmlFor="question-bank-title-filter">
+                                {t("search")}
                             </FieldLabel>
                             <Input
-                                id="question-bank-grade-level"
-                                value={gradeLevel}
+                                id="question-bank-title-filter"
+                                value={titleFilter}
                                 onChange={(event) =>
-                                    setGradeLevel(event.target.value)
+                                    setTitleFilter(event.target.value)
                                 }
-                                maxLength={80}
-                                placeholder={t("grade-level-placeholder")}
-                                required
+                                placeholder={t("search-question-bank")}
                             />
                         </Field>
                         <Field>
-                            <FieldLabel htmlFor="question-bank-chapter">
-                                {t("chapter")}
+                            <FieldLabel htmlFor="question-bank-grade-filter">
+                                {t("grade-level")}
                             </FieldLabel>
-                            <Input
-                                id="question-bank-chapter"
-                                value={chapter}
+                            <select
+                                id="question-bank-grade-filter"
+                                className={selectClassName}
+                                value={gradeLevelFilter}
                                 onChange={(event) =>
-                                    setChapter(event.target.value)
+                                    setGradeLevelFilter(event.target.value)
                                 }
-                                maxLength={160}
-                                placeholder={t("chapter-placeholder")}
-                                required
-                            />
+                            >
+                                <option value="">
+                                    {t("all-grade-levels")}
+                                </option>
+                                {gradeLevels.map((level) => (
+                                    <option key={level} value={level}>
+                                        {level}
+                                    </option>
+                                ))}
+                            </select>
                         </Field>
-                        {createError && <FieldError>{createError}</FieldError>}
-                        <Button type="submit" disabled={isCreating}>
-                            {isCreating ? (
-                                <LoaderCircle className="animate-spin" />
-                            ) : (
-                                <Plus />
-                            )}
-                            {isCreating
-                                ? t("creating-question-bank")
-                                : t("create-question-bank-action")}
-                        </Button>
+                        {(titleFilter || gradeLevelFilter) && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setTitleFilter("")
+                                    setGradeLevelFilter("")
+                                }}
+                            >
+                                {t("clear-filters")}
+                            </Button>
+                        )}
                     </FieldGroup>
-                </form>
+                </aside>
 
                 <div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -363,9 +437,26 @@ export function QuestionBanksPanel() {
                                 {t("no-question-bank-help")}
                             </p>
                         </div>
+                    ) : filteredQuestionBanks.length === 0 ? (
+                        <div className="mt-3 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                            <p className="font-medium">
+                                {t("no-question-bank-filtered")}
+                            </p>
+                            <Button
+                                type="button"
+                                className="mt-3"
+                                variant="outline"
+                                onClick={() => {
+                                    setTitleFilter("")
+                                    setGradeLevelFilter("")
+                                }}
+                            >
+                                {t("clear-filters")}
+                            </Button>
+                        </div>
                     ) : (
                         <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-                            {questionBanks.map((bank) => (
+                            {filteredQuestionBanks.map((bank) => (
                                 <li
                                     key={bank.id}
                                     className="relative rounded-xl border bg-background p-4"
@@ -375,7 +466,7 @@ export function QuestionBanksPanel() {
                                             count: bank.question_count,
                                         })}
                                     </span>
-                                    <div className="flex items-start gap-3 pr-24">
+                                    <div className="flex items-start gap-3 pr-16">
                                         <div className="rounded-lg bg-primary/10 p-2 text-primary">
                                             <BookOpenText className="size-5" />
                                         </div>
@@ -413,12 +504,139 @@ export function QuestionBanksPanel() {
                                             </div>
                                         </div>
                                     </div>
+                                    <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="destructive"
+                                        className="absolute right-4 bottom-4"
+                                        aria-label={t("delete-question-bank")}
+                                        title={t("delete-question-bank")}
+                                        onClick={() => {
+                                            setDeleteBankError(null)
+                                            setBankToDelete(bank)
+                                        }}
+                                    >
+                                        <Trash2 />
+                                    </Button>
                                 </li>
                             ))}
                         </ul>
                     )}
                 </div>
             </div>
+
+            <Dialog
+                open={isCreateDialogOpen}
+                onOpenChange={(open) => {
+                    if (!isCreating) {
+                        onCreateDialogOpenChange(open)
+                        if (!open) setCreateError(null)
+                    }
+                }}
+                title={t("create-question-bank")}
+                description={t("create-question-bank-help")}
+                className="max-w-lg"
+            >
+                <form onSubmit={handleSubmit}>
+                    <FieldGroup className="gap-4">
+                        <Field>
+                            <FieldLabel htmlFor="question-bank-grade-level">
+                                {t("grade-level")}
+                            </FieldLabel>
+                            <div className="flex gap-2">
+                                <select
+                                    id="question-bank-grade-level"
+                                    className={selectClassName}
+                                    value={gradeLevel}
+                                    onChange={(event) =>
+                                        setGradeLevel(event.target.value)
+                                    }
+                                    required
+                                >
+                                    <option value="" disabled>
+                                        {t("choose-grade-level")}
+                                    </option>
+                                    {gradeLevels.map((level) => (
+                                        <option key={level} value={level}>
+                                            {level}
+                                        </option>
+                                    ))}
+                                </select>
+                                <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    aria-label={t("add-grade-level")}
+                                    onClick={() =>
+                                        setIsAddingGradeLevel((value) => !value)
+                                    }
+                                >
+                                    <Plus />
+                                </Button>
+                            </div>
+                            {isAddingGradeLevel && (
+                                <div className="mt-2 flex gap-2">
+                                    <Input
+                                        value={newGradeLevel}
+                                        onChange={(event) =>
+                                            setNewGradeLevel(event.target.value)
+                                        }
+                                        maxLength={80}
+                                        placeholder={t(
+                                            "grade-level-placeholder"
+                                        )}
+                                    />
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={addGradeLevel}
+                                    >
+                                        {t("save-grade-level")}
+                                    </Button>
+                                </div>
+                            )}
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="question-bank-title">
+                                {t("question-bank-title")}
+                            </FieldLabel>
+                            <Input
+                                id="question-bank-title"
+                                value={title}
+                                onChange={(event) =>
+                                    setTitle(event.target.value)
+                                }
+                                maxLength={160}
+                                placeholder={t(
+                                    "question-bank-title-placeholder"
+                                )}
+                                required
+                            />
+                        </Field>
+                        {createError && <FieldError>{createError}</FieldError>}
+                        <div className="flex justify-end gap-2 border-t pt-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={isCreating}
+                                onClick={() => onCreateDialogOpenChange(false)}
+                            >
+                                {t("cancel")}
+                            </Button>
+                            <Button type="submit" disabled={isCreating}>
+                                {isCreating ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <Plus />
+                                )}
+                                {isCreating
+                                    ? t("creating-question-bank")
+                                    : t("create-question-bank-action")}
+                            </Button>
+                        </div>
+                    </FieldGroup>
+                </form>
+            </Dialog>
 
             <Dialog
                 open={isImportDialogOpen}
@@ -477,6 +695,48 @@ export function QuestionBanksPanel() {
                         </div>
                     </FieldGroup>
                 </form>
+            </Dialog>
+
+            <Dialog
+                open={bankToDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open && !isDeletingBank) {
+                        setBankToDelete(null)
+                        setDeleteBankError(null)
+                    }
+                }}
+                title={t("delete-question-bank")}
+                description={t("delete-question-bank-help", {
+                    title: bankToDelete?.chapter ?? "",
+                })}
+                className="max-w-md"
+            >
+                <div className="space-y-4">
+                    {deleteBankError && (
+                        <FieldError>{deleteBankError}</FieldError>
+                    )}
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isDeletingBank}
+                            onClick={() => setBankToDelete(null)}
+                        >
+                            {t("cancel")}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            disabled={isDeletingBank}
+                            onClick={() => void handleDeleteBank()}
+                        >
+                            {isDeletingBank && (
+                                <LoaderCircle className="animate-spin" />
+                            )}
+                            {t("delete-question-bank")}
+                        </Button>
+                    </div>
+                </div>
             </Dialog>
 
             {selectedBank && (
@@ -657,11 +917,11 @@ export function QuestionBanksPanel() {
                                                 <span>•</span>
                                                 <span>
                                                     {t(
-                                                    question.correction_mode ===
-                                                    "automatic"
-                                                        ? "automatic-correction-full"
-                                                        : "manual-correction-full"
-                                                )}
+                                                        question.correction_mode ===
+                                                            "automatic"
+                                                            ? "automatic-correction-full"
+                                                            : "manual-correction-full"
+                                                    )}
                                                 </span>
                                                 {!question.answer_mode_disclosed && (
                                                     <>

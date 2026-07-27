@@ -17,6 +17,7 @@ import {
     LibraryBig,
     LoaderCircle,
     LogOut,
+    Plus,
     UsersRound,
     type LucideIcon,
 } from "lucide-react"
@@ -41,6 +42,8 @@ export function Dashboard() {
     const [isLoading, setIsLoading] = useState(true)
     const [activeSection, setActiveSection] =
         useState<DashboardSection>("students")
+    const [isQuestionBankCreationOpen, setIsQuestionBankCreationOpen] =
+        useState(false)
 
     const dashboardEntries: DashboardEntry[] = [
         {
@@ -195,24 +198,42 @@ export function Dashboard() {
                     className="min-h-72 rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
                     aria-labelledby={`${activeEntry.id}-title`}
                 >
-                    <div className="flex items-start gap-4">
-                        <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                            <activeEntry.icon className="size-6" />
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                            <div className="rounded-xl bg-primary/10 p-3 text-primary">
+                                <activeEntry.icon className="size-6" />
+                            </div>
+                            <div>
+                                <h2
+                                    id={`${activeEntry.id}-title`}
+                                    className="text-2xl font-bold"
+                                >
+                                    {activeEntry.label}
+                                </h2>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    {activeEntry.description}
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h2
-                                id={`${activeEntry.id}-title`}
-                                className="text-2xl font-bold"
+                        {activeSection === "question-banks" && (
+                            <Button
+                                type="button"
+                                onClick={() =>
+                                    setIsQuestionBankCreationOpen(true)
+                                }
                             >
-                                {activeEntry.label}
-                            </h2>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                {activeEntry.description}
-                            </p>
-                        </div>
+                                <Plus />
+                                {t("create-question-bank")}
+                            </Button>
+                        )}
                     </div>
                     {activeSection === "question-banks" && (
-                        <QuestionBanksPanel />
+                        <QuestionBanksPanel
+                            isCreateDialogOpen={isQuestionBankCreationOpen}
+                            onCreateDialogOpenChange={
+                                setIsQuestionBankCreationOpen
+                            }
+                        />
                     )}
                 </section>
             </div>

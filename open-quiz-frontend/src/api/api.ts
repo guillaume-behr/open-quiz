@@ -267,6 +267,12 @@ export function createQuestionBank(
     })
 }
 
+export function deleteQuestionBank(questionBankId: number): Promise<void> {
+    return request<void>(`/api/question-banks/${questionBankId}`, {
+        method: "DELETE",
+    })
+}
+
 export function getQuestions(questionBankId: number): Promise<Question[]> {
     return request<Question[]>(
         `/api/question-banks/${questionBankId}/questions`
