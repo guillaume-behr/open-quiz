@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.models import User
+from app.models import TwoFactorCredential, User
 from app.security import decode_access_token
 
 bearer = HTTPBearer(auto_error=False)
@@ -42,7 +42,13 @@ def get_current_user(
         raise unauthorized from None
 
     user = session.get(User, user_id)
-    if user is None or not user.is_active:
+    two_factor = session.get(TwoFactorCredential, user_id)
+    if (
+        user is None
+        or not user.is_active
+        or two_factor is None
+        or not two_factor.confirmed
+    ):
         raise unauthorized
     return user
 

@@ -1,5 +1,13 @@
-import { login, logout, restoreSession, type User } from "@/api/api"
+import {
+    login,
+    logout,
+    restoreSession,
+    verifyTwoFactor,
+    type TwoFactorChallenge,
+    type User,
+} from "@/api/api"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
+import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { Button } from "@/components/ui/button"
 import { LoaderCircle, LogOut } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -8,6 +16,7 @@ import { useTranslation } from "react-i18next"
 export function Dashboard() {
     const { t } = useTranslation()
     const [currentUser, setCurrentUser] = useState<User | null>(null)
+    const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null)
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
@@ -18,7 +27,13 @@ export function Dashboard() {
     }, [])
 
     async function handleLogin(username: string, password: string) {
-        setCurrentUser(await login(username, password))
+        setChallenge(await login(username, password))
+    }
+
+    async function handleTwoFactor(code: string) {
+        if (!challenge) return
+        setCurrentUser(await verifyTwoFactor(challenge.challenge_token, code))
+        setChallenge(null)
     }
 
     function handleLogout() {
@@ -36,7 +51,15 @@ export function Dashboard() {
     if (!currentUser) {
         return (
             <div className="flex flex-1 items-center justify-center px-4">
-                <DashboardLogin onLogin={handleLogin} />
+                {challenge ? (
+                    <TwoFactorForm
+                        challenge={challenge}
+                        onVerify={handleTwoFactor}
+                        onCancel={() => setChallenge(null)}
+                    />
+                ) : (
+                    <DashboardLogin onLogin={handleLogin} />
+                )}
             </div>
         )
     }

@@ -32,3 +32,12 @@ class RefreshSession(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     expires_at: Mapped[int] = mapped_column(Integer)
     revoked_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class TwoFactorCredential(Base):
+    __tablename__ = "two_factor_credentials"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    encrypted_secret: Mapped[str] = mapped_column(String(255))
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_counter: Mapped[int | None] = mapped_column(Integer, nullable=True)

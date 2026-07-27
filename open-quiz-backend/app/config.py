@@ -12,6 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 class Settings:
     database_url: str
     jwt_secret: str
+    totp_encryption_key: str
     admin_username: str
     admin_password: str
     frontend_origin: str
@@ -30,6 +31,10 @@ class Settings:
             raise ValueError("JWT_SECRET must contain at least 32 characters")
         if self.jwt_secret.startswith("replace-with-"):
             raise ValueError("JWT_SECRET is still set to its example value")
+        if len(self.totp_encryption_key) < 32:
+            raise ValueError("TOTP_ENCRYPTION_KEY must contain at least 32 characters")
+        if self.totp_encryption_key.startswith("replace-with-"):
+            raise ValueError("TOTP_ENCRYPTION_KEY is still set to its example value")
         if len(self.admin_password) < 16:
             raise ValueError("ADMIN_PASSWORD must contain at least 16 characters")
         if self.admin_password.startswith("replace-with-"):
@@ -70,6 +75,7 @@ def get_settings() -> Settings:
             "DATABASE_URL", f"sqlite:///{(BASE_DIR / 'open-quiz.db').as_posix()}"
         ),
         jwt_secret=required_environment("JWT_SECRET"),
+        totp_encryption_key=required_environment("TOTP_ENCRYPTION_KEY"),
         admin_username=required_environment("ADMIN_USERNAME"),
         admin_password=required_environment("ADMIN_PASSWORD"),
         frontend_origin=os.getenv("FRONTEND_ORIGIN", "http://localhost:5173"),

@@ -22,6 +22,13 @@ type TokenResponse = {
     access_token: string
 }
 
+export type TwoFactorChallenge = {
+    status: "setup_required" | "verification_required"
+    challenge_token: string
+    secret: string | null
+    provisioning_uri: string | null
+}
+
 async function errorFrom(response: Response): Promise<Error> {
     const body = (await response.json().catch(() => ({}))) as {
         detail?: string
@@ -82,13 +89,33 @@ async function request<T>(
     return response.json() as Promise<T>
 }
 
-export async function login(username: string, password: string): Promise<User> {
+export async function login(
+    username: string,
+    password: string
+): Promise<TwoFactorChallenge> {
     accessToken = null
-    const result = await request<TokenResponse>(
+    return request<TwoFactorChallenge>(
         "/api/auth/login",
         {
             method: "POST",
             body: JSON.stringify({ username, password }),
+        },
+        false
+    )
+}
+
+export async function verifyTwoFactor(
+    challengeToken: string,
+    code: string
+): Promise<User> {
+    const result = await request<TokenResponse>(
+        "/api/auth/2fa/verify",
+        {
+            method: "POST",
+            body: JSON.stringify({
+                challenge_token: challengeToken,
+                code,
+            }),
         },
         false
     )

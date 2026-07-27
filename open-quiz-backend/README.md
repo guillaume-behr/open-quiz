@@ -10,10 +10,11 @@
 
 ## Démarrage
 
-Copiez `.env.example` vers `.env`, puis renseignez un secret JWT aléatoire d'au
-moins 32 caractères et un mot de passe administrateur robuste. Le compte
-administrateur est créé au premier démarrage. Ensuite, ses droits, son état et
-son mot de passe restent synchronisés avec `.env` à chaque démarrage.
+Copiez `.env.example` vers `.env`, puis renseignez deux secrets aléatoires
+distincts d'au moins 32 caractères pour les jetons JWT et le chiffrement TOTP,
+ainsi qu'un mot de passe administrateur robuste. Le compte administrateur est
+créé au premier démarrage. Ensuite, ses droits, son état et son mot de passe
+restent synchronisés avec `.env` à chaque démarrage.
 
 ```shell
 uv run fastapi dev main.py
@@ -23,7 +24,20 @@ La documentation interactive est disponible sur `http://localhost:8000/docs`.
 
 Les jetons d'accès expirent rapidement et restent uniquement en mémoire dans le
 navigateur. Les sessions longues utilisent un cookie HttpOnly rotatif et
-révocable. Pour révoquer les secrets locaux et en générer de nouveaux sans les
+révocable. Tous les comptes doivent configurer une application
+d'authentification TOTP lors de leur première connexion. Les secrets TOTP sont
+chiffrés dans SQLite avec `TOTP_ENCRYPTION_KEY`. Sauvegardez cette clé : si elle
+est perdue ou remplacée, chaque utilisateur devra réinitialiser son inscription
+2FA.
+
+Si un utilisateur perd son authentificateur, réinitialisez son inscription 2FA
+et révoquez ses sessions actives avec :
+
+```shell
+uv run python -m scripts.reset_two_factor identifiant
+```
+
+Pour renouveler le secret JWT et le mot de passe administrateur locaux sans les
 afficher dans le terminal :
 
 ```shell

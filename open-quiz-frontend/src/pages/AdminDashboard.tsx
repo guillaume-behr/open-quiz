@@ -4,10 +4,13 @@ import {
     login,
     logout,
     restoreSession,
+    verifyTwoFactor,
     type NewUser,
+    type TwoFactorChallenge,
     type User,
 } from "@/api/api"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
+import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -31,6 +34,7 @@ async function requireAdmin(user: User, errorMessage: string): Promise<void> {
 export function AdminDashboard() {
     const { t } = useTranslation()
     const [currentUser, setCurrentUser] = useState<User | null>(null)
+    const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null)
     const [users, setUsers] = useState<User[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState("")
@@ -52,10 +56,16 @@ export function AdminDashboard() {
     }, [t])
 
     async function handleLogin(username: string, password: string) {
-        const user = await login(username, password)
+        setChallenge(await login(username, password))
+    }
+
+    async function handleTwoFactor(code: string) {
+        if (!challenge) return
+        const user = await verifyTwoFactor(challenge.challenge_token, code)
         await requireAdmin(user, t("admin-only"))
         setCurrentUser(user)
         setUsers(await getUsers())
+        setChallenge(null)
     }
 
     async function handleCreateUser(event: SyntheticEvent<HTMLFormElement>) {
@@ -104,11 +114,19 @@ export function AdminDashboard() {
     if (!currentUser) {
         return (
             <div className="flex flex-1 items-center justify-center px-4">
-                <DashboardLogin
-                    onLogin={handleLogin}
-                    title={t("admin-login")}
-                    instructions={t("admin-login-instructions")}
-                />
+                {challenge ? (
+                    <TwoFactorForm
+                        challenge={challenge}
+                        onVerify={handleTwoFactor}
+                        onCancel={() => setChallenge(null)}
+                    />
+                ) : (
+                    <DashboardLogin
+                        onLogin={handleLogin}
+                        title={t("admin-login")}
+                        instructions={t("admin-login-instructions")}
+                    />
+                )}
             </div>
         )
     }
