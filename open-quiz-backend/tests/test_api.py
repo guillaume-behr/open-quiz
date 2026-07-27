@@ -326,6 +326,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert exported_batch["questions"][0]["image"]["content_type"] == "image/png"
         assert exported_batch["questions"][0]["code_language"] == "python"
         assert exported_batch["questions"][0]["choices"][0]["points"] == 2.5
+        assert exported_batch["questions"][0]["choices"][1]["points"] == -0.5
         assert exported_batch["questions"][0]["choices"][0]["image"] is not None
         assert (
             exported_batch["questions"][0]["choices"][0]["code_content"]
@@ -412,8 +413,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         } == {
             ("single", "automatic"),
             ("multiple", "automatic"),
-            ("single", "manual"),
-            ("multiple", "manual"),
+            ("written", "automatic"),
         }
         assert any(item["image"] for item in example_batch["questions"])
         assert any(item["code_content"] for item in example_batch["questions"])
@@ -427,6 +427,28 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             for item in example_batch["questions"]
             for choice in item["choices"]
         )
+        assert any(
+            choice["points"] < 0
+            for item in example_batch["questions"]
+            for choice in item["choices"]
+            if not choice["is_correct"]
+        )
+
+        example_batch["question_bank"] = {
+            "grade_level": "Terminale",
+            "chapter": "Import de l’exemple",
+        }
+        imported_example = client.post(
+            "/api/question-banks/import",
+            headers=teacher_headers,
+            json=example_batch,
+        )
+        assert imported_example.status_code == 201
+        assert imported_example.json()["question_bank"]["question_count"] == 3
+        assert {
+            question["answer_mode"]
+            for question in imported_example.json()["questions"]
+        } == {"single", "multiple", "written"}
 
         updated_payload = {
             **question_payload,

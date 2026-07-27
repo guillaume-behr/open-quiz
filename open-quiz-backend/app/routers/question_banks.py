@@ -308,7 +308,7 @@ def download_import_example(_: ProfessorUser) -> Response:
     example = {
         "version": 1,
         "question_bank": {
-            "grade_level": "5e",
+            "grade_level": "2de",
             "chapter": "Exemple complet",
         },
         "questions": [
@@ -330,7 +330,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "Lyon",
                         "is_correct": False,
-                        "points": 0,
+                        "points": -0.25,
                         "image": None,
                         "code_language": None,
                         "code_content": None,
@@ -372,7 +372,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "4",
                         "is_correct": False,
-                        "points": 0,
+                        "points": -0.25,
                         "image": {
                             "content_type": "image/png",
                             "data_base64": (
@@ -384,44 +384,8 @@ def download_import_example(_: ProfessorUser) -> Response:
                         "code_content": "console.log(4)",
                     },
                 ],
-                "code_language": None,
-                "code_content": None,
-                "image": None,
-            },
-            {
-                "prompt": "Expliquez le résultat produit par ce code.",
-                "difficulty": "hard",
-                "answer_mode": "single",
-                "answer_mode_disclosed": True,
-                "correction_mode": "manual",
-                "choices": [
-                    {
-                        "label": "Réponse proposée A",
-                        "is_correct": False,
-                        "points": 2,
-                    },
-                    {
-                        "label": "Réponse proposée B",
-                        "is_correct": False,
-                        "points": 1,
-                    },
-                ],
                 "code_language": "python",
-                "code_content": "values = [1, 2, 3]\nprint(sum(values))",
-                "image": None,
-            },
-            {
-                "prompt": "Sélectionnez les éléments visibles sur l’image.",
-                "difficulty": "medium",
-                "answer_mode": "multiple",
-                "answer_mode_disclosed": True,
-                "correction_mode": "manual",
-                "choices": [
-                    {"label": "Élément A", "is_correct": False, "points": 1},
-                    {"label": "Élément B", "is_correct": False, "points": 1},
-                ],
-                "code_language": None,
-                "code_content": None,
+                "code_content": "numbers = [2, 3, 4]\nprint(numbers)",
                 "image": {
                     "content_type": "image/png",
                     "data_base64": (
@@ -429,6 +393,26 @@ def download_import_example(_: ProfessorUser) -> Response:
                         "AAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="
                     ),
                 },
+            },
+            {
+                "prompt": "Expliquez pourquoi la Terre tourne autour du Soleil.",
+                "difficulty": "hard",
+                "answer_mode": "written",
+                "answer_mode_disclosed": True,
+                "correction_mode": "automatic",
+                "choices": [
+                    {
+                        "label": "La gravitation maintient la Terre en orbite autour du Soleil.",
+                        "is_correct": True,
+                        "points": 1,
+                        "image": None,
+                        "code_language": None,
+                        "code_content": None,
+                    },
+                ],
+                "code_language": None,
+                "code_content": None,
+                "image": None,
             },
         ],
     }
