@@ -1,4 +1,4 @@
-FROM node:latest AS build
+FROM node:24.17.0-alpine3.23 AS build
 
 WORKDIR /app
 
@@ -11,9 +11,11 @@ COPY . .
 RUN pnpm build
 
 
-FROM caddy:latest
+FROM caddy:2.11.4-alpine
 
 COPY docker/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
+
+USER caddy
 
 EXPOSE 8080

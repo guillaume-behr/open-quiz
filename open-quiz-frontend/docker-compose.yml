@@ -1,15 +1,23 @@
 services:
-  open-quiz-frontend:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    expose:
-      - "8080"
-    networks:
-      - open-quiz
-    restart: unless-stopped
+    open-quiz-frontend:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+        expose:
+            - "8080"
+        networks:
+            - open-quiz
+        read_only: true
+        tmpfs:
+            - /config
+            - /data
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        restart: unless-stopped
 
 networks:
-  open-quiz:
-    name: open-quiz
-    internal: true
+    open-quiz:
+        name: open-quiz
+        internal: true
