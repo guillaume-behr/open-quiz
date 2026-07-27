@@ -43,8 +43,10 @@ export function MainLayout() {
                 <Outlet />
             </main>
 
-            <LanguageSelector className="absolute right-1 bottom-1/10" />
-            <ThemeSelector className="absolute right-1 bottom-1/18" />
+            <div className="absolute right-1 bottom-1/18 flex flex-col gap-1">
+                <LanguageSelector />
+                <ThemeSelector />
+            </div>
 
             <footer className="flex h-1/20 w-full items-center justify-between bg-sidebar-primary px-10">
                 <p className="text-sm">v 2026.01</p>
