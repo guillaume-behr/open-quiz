@@ -32,6 +32,9 @@ class RefreshSession(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     expires_at: Mapped[int] = mapped_column(Integer)
     revoked_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
 
 
 class RefreshSessionFamily(Base):
@@ -63,12 +66,12 @@ class AuthenticationChallenge(Base):
     used_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
-class LoginFailure(Base):
-    __tablename__ = "login_failures"
+class LoginRateLimit(Base):
+    __tablename__ = "login_rate_limits"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    limiter_key: Mapped[str] = mapped_column(String(96), index=True)
-    occurred_at: Mapped[int] = mapped_column(Integer, index=True)
+    limiter_key: Mapped[str] = mapped_column(String(96), primary_key=True)
+    window_started_at: Mapped[int] = mapped_column(Integer)
+    attempts: Mapped[int] = mapped_column(Integer)
 
 
 class SecurityState(Base):

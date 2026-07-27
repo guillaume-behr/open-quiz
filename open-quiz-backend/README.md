@@ -28,7 +28,8 @@ Les jetons d'accès expirent rapidement et restent uniquement en mémoire dans l
 navigateur. Les sessions longues utilisent un cookie HttpOnly rotatif et
 révocable. La réutilisation d'un ancien jeton révoque toute sa famille de
 sessions. Un changement de mot de passe administrateur révoque ses sessions et
-un changement de `JWT_SECRET` révoque toutes les sessions. Tous les comptes
+invalide immédiatement ses jetons d'accès. Un changement de `JWT_SECRET`
+révoque toutes les sessions. Tous les comptes
 doivent configurer une application
 d'authentification TOTP lors de leur première connexion. Les secrets TOTP sont
 chiffrés dans SQLite avec `TOTP_ENCRYPTION_KEY`. Sauvegardez cette clé : si elle
@@ -55,8 +56,9 @@ origine frontend HTTPS exacte.
 Les cookies deviennent alors automatiquement sécurisés, la documentation
 interactive est désactivée et les requêtes HTTP sont redirigées vers HTTPS.
 
-La limitation d'authentification est stockée en base de données et fonctionne
-donc avec plusieurs processus. `LOGIN_ATTEMPTS` limite une adresse IP tandis que
+La limitation d'authentification réserve chaque tentative atomiquement en base
+de données avant le calcul Argon2 ou la vérification TOTP et fonctionne donc
+avec plusieurs processus. `LOGIN_ATTEMPTS` limite une adresse IP tandis que
 `LOGIN_ACCOUNT_ATTEMPTS`, volontairement plus élevé, protège un compte contre
 une attaque distribuée. Configurez le reverse proxy comme seule entrée vers le
 backend et n'acceptez les en-têtes `Forwarded` que de ce proxy. Le conteneur
@@ -73,7 +75,7 @@ horodatage UTC. En production, envoyez-les vers un collecteur central en
 de rétention. Alertez notamment sur `auth.refresh_reuse_detected`,
 `auth.login_rate_limited` et les événements `security.*`.
 
-Le fichier Compose situé dans `open-quiz-frontend` démarre le backend sur un
+Le fichier `docker-compose.yml` situé à la racine du dépôt démarre le backend sur un
 réseau interne, conserve SQLite dans un volume dédié et fait passer `/api` par
 Caddy. L'origine publique configurée dans `FRONTEND_ORIGIN` doit correspondre
 exactement à l'adresse utilisée par le navigateur.

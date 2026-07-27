@@ -1,7 +1,7 @@
 from base64 import urlsafe_b64encode
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from hmac import compare_digest
+from hmac import compare_digest, new as hmac_new
 from secrets import token_urlsafe
 
 import jwt
@@ -21,12 +21,26 @@ def verify_password(password: str, encoded: str) -> bool:
     return password_hash.verify(password, encoded)
 
 
-def create_access_token(user_id: int, secret: str, expires_minutes: int) -> str:
+def access_token_version(password_hash: str, secret: str) -> str:
+    return hmac_new(
+        secret.encode(),
+        password_hash.encode(),
+        sha256,
+    ).hexdigest()
+
+
+def create_access_token(
+    user_id: int,
+    secret: str,
+    expires_minutes: int,
+    version: str,
+) -> str:
     now = datetime.now(UTC)
     return jwt.encode(
         {
             "sub": str(user_id),
             "type": "access",
+            "ver": version,
             "iat": now,
             "exp": now + timedelta(minutes=expires_minutes),
         },
@@ -35,11 +49,14 @@ def create_access_token(user_id: int, secret: str, expires_minutes: int) -> str:
     )
 
 
-def decode_access_token(token: str, secret: str) -> int:
+def decode_access_token(token: str, secret: str) -> tuple[int, str]:
     payload = jwt.decode(token, secret, algorithms=["HS256"])
     if payload.get("type") != "access":
         raise jwt.InvalidTokenError("Unexpected token type")
-    return int(payload["sub"])
+    version = payload.get("ver")
+    if not isinstance(version, str) or not version:
+        raise jwt.InvalidTokenError("Missing token version")
+    return int(payload["sub"]), version
 
 
 def create_two_factor_token(

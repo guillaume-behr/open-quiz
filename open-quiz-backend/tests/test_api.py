@@ -1,7 +1,8 @@
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
-from time import time
+from time import sleep, time
 from typing import Any
 
 import pyotp
@@ -93,6 +94,8 @@ def login_admin(client: TestClient) -> dict[str, str]:
 def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "test.db")) as client:
         headers = login_admin(client)
+        assert client.get("/api/quizzes", headers=headers).status_code == 403
+
         created = client.post(
             "/api/admin/users",
             headers=headers,
@@ -131,10 +134,18 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
 
 
 def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
-    with make_client(settings_for(tmp_path / "test.db")) as client:
+    database_path = tmp_path / "test.db"
+    with make_client(settings_for(database_path)) as client:
         _, secret = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
         first_refresh = client.cookies.get(REFRESH_COOKIE)
         assert first_refresh
+
+        with sqlite3.connect(database_path) as database:
+            created_at = database.execute(
+                "SELECT created_at FROM refresh_sessions"
+            ).fetchone()
+        assert created_at is not None
+        assert created_at[0] is not None
 
         refreshed = client.post("/api/auth/refresh")
         assert refreshed.status_code == 200
@@ -254,6 +265,38 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
         assert rejected.status_code == 403
 
 
+def test_login_rate_limit_reserves_concurrent_attempts_atomically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings_for(tmp_path / "test.db", login_attempts=3)
+    barrier = Barrier(8)
+
+    def slow_invalid_password(_: str, __: str) -> bool:
+        sleep(0.1)
+        return False
+
+    monkeypatch.setattr(
+        "app.routers.auth.verify_password",
+        slow_invalid_password,
+    )
+
+    with make_client(app_settings) as client:
+        def attempt_login() -> int:
+            barrier.wait()
+            return client.post(
+                "/api/auth/login",
+                json={"username": "unknown", "password": "incorrect-password"},
+            ).status_code
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(attempt_login) for _ in range(8)]
+            statuses = [future.result() for future in futures]
+
+    assert statuses.count(401) <= 3
+    assert statuses.count(429) >= 5
+
+
 def test_admin_routes_require_authentication(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "test.db")) as client:
         assert client.get("/api/admin/users").status_code == 401
@@ -262,15 +305,19 @@ def test_admin_routes_require_authentication(tmp_path: Path) -> None:
 def test_environment_password_rotation_updates_existing_admin(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     with make_client(settings_for(database)) as client:
-        complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        access_headers, _ = complete_first_login(
+            client,
+            "root-admin",
+            ADMIN_PASSWORD,
+        )
         previous_refresh = client.cookies.get(REFRESH_COOKIE)
 
     rotated = settings_for(
         database,
         admin_password="a-different-strong-password",
-        jwt_secret="a-different-jwt-secret-that-is-at-least-32-bytes",
     )
     with make_client(rotated) as client:
+        assert client.get("/api/users/me", headers=access_headers).status_code == 401
         client.cookies.set(REFRESH_COOKIE, previous_refresh, path="/api/auth")
         assert client.post("/api/auth/refresh").status_code == 401
         old_login = client.post(
@@ -364,6 +411,14 @@ def test_request_size_and_authenticated_cache_controls(tmp_path: Path) -> None:
         )
         assert oversized.status_code == 413
         assert oversized.headers["cache-control"] == "no-store"
+
+        chunked = client.post(
+            "/api/auth/login",
+            content=(b"x" * 600 for _ in range(2)),
+            headers={"Content-Type": "application/json"},
+        )
+        assert chunked.status_code == 413
+        assert chunked.headers["cache-control"] == "no-store"
 
         headers = login_admin(client)
         users = client.get("/api/admin/users", headers=headers)

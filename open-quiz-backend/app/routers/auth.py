@@ -23,6 +23,7 @@ from app.schemas import (
 )
 from app.security import (
     DUMMY_PASSWORD_HASH,
+    access_token_version,
     create_access_token,
     create_refresh_token,
     create_two_factor_token,
@@ -127,7 +128,10 @@ def issue_session(
     set_refresh_cookie(response, refresh_token, request)
     return TokenResponse(
         access_token=create_access_token(
-            user.id, settings.jwt_secret, settings.access_token_minutes
+            user.id,
+            settings.jwt_secret,
+            settings.access_token_minutes,
+            access_token_version(user.password_hash, settings.jwt_secret),
         )
     )
 
@@ -201,7 +205,7 @@ def login(
     validate_origin(request)
     ip_address = client_ip(request)
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.retry_after(session, ip_address, payload.username)
+    retry_after = limiter.reserve(session, ip_address, payload.username)
     if retry_after:
         audit_event("auth.login_rate_limited", ip=ip_address)
         raise HTTPException(
@@ -214,12 +218,12 @@ def login(
     encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_valid = verify_password(payload.password, encoded_password)
     if user is None or not user.is_active or not password_valid:
-        limiter.record_failure(session, ip_address, payload.username)
         audit_event("auth.login_failed", ip=ip_address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
+    limiter.release(session, ip_address, payload.username)
 
     settings = request.app.state.settings
     two_factor = session.get(TwoFactorCredential, user.id)
@@ -315,7 +319,7 @@ def verify_two_factor(
         )
 
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.retry_after(session, ip_address, user.username)
+    retry_after = limiter.reserve(session, ip_address, user.username)
     if retry_after:
         audit_event("auth.two_factor_rate_limited", ip=ip_address, user_id=user.id)
         raise HTTPException(
@@ -342,7 +346,6 @@ def verify_two_factor(
         two_factor.last_counter,
     )
     if matched_counter is None:
-        limiter.record_failure(session, ip_address, user.username)
         audit_event("auth.two_factor_failed", ip=ip_address, user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -382,7 +385,8 @@ def verify_two_factor(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or already used two-factor challenge",
         )
-    limiter.clear(session, ip_address, user.username)
+    limiter.release(session, ip_address, user.username)
+    limiter.clear_account(session, user.username)
     audit_event("auth.two_factor_succeeded", ip=ip_address, user_id=user.id)
     return issue_session(user, request, response, session)
 

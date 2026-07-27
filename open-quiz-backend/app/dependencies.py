@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from hmac import compare_digest
 from typing import Annotated
 
 import jwt
@@ -7,7 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.models import TwoFactorCredential, User
-from app.security import decode_access_token
+from app.security import access_token_version, decode_access_token
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -35,7 +36,7 @@ def get_current_user(
         raise unauthorized
 
     try:
-        user_id = decode_access_token(
+        user_id, token_version = decode_access_token(
             credentials.credentials, request.app.state.settings.jwt_secret
         )
     except jwt.PyJWTError, ValueError, KeyError:
@@ -48,6 +49,13 @@ def get_current_user(
         or not user.is_active
         or two_factor is None
         or not two_factor.confirmed
+        or not compare_digest(
+            token_version,
+            access_token_version(
+                user.password_hash,
+                request.app.state.settings.jwt_secret,
+            ),
+        )
     ):
         raise unauthorized
     return user
@@ -66,3 +74,15 @@ def require_admin(user: CurrentUser) -> User:
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
+
+
+def require_professor(user: CurrentUser) -> User:
+    if user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Professor access required",
+        )
+    return user
+
+
+ProfessorUser = Annotated[User, Depends(require_professor)]

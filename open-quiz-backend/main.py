@@ -213,13 +213,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     content={"detail": "Request body is too large"},
                 )
             elif response is None:
-                body = await request.body()
-                if len(body) > settings.max_request_body_bytes:
-                    response = JSONResponse(
-                        status_code=413,
-                        content={"detail": "Request body is too large"},
-                    )
-                else:
+                chunks: list[bytes] = []
+                received_bytes = 0
+                async for chunk in request.stream():
+                    received_bytes += len(chunk)
+                    if received_bytes > settings.max_request_body_bytes:
+                        response = JSONResponse(
+                            status_code=413,
+                            content={"detail": "Request body is too large"},
+                        )
+                        break
+                    chunks.append(chunk)
+                if response is None:
+                    request._body = b"".join(chunks)
                     response = await call_next(request)
         else:
             response = await call_next(request)

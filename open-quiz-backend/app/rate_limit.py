@@ -1,10 +1,11 @@
 from hashlib import sha256
 from time import time
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, update
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
-from app.models import LoginFailure
+from app.models import LoginRateLimit
 
 
 class LoginRateLimiter:
@@ -20,69 +21,96 @@ class LoginRateLimiter:
         self.account_limit = account_limit
         self.window_seconds = window_seconds
 
-    def retry_after(
+    def reserve(
         self,
         session: Session,
         ip_address: str,
         username: str,
     ) -> int:
+        """Atomically reserve an authentication attempt.
+
+        A zero return value means the caller may continue. A positive value is
+        the number of seconds to advertise in Retry-After.
+        """
         now = int(time())
         cutoff = now - self.window_seconds
-        session.execute(delete(LoginFailure).where(LoginFailure.occurred_at <= cutoff))
-        session.commit()
-
         limits = (
             (self._ip_key(ip_address), self.ip_limit),
             (self._account_key(username), self.account_limit),
         )
+        retry_after = 0
         for limiter_key, limit in limits:
-            count, oldest = session.execute(
-                select(
-                    func.count(LoginFailure.id),
-                    func.min(LoginFailure.occurred_at),
-                ).where(LoginFailure.limiter_key == limiter_key)
-            ).one()
-            if count >= limit and oldest is not None:
-                return max(1, self.window_seconds - (now - oldest))
-        return 0
-
-    def record_failure(
-        self,
-        session: Session,
-        ip_address: str,
-        username: str,
-    ) -> None:
-        now = int(time())
-        session.add_all(
-            [
-                LoginFailure(
-                    limiter_key=self._ip_key(ip_address),
-                    occurred_at=now,
-                ),
-                LoginFailure(
-                    limiter_key=self._account_key(username),
-                    occurred_at=now,
-                ),
-            ]
-        )
+            expired = LoginRateLimit.window_started_at <= cutoff
+            statement = (
+                insert(LoginRateLimit)
+                .values(
+                    limiter_key=limiter_key,
+                    window_started_at=now,
+                    attempts=1,
+                )
+                .on_conflict_do_update(
+                    index_elements=[LoginRateLimit.limiter_key],
+                    set_={
+                        "window_started_at": case(
+                            (expired, now),
+                            else_=LoginRateLimit.window_started_at,
+                        ),
+                        "attempts": case(
+                            (expired, 1),
+                            else_=LoginRateLimit.attempts + 1,
+                        ),
+                    },
+                )
+                .returning(
+                    LoginRateLimit.attempts,
+                    LoginRateLimit.window_started_at,
+                )
+            )
+            attempts, window_started_at = session.execute(statement).one()
+            if attempts > limit:
+                retry_after = max(
+                    retry_after,
+                    max(1, self.window_seconds - (now - window_started_at)),
+                )
         session.commit()
 
-    def clear(
+        if retry_after:
+            self.release(session, ip_address, username)
+        return retry_after
+
+    def release(
         self,
         session: Session,
         ip_address: str,
         username: str,
     ) -> None:
+        """Release the reservation for a successful authentication step."""
         session.execute(
-            delete(LoginFailure).where(
-                LoginFailure.limiter_key.in_(
+            update(LoginRateLimit)
+            .where(
+                LoginRateLimit.limiter_key.in_(
                     (
                         self._ip_key(ip_address),
                         self._account_key(username),
                     )
-                )
+                ),
+                LoginRateLimit.attempts > 0,
+            )
+            .values(attempts=LoginRateLimit.attempts - 1)
+        )
+        session.commit()
+
+    def clear_account(
+        self,
+        session: Session,
+        username: str,
+    ) -> None:
+        session.execute(
+            delete(LoginRateLimit).where(
+                LoginRateLimit.limiter_key == self._account_key(username)
             )
         )
+        session.commit()
 
     @staticmethod
     def _ip_key(ip_address: str) -> str:
