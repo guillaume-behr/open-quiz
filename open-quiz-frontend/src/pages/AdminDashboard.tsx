@@ -132,7 +132,7 @@ export function AdminDashboard() {
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 overflow-y-auto px-6 py-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <p className="text-sm font-medium text-primary">
@@ -151,10 +151,10 @@ export function AdminDashboard() {
                 </Button>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[minmax(300px,0.8fr)_minmax(420px,1.2fr)]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(300px,0.8fr)_minmax(420px,1.2fr)]">
                 <form
                     onSubmit={handleCreateUser}
-                    className="h-fit rounded-2xl border bg-card p-6 shadow-sm"
+                    className="h-fit rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
                 >
                     <div className="mb-5 flex items-center gap-3">
                         <div className="rounded-xl bg-primary/10 p-2 text-primary">
@@ -241,7 +241,7 @@ export function AdminDashboard() {
                     </FieldGroup>
                 </form>
 
-                <section className="rounded-2xl border bg-card p-6 shadow-sm">
+                <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
                     <div className="mb-5 flex items-center gap-3">
                         <div className="rounded-xl bg-primary/10 p-2 text-primary">
                             <Users />
