@@ -26,7 +26,10 @@ La documentation interactive est disponible sur `http://localhost:8000/docs`.
 
 Les jetons d'accès expirent rapidement et restent uniquement en mémoire dans le
 navigateur. Les sessions longues utilisent un cookie HttpOnly rotatif et
-révocable. La réutilisation d'un ancien jeton révoque toute sa famille de
+révocable. Chaque appareil reste reconnu pendant 7 jours au maximum à partir de
+la dernière validation 2FA, sans prolongation glissante lors de l'utilisation.
+Après cette échéance, ou sur un nouvel appareil, une nouvelle validation 2FA est
+obligatoire. La réutilisation d'un ancien jeton révoque toute sa famille de
 sessions. Un changement de mot de passe administrateur révoque ses sessions et
 invalide immédiatement ses jetons d'accès. Un changement de `JWT_SECRET`
 révoque toutes les sessions. Tous les comptes

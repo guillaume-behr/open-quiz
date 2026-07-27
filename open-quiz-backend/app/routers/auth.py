@@ -59,12 +59,17 @@ def validate_origin(request: Request) -> None:
         )
 
 
-def set_refresh_cookie(response: Response, token: str, request: Request) -> None:
+def set_refresh_cookie(
+    response: Response,
+    token: str,
+    request: Request,
+    expires_at: int,
+) -> None:
     settings = request.app.state.settings
     response.set_cookie(
         key=REFRESH_COOKIE,
         value=token,
-        max_age=settings.refresh_token_days * 86400,
+        max_age=max(0, expires_at - int(time())),
         httponly=True,
         secure=settings.cookie_secure,
         samesite="strict",
@@ -80,9 +85,15 @@ def issue_session(
     *,
     family_id: str | None = None,
     parent_session_id: int | None = None,
+    expires_at: int | None = None,
 ) -> TokenResponse:
     settings = request.app.state.settings
     now = int(time())
+    session_expires_at = (
+        expires_at
+        if expires_at is not None
+        else now + settings.refresh_token_days * 86400
+    )
     expired_session_ids = select(RefreshSession.id).where(
         RefreshSession.expires_at <= now
     )
@@ -113,7 +124,7 @@ def issue_session(
     refresh_session = RefreshSession(
         token_hash=hash_refresh_token(refresh_token),
         user_id=user.id,
-        expires_at=now + settings.refresh_token_days * 86400,
+        expires_at=session_expires_at,
     )
     session.add(refresh_session)
     session.flush()
@@ -125,13 +136,14 @@ def issue_session(
         )
     )
     session.commit()
-    set_refresh_cookie(response, refresh_token, request)
+    set_refresh_cookie(response, refresh_token, request, session_expires_at)
     return TokenResponse(
         access_token=create_access_token(
             user.id,
             settings.jwt_secret,
             settings.access_token_minutes,
             access_token_version(user.password_hash, settings.jwt_secret),
+            session_expires_at=session_expires_at,
         )
     )
 
@@ -489,6 +501,7 @@ def refresh(
         session,
         family_id=family.family_id,
         parent_session_id=stored_session.id,
+        expires_at=stored_session.expires_at,
     )
 
 

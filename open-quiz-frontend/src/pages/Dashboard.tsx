@@ -78,6 +78,15 @@ export function Dashboard() {
             .finally(() => setIsLoading(false))
     }, [navigate])
 
+    useEffect(() => {
+        const previousTitle = document.title
+        document.title = "Espace Professeur"
+
+        return () => {
+            document.title = previousTitle
+        }
+    }, [])
+
     async function handleLogin(username: string, password: string) {
         setChallenge(await login(username, password))
     }
@@ -125,9 +134,6 @@ export function Dashboard() {
         <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-3 py-2 sm:px-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <p className="text-sm font-medium text-primary">
-                        {t("professor-space")}
-                    </p>
                     <h1 className="text-3xl font-extrabold">
                         {t("welcome-professor", {
                             name: currentUser.display_name,

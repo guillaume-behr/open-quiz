@@ -141,16 +141,21 @@ def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
         assert first_refresh
 
         with sqlite3.connect(database_path) as database:
-            created_at = database.execute(
-                "SELECT created_at FROM refresh_sessions"
+            created_at, first_expires_at = database.execute(
+                "SELECT created_at, expires_at FROM refresh_sessions"
             ).fetchone()
         assert created_at is not None
-        assert created_at[0] is not None
+        assert first_expires_at is not None
 
         refreshed = client.post("/api/auth/refresh")
         assert refreshed.status_code == 200
         second_refresh = client.cookies.get(REFRESH_COOKIE)
         assert second_refresh and second_refresh != first_refresh
+        with sqlite3.connect(database_path) as database:
+            second_expires_at = database.execute(
+                "SELECT expires_at FROM refresh_sessions ORDER BY id DESC LIMIT 1"
+            ).fetchone()[0]
+        assert second_expires_at == first_expires_at
 
         client.cookies.set(REFRESH_COOKIE, first_refresh, path="/api/auth")
         assert client.post("/api/auth/refresh").status_code == 401
@@ -209,6 +214,23 @@ def test_later_login_requires_two_factor_code(tmp_path: Path) -> None:
             },
         )
         assert replayed.status_code == 401
+
+
+def test_new_device_requires_two_factor_while_known_device_is_restored(
+    tmp_path: Path,
+) -> None:
+    app_settings = settings_for(tmp_path / "test.db")
+    with make_client(app_settings) as known_device:
+        complete_first_login(known_device, "root-admin", ADMIN_PASSWORD)
+        assert known_device.post("/api/auth/refresh").status_code == 200
+
+    with make_client(app_settings) as new_device:
+        login_response = new_device.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        assert login_response.status_code == 200
+        assert login_response.json()["status"] == "verification_required"
 
 
 def test_two_factor_recovery_requires_new_setup(tmp_path: Path) -> None:

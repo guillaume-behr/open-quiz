@@ -34,15 +34,23 @@ def create_access_token(
     secret: str,
     expires_minutes: int,
     version: str,
+    *,
+    session_expires_at: int | None = None,
 ) -> str:
     now = datetime.now(UTC)
+    expires_at = now + timedelta(minutes=expires_minutes)
+    if session_expires_at is not None:
+        expires_at = min(
+            expires_at,
+            datetime.fromtimestamp(session_expires_at, UTC),
+        )
     return jwt.encode(
         {
             "sub": str(user_id),
             "type": "access",
             "ver": version,
             "iat": now,
-            "exp": now + timedelta(minutes=expires_minutes),
+            "exp": expires_at,
         },
         secret,
         algorithm="HS256",
