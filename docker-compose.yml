@@ -15,6 +15,7 @@ services:
                 ipv4_address: 172.28.0.3
         volumes:
             - open-quiz-data:/data
+        init: true
         read_only: true
         tmpfs:
             - /tmp
@@ -35,6 +36,13 @@ services:
             retries: 3
             start_period: 10s
         restart: unless-stopped
+        stop_grace_period: 30s
+        pids_limit: 128
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "5"
 
     open-quiz-frontend:
         build:
@@ -48,6 +56,7 @@ services:
         networks:
             open-quiz:
                 ipv4_address: 172.28.0.2
+        init: true
         read_only: true
         tmpfs:
             - /config
@@ -56,11 +65,33 @@ services:
             - ALL
         security_opt:
             - no-new-privileges:true
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--quiet",
+                    "--tries=1",
+                    "--spider",
+                    "http://127.0.0.1:8080/healthz",
+                ]
+            interval: 30s
+            timeout: 3s
+            retries: 3
+            start_period: 5s
         restart: unless-stopped
+        stop_grace_period: 15s
+        pids_limit: 64
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "5"
 
 networks:
     open-quiz:
         name: open-quiz
+        internal: true
         ipam:
             config:
                 - subnet: 172.28.0.0/24

@@ -1,4 +1,4 @@
-FROM node:24.17.0-alpine3.23 AS build
+FROM node:24.17.0-alpine3.23@sha256:7c70d1235c0b4c2bc9eeed5393d19f1bbdde6885ba0d58ba62bb385d7b0f3ff1 AS build
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY . .
 RUN pnpm build
 
 
-FROM caddy:2.11.4-alpine
+FROM caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
 
 RUN setcap -r /usr/bin/caddy \
     && addgroup -S openquiz \
@@ -19,6 +19,8 @@ RUN setcap -r /usr/bin/caddy \
 
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
+
+RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 USER openquiz
 

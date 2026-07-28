@@ -4,14 +4,17 @@
 
     header {
         -Server
-        Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'"
+        Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'"
         Cross-Origin-Opener-Policy "same-origin"
         Cross-Origin-Resource-Policy "same-origin"
         Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
         Referrer-Policy "strict-origin-when-cross-origin"
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
     }
+
+    respond /healthz 200
 
     handle /api/* {
         request_body {
@@ -21,10 +24,16 @@
             header_up X-Forwarded-Proto https
             transport http {
                 dial_timeout 2s
-                response_header_timeout 10s
+                response_header_timeout 30s
             }
         }
     }
+
+    @immutable_assets path /assets/*
+    header @immutable_assets Cache-Control "public, max-age=31536000, immutable"
+
+    @fresh_content path / /index.html /locales/*
+    header @fresh_content Cache-Control "no-cache"
 
     handle {
         try_files {path} /index.html

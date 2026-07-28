@@ -24,6 +24,9 @@ uv run fastapi dev main.py
 
 La documentation interactive est disponible sur `http://localhost:8000/docs`.
 
+Le point `/api/health` vérifie à la fois le processus HTTP et l’accès réel à la
+base de données. Il doit être utilisé pour les contrôles de disponibilité.
+
 Les jetons d'accès expirent rapidement et restent uniquement en mémoire dans le
 navigateur. Les sessions longues utilisent un cookie HttpOnly rotatif et
 révocable. Chaque appareil reste reconnu pendant 7 jours au maximum à partir de
@@ -40,7 +43,10 @@ est perdue ou remplacée, chaque utilisateur devra réinitialiser son inscriptio
 2FA.
 
 Si un utilisateur perd son authentificateur, réinitialisez son inscription 2FA
-et révoquez ses sessions actives avec :
+et révoquez ses sessions actives depuis l'espace d'administration en utilisant
+« Récupérer l'accès ». Cette action définit un nouveau mot de passe, révoque les
+sessions et impose une nouvelle inscription 2FA. L'outil de secours en ligne de
+commande reste disponible avec :
 
 ```shell
 uv run python -m scripts.reset_two_factor identifiant
@@ -71,6 +77,20 @@ fourni respecte cette contrainte grâce au réseau Docker interne.
 conteneur Uvicorn ajoute également une limite de concurrence et des délais de
 connexion courts. Conservez des limites équivalentes sur le reverse proxy
 externe.
+
+Les résultats terminés sont supprimés automatiquement lorsqu'un professeur
+consulte ses résultats et qu'ils dépassent `QUIZ_RESULT_RETENTION_DAYS`
+(365 jours par défaut). Un professeur peut aussi supprimer immédiatement un
+résultat depuis son tableau de bord. Cette suppression efface la session, les
+participants, les réponses et les alertes associées.
+
+SQLite est configuré en mode WAL avec vérification des clés étrangères, attente
+sur verrou et contrôle de disponibilité. Le volume `/data` doit rester
+persistant et sauvegardé avec les scripts situés à la racine du dépôt.
+
+Les images de questions sont décodées, limitées en dimensions puis réencodées
+avant stockage. Les métadonnées et les trames d'animation ne sont pas
+conservées.
 
 Les événements de sécurité sont émis en JSON sur la sortie standard avec un
 horodatage UTC. En production, envoyez-les vers un collecteur central en
