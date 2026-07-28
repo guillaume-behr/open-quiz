@@ -49,7 +49,10 @@ services:
             context: ./open-quiz-frontend
             dockerfile: Dockerfile
         ports:
-            - "127.0.0.1:7800:8080"
+            - target: 8080
+              published: "7800"
+              host_ip: 127.0.0.1
+              protocol: tcp
         depends_on:
             open-quiz-backend:
                 condition: service_healthy
