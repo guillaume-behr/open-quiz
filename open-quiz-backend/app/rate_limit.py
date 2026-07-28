@@ -120,3 +120,55 @@ class LoginRateLimiter:
     def _account_key(username: str) -> str:
         digest = sha256(username.casefold().encode()).hexdigest()
         return f"account:{digest}"
+
+
+class FixedWindowRateLimiter:
+    """Database-backed limiter for public quiz endpoints."""
+
+    def __init__(self, limit: int, window_seconds: int, namespace: str) -> None:
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self.namespace = namespace
+
+    def reserve(self, session: Session, subject: str) -> int:
+        now = int(time())
+        cutoff = now - self.window_seconds
+        digest = sha256(subject.encode()).hexdigest()
+        limiter_key = f"{self.namespace}:{digest}"
+        session.execute(
+            delete(LoginRateLimit).where(
+                LoginRateLimit.limiter_key.like(f"{self.namespace}:%"),
+                LoginRateLimit.window_started_at <= cutoff,
+            )
+        )
+        expired = LoginRateLimit.window_started_at <= cutoff
+        statement = (
+            insert(LoginRateLimit)
+            .values(
+                limiter_key=limiter_key,
+                window_started_at=now,
+                attempts=1,
+            )
+            .on_conflict_do_update(
+                index_elements=[LoginRateLimit.limiter_key],
+                set_={
+                    "window_started_at": case(
+                        (expired, now),
+                        else_=LoginRateLimit.window_started_at,
+                    ),
+                    "attempts": case(
+                        (expired, 1),
+                        else_=LoginRateLimit.attempts + 1,
+                    ),
+                },
+            )
+            .returning(
+                LoginRateLimit.attempts,
+                LoginRateLimit.window_started_at,
+            )
+        )
+        attempts, window_started_at = session.execute(statement).one()
+        session.commit()
+        if attempts <= self.limit:
+            return 0
+        return max(1, self.window_seconds - (now - window_started_at))

@@ -17,12 +17,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
 from app.dependencies import DbSession, ProfessorUser
+from app.grading import recompute_finished_scores_for_question
 from app.models import (
     Question,
     QuestionBank,
     QuestionChoice,
     QuestionCode,
     QuizQuestionBank,
+    QuizSession,
     QuizSessionQuestion,
 )
 from app.schemas import (
@@ -681,13 +683,19 @@ async def update_question(
     """Update a professor's question and replace its answer configuration."""
     question = owned_question(question_id, professor, session)
     if session.scalar(
-        select(QuizSessionQuestion.session_id).where(
-            QuizSessionQuestion.question_id == question_id
+        select(QuizSessionQuestion.session_id)
+        .join(
+            QuizSession,
+            QuizSession.id == QuizSessionQuestion.session_id,
+        )
+        .where(
+            QuizSessionQuestion.question_id == question_id,
+            QuizSession.status.in_(["waiting", "in_progress"]),
         )
     ) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This question is used by a launched quiz",
+            detail="This question is used by an active quiz",
         )
     try:
         question_payload = QuestionUpdate.model_validate(json.loads(payload))
@@ -762,35 +770,41 @@ async def update_question(
         )
 
     session.execute(
-        delete(QuestionChoice).where(QuestionChoice.question_id == question.id)
-    )
-    session.execute(
         delete(QuestionCode).where(QuestionCode.question_id == question.id)
     )
-    choices = [
-        QuestionChoice(
-            question_id=question.id,
-            label=choice.label,
-            is_correct=choice.is_correct,
-            points=choice.points,
-            image_data=choice_image_data,
-            image_content_type=choice_image_content_type,
-            code_language=choice.code_language,
-            code_content=choice.code_content,
-            position=position,
+    choices = []
+    for position, (
+        choice_payload,
+        (choice_image_data, choice_image_content_type),
+    ) in enumerate(
+        zip(
+            question_payload.choices,
+            replacement_choice_images,
+            strict=True,
         )
-        for position, (
-            choice,
-            (choice_image_data, choice_image_content_type),
-        ) in enumerate(
-            zip(
-                question_payload.choices,
-                replacement_choice_images,
-                strict=True,
+    ):
+        choice = (
+            existing_choices_by_id[choice_payload.id]
+            if choice_payload.id is not None
+            else QuestionChoice(question_id=question.id)
+        )
+        choice.label = choice_payload.label
+        choice.is_correct = choice_payload.is_correct
+        choice.points = choice_payload.points
+        choice.image_data = choice_image_data
+        choice.image_content_type = choice_image_content_type
+        choice.code_language = choice_payload.code_language
+        choice.code_content = choice_payload.code_content
+        choice.position = position
+        choices.append(choice)
+        session.add(choice)
+    removed_choice_ids = set(existing_choices_by_id) - submitted_choice_ids
+    if removed_choice_ids:
+        session.execute(
+            delete(QuestionChoice).where(
+                QuestionChoice.id.in_(removed_choice_ids)
             )
         )
-    ]
-    session.add_all(choices)
     code = None
     if (
         question_payload.code_language is not None
@@ -802,6 +816,8 @@ async def update_question(
             content=question_payload.code_content,
         )
         session.add(code)
+    session.flush()
+    recompute_finished_scores_for_question(question.id, session)
     session.commit()
     session.refresh(question)
     return question_response(question, choices, code)

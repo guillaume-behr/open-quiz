@@ -43,6 +43,27 @@ def make_client(settings: Settings) -> TestClient:
     )
 
 
+def test_public_quiz_join_is_rate_limited(tmp_path: Path) -> None:
+    settings = settings_for(
+        tmp_path / "quiz-rate-limit.db",
+        quiz_join_attempts=5,
+        quiz_rate_window_seconds=60,
+    )
+    with make_client(settings) as client:
+        payload = {
+            "join_code": "ABC123",
+            "student_identifier": "student",
+        }
+        for _ in range(5):
+            response = client.post("/api/quizzes/join", json=payload)
+            assert response.status_code == 403
+            assert response.json()["detail"] == "Unable to join this quiz"
+
+        limited = client.post("/api/quizzes/join", json=payload)
+        assert limited.status_code == 429
+        assert int(limited.headers["retry-after"]) > 0
+
+
 def complete_first_login(
     client: TestClient,
     username: str,
@@ -624,9 +645,9 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 "student_identifier": "martin.g",
             },
         )
-        assert joined_again.status_code == 201
-        assert "participants" not in joined_again.json()
-        participant_token = joined_again.json()["participant_token"]
+        assert joined_again.status_code == 403
+        assert joined_again.json()["detail"] == "Unable to join this quiz"
+        participant_token = joined.json()["participant_token"]
         student_headers = {"X-Quiz-Token": participant_token}
         assert (
             client.get(
@@ -673,6 +694,17 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert monitored["violation_count"] == 1
         assert monitored["last_violation_type"] == "fullscreen_exit"
         assert monitored["last_violation_at"] is not None
+        duplicate_violation = client.post(
+            f"{student_state_url}/violation",
+            headers=student_headers,
+            json={"event_type": "fullscreen_exit"},
+        )
+        assert duplicate_violation.status_code == 204
+        monitored = client.get(
+            f"/api/quizzes/sessions/{quiz_session['id']}",
+            headers=teacher_headers,
+        ).json()["participants"][0]
+        assert monitored["violation_count"] == 1
         assert (
             client.post(
                 "/api/quizzes/join",
@@ -681,7 +713,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     "student_identifier": "nouvel.eleve",
                 },
             ).status_code
-            == 409
+            == 403
         )
         assert (
             client.delete(
@@ -794,6 +826,59 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
 
         assert teacher_state["status"] == "finished"
         assert teacher_state["participants"][0]["score"] > 0
+        results = client.get(
+            "/api/quizzes/sessions/results",
+            headers=teacher_headers,
+        )
+        assert results.status_code == 200
+        assert [result["id"] for result in results.json()] == [quiz_session["id"]]
+        assert results.json()[0]["quiz_title"] == quiz["title"]
+        assert results.json()[0]["class_name"] == "5e B"
+        assert results.json()[0]["participants"][0]["score"] > 0
+        assert (
+            client.get("/api/quizzes/sessions/results", headers=headers).status_code
+            == 403
+        )
+        previous_score = results.json()[0]["participants"][0]["score"]
+        regraded_question = preview.json()[0]
+        original_choice_ids = [
+            choice["id"] for choice in regraded_question["choices"]
+        ]
+        regraded_payload = {
+            "prompt": regraded_question["prompt"],
+            "difficulty": regraded_question["difficulty"],
+            "answer_mode": regraded_question["answer_mode"],
+            "answer_mode_disclosed": regraded_question[
+                "answer_mode_disclosed"
+            ],
+            "code_language": regraded_question["code_language"],
+            "code_content": regraded_question["code_content"],
+            "choices": [
+                {
+                    "id": choice["id"],
+                    "label": choice["label"],
+                    "is_correct": choice["is_correct"],
+                    "points": 9 if choice["is_correct"] else choice["points"],
+                    "code_language": choice["code_language"],
+                    "code_content": choice["code_content"],
+                }
+                for choice in regraded_question["choices"]
+            ],
+        }
+        regraded = client.post(
+            f"/api/question-banks/questions/{regraded_question['id']}/update",
+            headers=teacher_headers,
+            data={"payload": json.dumps(regraded_payload)},
+        )
+        assert regraded.status_code == 200
+        assert [choice["id"] for choice in regraded.json()["choices"]] == (
+            original_choice_ids
+        )
+        refreshed_results = client.get(
+            "/api/quizzes/sessions/results",
+            headers=teacher_headers,
+        ).json()
+        assert refreshed_results[0]["participants"][0]["score"] > previous_score
         completed_class = client.get(
             "/api/classes", headers=teacher_headers
         ).json()[0]

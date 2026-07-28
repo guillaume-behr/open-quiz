@@ -13,7 +13,7 @@ from app.audit import audit_event
 from app.config import Settings, get_settings
 from app.database import build_session_factory
 from app.models import RefreshSession, RefreshSessionFamily, SecurityState, User
-from app.rate_limit import LoginRateLimiter
+from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
 from app.routers import (
     admin,
     auth,
@@ -188,6 +188,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.login_attempts,
         settings.login_account_attempts,
         settings.login_window_seconds,
+    )
+    app.state.quiz_join_rate_limiter = FixedWindowRateLimiter(
+        settings.quiz_join_attempts,
+        settings.quiz_rate_window_seconds,
+        "quiz-join",
+    )
+    app.state.quiz_participant_rate_limiter = FixedWindowRateLimiter(
+        settings.quiz_participant_attempts,
+        settings.quiz_rate_window_seconds,
+        "quiz-participant",
+    )
+    app.state.quiz_violation_rate_limiter = FixedWindowRateLimiter(
+        settings.quiz_violation_attempts,
+        settings.quiz_rate_window_seconds,
+        "quiz-violation",
     )
     if production:
         app.add_middleware(HTTPSRedirectMiddleware)

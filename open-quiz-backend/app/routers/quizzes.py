@@ -7,12 +7,13 @@ from secrets import token_urlsafe
 from string import ascii_uppercase, digits
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Response, status
+from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
 from app.dependencies import DbSession, ProfessorUser
+from app.grading import compute_final_scores
 from app.models import (
     Question,
     QuestionBank,
@@ -50,6 +51,34 @@ from app.schemas import (
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 randomizer = SystemRandom()
 JOIN_CODE_ALPHABET = ascii_uppercase + digits
+VIOLATION_DEDUPLICATION_SECONDS = 2
+
+
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def enforce_public_rate_limit(
+    request: Request,
+    session: DbSession,
+    limiter_name: str,
+    subject: str,
+) -> None:
+    limiter = getattr(request.app.state, limiter_name)
+    retry_after = limiter.reserve(session, subject)
+    if retry_after:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many quiz requests",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def quiz_join_rejected() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Unable to join this quiz",
+    )
 
 
 def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
@@ -406,55 +435,6 @@ def quiz_ends_at(quiz_session: QuizSession, quiz: Quiz) -> datetime | None:
     return started_at + timedelta(seconds=quiz.duration_seconds)
 
 
-def compute_final_scores(quiz_session: QuizSession, session: DbSession) -> None:
-    answers = list(
-        session.scalars(
-            select(QuizAnswer).where(
-                QuizAnswer.session_id == quiz_session.id
-            )
-        )
-    )
-    question_ids = {answer.question_id for answer in answers}
-    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
-    if question_ids:
-        for choice in session.scalars(
-            select(QuestionChoice).where(
-                QuestionChoice.question_id.in_(question_ids)
-            )
-        ):
-            choices_by_question[choice.question_id].append(choice)
-    questions = {
-        question.id: question
-        for question in session.scalars(
-            select(Question).where(Question.id.in_(question_ids))
-        )
-    }
-    for answer in answers:
-        question = questions.get(answer.question_id)
-        choices = choices_by_question.get(answer.question_id, [])
-        submitted = json.loads(answer.answer_data)
-        if question is None:
-            answer.score = 0
-        elif question.answer_mode == "written":
-            expected = next(
-                (choice for choice in choices if choice.is_correct), None
-            )
-            written = str(submitted.get("written_answer", "")).strip()
-            answer.score = (
-                expected.points
-                if expected is not None
-                and written.casefold() == expected.label.strip().casefold()
-                else 0
-            )
-        else:
-            choices_by_id = {choice.id: choice for choice in choices}
-            answer.score = sum(
-                choices_by_id[choice_id].points
-                for choice_id in submitted.get("selected_choice_ids", [])
-                if choice_id in choices_by_id
-            )
-
-
 def expire_quiz_session(
     quiz_session: QuizSession,
     quiz: Quiz,
@@ -484,9 +464,16 @@ def participant_token_hash(token: str) -> str:
 def authenticated_participant(
     join_code: str,
     token: str | None,
+    request: Request,
     session: DbSession,
 ) -> tuple[QuizSession, Quiz, QuizParticipant]:
     if not token:
+        enforce_public_rate_limit(
+            request,
+            session,
+            "quiz_join_rate_limiter",
+            f"participant-auth:{client_ip(request)}",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing quiz participant token",
@@ -505,6 +492,12 @@ def authenticated_participant(
         )
     ).first()
     if row is None:
+        enforce_public_rate_limit(
+            request,
+            session,
+            "quiz_join_rate_limiter",
+            f"participant-auth:{client_ip(request)}",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid quiz participant token",
@@ -686,9 +679,36 @@ def list_active_sessions(
     rows = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(Quiz.owner_id == professor.id)
+        .where(
+            Quiz.owner_id == professor.id,
+            QuizSession.status.in_(["waiting", "in_progress"]),
+        )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
         .limit(20)
+    )
+    return [
+        session_response(quiz_session, quiz, session)
+        for quiz_session, quiz in rows
+    ]
+
+
+@router.get("/sessions/results", response_model=list[QuizSessionResponse])
+def list_quiz_results(
+    professor: ProfessorUser,
+    session: DbSession,
+) -> list[QuizSessionResponse]:
+    rows = session.execute(
+        select(QuizSession, Quiz)
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(
+            Quiz.owner_id == professor.id,
+            QuizSession.status == "finished",
+        )
+        .order_by(
+            QuizSession.started_at.desc(),
+            QuizSession.created_at.desc(),
+            QuizSession.id.desc(),
+        )
     )
     return [
         session_response(quiz_session, quiz, session)
@@ -804,29 +824,33 @@ def launch_quiz(
 )
 def join_quiz(
     payload: QuizJoin,
+    request: Request,
     session: DbSession,
 ) -> StudentQuizJoinResponse:
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_join_rate_limiter",
+        f"join-ip:{client_ip(request)}",
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_join_rate_limiter",
+        f"join-code:{payload.join_code}",
+    )
     row = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(QuizSession.join_code == payload.join_code)
     ).first()
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Quiz session not found",
-        )
+        raise quiz_join_rejected()
     quiz_session, quiz = row
     if quiz_session.status != "waiting":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This quiz has already started",
-        )
+        raise quiz_join_rejected()
     if quiz_session.class_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The class used for this quiz no longer exists",
-        )
+        raise quiz_join_rejected()
     student = session.scalar(
         select(Student).where(
             Student.class_id == quiz_session.class_id,
@@ -834,35 +858,30 @@ def join_quiz(
         )
     )
     if student is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This student does not belong to the selected class",
-        )
+        raise quiz_join_rejected()
     existing = session.scalar(
         select(QuizParticipant).where(
             QuizParticipant.session_id == quiz_session.id,
             QuizParticipant.student_id == student.id,
         )
     )
+    if existing is not None:
+        raise quiz_join_rejected()
     participant_token = token_urlsafe(32)
-    if existing is None:
-        existing = QuizParticipant(
-            session_id=quiz_session.id,
-            student_id=student.id,
-            student_identifier=student.identifier,
-            student_display_name=student.display_name,
-        )
-        session.add(existing)
-    existing.access_token_hash = participant_token_hash(participant_token)
+    participant = QuizParticipant(
+        session_id=quiz_session.id,
+        student_id=student.id,
+        student_identifier=student.identifier,
+        student_display_name=student.display_name,
+        access_token_hash=participant_token_hash(participant_token),
+    )
+    session.add(participant)
     try:
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Unable to join this quiz",
-        ) from None
-    state = student_state_response(quiz_session, quiz, existing, session)
+        raise quiz_join_rejected() from None
+    state = student_state_response(quiz_session, quiz, participant, session)
     return StudentQuizJoinResponse(
         **state.model_dump(),
         participant_token=participant_token,
@@ -875,13 +894,20 @@ def join_quiz(
 )
 def get_student_quiz_state(
     join_code: str,
+    request: Request,
     session: DbSession,
     quiz_token: Annotated[
         str | None, Header(alias="X-Quiz-Token")
     ] = None,
 ) -> StudentQuizStateResponse:
     quiz_session, quiz, participant = authenticated_participant(
-        join_code, quiz_token, session
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_participant_rate_limiter",
+        participant_token_hash(quiz_token),
     )
     return student_state_response(quiz_session, quiz, participant, session)
 
@@ -893,13 +919,20 @@ def get_student_quiz_state(
 def submit_student_answer(
     join_code: str,
     payload: StudentQuizAnswer,
+    request: Request,
     session: DbSession,
     quiz_token: Annotated[
         str | None, Header(alias="X-Quiz-Token")
     ] = None,
 ) -> StudentQuizStateResponse:
     quiz_session, quiz, participant = authenticated_participant(
-        join_code, quiz_token, session
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_participant_rate_limiter",
+        participant_token_hash(quiz_token),
     )
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status != "in_progress":
@@ -1006,13 +1039,20 @@ def submit_student_answer(
 def navigate_student_quiz(
     join_code: str,
     payload: StudentQuizNavigation,
+    request: Request,
     session: DbSession,
     quiz_token: Annotated[
         str | None, Header(alias="X-Quiz-Token")
     ] = None,
 ) -> StudentQuizStateResponse:
     quiz_session, quiz, participant = authenticated_participant(
-        join_code, quiz_token, session
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_participant_rate_limiter",
+        participant_token_hash(quiz_token),
     )
     expire_quiz_session(quiz_session, quiz, session)
     target_position = payload.question_number - 1
@@ -1039,20 +1079,38 @@ def navigate_student_quiz(
 def report_student_violation(
     join_code: str,
     payload: StudentQuizViolation,
+    request: Request,
     session: DbSession,
     quiz_token: Annotated[
         str | None, Header(alias="X-Quiz-Token")
     ] = None,
 ) -> Response:
     quiz_session, quiz, participant = authenticated_participant(
-        join_code, quiz_token, session
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_violation_rate_limiter",
+        participant_token_hash(quiz_token),
     )
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status not in {"waiting", "in_progress"}:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+    now = datetime.now(UTC)
+    last_violation_at = participant.last_violation_at
+    if last_violation_at is not None and last_violation_at.tzinfo is None:
+        last_violation_at = last_violation_at.replace(tzinfo=UTC)
+    if (
+        participant.last_violation_type == payload.event_type
+        and last_violation_at is not None
+        and (now - last_violation_at).total_seconds()
+        < VIOLATION_DEDUPLICATION_SECONDS
+    ):
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     participant.violation_count += 1
     participant.last_violation_type = payload.event_type
-    participant.last_violation_at = datetime.now(UTC)
+    participant.last_violation_at = now
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -1063,13 +1121,20 @@ def report_student_violation(
 def get_student_question_image(
     join_code: str,
     question_id: int,
+    request: Request,
     session: DbSession,
     quiz_token: Annotated[
         str | None, Header(alias="X-Quiz-Token")
     ] = None,
 ) -> Response:
     quiz_session, _, participant = authenticated_participant(
-        join_code, quiz_token, session
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_participant_rate_limiter",
+        participant_token_hash(quiz_token),
     )
     if current_question_id(quiz_session, participant, session) != question_id:
         raise HTTPException(
@@ -1098,13 +1163,20 @@ def get_student_question_image(
 def get_student_choice_image(
     join_code: str,
     choice_id: int,
+    request: Request,
     session: DbSession,
     quiz_token: Annotated[
         str | None, Header(alias="X-Quiz-Token")
     ] = None,
 ) -> Response:
     quiz_session, _, participant = authenticated_participant(
-        join_code, quiz_token, session
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_participant_rate_limiter",
+        participant_token_hash(quiz_token),
     )
     question_id = current_question_id(quiz_session, participant, session)
     choice = session.scalar(
