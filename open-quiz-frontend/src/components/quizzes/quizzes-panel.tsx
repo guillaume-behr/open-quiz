@@ -16,6 +16,7 @@ import {
 } from "@/api/api"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
+import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import {
     Field,
     FieldError,
@@ -25,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input"
 import {
     BookOpenText,
+    AlertTriangle,
     Eye,
     LoaderCircle,
     Play,
@@ -56,6 +58,8 @@ export function QuizzesPanel({
     const [title, setTitle] = useState("")
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
     const [questionCount, setQuestionCount] = useState(10)
+    const [durationMinutes, setDurationMinutes] = useState(30)
+    const [allowPreviousQuestions, setAllowPreviousQuestions] = useState(false)
     const [percentages, setPercentages] = useState({
         easy: 30,
         medium: 40,
@@ -91,10 +95,10 @@ export function QuizzesPanel({
                     loadedSessions,
                     loadedClasses,
                 ]) => {
-                if (!isActive) return
-                setQuizzes(loadedQuizzes)
-                setBanks(loadedBanks)
-                setSessions(loadedSessions)
+                    if (!isActive) return
+                    setQuizzes(loadedQuizzes)
+                    setBanks(loadedBanks)
+                    setSessions(loadedSessions)
                     setClasses(loadedClasses)
                 }
             )
@@ -110,7 +114,11 @@ export function QuizzesPanel({
     }, [t])
 
     useEffect(() => {
-        if (!activeSessionId || activeSessionStatus !== "waiting") return
+        if (
+            !activeSessionId ||
+            !["waiting", "in_progress"].includes(activeSessionStatus ?? "")
+        )
+            return
         let isActive = true
         const refresh = () => {
             void getQuizSession(activeSessionId)
@@ -139,6 +147,8 @@ export function QuizzesPanel({
         setTitle("")
         setSelectedBankIds([])
         setQuestionCount(10)
+        setDurationMinutes(30)
+        setAllowPreviousQuestions(false)
         setPercentages({ easy: 30, medium: 40, hard: 30 })
         setCreateError(null)
     }
@@ -153,6 +163,8 @@ export function QuizzesPanel({
                 title: title.trim(),
                 question_bank_ids: selectedBankIds,
                 question_count: questionCount,
+                duration_seconds: durationMinutes * 60,
+                allow_previous_questions: allowPreviousQuestions,
                 easy_percentage: percentages.easy,
                 medium_percentage: percentages.medium,
                 hard_percentage: percentages.hard,
@@ -370,6 +382,33 @@ export function QuizzesPanel({
                             />
                         </Field>
                         <Field>
+                            <FieldLabel htmlFor="quiz-duration">
+                                {t("quiz-duration")}
+                            </FieldLabel>
+                            <Input
+                                id="quiz-duration"
+                                type="number"
+                                min={1}
+                                max={480}
+                                value={durationMinutes}
+                                onChange={(event) =>
+                                    setDurationMinutes(
+                                        Math.min(
+                                            480,
+                                            Math.max(
+                                                1,
+                                                Number(event.target.value)
+                                            )
+                                        )
+                                    )
+                                }
+                                required
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                {t("quiz-duration-help")}
+                            </p>
+                        </Field>
+                        <Field>
                             <FieldLabel>{t("quiz-question-banks")}</FieldLabel>
                             {banks.length === 0 ? (
                                 <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -428,6 +467,27 @@ export function QuizzesPanel({
                             )}
                         </Field>
                         <Field>
+                            <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
+                                <input
+                                    type="checkbox"
+                                    checked={allowPreviousQuestions}
+                                    onChange={(event) =>
+                                        setAllowPreviousQuestions(
+                                            event.target.checked
+                                        )
+                                    }
+                                />
+                                <span>
+                                    <span className="block font-medium">
+                                        {t("allow-previous-questions")}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {t("allow-previous-questions-help")}
+                                    </span>
+                                </span>
+                            </label>
+                        </Field>
+                        <Field>
                             <FieldLabel htmlFor="quiz-question-count">
                                 {t("quiz-question-count")}
                             </FieldLabel>
@@ -439,10 +499,7 @@ export function QuizzesPanel({
                                 value={questionCount}
                                 onChange={(event) =>
                                     setQuestionCount(
-                                        Math.max(
-                                            1,
-                                            Number(event.target.value)
-                                        )
+                                        Math.max(1, Number(event.target.value))
                                     )
                                 }
                                 required
@@ -509,9 +566,7 @@ export function QuizzesPanel({
                                 type="button"
                                 variant="outline"
                                 disabled={isCreating}
-                                onClick={() =>
-                                    onCreateDialogOpenChange(false)
-                                }
+                                onClick={() => onCreateDialogOpenChange(false)}
                             >
                                 {t("cancel")}
                             </Button>
@@ -550,8 +605,7 @@ export function QuizzesPanel({
                         variant="outline"
                         disabled={isPreviewLoading || !previewedQuiz}
                         onClick={() => {
-                            if (previewedQuiz)
-                                void openPreview(previewedQuiz)
+                            if (previewedQuiz) void openPreview(previewedQuiz)
                         }}
                     >
                         <RefreshCw />
@@ -576,9 +630,7 @@ export function QuizzesPanel({
                                         {index + 1}. {question.prompt}
                                     </p>
                                     <span className="rounded-full bg-muted px-2 py-1 text-xs">
-                                        {t(
-                                            `difficulty-${question.difficulty}`
-                                        )}
+                                        {t(`difficulty-${question.difficulty}`)}
                                     </span>
                                 </div>
                                 <ul className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -637,9 +689,7 @@ export function QuizzesPanel({
                                 ))}
                             </select>
                             {classes.length === 0 && (
-                                <FieldError>
-                                    {t("quiz-needs-class")}
-                                </FieldError>
+                                <FieldError>{t("quiz-needs-class")}</FieldError>
                             )}
                         </Field>
                         {launchError && <FieldError>{launchError}</FieldError>}
@@ -654,9 +704,7 @@ export function QuizzesPanel({
                             </Button>
                             <Button
                                 type="submit"
-                                disabled={
-                                    isLaunching || !selectedClassId
-                                }
+                                disabled={isLaunching || !selectedClassId}
                             >
                                 {isLaunching ? (
                                     <LoaderCircle className="animate-spin" />
@@ -695,6 +743,11 @@ export function QuizzesPanel({
                             <p className="mt-1 text-4xl font-black tracking-[0.2em] text-primary">
                                 {activeSession.join_code}
                             </p>
+                            {activeSession.status === "in_progress" && (
+                                <div className="mt-3">
+                                    <QuizTimer endsAt={activeSession.ends_at} />
+                                </div>
+                            )}
                         </div>
                         <div className="mt-5 flex items-center justify-between gap-3">
                             <h4 className="flex items-center gap-2 font-semibold">
@@ -733,33 +786,71 @@ export function QuizzesPanel({
                                                     }
                                                 </span>
                                             )}
+                                            {activeSession.status ===
+                                                "finished" && (
+                                                <span className="block text-sm font-semibold text-primary">
+                                                    {t(
+                                                        "teacher-student-result",
+                                                        {
+                                                            score: participant.score,
+                                                            count: participant.answered_count,
+                                                            total: activeSession.total_questions,
+                                                        }
+                                                    )}
+                                                </span>
+                                            )}
+                                            {activeSession.status ===
+                                                "in_progress" && (
+                                                <span className="block text-sm font-semibold text-primary">
+                                                    {t(
+                                                        "teacher-student-progress",
+                                                        {
+                                                            count: participant.answered_count,
+                                                            total: activeSession.total_questions,
+                                                        }
+                                                    )}
+                                                </span>
+                                            )}
+                                            {participant.violation_count >
+                                                0 && (
+                                                <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
+                                                    <AlertTriangle className="size-3" />
+                                                    {t(
+                                                        "student-monitoring-alert",
+                                                        {
+                                                            count: participant.violation_count,
+                                                            event: t(
+                                                                `violation-${participant.last_violation_type}`
+                                                            ),
+                                                        }
+                                                    )}
+                                                </span>
+                                            )}
                                         </li>
                                     )
                                 )}
                             </ul>
                         )}
-                        <div className="mt-5 flex justify-end border-t pt-4">
-                            <Button
-                                type="button"
-                                size="lg"
-                                disabled={
-                                    isStarting ||
-                                    activeSession.status === "started"
-                                }
-                                onClick={() => void handleStart()}
-                            >
-                                {isStarting ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <Play />
-                                )}
-                                {t(
-                                    activeSession.status === "started"
-                                        ? "quiz-started"
-                                        : "start-quiz"
-                                )}
-                            </Button>
-                        </div>
+                        {activeSession.status === "waiting" && (
+                            <div className="mt-5 flex justify-end border-t pt-4">
+                                <Button
+                                    type="button"
+                                    size="lg"
+                                    disabled={
+                                        isStarting ||
+                                        activeSession.participant_count === 0
+                                    }
+                                    onClick={() => void handleStart()}
+                                >
+                                    {isStarting ? (
+                                        <LoaderCircle className="animate-spin" />
+                                    ) : (
+                                        <Play />
+                                    )}
+                                    {t("start-quiz")}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 )}
             </Dialog>

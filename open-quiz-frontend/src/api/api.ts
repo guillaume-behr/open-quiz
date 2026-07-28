@@ -125,6 +125,8 @@ export type Quiz = {
     id: number
     title: string
     question_count: number
+    duration_seconds: number
+    allow_previous_questions: boolean
     easy_percentage: number
     medium_percentage: number
     hard_percentage: number
@@ -141,6 +143,8 @@ export type NewQuiz = {
     title: string
     question_bank_ids: number[]
     question_count: number
+    duration_seconds: number
+    allow_previous_questions: boolean
     easy_percentage: number
     medium_percentage: number
     hard_percentage: number
@@ -150,6 +154,11 @@ export type QuizParticipant = {
     id: number
     student_identifier: string
     student_display_name: string | null
+    answered_count: number
+    score: number
+    violation_count: number
+    last_violation_type: string | null
+    last_violation_at: string | null
     joined_at: string
 }
 
@@ -160,18 +169,61 @@ export type QuizSession = {
     class_id: number | null
     class_name: string
     join_code: string
-    status: "waiting" | "started"
+    status: "waiting" | "in_progress" | "finished"
     participant_count: number
     participants: QuizParticipant[]
+    current_question_number: number | null
+    total_questions: number
+    current_submission_count: number
     created_at: string
     started_at: string | null
+    ends_at: string | null
+}
+
+export type StudentQuizChoice = {
+    id: number
+    label: string
+    position: number
+    has_image: boolean
+    code_language: CodeLanguage | null
+    code_content: string | null
+}
+
+export type StudentQuizQuestion = {
+    id: number
+    prompt: string
+    difficulty: QuestionDifficulty
+    answer_mode: AnswerMode
+    answer_mode_disclosed: boolean
+    has_image: boolean
+    code_language: CodeLanguage | null
+    code_content: string | null
+    choices: StudentQuizChoice[]
 }
 
 export type StudentQuizSession = {
     quiz_title: string
     class_name: string
     join_code: string
-    status: "waiting" | "started"
+    status: "waiting" | "in_progress" | "finished"
+    ends_at: string | null
+    question_number: number | null
+    total_questions: number
+    has_answered: boolean
+    answered_count: number
+    allow_previous_questions: boolean
+    selected_choice_ids: number[] | null
+    written_answer: string | null
+    question: StudentQuizQuestion | null
+}
+
+export type StudentQuizJoin = StudentQuizSession & {
+    participant_token: string
+}
+
+export type StudentQuizAnswer = {
+    selected_choice_ids?: number[]
+    written_answer?: string
 }
 
 type TokenResponse = {
@@ -419,8 +471,8 @@ export function startQuizSession(sessionId: number): Promise<QuizSession> {
 export function joinQuiz(
     joinCode: string,
     studentIdentifier: string
-): Promise<StudentQuizSession> {
-    return request<StudentQuizSession>(
+): Promise<StudentQuizJoin> {
+    return request<StudentQuizJoin>(
         "/api/quizzes/join",
         {
             method: "POST",
@@ -433,14 +485,81 @@ export function joinQuiz(
     )
 }
 
-export function getPublicQuizSession(
-    joinCode: string
+export function getStudentQuizSession(
+    joinCode: string,
+    participantToken: string
 ): Promise<StudentQuizSession> {
     return request<StudentQuizSession>(
-        `/api/quizzes/public/sessions/${encodeURIComponent(joinCode)}`,
-        {},
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}`,
+        { headers: { "X-Quiz-Token": participantToken } },
         false
     )
+}
+
+export function submitStudentQuizAnswer(
+    joinCode: string,
+    participantToken: string,
+    answer: StudentQuizAnswer
+): Promise<StudentQuizSession> {
+    return request<StudentQuizSession>(
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/answer`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+            body: JSON.stringify(answer),
+        },
+        false
+    )
+}
+
+export function navigateStudentQuiz(
+    joinCode: string,
+    participantToken: string,
+    questionNumber: number
+): Promise<StudentQuizSession> {
+    return request<StudentQuizSession>(
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/navigate`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+            body: JSON.stringify({ question_number: questionNumber }),
+        },
+        false
+    )
+}
+
+export function reportStudentQuizViolation(
+    joinCode: string,
+    participantToken: string,
+    eventType:
+        "fullscreen_exit" | "pointer_exit" | "window_blur" | "page_hidden"
+): Promise<void> {
+    return request<void>(
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/violation`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+            body: JSON.stringify({ event_type: eventType }),
+        },
+        false
+    )
+}
+
+export async function getStudentQuizImage(
+    path: "questions" | "choices",
+    id: number,
+    joinCode: string,
+    participantToken: string
+): Promise<Blob> {
+    const response = await fetch(
+        `${API_URL}/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/${path}/${id}/image`,
+        {
+            credentials: "include",
+            headers: { "X-Quiz-Token": participantToken },
+        }
+    )
+    if (!response.ok) throw await errorFrom(response)
+    return response.blob()
 }
 
 export function createUser(user: NewUser): Promise<User> {
