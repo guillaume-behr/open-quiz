@@ -44,7 +44,7 @@ export function DashboardLogin({
     return (
         <form
             onSubmit={handleLogin}
-            className="flex w-full max-w-fit min-w-sm flex-col gap-5 rounded-2xl border bg-secondary px-10 py-15 shadow-lg"
+            className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-15"
         >
             <div className="flex flex-col gap-2">
                 <p className="text-center text-4xl font-extrabold">

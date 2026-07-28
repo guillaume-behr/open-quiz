@@ -406,7 +406,7 @@ export function StudentClassesPanel({
                             </div>
                             <Button
                                 type="button"
-                                className="mt-auto w-full"
+                                className="mt-4 w-full"
                                 variant="outline"
                                 onClick={() =>
                                     setManagedClassId(studentClass.id)

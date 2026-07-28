@@ -147,7 +147,7 @@ export function Dashboard() {
     }
 
     return (
-        <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-10 py-2">
+        <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold">
@@ -203,12 +203,12 @@ export function Dashboard() {
                     className="min-h-72 rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
                     aria-labelledby={`${activeEntry.id}-title`}
                 >
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="flex min-w-0 items-start gap-3 sm:gap-4">
                             <div className="rounded-xl bg-primary/10 p-3 text-primary">
                                 <activeEntry.icon className="size-6" />
                             </div>
-                            <div>
+                            <div className="min-w-0">
                                 <h2
                                     id={`${activeEntry.id}-title`}
                                     className="text-2xl font-bold"

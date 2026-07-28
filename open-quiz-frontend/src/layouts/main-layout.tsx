@@ -26,14 +26,14 @@ export function MainLayout() {
             : { text: "homepage", url: "/" }
 
     return (
-        <div className="flex h-screen flex-col items-center justify-between">
-            <header className="flex h-1/15 w-full items-center justify-between px-10">
-                <p className="text-3xl font-extrabold text-primary">
+        <div className="flex min-h-dvh flex-col items-center">
+            <header className="flex w-full shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
+                <p className="text-2xl font-extrabold text-primary sm:text-3xl">
                     {t("app-name")}
                 </p>
                 <Link
                     to={link.url}
-                    className="cursor-pointer font-bold text-primary underline"
+                    className="text-right text-sm font-bold text-primary underline sm:text-base"
                 >
                     {t(link.text)}
                 </Link>
@@ -43,14 +43,13 @@ export function MainLayout() {
                 <Outlet />
             </main>
 
-            <div className="absolute right-1 bottom-1/18 flex flex-col gap-1">
-                <LanguageSelector />
-                <ThemeSelector />
-            </div>
-
-            <footer className="flex h-1/20 w-full items-center justify-between bg-sidebar-primary px-10">
-                <p className="text-sm">v 2026.01</p>
-                <div className="flex items-center gap-4">
+            <footer className="flex w-full shrink-0 flex-wrap items-center justify-center gap-x-5 gap-y-3 bg-sidebar-primary px-4 py-3 sm:justify-between sm:px-10">
+                <div className="flex items-center gap-3">
+                    <p className="text-sm whitespace-nowrap">v 2026.01</p>
+                    <LanguageSelector />
+                    <ThemeSelector />
+                </div>
+                <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                     <Link className="cursor-pointer text-sm underline" to="">
                         {t("legal")}
                     </Link>
@@ -66,7 +65,7 @@ export function MainLayout() {
                     <Link className="cursor-pointer text-sm underline" to="">
                         {t("signal")}
                     </Link>
-                </div>
+                </nav>
             </footer>
         </div>
     )

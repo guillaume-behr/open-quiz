@@ -514,7 +514,7 @@ export function QuestionBanksPanel({
                             {filteredQuestionBanks.map((bank) => (
                                 <li
                                     key={bank.id}
-                                    className="relative rounded-xl border bg-background p-4"
+                                    className="relative rounded-xl border bg-background p-4 pb-16"
                                 >
                                     <span className="absolute top-4 right-4 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
                                         {t("question-count", {
@@ -842,12 +842,12 @@ export function QuestionBanksPanel({
                                             key={question.id}
                                             className="rounded-xl border bg-background p-4"
                                         >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <p className="font-semibold">
+                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                <p className="min-w-0 font-semibold break-words">
                                                     {index + 1}.{" "}
                                                     {question.prompt}
                                                 </p>
-                                                <div className="flex shrink-0 items-center gap-2">
+                                                <div className="flex shrink-0 flex-wrap items-center gap-2">
                                                     <span className="rounded-full bg-muted px-2 py-1 text-xs whitespace-nowrap">
                                                         {t(
                                                             `difficulty-${question.difficulty}`

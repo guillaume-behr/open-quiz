@@ -132,7 +132,7 @@ export function AdminDashboard() {
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto px-10 py-2">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <p className="text-sm font-medium text-primary">
@@ -261,8 +261,8 @@ export function AdminDashboard() {
                                 className="flex items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
                             >
                                 <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <p className="truncate font-semibold">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <p className="min-w-0 truncate font-semibold">
                                             {user.display_name}
                                         </p>
                                         {user.is_admin && (

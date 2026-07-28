@@ -1,6 +1,7 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { X } from "lucide-react"
 import type { ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 
@@ -21,6 +22,8 @@ export function Dialog({
     children,
     className,
 }: DialogProps) {
+    const { t } = useTranslation()
+
     return (
         <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
             <DialogPrimitive.Portal>
@@ -32,8 +35,8 @@ export function Dialog({
                     )}
                 >
                     <div className="flex shrink-0 items-start justify-between gap-4 border-b px-5 py-4">
-                        <div>
-                            <DialogPrimitive.Title className="text-xl font-bold">
+                        <div className="min-w-0">
+                            <DialogPrimitive.Title className="text-xl font-bold break-words">
                                 {title}
                             </DialogPrimitive.Title>
                             {description && (
@@ -44,7 +47,7 @@ export function Dialog({
                         </div>
                         <DialogPrimitive.Close
                             className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                            aria-label="Fermer"
+                            aria-label={t("close")}
                         >
                             <X className="size-5" />
                         </DialogPrimitive.Close>

@@ -399,8 +399,8 @@ export function QuizzesPanel({
                             className="flex h-full flex-col rounded-xl border bg-background p-4"
                         >
                             <div className="flex items-start justify-between gap-3">
-                                <div>
-                                    <h3 className="font-semibold">
+                                <div className="min-w-0">
+                                    <h3 className="font-semibold break-words">
                                         {quiz.title}
                                     </h3>
                                     <p className="mt-1 text-sm text-muted-foreground">
@@ -410,7 +410,7 @@ export function QuizzesPanel({
                                         })}
                                     </p>
                                 </div>
-                                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                                <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
                                     {quiz.question_count}
                                 </span>
                             </div>
