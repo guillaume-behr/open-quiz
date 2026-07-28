@@ -459,6 +459,10 @@ export function getActiveQuizSessions(): Promise<QuizSession[]> {
     return request<QuizSession[]>("/api/quizzes/sessions/active")
 }
 
+export function getQuizResults(): Promise<QuizSession[]> {
+    return request<QuizSession[]>("/api/quizzes/sessions/results")
+}
+
 export function startQuizSession(sessionId: number): Promise<QuizSession> {
     return request<QuizSession>(`/api/quizzes/sessions/${sessionId}/start`, {
         method: "POST",

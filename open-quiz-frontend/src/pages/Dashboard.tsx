@@ -11,6 +11,7 @@ import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { StudentClassesPanel } from "@/components/classes/student-classes-panel"
 import { QuestionBanksPanel } from "@/components/question-banks/question-banks-panel"
 import { QuizzesPanel } from "@/components/quizzes/quizzes-panel"
+import { ResultsPanel } from "@/components/results/results-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -269,6 +270,7 @@ export function Dashboard() {
                             onCreateDialogOpenChange={setIsQuizCreationOpen}
                         />
                     )}
+                    {activeSection === "results" && <ResultsPanel />}
                 </section>
             </div>
         </div>

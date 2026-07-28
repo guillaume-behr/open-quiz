@@ -263,5 +263,15 @@
     "violation-fullscreen_exit": "sortie du plein écran",
     "violation-pointer_exit": "pointeur sorti de la fenêtre",
     "violation-window_blur": "fenêtre quittée",
-    "violation-page_hidden": "onglet masqué"
+    "violation-page_hidden": "onglet masqué",
+    "results-load-error": "Impossible de charger les résultats.",
+    "results-empty": "Aucun résultat disponible",
+    "results-empty-help": "Les quiz terminés apparaîtront ici avec les résultats de chaque élève.",
+    "result-students_one": "{{count}} élève",
+    "result-students_other": "{{count}} élèves",
+    "view-results": "Consulter les résultats",
+    "result-participants": "Participants",
+    "result-progress": "Questions répondues",
+    "result-score": "Score",
+    "result-no-participants": "Aucun élève n’a participé à ce quiz."
 }
