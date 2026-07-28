@@ -410,7 +410,7 @@ class StudentQuizJoinResponse(StudentQuizStateResponse):
 
 class StudentQuizAnswer(BaseModel):
     selected_choice_ids: list[int] | None = Field(
-        default=None, max_length=12
+        default=None, min_length=1, max_length=12
     )
     written_answer: str | None = Field(default=None, max_length=4000)
 

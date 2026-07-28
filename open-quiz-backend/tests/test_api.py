@@ -369,6 +369,50 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert question["choices"][0]["has_image"] is True
         assert question["choices"][0]["code_language"] == "python"
         assert question["choices"][0]["code_content"] == "print(1 / 2)"
+        reordered_payload = {
+            **question_payload,
+            "choices": [
+                {
+                    **question_payload["choices"][1],
+                    "id": question["choices"][1]["id"],
+                },
+                {
+                    **question_payload["choices"][0],
+                    "id": question["choices"][0]["id"],
+                },
+            ],
+        }
+        reordered_question = client.post(
+            f"/api/question-banks/questions/{question['id']}/update",
+            headers=teacher_headers,
+            data={"payload": json.dumps(reordered_payload)},
+        )
+        assert reordered_question.status_code == 200
+        question = reordered_question.json()
+        assert [choice["label"] for choice in question["choices"]] == [
+            "1/3",
+            "1/2",
+        ]
+        restored_payload = {
+            **question_payload,
+            "choices": [
+                {
+                    **question_payload["choices"][0],
+                    "id": question["choices"][1]["id"],
+                },
+                {
+                    **question_payload["choices"][1],
+                    "id": question["choices"][0]["id"],
+                },
+            ],
+        }
+        restored_question = client.post(
+            f"/api/question-banks/questions/{question['id']}/update",
+            headers=teacher_headers,
+            data={"payload": json.dumps(restored_payload)},
+        )
+        assert restored_question.status_code == 200
+        question = restored_question.json()
         bank_with_question = next(
             bank
             for bank in client.get(
@@ -799,6 +843,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     )
                 }
             else:
+                empty_answer = client.post(
+                    f"{student_state_url}/answer",
+                    headers=student_headers,
+                    json={"selected_choice_ids": []},
+                )
+                assert empty_answer.status_code == 422
                 correct_labels = {
                     choice["label"]
                     for choice in expected["choices"]

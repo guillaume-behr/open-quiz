@@ -66,14 +66,20 @@ function ProtectedQuizImage({
     const [source, setSource] = useState<string | null>(null)
 
     useEffect(() => {
+        let active = true
         let objectUrl: string | null = null
         void getStudentQuizImage(path, id, joinCode, token)
             .then((blob) => {
                 objectUrl = URL.createObjectURL(blob)
-                setSource(objectUrl)
+                if (active) {
+                    setSource(objectUrl)
+                } else {
+                    URL.revokeObjectURL(objectUrl)
+                }
             })
             .catch(() => undefined)
         return () => {
+            active = false
             if (objectUrl) URL.revokeObjectURL(objectUrl)
         }
     }, [id, joinCode, path, token])

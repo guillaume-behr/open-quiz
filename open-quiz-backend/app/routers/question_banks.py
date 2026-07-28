@@ -741,6 +741,15 @@ async def update_question(
             )
         )
     )
+    # Move existing rows out of the final position range before applying a
+    # reorder. SQLite checks the unique (question_id, position) constraint for
+    # every row update, so swapping positions directly can fail transiently.
+    temporary_position = (
+        max((choice.position for choice in existing_choices), default=-1) + 1
+    )
+    for offset, choice in enumerate(existing_choices):
+        choice.position = temporary_position + offset
+    session.flush()
     existing_choices_by_id = {choice.id: choice for choice in existing_choices}
     submitted_choice_ids = {
         choice.id for choice in question_payload.choices if choice.id is not None
