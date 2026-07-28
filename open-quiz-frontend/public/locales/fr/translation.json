@@ -344,5 +344,9 @@
     "delete-grade-level-confirmation": "Supprimer le niveau « {{level}} » ? Cette action est définitive.",
     "grade-level-create-error": "Impossible d’ajouter ce niveau.",
     "grade-level-delete-error": "Impossible de supprimer ce niveau.",
-    "grade-level-in-use-error": "Ce niveau est encore utilisé par une classe ou une banque de questions."
+    "grade-level-in-use-error": "Ce niveau est encore utilisé par une classe ou une banque de questions.",
+    "written-response-format": "Format de la réponse rédactionnelle",
+    "plain-text": "Texte simple",
+    "plain-text-response": "Répondez en texte simple.",
+    "write-code-in-language": "Écrivez votre réponse en {{language}}."
 }

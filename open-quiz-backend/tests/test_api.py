@@ -716,6 +716,11 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert all("correction_mode" not in item for item in example_batch["questions"])
         assert any(item["image"] for item in example_batch["questions"])
         assert any(item["code_content"] for item in example_batch["questions"])
+        assert next(
+            item
+            for item in example_batch["questions"]
+            if item["answer_mode"] == "written"
+        )["response_language"] == "python"
         assert any(
             choice["image"]
             for item in example_batch["questions"]
@@ -747,6 +752,11 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert {
             question["answer_mode"] for question in imported_example.json()["questions"]
         } == {"single", "multiple", "written"}
+        assert next(
+            question
+            for question in imported_example.json()["questions"]
+            if question["answer_mode"] == "written"
+        )["response_language"] == "python"
 
         invalid_quiz_distribution = client.post(
             "/api/quizzes",

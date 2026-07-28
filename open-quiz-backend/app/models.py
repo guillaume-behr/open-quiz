@@ -117,6 +117,9 @@ class Question(Base):
     difficulty: Mapped[str] = mapped_column(String(20))
     answer_mode: Mapped[str] = mapped_column(String(20))
     answer_mode_disclosed: Mapped[bool] = mapped_column(Boolean, default=True)
+    response_language: Mapped[str | None] = mapped_column(
+        String(30), nullable=True
+    )
     correction_mode: Mapped[str] = mapped_column(String(20))
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     image_content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)

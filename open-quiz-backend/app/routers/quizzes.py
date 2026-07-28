@@ -687,6 +687,7 @@ def student_question_response(
         difficulty=question.difficulty,
         answer_mode=question.answer_mode,
         answer_mode_disclosed=question.answer_mode_disclosed,
+        response_language=question.response_language,
         has_image=question.image_content_type is not None,
         code_language=code.language if code else None,
         code_content=code.content if code else None,

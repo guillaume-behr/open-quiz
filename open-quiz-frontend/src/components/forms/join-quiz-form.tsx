@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { CodeBlock } from "@/components/question-banks/code-block"
+import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
 import { useObjectUrl } from "@/hooks/use-object-url"
 import { cn } from "@/lib/utils"
 import { LoaderCircle, LogOut, UserRound } from "lucide-react"
@@ -521,15 +522,38 @@ export function JoinQuizForm() {
                             />
                         )}
                         {question.answer_mode === "written" ? (
-                            <textarea
-                                className="min-h-32 w-full rounded-md border bg-background p-3"
-                                value={writtenAnswer}
-                                aria-label={t("written-answer")}
-                                onChange={(event) =>
-                                    setWrittenAnswer(event.target.value)
-                                }
-                                required
-                            />
+                            <div className="space-y-2">
+                                <p className="text-sm text-muted-foreground">
+                                    {question.response_language
+                                        ? t("write-code-in-language", {
+                                              language:
+                                                  CODE_LANGUAGES.find(
+                                                      (item) =>
+                                                          item.value ===
+                                                          question.response_language
+                                                  )?.label ??
+                                                  question.response_language,
+                                          })
+                                        : t("plain-text-response")}
+                                </p>
+                                <textarea
+                                    className={cn(
+                                        "min-h-32 w-full rounded-md border bg-background p-3",
+                                        question.response_language &&
+                                            "font-mono"
+                                    )}
+                                    value={writtenAnswer}
+                                    aria-label={t("written-answer")}
+                                    lang={
+                                        question.response_language ?? undefined
+                                    }
+                                    spellCheck={!question.response_language}
+                                    onChange={(event) =>
+                                        setWrittenAnswer(event.target.value)
+                                    }
+                                    required
+                                />
+                            </div>
                         ) : (
                             <div className="grid gap-3">
                                 {question.choices.map((choice) => {

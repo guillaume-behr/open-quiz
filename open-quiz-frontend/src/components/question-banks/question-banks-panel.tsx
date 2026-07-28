@@ -15,6 +15,7 @@ import { QuestionForm } from "@/components/question-banks/question-form"
 import { QuestionImage } from "@/components/question-banks/question-image"
 import { ChoiceImage } from "@/components/question-banks/choice-image"
 import { CodeBlock } from "@/components/question-banks/code-block"
+import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -1015,6 +1016,26 @@ export function QuestionBanksPanel({
                                                               : "written-answer"
                                                     )}
                                                 </span>
+                                                {question.answer_mode ===
+                                                    "written" && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <span>
+                                                            {question.response_language
+                                                                ? (CODE_LANGUAGES.find(
+                                                                      (
+                                                                          language
+                                                                      ) =>
+                                                                          language.value ===
+                                                                          question.response_language
+                                                                  )?.label ??
+                                                                  question.response_language)
+                                                                : t(
+                                                                      "plain-text"
+                                                                  )}
+                                                        </span>
+                                                    </>
+                                                )}
                                                 {!question.answer_mode_disclosed && (
                                                     <>
                                                         <span>•</span>

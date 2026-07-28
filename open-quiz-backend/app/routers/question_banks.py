@@ -221,6 +221,7 @@ def question_response(
         difficulty=question.difficulty,
         answer_mode=question.answer_mode,
         answer_mode_disclosed=question.answer_mode_disclosed,
+        response_language=question.response_language,
         has_image=question.image_content_type is not None,
         code_language=code.language if code else None,
         code_content=code.content if code else None,
@@ -260,6 +261,7 @@ def add_question(
         difficulty=payload.difficulty,
         answer_mode=payload.answer_mode,
         answer_mode_disclosed=payload.answer_mode_disclosed,
+        response_language=payload.response_language,
         correction_mode="automatic",
         image_data=image_data,
         image_content_type=image_content_type,
@@ -438,6 +440,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                 "difficulty": "hard",
                 "answer_mode": "written",
                 "answer_mode_disclosed": True,
+                "response_language": "python",
                 "choices": [
                     {
                         "label": "La gravitation maintient la Terre en orbite autour du Soleil.",
@@ -502,6 +505,7 @@ def export_questions(
                 "difficulty": question.difficulty,
                 "answer_mode": question.answer_mode,
                 "answer_mode_disclosed": question.answer_mode_disclosed,
+                "response_language": question.response_language,
                 "choices": [
                     {
                         "label": choice.label,
@@ -785,6 +789,7 @@ async def update_question(
     question.difficulty = question_payload.difficulty
     question.answer_mode = question_payload.answer_mode
     question.answer_mode_disclosed = question_payload.answer_mode_disclosed
+    question.response_language = question_payload.response_language
     question.correction_mode = "automatic"
     if image_data and image_content_type:
         question.image_data = image_data

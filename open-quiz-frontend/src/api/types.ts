@@ -95,6 +95,7 @@ export type Question = {
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
+    response_language: CodeLanguage | null
     has_image: boolean
     code_language: CodeLanguage | null
     code_content: string | null
@@ -107,6 +108,7 @@ export type NewQuestion = {
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
+    response_language: CodeLanguage | null
     code_language: CodeLanguage | null
     code_content: string | null
     choices: Array<{
@@ -217,6 +219,7 @@ export type StudentQuizQuestion = {
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
+    response_language: CodeLanguage | null
     has_image: boolean
     code_language: CodeLanguage | null
     code_content: string | null

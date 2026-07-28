@@ -340,5 +340,9 @@
     "delete-grade-level-confirmation": "Delete grade level “{{level}}”? This action cannot be undone.",
     "grade-level-create-error": "Unable to add this grade level.",
     "grade-level-delete-error": "Unable to delete this grade level.",
-    "grade-level-in-use-error": "This grade level is still used by a class or question bank."
+    "grade-level-in-use-error": "This grade level is still used by a class or question bank.",
+    "written-response-format": "Written response format",
+    "plain-text": "Plain text",
+    "plain-text-response": "Write your answer as plain text.",
+    "write-code-in-language": "Write your answer in {{language}}."
 }

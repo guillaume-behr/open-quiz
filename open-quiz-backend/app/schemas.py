@@ -245,6 +245,7 @@ class QuestionCreate(BaseModel):
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool = True
+    response_language: CodeLanguage | None = None
     choices: list[QuestionChoiceCreate] = Field(min_length=1, max_length=12)
     code_language: CodeLanguage | None = None
     code_content: str | None = Field(default=None, max_length=20000)
@@ -282,6 +283,10 @@ class QuestionCreate(BaseModel):
         if self.answer_mode == "written" and len(self.choices) != 1:
             raise ValueError(
                 "Une question rédactionnelle nécessite une réponse attendue"
+            )
+        if self.answer_mode != "written" and self.response_language is not None:
+            raise ValueError(
+                "Un langage de réponse est réservé aux questions rédactionnelles"
             )
         if correct_count == 0:
             raise ValueError("Une question nécessite au moins une bonne réponse")
@@ -322,6 +327,7 @@ class QuestionResponse(BaseModel):
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool
+    response_language: str | None
     has_image: bool
     code_language: str | None
     code_content: str | None
@@ -461,6 +467,7 @@ class StudentQuizQuestionResponse(BaseModel):
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool
+    response_language: str | None
     has_image: bool
     code_language: str | None
     code_content: str | None

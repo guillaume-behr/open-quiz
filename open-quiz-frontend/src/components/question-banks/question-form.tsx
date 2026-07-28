@@ -146,6 +146,8 @@ export function QuestionForm({
     const [answerModeDisclosed, setAnswerModeDisclosed] = useState(
         question?.answer_mode_disclosed ?? true
     )
+    const [responseLanguage, setResponseLanguage] =
+        useState<CodeLanguage | null>(question?.response_language ?? null)
     const choiceModeBackup = useRef<EditableChoice[] | null>(null)
     const answerModeDisclosedBackup = useRef<boolean | null>(null)
     const [choices, setChoices] = useState<EditableChoice[]>(
@@ -354,6 +356,8 @@ export function QuestionForm({
                 difficulty,
                 answer_mode: answerMode,
                 answer_mode_disclosed: answerModeDisclosed,
+                response_language:
+                    answerMode === "written" ? responseLanguage : null,
                 code_language: hasCode ? codeLanguage : null,
                 code_content: hasCode ? codeContent : null,
                 choices: encodedChoices,
@@ -556,6 +560,35 @@ export function QuestionForm({
                             aria-label={t("disclose-answer-mode")}
                         />
                     </label>
+                )}
+
+                {answerMode === "written" && (
+                    <Field>
+                        <FieldLabel htmlFor="written-response-language">
+                            {t("written-response-format")}
+                        </FieldLabel>
+                        <select
+                            id="written-response-language"
+                            className={selectClassName}
+                            value={responseLanguage ?? ""}
+                            onChange={(event) =>
+                                setResponseLanguage(
+                                    (event.target.value ||
+                                        null) as CodeLanguage | null
+                                )
+                            }
+                        >
+                            <option value="">{t("plain-text")}</option>
+                            {CODE_LANGUAGES.map((language) => (
+                                <option
+                                    key={language.value}
+                                    value={language.value}
+                                >
+                                    {language.label}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
                 )}
 
                 <Field>
