@@ -519,6 +519,7 @@ export function JoinQuizForm() {
                             <Button
                                 className="flex-1"
                                 size="lg"
+                                type="submit"
                                 disabled={
                                     isBusy ||
                                     (question.answer_mode !== "written" &&
