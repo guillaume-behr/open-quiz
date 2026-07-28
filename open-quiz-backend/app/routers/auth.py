@@ -331,7 +331,7 @@ def verify_two_factor(
             payload.challenge_token,
             settings.jwt_secret,
         )
-    except jwt.PyJWTError, ValueError, KeyError:
+    except (jwt.PyJWTError, ValueError, KeyError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Demande de double authentification invalide ou expirée",

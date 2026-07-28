@@ -39,7 +39,7 @@ def get_current_user(
         user_id, token_version = decode_access_token(
             credentials.credentials, request.app.state.settings.jwt_secret
         )
-    except jwt.PyJWTError, ValueError, KeyError:
+    except (jwt.PyJWTError, ValueError, KeyError):
         raise unauthorized from None
 
     user = session.get(User, user_id)

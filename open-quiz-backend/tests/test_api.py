@@ -844,11 +844,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "/api/quizzes/join",
             json={
                 "join_code": quiz_session["join_code"].lower(),
-                "student_identifier": " martin.g ",
+                "student_identifier": " MARTIN.G ",
             },
         )
         assert joined.status_code == 201
         assert joined.json()["quiz_title"] == quiz["title"]
+        assert joined.json()["student_name"] == "Martin Giraud"
         assert "participants" not in joined.json()
         with sqlite3.connect(tmp_path / "test.db") as connection:
             successful_join_limits = connection.execute(

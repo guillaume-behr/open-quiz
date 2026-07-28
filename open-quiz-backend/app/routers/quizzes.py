@@ -486,10 +486,14 @@ def session_response(
 def student_session_response(
     quiz_session: QuizSession,
     quiz: Quiz,
+    participant: QuizParticipant,
 ) -> StudentQuizSessionResponse:
     return StudentQuizSessionResponse(
         quiz_title=quiz.title,
         class_name=quiz_session.class_name,
+        student_name=(
+            participant.student_display_name or participant.student_identifier
+        ),
         join_code=quiz_session.join_code,
         status=quiz_session.status,
         ends_at=quiz_ends_at(quiz_session, quiz),
@@ -741,7 +745,7 @@ def student_state_response(
         )
     )
     return StudentQuizStateResponse(
-        **student_session_response(quiz_session, quiz).model_dump(),
+        **student_session_response(quiz_session, quiz, participant).model_dump(),
         question_number=(
             participant.current_position + 1
             if participant.current_position is not None
@@ -1585,7 +1589,7 @@ def get_student_question_image(
     session: DbSession,
     quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> Response:
-    quiz_session, _, participant = authenticated_participant(
+    quiz_session, quiz, participant = authenticated_participant(
         join_code, quiz_token, request, session
     )
     enforce_public_rate_limit(
@@ -1594,6 +1598,12 @@ def get_student_question_image(
         "quiz_participant_rate_limiter",
         participant_token_hash(quiz_token),
     )
+    expire_quiz_session(quiz_session, quiz, session)
+    if quiz_session.status != "in_progress":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image de la question introuvable",
+        )
     if current_question_id(quiz_session, participant, session) != question_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1623,7 +1633,7 @@ def get_student_choice_image(
     session: DbSession,
     quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> Response:
-    quiz_session, _, participant = authenticated_participant(
+    quiz_session, quiz, participant = authenticated_participant(
         join_code, quiz_token, request, session
     )
     enforce_public_rate_limit(
@@ -1632,6 +1642,12 @@ def get_student_choice_image(
         "quiz_participant_rate_limiter",
         participant_token_hash(quiz_token),
     )
+    expire_quiz_session(quiz_session, quiz, session)
+    if quiz_session.status != "in_progress":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image de la réponse introuvable",
+        )
     question_id = current_question_id(quiz_session, participant, session)
     choice = session.scalar(
         select(QuestionChoice).where(

@@ -421,6 +421,7 @@ class QuizSessionResponse(BaseModel):
 class StudentQuizSessionResponse(BaseModel):
     quiz_title: str
     class_name: str
+    student_name: str
     join_code: str
     status: Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
     ends_at: datetime | None
@@ -512,7 +513,7 @@ class QuizJoin(BaseModel):
     @field_validator("student_identifier")
     @classmethod
     def normalize_student_identifier(cls, value: str) -> str:
-        normalized = " ".join(value.split())
+        normalized = "".join(value.split()).lower()
         if not normalized:
             raise ValueError("L’identifiant de l’élève ne peut pas être vide")
         return normalized
