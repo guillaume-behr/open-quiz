@@ -25,7 +25,6 @@ import {
     type FormEvent,
     type KeyboardEvent,
     useEffect,
-    useMemo,
     useRef,
     useState,
 } from "react"
@@ -83,13 +82,19 @@ function SelectedImagePreview({
     alt: string
     className: string
 }) {
-    const imageUrl = useMemo(() => URL.createObjectURL(image), [image])
+    const imageElement = useRef<HTMLImageElement>(null)
 
     useEffect(() => {
-        return () => URL.revokeObjectURL(imageUrl)
-    }, [imageUrl])
+        const nextImageUrl = URL.createObjectURL(image)
+        const preview = imageElement.current
+        if (preview) preview.src = nextImageUrl
+        return () => {
+            if (preview) preview.removeAttribute("src")
+            URL.revokeObjectURL(nextImageUrl)
+        }
+    }, [image])
 
-    return <img src={imageUrl} alt={alt} className={className} />
+    return <img ref={imageElement} alt={alt} className={className} />
 }
 
 function indentCode(
