@@ -339,5 +339,10 @@
     "no-answer": "Aucune réponse",
     "manual-score": "Note attribuée",
     "grade-answer": "Valider la correction",
-    "update-grade": "Modifier la note"
+    "update-grade": "Modifier la note",
+    "delete-grade-level": "Supprimer le niveau {{level}}",
+    "delete-grade-level-confirmation": "Supprimer le niveau « {{level}} » ? Cette action est définitive.",
+    "grade-level-create-error": "Impossible d’ajouter ce niveau.",
+    "grade-level-delete-error": "Impossible de supprimer ce niveau.",
+    "grade-level-in-use-error": "Ce niveau est encore utilisé par une classe ou une banque de questions."
 }

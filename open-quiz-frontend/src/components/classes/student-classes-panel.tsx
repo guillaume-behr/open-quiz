@@ -10,8 +10,8 @@ import {
     updateStudentClass,
 } from "@/api/classes"
 import { ApiError } from "@/api/client"
-import { getQuestionBanks } from "@/api/question-banks"
-import type { Student, StudentClass } from "@/api/types"
+import type { GradeLevel, Student, StudentClass } from "@/api/types"
+import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -38,6 +38,9 @@ import { useTranslation } from "react-i18next"
 type StudentClassesPanelProps = {
     isCreateDialogOpen: boolean
     onCreateDialogOpenChange: (open: boolean) => void
+    gradeLevels: GradeLevel[]
+    onCreateGradeLevel: (name: string) => Promise<GradeLevel>
+    onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
 }
 
 const selectClassName =
@@ -67,6 +70,9 @@ function studentsFilename(studentClass: StudentClass): string {
 export function StudentClassesPanel({
     isCreateDialogOpen,
     onCreateDialogOpenChange,
+    gradeLevels,
+    onCreateGradeLevel,
+    onDeleteGradeLevel,
 }: StudentClassesPanelProps) {
     const { t } = useTranslation()
     const [classes, setClasses] = useState<StudentClass[]>([])
@@ -82,7 +88,6 @@ export function StudentClassesPanel({
     )
     const [studentFirstName, setStudentFirstName] = useState("")
     const [studentLastName, setStudentLastName] = useState("")
-    const [gradeLevels, setGradeLevels] = useState<string[]>([])
     const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
     const [newGradeLevel, setNewGradeLevel] = useState("")
     const [isCreatingStudent, setIsCreatingStudent] = useState(false)
@@ -168,20 +173,10 @@ export function StudentClassesPanel({
 
     useEffect(() => {
         let isActive = true
-        Promise.all([getStudentClasses(), getQuestionBanks()])
-            .then(([loadedClasses, banks]) => {
+        getStudentClasses()
+            .then((loadedClasses) => {
                 if (!isActive) return
                 setClasses(loadedClasses)
-                setGradeLevels(
-                    Array.from(
-                        new Set([
-                            ...banks.map((bank) => bank.grade_level),
-                            ...loadedClasses.map(
-                                (studentClass) => studentClass.grade_level
-                            ),
-                        ])
-                    ).sort((first, second) => first.localeCompare(second, "fr"))
-                )
             })
             .catch(() => {
                 if (isActive) setLoadError(t("classes-load-error"))
@@ -238,19 +233,18 @@ export function StudentClassesPanel({
         }
     }
 
-    function addGradeLevel(): void {
+    async function addGradeLevel(): Promise<void> {
         const normalizedLevel = newGradeLevel.trim()
         if (!normalizedLevel) return
-        setGradeLevels((levels) =>
-            levels.includes(normalizedLevel)
-                ? levels
-                : [...levels, normalizedLevel].sort((first, second) =>
-                      first.localeCompare(second, "fr")
-                  )
-        )
-        setGradeLevel(normalizedLevel)
-        setNewGradeLevel("")
-        setIsAddingGradeLevel(false)
+        setClassError(null)
+        try {
+            const created = await onCreateGradeLevel(normalizedLevel)
+            setGradeLevel(created.name)
+            setNewGradeLevel("")
+            setIsAddingGradeLevel(false)
+        } catch {
+            setClassError(t("grade-level-create-error"))
+        }
     }
 
     async function handleCreateStudent(event: FormEvent<HTMLFormElement>) {
@@ -389,8 +383,8 @@ export function StudentClassesPanel({
                                         {t("all-grade-levels")}
                                     </option>
                                     {gradeLevels.map((level) => (
-                                        <option key={level} value={level}>
-                                            {level}
+                                        <option key={level.id} value={level.name}>
+                                            {level.name}
                                         </option>
                                     ))}
                                 </select>
@@ -437,8 +431,8 @@ export function StudentClassesPanel({
                                         {t("all-grade-levels")}
                                     </option>
                                     {gradeLevels.map((level) => (
-                                        <option key={level} value={level}>
-                                            {level}
+                                        <option key={level.id} value={level.name}>
+                                            {level.name}
                                         </option>
                                     ))}
                                 </select>
@@ -779,24 +773,27 @@ export function StudentClassesPanel({
                                 {t("grade-level")}
                             </FieldLabel>
                             <div className="flex gap-2">
-                                <select
+                                <GradeLevelSelect
                                     id="class-grade"
-                                    className={selectClassName}
                                     value={gradeLevel}
-                                    onChange={(event) =>
-                                        setGradeLevel(event.target.value)
-                                    }
-                                    required
-                                >
-                                    <option value="" disabled>
-                                        {t("choose-grade-level")}
-                                    </option>
-                                    {gradeLevels.map((level) => (
-                                        <option key={level} value={level}>
-                                            {level}
-                                        </option>
-                                    ))}
-                                </select>
+                                    levels={gradeLevels}
+                                    onChange={setGradeLevel}
+                                    onDelete={async (level) => {
+                                        setClassError(null)
+                                        try {
+                                            await onDeleteGradeLevel(level)
+                                        } catch (error) {
+                                            setClassError(
+                                                error instanceof ApiError &&
+                                                    error.status === 409
+                                                    ? t("grade-level-in-use-error")
+                                                    : t("grade-level-delete-error")
+                                            )
+                                            throw error
+                                        }
+                                    }}
+                                    disabled={isCreatingClass}
+                                />
                                 <Button
                                     type="button"
                                     size="icon"
@@ -824,7 +821,7 @@ export function StudentClassesPanel({
                                     <Button
                                         type="button"
                                         size="sm"
-                                        onClick={addGradeLevel}
+                                        onClick={() => void addGradeLevel()}
                                     >
                                         {t("save-grade-level")}
                                     </Button>

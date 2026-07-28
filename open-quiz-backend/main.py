@@ -18,6 +18,7 @@ from app.routers import (
     admin,
     auth,
     classes,
+    grade_levels,
     health,
     question_banks,
     quizzes,
@@ -282,6 +283,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users.router)
     app.include_router(admin.router)
     app.include_router(classes.router)
+    app.include_router(grade_levels.router)
     app.include_router(quizzes.router)
     app.include_router(question_banks.router)
     return app

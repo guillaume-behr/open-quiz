@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
 from app.dependencies import DbSession, ProfessorUser
+from app.grade_levels import ensure_grade_level
 from app.grading import recompute_finished_scores_for_question
 from app.images import (
     ALLOWED_IMAGE_TYPES,
@@ -116,6 +117,7 @@ def create_question_bank(
         chapter=payload.chapter,
     )
     session.add(question_bank)
+    ensure_grade_level(professor.id, payload.grade_level, session)
     try:
         session.commit()
     except IntegrityError:
@@ -599,6 +601,7 @@ def import_question_bank(
         chapter=payload.question_bank.chapter,
     )
     session.add(question_bank)
+    ensure_grade_level(professor.id, payload.question_bank.grade_level, session)
     try:
         session.flush()
     except IntegrityError:

@@ -335,5 +335,10 @@
     "no-answer": "No answer",
     "manual-score": "Awarded score",
     "grade-answer": "Confirm grade",
-    "update-grade": "Update score"
+    "update-grade": "Update score",
+    "delete-grade-level": "Delete grade level {{level}}",
+    "delete-grade-level-confirmation": "Delete grade level “{{level}}”? This action cannot be undone.",
+    "grade-level-create-error": "Unable to add this grade level.",
+    "grade-level-delete-error": "Unable to delete this grade level.",
+    "grade-level-in-use-error": "This grade level is still used by a class or question bank."
 }

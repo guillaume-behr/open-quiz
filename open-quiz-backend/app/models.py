@@ -34,6 +34,20 @@ class User(Base):
     )
 
 
+class GradeLevel(Base):
+    __tablename__ = "grade_levels"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="uq_grade_level_owner_name"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
 class StudentClass(Base):
     __tablename__ = "student_classes"
     __table_args__ = (

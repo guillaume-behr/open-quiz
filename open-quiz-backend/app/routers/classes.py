@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.grade_levels import ensure_grade_level
 from app.models import (
     QuizParticipant,
     QuizSession,
@@ -170,6 +171,7 @@ def create_class(
         grade_level=payload.grade_level,
     )
     session.add(student_class)
+    ensure_grade_level(professor.id, payload.grade_level, session)
     try:
         session.commit()
     except IntegrityError:
@@ -231,6 +233,7 @@ def update_class(
     student_class = owned_class(class_id, professor, session)
     student_class.name = payload.name
     student_class.grade_level = payload.grade_level
+    ensure_grade_level(professor.id, payload.grade_level, session)
     try:
         session.commit()
     except IntegrityError:

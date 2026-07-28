@@ -31,6 +31,11 @@ export type StudentClass = {
     created_at: string
 }
 
+export type GradeLevel = {
+    id: number
+    name: string
+}
+
 export type QuestionBank = {
     id: number
     grade_level: string

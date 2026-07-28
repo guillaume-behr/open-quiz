@@ -9,7 +9,8 @@ import {
     importQuestionBatch,
 } from "@/api/question-banks"
 import { ApiError } from "@/api/client"
-import type { Question, QuestionBank } from "@/api/types"
+import type { GradeLevel, Question, QuestionBank } from "@/api/types"
+import { GradeLevelSelect } from "@/components/grade-level-select"
 import { QuestionForm } from "@/components/question-banks/question-form"
 import { QuestionImage } from "@/components/question-banks/question-image"
 import { ChoiceImage } from "@/components/question-banks/choice-image"
@@ -39,7 +40,6 @@ import {
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-const DEFAULT_GRADE_LEVELS = ["2de", "1re", "Terminale"]
 const selectClassName =
     "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
@@ -77,11 +77,17 @@ function exportFilename(bank: QuestionBank): string {
 type QuestionBanksPanelProps = {
     isCreateDialogOpen: boolean
     onCreateDialogOpenChange: (open: boolean) => void
+    gradeLevels: GradeLevel[]
+    onCreateGradeLevel: (name: string) => Promise<GradeLevel>
+    onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
 }
 
 export function QuestionBanksPanel({
     isCreateDialogOpen,
     onCreateDialogOpenChange,
+    gradeLevels,
+    onCreateGradeLevel,
+    onDeleteGradeLevel,
 }: QuestionBanksPanelProps) {
     const { t } = useTranslation()
     const [questionBanks, setQuestionBanks] = useState<QuestionBank[]>([])
@@ -89,7 +95,6 @@ export function QuestionBanksPanel({
     const [title, setTitle] = useState("")
     const [titleFilter, setTitleFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
-    const [gradeLevels, setGradeLevels] = useState(DEFAULT_GRADE_LEVELS)
     const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
     const [newGradeLevel, setNewGradeLevel] = useState("")
     const [isLoading, setIsLoading] = useState(true)
@@ -130,16 +135,6 @@ export function QuestionBanksPanel({
             .then((banks) => {
                 if (!isActive) return
                 setQuestionBanks(banks)
-                setGradeLevels((levels) => [
-                    ...levels,
-                    ...Array.from(
-                        new Set(
-                            banks
-                                .map((bank) => bank.grade_level)
-                                .filter((level) => !levels.includes(level))
-                        )
-                    ),
-                ])
             })
             .catch(() => {
                 if (isActive) setLoadError(t("question-banks-load-error"))
@@ -200,17 +195,18 @@ export function QuestionBanksPanel({
         }
     }
 
-    function addGradeLevel(): void {
+    async function addGradeLevel(): Promise<void> {
         const normalizedLevel = newGradeLevel.trim()
         if (!normalizedLevel) return
-        setGradeLevels((levels) =>
-            levels.includes(normalizedLevel)
-                ? levels
-                : [...levels, normalizedLevel]
-        )
-        setGradeLevel(normalizedLevel)
-        setNewGradeLevel("")
-        setIsAddingGradeLevel(false)
+        setCreateError(null)
+        try {
+            const created = await onCreateGradeLevel(normalizedLevel)
+            setGradeLevel(created.name)
+            setNewGradeLevel("")
+            setIsAddingGradeLevel(false)
+        } catch {
+            setCreateError(t("grade-level-create-error"))
+        }
     }
 
     const selectedBank = questionBanks.find(
@@ -334,11 +330,7 @@ export function QuestionBanksPanel({
             setQuestionBanks((banks) =>
                 [...banks, imported.question_bank].sort(compareQuestionBanks)
             )
-            setGradeLevels((levels) =>
-                levels.includes(imported.question_bank.grade_level)
-                    ? levels
-                    : [...levels, imported.question_bank.grade_level]
-            )
+            await onCreateGradeLevel(imported.question_bank.grade_level)
             setBatchMessage(
                 t("questions-imported", {
                     count: imported.questions.length,
@@ -408,8 +400,8 @@ export function QuestionBanksPanel({
                                     {t("all-grade-levels")}
                                 </option>
                                 {gradeLevels.map((level) => (
-                                    <option key={level} value={level}>
-                                        {level}
+                                    <option key={level.id} value={level.name}>
+                                        {level.name}
                                     </option>
                                 ))}
                             </select>
@@ -602,24 +594,27 @@ export function QuestionBanksPanel({
                                 {t("grade-level")}
                             </FieldLabel>
                             <div className="flex gap-2">
-                                <select
+                                <GradeLevelSelect
                                     id="question-bank-grade-level"
-                                    className={selectClassName}
                                     value={gradeLevel}
-                                    onChange={(event) =>
-                                        setGradeLevel(event.target.value)
-                                    }
-                                    required
-                                >
-                                    <option value="" disabled>
-                                        {t("choose-grade-level")}
-                                    </option>
-                                    {gradeLevels.map((level) => (
-                                        <option key={level} value={level}>
-                                            {level}
-                                        </option>
-                                    ))}
-                                </select>
+                                    levels={gradeLevels}
+                                    onChange={setGradeLevel}
+                                    onDelete={async (level) => {
+                                        setCreateError(null)
+                                        try {
+                                            await onDeleteGradeLevel(level)
+                                        } catch (error) {
+                                            setCreateError(
+                                                error instanceof ApiError &&
+                                                    error.status === 409
+                                                    ? t("grade-level-in-use-error")
+                                                    : t("grade-level-delete-error")
+                                            )
+                                            throw error
+                                        }
+                                    }}
+                                    disabled={isCreating}
+                                />
                                 <Button
                                     type="button"
                                     size="icon"
@@ -647,7 +642,7 @@ export function QuestionBanksPanel({
                                     <Button
                                         type="button"
                                         size="sm"
-                                        onClick={addGradeLevel}
+                                        onClick={() => void addGradeLevel()}
                                     >
                                         {t("save-grade-level")}
                                     </Button>

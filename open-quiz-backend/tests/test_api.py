@@ -267,6 +267,31 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["grade_level"] == "5e"
         assert student_class["students"] == []
         assert student_class["completed_quiz_count"] == 0
+        grade_levels = client.get(
+            "/api/grade-levels", headers=teacher_headers
+        ).json()
+        assert [level["name"] for level in grade_levels] == ["5e"]
+        assert (
+            client.delete(
+                f"/api/grade-levels/{grade_levels[0]['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 409
+        )
+        unused_level = client.post(
+            "/api/grade-levels",
+            headers=teacher_headers,
+            json={"name": " 4e "},
+        )
+        assert unused_level.status_code == 201
+        assert unused_level.json()["name"] == "4e"
+        assert (
+            client.delete(
+                f"/api/grade-levels/{unused_level.json()['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
         assert (
             client.post(
                 "/api/classes",

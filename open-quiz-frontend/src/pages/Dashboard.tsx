@@ -1,5 +1,10 @@
 import { login, logout, restoreSession, verifyTwoFactor } from "@/api/auth"
-import type { TwoFactorChallenge, User } from "@/api/types"
+import {
+    createGradeLevel,
+    deleteGradeLevel,
+    getGradeLevels,
+} from "@/api/grade-levels"
+import type { GradeLevel, TwoFactorChallenge, User } from "@/api/types"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { StudentClassesPanel } from "@/components/classes/student-classes-panel"
@@ -43,6 +48,7 @@ export function Dashboard() {
         useState(false)
     const [isQuizCreationOpen, setIsQuizCreationOpen] = useState(false)
     const [isClassCreationOpen, setIsClassCreationOpen] = useState(false)
+    const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([])
 
     const dashboardEntries: DashboardEntry[] = [
         {
@@ -83,6 +89,7 @@ export function Dashboard() {
                     return
                 }
                 setCurrentUser(user)
+                void getGradeLevels().then(setGradeLevels)
             })
             .catch(() => setCurrentUser(null))
             .finally(() => setIsLoading(false))
@@ -110,10 +117,33 @@ export function Dashboard() {
             return
         }
         setCurrentUser(user)
+        setGradeLevels(await getGradeLevels())
     }
 
     function handleLogout() {
-        void logout().finally(() => setCurrentUser(null))
+        void logout().finally(() => {
+            setCurrentUser(null)
+            setGradeLevels([])
+        })
+    }
+
+    async function handleCreateGradeLevel(name: string): Promise<GradeLevel> {
+        const level = await createGradeLevel(name)
+        setGradeLevels((current) =>
+            current.some((item) => item.id === level.id)
+                ? current
+                : [...current, level].sort((a, b) =>
+                      a.name.localeCompare(b.name, "fr")
+                  )
+        )
+        return level
+    }
+
+    async function handleDeleteGradeLevel(level: GradeLevel): Promise<void> {
+        await deleteGradeLevel(level.id)
+        setGradeLevels((current) =>
+            current.filter((item) => item.id !== level.id)
+        )
     }
 
     if (isLoading) {
@@ -246,6 +276,9 @@ export function Dashboard() {
                     </div>
                     {activeSection === "question-banks" && (
                         <QuestionBanksPanel
+                            gradeLevels={gradeLevels}
+                            onCreateGradeLevel={handleCreateGradeLevel}
+                            onDeleteGradeLevel={handleDeleteGradeLevel}
                             isCreateDialogOpen={isQuestionBankCreationOpen}
                             onCreateDialogOpenChange={
                                 setIsQuestionBankCreationOpen
@@ -254,6 +287,9 @@ export function Dashboard() {
                     )}
                     {activeSection === "students" && (
                         <StudentClassesPanel
+                            gradeLevels={gradeLevels}
+                            onCreateGradeLevel={handleCreateGradeLevel}
+                            onDeleteGradeLevel={handleDeleteGradeLevel}
                             isCreateDialogOpen={isClassCreationOpen}
                             onCreateDialogOpenChange={setIsClassCreationOpen}
                         />

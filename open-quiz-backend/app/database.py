@@ -37,6 +37,30 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
 
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO grade_levels (owner_id, name, created_at) "
+                "SELECT DISTINCT owner_id, grade_level, CURRENT_TIMESTAMP "
+                "FROM student_classes "
+                "WHERE NOT EXISTS ("
+                "SELECT 1 FROM grade_levels "
+                "WHERE grade_levels.owner_id = student_classes.owner_id "
+                "AND grade_levels.name = student_classes.grade_level"
+                ")"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO grade_levels (owner_id, name, created_at) "
+                "SELECT DISTINCT owner_id, grade_level, CURRENT_TIMESTAMP "
+                "FROM question_banks "
+                "WHERE NOT EXISTS ("
+                "SELECT 1 FROM grade_levels "
+                "WHERE grade_levels.owner_id = question_banks.owner_id "
+                "AND grade_levels.name = question_banks.grade_level"
+                ")"
+            )
+        )
         choice_columns = {
             column["name"]
             for column in inspect(connection).get_columns("question_choices")

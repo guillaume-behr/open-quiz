@@ -53,6 +53,25 @@ class UserCredentialReset(BaseModel):
     reset_two_factor: bool = True
 
 
+class GradeLevelCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("Le niveau ne peut pas être vide")
+        return normalized
+
+
+class GradeLevelResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
 class StudentCreate(BaseModel):
     identifier: str | None = Field(default=None, min_length=1, max_length=80)
     display_name: str = Field(min_length=1, max_length=120)
