@@ -518,7 +518,6 @@ export function JoinQuizForm() {
                             <CodeBlock
                                 code={question.code_content}
                                 language={question.code_language}
-                                runnable
                             />
                         )}
                         {question.answer_mode === "written" ? (
@@ -536,23 +535,26 @@ export function JoinQuizForm() {
                                           })
                                         : t("plain-text-response")}
                                 </p>
-                                <textarea
-                                    className={cn(
-                                        "min-h-32 w-full rounded-md border bg-background p-3",
-                                        question.response_language &&
-                                            "font-mono"
-                                    )}
-                                    value={writtenAnswer}
-                                    aria-label={t("written-answer")}
-                                    lang={
-                                        question.response_language ?? undefined
-                                    }
-                                    spellCheck={!question.response_language}
-                                    onChange={(event) =>
-                                        setWrittenAnswer(event.target.value)
-                                    }
-                                    required
-                                />
+                                {question.response_language ? (
+                                    <CodeBlock
+                                        code={writtenAnswer}
+                                        language={question.response_language}
+                                        editable
+                                        onCodeChange={setWrittenAnswer}
+                                        editorClassName="min-h-48"
+                                    />
+                                ) : (
+                                    <textarea
+                                        className="min-h-32 w-full rounded-md border bg-background p-3"
+                                        value={writtenAnswer}
+                                        aria-label={t("written-answer")}
+                                        spellCheck
+                                        onChange={(event) =>
+                                            setWrittenAnswer(event.target.value)
+                                        }
+                                        required
+                                    />
+                                )}
                             </div>
                         ) : (
                             <div className="grid gap-3">
