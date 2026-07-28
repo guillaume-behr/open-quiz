@@ -38,15 +38,10 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
         submitted = json.loads(answer.answer_data)
         if question is None:
             answer.score = 0
+            answer.is_graded = True
         elif question.answer_mode == "written":
-            expected = next((choice for choice in choices if choice.is_correct), None)
-            written = str(submitted.get("written_answer", "")).strip()
-            answer.score = (
-                expected.points
-                if expected is not None
-                and written.casefold() == expected.label.strip().casefold()
-                else 0
-            )
+            if not answer.is_graded:
+                answer.score = 0
         else:
             choices_by_id = {choice.id: choice for choice in choices}
             answer.score = sum(
@@ -54,6 +49,7 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
                 for choice_id in submitted.get("selected_choice_ids", [])
                 if choice_id in choices_by_id
             )
+            answer.is_graded = True
 
 
 def recompute_finished_scores_for_question(

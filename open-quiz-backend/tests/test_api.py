@@ -335,6 +335,55 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert listed_classes.status_code == 200
         assert listed_classes.json()[0]["student_count"] == 1
+        exported_students = client.get(
+            f"/api/classes/{student_class['id']}/students/export",
+            headers=teacher_headers,
+        )
+        assert exported_students.status_code == 200
+        assert "attachment;" in exported_students.headers["content-disposition"]
+        student_batch = exported_students.json()
+        assert student_batch["version"] == 1
+        assert student_batch["class"] == {
+            "name": "5e B",
+            "grade_level": "Cinquième",
+        }
+        assert student_batch["students"] == [
+            {
+                "identifier": "martin.g",
+                "display_name": "Martin Giraud",
+            }
+        ]
+        assert (
+            client.post(
+                f"/api/classes/{student_class['id']}/students/import",
+                headers=teacher_headers,
+                json=student_batch,
+            ).status_code
+            == 409
+        )
+        student_batch["students"][0] = {
+            "identifier": "lea.d",
+            "display_name": "Léa Dupont",
+        }
+        imported_students = client.post(
+            f"/api/classes/{student_class['id']}/students/import",
+            headers=teacher_headers,
+            json=student_batch,
+        )
+        assert imported_students.status_code == 200
+        assert imported_students.json()["student_count"] == 2
+        imported_student = next(
+            item
+            for item in imported_students.json()["students"]
+            if item["identifier"] == "lea.d"
+        )
+        assert (
+            client.delete(
+                f"/api/classes/students/{imported_student['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
 
         first_bank = client.post(
             "/api/question-banks",
@@ -695,10 +744,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 "title": " Révisions   générales ",
                 "question_bank_ids": [imported_example.json()["question_bank"]["id"]],
                 "question_count": 3,
-                "allow_previous_questions": True,
-                "easy_percentage": 34,
-                "medium_percentage": 33,
-                "hard_percentage": 33,
+                "allow_previous_questions": False,
+                "easy_percentage": 0,
+                "medium_percentage": 0,
+                "hard_percentage": 100,
             },
         )
         assert created_quiz.status_code == 201
@@ -706,12 +755,34 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert quiz["title"] == "Révisions générales"
         assert quiz["question_count"] == 3
         assert quiz["duration_seconds"] == 1800
-        assert quiz["allow_previous_questions"] is True
+        assert quiz["allow_previous_questions"] is False
         assert len(quiz["question_banks"]) == 1
+        assert quiz["question_banks"][0]["easy_question_count"] == 1
+        assert quiz["question_banks"][0]["medium_question_count"] == 1
+        assert quiz["question_banks"][0]["hard_question_count"] == 1
         assert (
             client.get("/api/quizzes", headers=teacher_headers).json()[0]["id"]
             == quiz["id"]
         )
+        updated_quiz = client.post(
+            f"/api/quizzes/{quiz['id']}/update",
+            headers=teacher_headers,
+            json={
+                "title": "Révisions générales modifiées",
+                "question_bank_ids": [imported_example.json()["question_bank"]["id"]],
+                "question_count": 3,
+                "duration_seconds": 2400,
+                "allow_previous_questions": True,
+                "easy_percentage": 34,
+                "medium_percentage": 33,
+                "hard_percentage": 33,
+            },
+        )
+        assert updated_quiz.status_code == 200
+        quiz = updated_quiz.json()
+        assert quiz["title"] == "Révisions générales modifiées"
+        assert quiz["duration_seconds"] == 2400
+        assert quiz["allow_previous_questions"] is True
 
         preview = client.get(
             f"/api/quizzes/{quiz['id']}/preview",
@@ -741,6 +812,25 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 headers=teacher_headers,
             ).json()[0]["id"]
             == quiz_session["id"]
+        )
+        assert (
+            client.post(
+                f"/api/quizzes/{quiz['id']}/update",
+                headers=teacher_headers,
+                json={
+                    "title": quiz["title"],
+                    "question_bank_ids": [
+                        imported_example.json()["question_bank"]["id"]
+                    ],
+                    "question_count": 3,
+                    "duration_seconds": 2400,
+                    "allow_previous_questions": True,
+                    "easy_percentage": 34,
+                    "medium_percentage": 33,
+                    "hard_percentage": 33,
+                },
+            ).status_code
+            == 409
         )
         assert (
             client.delete(
@@ -942,11 +1032,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             expected = expected_by_prompt[safe_question["prompt"]]
             if safe_question["answer_mode"] == "written":
                 answer_payload = {
-                    "written_answer": next(
-                        choice["label"]
-                        for choice in expected["choices"]
-                        if choice["is_correct"]
-                    )
+                    "written_answer": "Réponse rédactionnelle très longue. " * 200
                 }
             else:
                 missing_answer = client.post(
@@ -1008,6 +1094,42 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 assert collect_keys(previous.json()).isdisjoint(
                     {"is_correct", "points", "correction_mode", "score"}
                 )
+                paused_with_answer = client.post(
+                    f"/api/quizzes/sessions/{quiz_session['id']}/pause",
+                    headers=teacher_headers,
+                )
+                assert paused_with_answer.status_code == 200
+                answer_during_pause = client.get(
+                    student_state_url,
+                    headers=student_headers,
+                ).json()
+                assert answer_during_pause["status"] == "paused"
+                assert answer_during_pause["question"] is None
+                assert (
+                    answer_during_pause["selected_choice_ids"]
+                    == previous.json()["selected_choice_ids"]
+                )
+                assert (
+                    answer_during_pause["written_answer"]
+                    == previous.json()["written_answer"]
+                )
+                resumed_with_answer = client.post(
+                    f"/api/quizzes/sessions/{quiz_session['id']}/resume",
+                    headers=teacher_headers,
+                )
+                assert resumed_with_answer.status_code == 200
+                answer_after_resume = client.get(
+                    student_state_url,
+                    headers=student_headers,
+                ).json()
+                assert (
+                    answer_after_resume["selected_choice_ids"]
+                    == previous.json()["selected_choice_ids"]
+                )
+                assert (
+                    answer_after_resume["written_answer"]
+                    == previous.json()["written_answer"]
+                )
                 resubmitted = client.post(
                     f"{student_state_url}/answer",
                     headers=student_headers,
@@ -1034,12 +1156,48 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert results.json()[0]["quiz_title"] == quiz["title"]
         assert results.json()[0]["class_name"] == "5e B"
         assert results.json()[0]["participants"][0]["score"] > 0
+        assert results.json()[0]["participants"][0]["pending_manual_grading_count"] == 1
         assert (
             client.get("/api/quizzes/sessions/results", headers=headers).status_code
             == 403
         )
-        previous_score = results.json()[0]["participants"][0]["score"]
-        regraded_question = preview.json()[0]
+        reviewed_answers = client.get(
+            f"/api/quizzes/sessions/{quiz_session['id']}/participants/"
+            f"{teacher_state['participants'][0]['id']}/answers",
+            headers=teacher_headers,
+        )
+        assert reviewed_answers.status_code == 200
+        assert len(reviewed_answers.json()) == 3
+        written_review = next(
+            answer
+            for answer in reviewed_answers.json()
+            if answer["answer_mode"] == "written"
+        )
+        assert written_review["submitted_answers"]
+        assert len(written_review["submitted_answers"][0]) > 4000
+        assert written_review["expected_answers"]
+        assert written_review["score"] == 0
+        assert written_review["is_graded"] is False
+        manually_graded = client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/answers/"
+            f"{written_review['id']}/grade",
+            headers=teacher_headers,
+            json={"score": written_review["max_score"]},
+        )
+        assert manually_graded.status_code == 200
+        assert manually_graded.json()["is_graded"] is True
+        assert manually_graded.json()["score"] == written_review["max_score"]
+        graded_results = client.get(
+            "/api/quizzes/sessions/results",
+            headers=teacher_headers,
+        ).json()
+        assert graded_results[0]["participants"][0]["pending_manual_grading_count"] == 0
+        previous_score = graded_results[0]["participants"][0]["score"]
+        regraded_question = next(
+            question
+            for question in preview.json()
+            if question["answer_mode"] != "written"
+        )
         original_choice_ids = [choice["id"] for choice in regraded_question["choices"]]
         regraded_payload = {
             "prompt": regraded_question["prompt"],

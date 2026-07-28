@@ -261,6 +261,7 @@ class QuizAnswer(Base):
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True)
     answer_data: Mapped[str] = mapped_column(Text)
     score: Mapped[float] = mapped_column(Float, default=0.0)
+    is_graded: Mapped[bool] = mapped_column(Boolean, default=False)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )

@@ -1,7 +1,8 @@
+import json
 import re
 import unicodedata
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -16,6 +17,7 @@ from app.schemas import (
     StudentClassCreate,
     StudentClassResponse,
     StudentCreate,
+    StudentImportBatch,
     StudentResponse,
 )
 
@@ -238,6 +240,90 @@ def update_class(
             detail="Une classe porte déjà ce nom",
         ) from None
     session.refresh(student_class)
+    return class_response(student_class, session)
+
+
+@router.get("/{class_id}/students/export")
+def export_students(
+    class_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> Response:
+    student_class = owned_class(class_id, professor, session)
+    students = session.scalars(
+        select(Student)
+        .where(Student.class_id == class_id)
+        .order_by(Student.display_name, Student.identifier, Student.id)
+    )
+    content = json.dumps(
+        {
+            "version": 1,
+            "class": {
+                "name": student_class.name,
+                "grade_level": student_class.grade_level,
+            },
+            "students": [
+                {
+                    "identifier": student.identifier,
+                    "display_name": student.display_name,
+                }
+                for student in students
+            ],
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return Response(
+        content=f"{content}\n",
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="classe-{student_class.id}-eleves.json"'
+            )
+        },
+    )
+
+
+@router.post(
+    "/{class_id}/students/import",
+    response_model=StudentClassResponse,
+)
+def import_students(
+    class_id: int,
+    payload: StudentImportBatch,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> StudentClassResponse:
+    student_class = owned_class(class_id, professor, session)
+    imported_identifiers = [student.identifier for student in payload.students]
+    if imported_identifiers and session.scalar(
+        select(Student.id)
+        .where(
+            Student.class_id == class_id,
+            Student.identifier.in_(imported_identifiers),
+        )
+        .limit(1)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un identifiant du fichier existe déjà dans cette classe",
+        )
+    session.add_all(
+        Student(
+            class_id=class_id,
+            identifier=student.identifier,
+            display_name=student.display_name,
+        )
+        for student in payload.students
+    )
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Le fichier contient un identifiant déjà utilisé",
+        ) from None
     return class_response(student_class, session)
 
 

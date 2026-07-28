@@ -9,7 +9,7 @@ from string import ascii_uppercase, digits
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
@@ -34,6 +34,8 @@ from app.requests import client_ip
 from app.routers.question_banks import question_response
 from app.schemas import (
     QuestionResponse,
+    QuizAnswerGrade,
+    QuizAnswerReview,
     QuizBankSummary,
     QuizCreate,
     QuizJoin,
@@ -110,7 +112,13 @@ def reject_quiz_join(
     raise quiz_join_rejected()
 
 
-def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
+DIFFICULTY_EASE_PRIORITY = {"easy": 2, "medium": 1, "hard": 0}
+
+
+def difficulty_counts(
+    payload: Quiz | QuizCreate,
+    available: dict[str, int] | None = None,
+) -> dict[str, int]:
     percentages = {
         "easy": payload.easy_percentage,
         "medium": payload.medium_percentage,
@@ -127,11 +135,36 @@ def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
         key=lambda difficulty: (
             exact[difficulty] - counts[difficulty],
             percentages[difficulty],
+            DIFFICULTY_EASE_PRIORITY[difficulty],
         ),
         reverse=True,
     )
     for difficulty in priorities[:remaining]:
         counts[difficulty] += 1
+    if available is None:
+        return counts
+    counts = {
+        difficulty: min(count, available.get(difficulty, 0))
+        for difficulty, count in counts.items()
+    }
+    remaining = payload.question_count - sum(counts.values())
+    while remaining:
+        candidates = [
+            difficulty
+            for difficulty in percentages
+            if counts[difficulty] < available.get(difficulty, 0)
+        ]
+        if not candidates:
+            break
+        difficulty = max(
+            candidates,
+            key=lambda item: (
+                percentages[item],
+                DIFFICULTY_EASE_PRIORITY[item],
+            ),
+        )
+        counts[difficulty] += 1
+        remaining -= 1
     return counts
 
 
@@ -175,20 +208,15 @@ def validate_bank_selection(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Une ou plusieurs banques de questions sont invalides",
         )
-    validate_question_availability(
-        payload.question_bank_ids,
-        difficulty_counts(payload),
-        session,
-    )
+    difficulty_counts_for_banks(payload, payload.question_bank_ids, session)
     return banks
 
 
-def validate_question_availability(
+def available_difficulty_counts(
     bank_ids: list[int],
-    requested: dict[str, int],
     session: DbSession,
-) -> None:
-    available = {
+) -> dict[str, int]:
+    return {
         difficulty: count
         for difficulty, count in session.execute(
             select(Question.difficulty, func.count(Question.id))
@@ -196,25 +224,25 @@ def validate_question_availability(
             .group_by(Question.difficulty)
         )
     }
-    shortages = [
-        difficulty
-        for difficulty, count in requested.items()
-        if available.get(difficulty, 0) < count
-    ]
-    if shortages:
+
+
+def difficulty_counts_for_banks(
+    payload: Quiz | QuizCreate,
+    bank_ids: list[int],
+    session: DbSession,
+) -> dict[str, int]:
+    available = available_difficulty_counts(bank_ids, session)
+    if sum(available.values()) < payload.question_count:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                "Nombre de questions insuffisant pour la répartition demandée : "
-                + ", ".join(shortages)
-            ),
+            detail="Nombre total de questions insuffisant dans les banques sélectionnées",
         )
+    return difficulty_counts(payload, available)
 
 
 def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
     bank_ids = quiz_bank_ids(quiz.id, session)
-    requested = difficulty_counts(quiz)
-    validate_question_availability(bank_ids, requested, session)
+    requested = difficulty_counts_for_banks(quiz, bank_ids, session)
     selected_ids: list[int] = []
     for difficulty, count in requested.items():
         if count == 0:
@@ -272,7 +300,13 @@ def load_question_responses(
 
 def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
     rows = session.execute(
-        select(QuestionBank, func.count(Question.id))
+        select(
+            QuestionBank,
+            func.count(Question.id),
+            func.sum(case((Question.difficulty == "easy", 1), else_=0)),
+            func.sum(case((Question.difficulty == "medium", 1), else_=0)),
+            func.sum(case((Question.difficulty == "hard", 1), else_=0)),
+        )
         .join(
             QuizQuestionBank,
             QuizQuestionBank.question_bank_id == QuestionBank.id,
@@ -297,8 +331,11 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
                 grade_level=bank.grade_level,
                 chapter=bank.chapter,
                 question_count=count,
+                easy_question_count=easy_count or 0,
+                medium_question_count=medium_count or 0,
+                hard_question_count=hard_count or 0,
             )
-            for bank, count in rows
+            for bank, count, easy_count, medium_count, hard_count in rows
         ],
         created_at=quiz.created_at,
     )
@@ -343,7 +380,10 @@ def current_question_id(
     participant: QuizParticipant,
     session: DbSession,
 ) -> int | None:
-    if quiz_session.status != "in_progress" or participant.current_position is None:
+    if (
+        quiz_session.status not in ("in_progress", "paused")
+        or participant.current_position is None
+    ):
         return None
     return session.scalar(
         select(QuizSessionQuestion.question_id).where(
@@ -373,14 +413,15 @@ def session_response(
                 QuizAnswer.participant_id,
                 func.count(QuizAnswer.id),
                 func.coalesce(func.sum(QuizAnswer.score), 0),
+                func.sum(case((QuizAnswer.is_graded.is_(False), 1), else_=0)),
             )
             .where(QuizAnswer.session_id == quiz_session.id)
             .group_by(QuizAnswer.participant_id)
         )
     )
     answers_by_student = {
-        participant_id: (answered_count, float(score))
-        for participant_id, answered_count, score in answer_rows
+        participant_id: (answered_count, float(score), pending_count or 0)
+        for participant_id, answered_count, score, pending_count in answer_rows
     }
     student_ids = [
         participant.student_id
@@ -415,9 +456,14 @@ def session_response(
                     if participant.student_id in students_by_id
                     else participant.student_display_name
                 ),
-                answered_count=answers_by_student.get(participant.id, (0, 0))[0],
+                answered_count=answers_by_student.get(participant.id, (0, 0, 0))[0],
                 score=(
-                    answers_by_student.get(participant.id, (0, 0))[1]
+                    answers_by_student.get(participant.id, (0, 0, 0))[1]
+                    if quiz_session.status == "finished"
+                    else 0
+                ),
+                pending_manual_grading_count=(
+                    answers_by_student.get(participant.id, (0, 0, 0))[2]
                     if quiz_session.status == "finished"
                     else 0
                 ),
@@ -715,7 +761,7 @@ def student_state_response(
                 participant,
                 session,
             )
-            if question_id is not None
+            if question_id is not None and quiz_session.status == "in_progress"
             else None
         ),
     )
@@ -827,6 +873,167 @@ def list_quiz_results(
     return [
         session_response(quiz_session, quiz, session) for quiz_session, quiz in rows
     ]
+
+
+def answer_review(
+    answer: QuizAnswer,
+    question: Question,
+    position: int,
+    choices: list[QuestionChoice],
+) -> QuizAnswerReview:
+    submitted = json.loads(answer.answer_data)
+    choices_by_id = {choice.id: choice for choice in choices}
+    if question.answer_mode == "written":
+        submitted_answers = [str(submitted.get("written_answer", ""))]
+    else:
+        submitted_answers = [
+            choices_by_id[choice_id].label
+            for choice_id in submitted.get("selected_choice_ids", [])
+            if choice_id in choices_by_id
+        ]
+    expected_answers = [choice.label for choice in choices if choice.is_correct]
+    return QuizAnswerReview(
+        id=answer.id,
+        question_id=question.id,
+        position=position + 1,
+        prompt=question.prompt,
+        difficulty=question.difficulty,
+        answer_mode=question.answer_mode,
+        submitted_answers=submitted_answers,
+        expected_answers=expected_answers,
+        score=answer.score,
+        max_score=max(
+            0,
+            sum(choice.points for choice in choices if choice.is_correct),
+        ),
+        is_graded=answer.is_graded,
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/participants/{participant_id}/answers",
+    response_model=list[QuizAnswerReview],
+)
+def list_participant_answers(
+    session_id: int,
+    participant_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> list[QuizAnswerReview]:
+    quiz_session, _ = owned_quiz_session(session_id, professor, session)
+    if quiz_session.status != "finished":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Les réponses sont disponibles une fois le quiz terminé",
+        )
+    participant = session.scalar(
+        select(QuizParticipant).where(
+            QuizParticipant.id == participant_id,
+            QuizParticipant.session_id == quiz_session.id,
+        )
+    )
+    if participant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Participant introuvable",
+        )
+    rows = list(
+        session.execute(
+            select(QuizAnswer, Question, QuizSessionQuestion.position)
+            .join(Question, Question.id == QuizAnswer.question_id)
+            .join(
+                QuizSessionQuestion,
+                (QuizSessionQuestion.session_id == QuizAnswer.session_id)
+                & (QuizSessionQuestion.question_id == QuizAnswer.question_id),
+            )
+            .where(
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == participant.id,
+            )
+            .order_by(QuizSessionQuestion.position)
+        )
+    )
+    question_ids = [question.id for _, question, _ in rows]
+    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
+    if question_ids:
+        for choice in session.scalars(
+            select(QuestionChoice)
+            .where(QuestionChoice.question_id.in_(question_ids))
+            .order_by(QuestionChoice.position, QuestionChoice.id)
+        ):
+            choices_by_question[choice.question_id].append(choice)
+    return [
+        answer_review(
+            answer,
+            question,
+            position,
+            choices_by_question[question.id],
+        )
+        for answer, question, position in rows
+    ]
+
+
+@router.post(
+    "/sessions/{session_id}/answers/{answer_id}/grade",
+    response_model=QuizAnswerReview,
+)
+def grade_written_answer(
+    session_id: int,
+    answer_id: int,
+    payload: QuizAnswerGrade,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> QuizAnswerReview:
+    quiz_session, _ = owned_quiz_session(session_id, professor, session)
+    if quiz_session.status != "finished":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La correction est disponible une fois le quiz terminé",
+        )
+    row = session.execute(
+        select(QuizAnswer, Question, QuizSessionQuestion.position)
+        .join(Question, Question.id == QuizAnswer.question_id)
+        .join(
+            QuizSessionQuestion,
+            (QuizSessionQuestion.session_id == QuizAnswer.session_id)
+            & (QuizSessionQuestion.question_id == QuizAnswer.question_id),
+        )
+        .where(
+            QuizAnswer.id == answer_id,
+            QuizAnswer.session_id == quiz_session.id,
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Réponse introuvable",
+        )
+    answer, question, position = row
+    if question.answer_mode != "written":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Seules les réponses rédactionnelles sont corrigées manuellement",
+        )
+    choices = list(
+        session.scalars(
+            select(QuestionChoice)
+            .where(QuestionChoice.question_id == question.id)
+            .order_by(QuestionChoice.position, QuestionChoice.id)
+        )
+    )
+    max_score = max(
+        0,
+        sum(choice.points for choice in choices if choice.is_correct),
+    )
+    if payload.score > max_score:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"La note ne peut pas dépasser {max_score:g}",
+        )
+    answer.score = payload.score
+    answer.is_graded = True
+    session.commit()
+    return answer_review(answer, question, position, choices)
 
 
 @router.get(
@@ -989,6 +1196,48 @@ def preview_quiz(
 ) -> list[QuestionResponse]:
     quiz = owned_quiz(quiz_id, professor, session)
     return load_question_responses(draw_question_ids(quiz, session), session)
+
+
+@router.post(
+    "/{quiz_id}/update",
+    response_model=QuizResponse,
+)
+def update_quiz(
+    quiz_id: int,
+    payload: QuizCreate,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> QuizResponse:
+    quiz = owned_quiz(quiz_id, professor, session)
+    active_session_id = session.scalar(
+        select(QuizSession.id)
+        .where(
+            QuizSession.quiz_id == quiz.id,
+            QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+        )
+        .limit(1)
+    )
+    if active_session_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un quiz avec une session active ne peut pas être modifié",
+        )
+    validate_bank_selection(payload, professor, session)
+    quiz.title = payload.title
+    quiz.question_count = payload.question_count
+    quiz.duration_seconds = payload.duration_seconds
+    quiz.allow_previous_questions = payload.allow_previous_questions
+    quiz.easy_percentage = payload.easy_percentage
+    quiz.medium_percentage = payload.medium_percentage
+    quiz.hard_percentage = payload.hard_percentage
+    session.execute(delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz.id))
+    session.add_all(
+        QuizQuestionBank(quiz_id=quiz.id, question_bank_id=bank_id)
+        for bank_id in payload.question_bank_ids
+    )
+    session.commit()
+    session.refresh(quiz)
+    return quiz_response(quiz, session)
 
 
 @router.post(
@@ -1221,11 +1470,13 @@ def submit_student_answer(
                 question_id=question_id,
                 answer_data=json.dumps(answer_data, ensure_ascii=False),
                 score=0,
+                is_graded=False,
             )
         )
     else:
         existing_answer.answer_data = json.dumps(answer_data, ensure_ascii=False)
         existing_answer.score = 0
+        existing_answer.is_graded = False
     total_questions = len(session_question_ids(quiz_session, session))
     if (
         participant.current_position is not None

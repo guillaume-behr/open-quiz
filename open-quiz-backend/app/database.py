@@ -116,6 +116,24 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "ADD COLUMN student_display_name VARCHAR(120)"
                 )
             )
+        answer_columns = {
+            column["name"] for column in inspect(connection).get_columns("quiz_answers")
+        }
+        if "is_graded" not in answer_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quiz_answers "
+                    "ADD COLUMN is_graded BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE quiz_answers SET is_graded = CASE "
+                    "WHEN question_id IN "
+                    "(SELECT id FROM questions WHERE answer_mode = 'written') "
+                    "THEN FALSE ELSE TRUE END"
+                )
+            )
         if "access_token_hash" not in participant_columns:
             connection.execute(
                 text(

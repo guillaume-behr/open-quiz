@@ -84,6 +84,39 @@ class StudentResponse(BaseModel):
     created_at: datetime
 
 
+class StudentImportItem(BaseModel):
+    identifier: str = Field(min_length=1, max_length=80)
+    display_name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("Le nom ne peut pas être vide")
+        return normalized
+
+    @field_validator("identifier")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        normalized = "".join(value.split()).lower()
+        if not normalized:
+            raise ValueError("L’identifiant ne peut pas être vide")
+        return normalized
+
+
+class StudentImportBatch(BaseModel):
+    version: Literal[1]
+    students: list[StudentImportItem] = Field(max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_unique_identifiers(self) -> StudentImportBatch:
+        identifiers = [student.identifier for student in self.students]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("Le fichier contient des identifiants en double")
+        return self
+
+
 class StudentClassCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     grade_level: str = Field(min_length=1, max_length=80)
@@ -128,6 +161,9 @@ class QuestionBankResponse(BaseModel):
     chapter: str
     created_at: datetime
     question_count: int = 0
+    easy_question_count: int = 0
+    medium_question_count: int = 0
+    hard_question_count: int = 0
 
 
 CodeLanguage = Literal[
@@ -329,6 +365,9 @@ class QuizBankSummary(BaseModel):
     grade_level: str
     chapter: str
     question_count: int
+    easy_question_count: int
+    medium_question_count: int
+    hard_question_count: int
 
 
 class QuizResponse(BaseModel):
@@ -354,6 +393,7 @@ class QuizParticipantResponse(BaseModel):
     student_display_name: str | None
     answered_count: int = 0
     score: float = 0
+    pending_manual_grading_count: int = 0
     violation_count: int = 0
     last_violation_type: str | None = None
     last_violation_at: datetime | None = None
@@ -426,7 +466,25 @@ class StudentQuizAnswer(BaseModel):
     selected_choice_ids: list[int] | None = Field(
         default=None, min_length=1, max_length=12
     )
-    written_answer: str | None = Field(default=None, max_length=4000)
+    written_answer: str | None = None
+
+
+class QuizAnswerGrade(BaseModel):
+    score: float = Field(ge=0)
+
+
+class QuizAnswerReview(BaseModel):
+    id: int
+    question_id: int
+    position: int
+    prompt: str
+    difficulty: Literal["easy", "medium", "hard"]
+    answer_mode: Literal["single", "multiple", "written"]
+    submitted_answers: list[str]
+    expected_answers: list[str]
+    score: float
+    max_score: float
+    is_graded: bool
 
 
 class StudentQuizNavigation(BaseModel):

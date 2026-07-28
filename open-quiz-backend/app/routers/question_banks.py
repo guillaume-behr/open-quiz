@@ -12,7 +12,7 @@ from fastapi import (
     status,
 )
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
@@ -65,7 +65,13 @@ def list_question_banks(
 ) -> list[QuestionBankResponse]:
     """Return question banks owned by the authenticated professor."""
     rows = session.execute(
-        select(QuestionBank, func.count(Question.id))
+        select(
+            QuestionBank,
+            func.count(Question.id),
+            func.sum(case((Question.difficulty == "easy", 1), else_=0)),
+            func.sum(case((Question.difficulty == "medium", 1), else_=0)),
+            func.sum(case((Question.difficulty == "hard", 1), else_=0)),
+        )
         .outerjoin(
             Question,
             Question.question_bank_id == QuestionBank.id,
@@ -76,9 +82,20 @@ def list_question_banks(
     )
     return [
         QuestionBankResponse.model_validate(question_bank).model_copy(
-            update={"question_count": question_count}
+            update={
+                "question_count": question_count,
+                "easy_question_count": easy_count or 0,
+                "medium_question_count": medium_count or 0,
+                "hard_question_count": hard_count or 0,
+            }
         )
-        for question_bank, question_count in rows
+        for (
+            question_bank,
+            question_count,
+            easy_count,
+            medium_count,
+            hard_count,
+        ) in rows
     ]
 
 
@@ -617,7 +634,18 @@ def import_question_bank(
     ]
     return QuestionBatchImportResponse(
         question_bank=QuestionBankResponse.model_validate(question_bank).model_copy(
-            update={"question_count": len(questions)}
+            update={
+                "question_count": len(questions),
+                "easy_question_count": sum(
+                    question.difficulty == "easy" for question in payload.questions
+                ),
+                "medium_question_count": sum(
+                    question.difficulty == "medium" for question in payload.questions
+                ),
+                "hard_question_count": sum(
+                    question.difficulty == "hard" for question in payload.questions
+                ),
+            }
         ),
         questions=questions,
     )
