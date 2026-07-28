@@ -549,6 +549,12 @@ def participant_token_hash(token: str) -> str:
     return sha256(token.encode()).hexdigest()
 
 
+def participant_auth_subject(join_code: str, token: str | None) -> str:
+    normalized_join_code = join_code.strip().upper()
+    token_fingerprint = participant_token_hash(token) if token else "missing"
+    return f"participant-auth:{normalized_join_code}:{token_fingerprint}"
+
+
 def authenticated_participant(
     join_code: str,
     token: str | None,
@@ -560,7 +566,7 @@ def authenticated_participant(
             request,
             session,
             "quiz_join_rate_limiter",
-            f"participant-auth:{client_ip(request)}",
+            participant_auth_subject(join_code, token),
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -583,7 +589,7 @@ def authenticated_participant(
             request,
             session,
             "quiz_join_rate_limiter",
-            f"participant-auth:{client_ip(request)}",
+            participant_auth_subject(join_code, token),
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -942,7 +948,7 @@ def join_quiz(
     request: Request,
     session: DbSession,
 ) -> StudentQuizJoinResponse:
-    join_subject = f"join-ip:{client_ip(request)}"
+    join_subject = f"join:{payload.join_code}:{payload.student_identifier}"
     enforce_existing_public_rate_limit(
         request,
         session,

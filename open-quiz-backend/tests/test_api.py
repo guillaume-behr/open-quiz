@@ -76,6 +76,44 @@ def test_public_quiz_join_is_rate_limited(tmp_path: Path) -> None:
         limited = client.post("/api/quizzes/join", json=payload)
         assert limited.status_code == 429
         assert int(limited.headers["retry-after"]) > 0
+        different_student = client.post(
+            "/api/quizzes/join",
+            json={
+                "join_code": "ABC123",
+                "student_identifier": "another-student",
+            },
+        )
+        assert different_student.status_code == 403
+
+
+def test_invalid_participant_tokens_are_rate_limited_independently(
+    tmp_path: Path,
+) -> None:
+    settings = settings_for(
+        tmp_path / "participant-auth-rate-limit.db",
+        quiz_join_attempts=5,
+        quiz_rate_window_seconds=60,
+    )
+    endpoint = "/api/quizzes/student/sessions/ABC123"
+    with make_client(settings) as client:
+        for _ in range(5):
+            response = client.get(
+                endpoint,
+                headers={"X-Quiz-Token": "invalid-token"},
+            )
+            assert response.status_code == 401
+
+        limited = client.get(
+            endpoint,
+            headers={"X-Quiz-Token": "invalid-token"},
+        )
+        assert limited.status_code == 429
+
+        different_token = client.get(
+            endpoint,
+            headers={"X-Quiz-Token": "another-invalid-token"},
+        )
+        assert different_token.status_code == 401
 
 
 def test_expired_public_quiz_rate_limits_are_removed(tmp_path: Path) -> None:
