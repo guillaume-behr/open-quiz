@@ -49,14 +49,12 @@ services:
             context: ./open-quiz-frontend
             dockerfile: Dockerfile
         ports:
-            - target: 8080
-              published: "7800"
-              host_ip: 127.0.0.1
-              protocol: tcp
+            - "127.0.0.1:7800:8080"
         depends_on:
             open-quiz-backend:
                 condition: service_healthy
         networks:
+            open-quiz-edge: {}
             open-quiz:
                 ipv4_address: 172.28.0.2
         init: true
@@ -92,8 +90,12 @@ services:
                 max-file: "5"
 
 networks:
+    open-quiz-edge:
+        name: open-quiz-edge
+        driver: bridge
     open-quiz:
         name: open-quiz
+        driver: bridge
         internal: true
         ipam:
             config:
