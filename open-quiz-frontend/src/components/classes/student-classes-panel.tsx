@@ -5,6 +5,7 @@ import {
     deleteStudent,
     deleteStudentClass,
     getStudentClasses,
+    getQuestionBanks,
     updateStudent,
     updateStudentClass,
     type Student,
@@ -21,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input"
 import {
     LoaderCircle,
+    Eye,
     Pencil,
     Plus,
     Trash2,
@@ -34,6 +36,9 @@ type StudentClassesPanelProps = {
     isCreateDialogOpen: boolean
     onCreateDialogOpenChange: (open: boolean) => void
 }
+
+const selectClassName =
+    "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 export function StudentClassesPanel({
     isCreateDialogOpen,
@@ -50,8 +55,9 @@ export function StudentClassesPanel({
     const [editingClass, setEditingClass] = useState<StudentClass | null>(null)
     const [classForStudent, setClassForStudent] =
         useState<StudentClass | null>(null)
-    const [studentIdentifier, setStudentIdentifier] = useState("")
-    const [studentName, setStudentName] = useState("")
+    const [studentFirstName, setStudentFirstName] = useState("")
+    const [studentLastName, setStudentLastName] = useState("")
+    const [gradeLevels, setGradeLevels] = useState<string[]>([])
     const [isCreatingStudent, setIsCreatingStudent] = useState(false)
     const [studentError, setStudentError] = useState<string | null>(null)
     const [editingStudent, setEditingStudent] = useState<Student | null>(null)
@@ -63,12 +69,41 @@ export function StudentClassesPanel({
     )
     const [isDeleting, setIsDeleting] = useState(false)
     const [deleteError, setDeleteError] = useState<string | null>(null)
+    const [managedClassId, setManagedClassId] = useState<number | null>(null)
+    const [classFilter, setClassFilter] = useState("")
+    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
+    const managedClass =
+        classes.find((studentClass) => studentClass.id === managedClassId) ??
+        null
+    const filteredClasses = classes.filter(
+        (studentClass) =>
+            (!classFilter ||
+                studentClass.name
+                    .toLocaleLowerCase("fr")
+                    .includes(classFilter.toLocaleLowerCase("fr"))) &&
+            (!gradeLevelFilter ||
+                studentClass.grade_level === gradeLevelFilter)
+    )
 
     useEffect(() => {
         let isActive = true
-        getStudentClasses()
-            .then((loaded) => {
-                if (isActive) setClasses(loaded)
+        Promise.all([getStudentClasses(), getQuestionBanks()])
+            .then(([loadedClasses, banks]) => {
+                if (!isActive) return
+                setClasses(loadedClasses)
+                setGradeLevels(
+                    Array.from(
+                        new Set([
+                            ...banks.map((bank) => bank.grade_level),
+                            ...loadedClasses.map(
+                                (studentClass) =>
+                                    studentClass.grade_level
+                            ),
+                        ])
+                    ).sort((first, second) =>
+                        first.localeCompare(second, "fr")
+                    )
+                )
             })
             .catch(() => {
                 if (isActive) setLoadError(t("classes-load-error"))
@@ -132,17 +167,11 @@ export function StudentClassesPanel({
         setStudentError(null)
         setIsCreatingStudent(true)
         try {
+            const displayName =
+                `${studentFirstName.trim()} ${studentLastName.trim()}`.trim()
             const student = editingStudent
-                ? await updateStudent(
-                      editingStudent.id,
-                      studentIdentifier.trim(),
-                      studentName.trim()
-                  )
-                : await createStudent(
-                      classForStudent.id,
-                      studentIdentifier.trim(),
-                      studentName.trim()
-                  )
+                ? await updateStudent(editingStudent.id, displayName)
+                : await createStudent(classForStudent.id, displayName)
             setClasses((current) =>
                 current.map((studentClass) =>
                     studentClass.id === classForStudent.id
@@ -169,8 +198,8 @@ export function StudentClassesPanel({
                         : studentClass
                 )
             )
-            setStudentIdentifier("")
-            setStudentName("")
+            setStudentFirstName("")
+            setStudentLastName("")
             setEditingStudent(null)
             setClassForStudent(null)
         } catch (error) {
@@ -239,93 +268,232 @@ export function StudentClassesPanel({
                     {loadError}
                 </p>
             ) : classes.length === 0 ? (
-                <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                    <UsersRound className="mb-2 size-8" />
-                    <p className="font-medium">{t("no-class")}</p>
-                    <p className="mt-1 text-sm">{t("no-class-help")}</p>
+                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                    <aside className="h-fit rounded-xl border bg-background p-4">
+                        <h3 className="font-semibold">{t("filters")}</h3>
+                        <FieldGroup className="mt-4 gap-4">
+                            <Field>
+                                <FieldLabel htmlFor="empty-class-filter">
+                                    {t("search")}
+                                </FieldLabel>
+                                <Input
+                                    id="empty-class-filter"
+                                    value={classFilter}
+                                    onChange={(event) =>
+                                        setClassFilter(event.target.value)
+                                    }
+                                    placeholder={t("search-class")}
+                                />
+                            </Field>
+                            <Field>
+                                <FieldLabel htmlFor="empty-class-grade-filter">
+                                    {t("grade-level")}
+                                </FieldLabel>
+                                <select
+                                    id="empty-class-grade-filter"
+                                    className={selectClassName}
+                                    value={gradeLevelFilter}
+                                    onChange={(event) =>
+                                        setGradeLevelFilter(event.target.value)
+                                    }
+                                >
+                                    <option value="">
+                                        {t("all-grade-levels")}
+                                    </option>
+                                    {gradeLevels.map((level) => (
+                                        <option key={level} value={level}>
+                                            {level}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                        </FieldGroup>
+                    </aside>
+                    <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                        <UsersRound className="mb-2 size-8" />
+                        <p className="font-medium">{t("no-class")}</p>
+                        <p className="mt-1 text-sm">{t("no-class-help")}</p>
+                    </div>
                 </div>
             ) : (
-                <div className="grid gap-4 xl:grid-cols-2">
-                    {classes.map((studentClass) => (
+                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                    <aside className="h-fit rounded-xl border bg-background p-4">
+                        <h3 className="font-semibold">{t("filters")}</h3>
+                        <FieldGroup className="mt-4 gap-4">
+                            <Field>
+                                <FieldLabel htmlFor="class-filter">
+                                    {t("search")}
+                                </FieldLabel>
+                                <Input
+                                    id="class-filter"
+                                    value={classFilter}
+                                    onChange={(event) =>
+                                        setClassFilter(event.target.value)
+                                    }
+                                    placeholder={t("search-class")}
+                                />
+                            </Field>
+                            <Field>
+                                <FieldLabel htmlFor="class-grade-filter">
+                                    {t("grade-level")}
+                                </FieldLabel>
+                                <select
+                                    id="class-grade-filter"
+                                    className={selectClassName}
+                                    value={gradeLevelFilter}
+                                    onChange={(event) =>
+                                        setGradeLevelFilter(event.target.value)
+                                    }
+                                >
+                                    <option value="">
+                                        {t("all-grade-levels")}
+                                    </option>
+                                    {gradeLevels.map((level) => (
+                                        <option key={level} value={level}>
+                                            {level}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                            {(classFilter || gradeLevelFilter) && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setClassFilter("")
+                                        setGradeLevelFilter("")
+                                    }}
+                                >
+                                    {t("clear-filters")}
+                                </Button>
+                            )}
+                        </FieldGroup>
+                    </aside>
+                    {filteredClasses.length === 0 ? (
+                        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                            {t("no-class-filtered")}
+                        </p>
+                    ) : (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                    {filteredClasses.map((studentClass) => (
                         <article
                             key={studentClass.id}
-                            className="rounded-xl border bg-background p-4"
+                            className="flex h-full flex-col rounded-xl border bg-background p-4"
                         >
-                            <div className="flex items-start justify-between gap-3">
-                                <div>
-                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                        {studentClass.grade_level}
-                                    </p>
-                                    <h3 className="mt-1 font-semibold">
-                                        {studentClass.name}
-                                    </h3>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        {t("student-count", {
-                                            count: studentClass.student_count,
-                                        })}
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        type="button"
-                                        size="icon"
-                                        variant="outline"
-                                        aria-label={t("edit-class")}
-                                        onClick={() => {
-                                            setEditingClass(studentClass)
-                                            setClassName(studentClass.name)
-                                            setGradeLevel(
-                                                studentClass.grade_level
-                                            )
-                                            setClassError(null)
-                                        }}
-                                    >
-                                        <Pencil />
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                            setStudentError(null)
-                                            setClassForStudent(studentClass)
-                                        }}
-                                    >
-                                        <UserPlus />
-                                        {t("add-student")}
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        size="icon"
-                                        variant="destructive"
-                                        aria-label={t("delete-class")}
-                                        onClick={() =>
-                                            setClassToDelete(studentClass)
-                                        }
-                                    >
-                                        <Trash2 />
-                                    </Button>
-                                </div>
-                            </div>
-                            {studentClass.students.length === 0 ? (
-                                <p className="mt-4 rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-                                    {t("no-student")}
+                            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                {studentClass.grade_level}
+                            </p>
+                            <h3 className="mt-1 text-lg font-semibold">
+                                {studentClass.name}
+                            </h3>
+                            <div className="mt-4 grid grid-cols-2 gap-3">
+                            <div className="rounded-lg bg-primary/5 p-3">
+                                <p className="text-2xl font-bold text-primary">
+                                    {studentClass.student_count}
                                 </p>
-                            ) : (
-                                <ul className="mt-4 divide-y rounded-lg border">
-                                    {studentClass.students.map((student) => (
-                                        <li
-                                            key={student.id}
-                                            className="flex items-center justify-between gap-3 px-3 py-2"
-                                        >
-                                            <div className="min-w-0">
-                                                <p className="font-medium">
-                                                    {student.display_name}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {student.identifier}
-                                                </p>
-                                            </div>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("students")}
+                                </p>
+                            </div>
+                            <div className="rounded-lg bg-primary/5 p-3">
+                                <p className="text-2xl font-bold text-primary">
+                                    {studentClass.completed_quiz_count}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("completed-quizzes")}
+                                </p>
+                            </div>
+                            </div>
+                            <Button
+                                type="button"
+                                className="mt-auto w-full"
+                                variant="outline"
+                                onClick={() =>
+                                    setManagedClassId(studentClass.id)
+                                }
+                            >
+                                <Eye />
+                                {t("view-class")}
+                            </Button>
+                        </article>
+                    ))}
+                    </div>
+                    )}
+                </div>
+            )}
+
+            <Dialog
+                open={managedClass !== null}
+                onOpenChange={(open) => {
+                    if (!open) setManagedClassId(null)
+                }}
+                title={managedClass?.name ?? ""}
+                description={
+                    managedClass
+                        ? `${managedClass.grade_level} — ${t(
+                              "student-count",
+                              { count: managedClass.student_count }
+                          )}`
+                        : undefined
+                }
+                className="max-w-2xl"
+            >
+                {managedClass && (
+                    <div>
+                        <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setEditingClass(managedClass)
+                                    setClassName(managedClass.name)
+                                    setGradeLevel(managedClass.grade_level)
+                                    setClassError(null)
+                                    setManagedClassId(null)
+                                }}
+                            >
+                                <Pencil />
+                                {t("edit-class")}
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={() => {
+                                    setStudentError(null)
+                                    setClassForStudent(managedClass)
+                                }}
+                            >
+                                <UserPlus />
+                                {t("add-student")}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={() => setClassToDelete(managedClass)}
+                            >
+                                <Trash2 />
+                                {t("delete-class")}
+                            </Button>
+                        </div>
+                        {managedClass.students.length === 0 ? (
+                            <p className="mt-5 rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+                                {t("no-student")}
+                            </p>
+                        ) : (
+                            <ul className="mt-5 divide-y rounded-lg border">
+                                {managedClass.students.map((student) => (
+                                    <li
+                                        key={student.id}
+                                        className="flex items-center justify-between gap-3 px-4 py-3"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="font-medium">
+                                                {student.display_name}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {student.identifier}
+                                            </p>
+                                        </div>
+                                        <div className="flex gap-1">
                                             <Button
                                                 type="button"
                                                 size="icon"
@@ -333,14 +501,21 @@ export function StudentClassesPanel({
                                                 aria-label={t("edit-student")}
                                                 onClick={() => {
                                                     setClassForStudent(
-                                                        studentClass
+                                                        managedClass
                                                     )
                                                     setEditingStudent(student)
-                                                    setStudentName(
-                                                        student.display_name
+                                                    const [
+                                                        firstName,
+                                                        ...lastName
+                                                    ] =
+                                                        student.display_name.split(
+                                                            " "
+                                                        )
+                                                    setStudentFirstName(
+                                                        firstName
                                                     )
-                                                    setStudentIdentifier(
-                                                        student.identifier
+                                                    setStudentLastName(
+                                                        lastName.join(" ")
                                                     )
                                                     setStudentError(null)
                                                 }}
@@ -360,14 +535,14 @@ export function StudentClassesPanel({
                                             >
                                                 <Trash2 />
                                             </Button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </article>
-                    ))}
-                </div>
-            )}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                )}
+            </Dialog>
 
             <Dialog
                 open={isCreateDialogOpen || editingClass !== null}
@@ -393,6 +568,7 @@ export function StudentClassesPanel({
                             </FieldLabel>
                             <Input
                                 id="class-name"
+                                list="existing-class-names"
                                 value={className}
                                 onChange={(event) =>
                                     setClassName(event.target.value)
@@ -401,21 +577,37 @@ export function StudentClassesPanel({
                                 maxLength={120}
                                 required
                             />
+                            <datalist id="existing-class-names">
+                                {classes.map((studentClass) => (
+                                    <option
+                                        key={studentClass.id}
+                                        value={studentClass.name}
+                                    />
+                                ))}
+                            </datalist>
                         </Field>
                         <Field>
                             <FieldLabel htmlFor="class-grade">
                                 {t("grade-level")}
                             </FieldLabel>
-                            <Input
+                            <select
                                 id="class-grade"
+                                className={selectClassName}
                                 value={gradeLevel}
                                 onChange={(event) =>
                                     setGradeLevel(event.target.value)
                                 }
-                                placeholder={t("grade-level-placeholder")}
-                                maxLength={80}
                                 required
-                            />
+                            >
+                                <option value="" disabled>
+                                    {t("choose-grade-level")}
+                                </option>
+                                {gradeLevels.map((level) => (
+                                    <option key={level} value={level}>
+                                        {level}
+                                    </option>
+                                ))}
+                            </select>
                         </Field>
                         {classError && <FieldError>{classError}</FieldError>}
                         <div className="flex justify-end gap-2">
@@ -456,8 +648,8 @@ export function StudentClassesPanel({
                     if (!open && !isCreatingStudent) {
                         setClassForStudent(null)
                         setEditingStudent(null)
-                        setStudentName("")
-                        setStudentIdentifier("")
+                        setStudentFirstName("")
+                        setStudentLastName("")
                     }
                 }}
                 title={t(
@@ -469,33 +661,35 @@ export function StudentClassesPanel({
                 <form onSubmit={handleCreateStudent}>
                     <FieldGroup>
                         <Field>
-                            <FieldLabel htmlFor="student-name">
-                                {t("student-name")}
+                            <FieldLabel htmlFor="student-first-name">
+                                {t("first-name")}
                             </FieldLabel>
                             <Input
-                                id="student-name"
-                                value={studentName}
+                                id="student-first-name"
+                                value={studentFirstName}
                                 onChange={(event) =>
-                                    setStudentName(event.target.value)
+                                    setStudentFirstName(event.target.value)
                                 }
                                 maxLength={120}
                                 required
                             />
                         </Field>
                         <Field>
-                            <FieldLabel htmlFor="student-identifier">
-                                {t("student-id")}
+                            <FieldLabel htmlFor="student-last-name">
+                                {t("last-name")}
                             </FieldLabel>
                             <Input
-                                id="student-identifier"
-                                value={studentIdentifier}
+                                id="student-last-name"
+                                value={studentLastName}
                                 onChange={(event) =>
-                                    setStudentIdentifier(event.target.value)
+                                    setStudentLastName(event.target.value)
                                 }
-                                maxLength={80}
-                                spellCheck={false}
+                                maxLength={120}
                                 required
                             />
+                            <p className="text-xs text-muted-foreground">
+                                {t("student-id-generated-help")}
+                            </p>
                         </Field>
                         {studentError && (
                             <FieldError>{studentError}</FieldError>
@@ -508,8 +702,8 @@ export function StudentClassesPanel({
                                 onClick={() => {
                                     setClassForStudent(null)
                                     setEditingStudent(null)
-                                    setStudentName("")
-                                    setStudentIdentifier("")
+                                    setStudentFirstName("")
+                                    setStudentLastName("")
                                     setStudentError(null)
                                 }}
                             >

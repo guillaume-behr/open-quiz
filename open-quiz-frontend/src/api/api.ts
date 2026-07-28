@@ -31,6 +31,7 @@ export type StudentClass = {
     name: string
     grade_level: string
     student_count: number
+    completed_quiz_count: number
     students: Student[]
     created_at: string
 }
@@ -397,13 +398,11 @@ export function updateStudentClass(
 
 export function createStudent(
     classId: number,
-    identifier: string,
     displayName: string
 ): Promise<Student> {
     return request<Student>(`/api/classes/${classId}/students`, {
         method: "POST",
         body: JSON.stringify({
-            identifier,
             display_name: displayName,
         }),
     })
@@ -417,13 +416,11 @@ export function deleteStudent(studentId: number): Promise<void> {
 
 export function updateStudent(
     studentId: number,
-    identifier: string,
     displayName: string
 ): Promise<Student> {
     return request<Student>(`/api/classes/students/${studentId}/update`, {
         method: "POST",
         body: JSON.stringify({
-            identifier,
             display_name: displayName,
         }),
     })

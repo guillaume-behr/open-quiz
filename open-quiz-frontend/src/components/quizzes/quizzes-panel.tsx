@@ -43,6 +43,8 @@ type QuizzesPanelProps = {
 }
 
 const difficultyKeys = ["easy", "medium", "hard"] as const
+const selectClassName =
+    "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 export function QuizzesPanel({
     isCreateDialogOpen,
@@ -77,6 +79,8 @@ export function QuizzesPanel({
     const [launchError, setLaunchError] = useState<string | null>(null)
     const [activeSession, setActiveSession] = useState<QuizSession | null>(null)
     const [isStarting, setIsStarting] = useState(false)
+    const [quizFilter, setQuizFilter] = useState("")
+    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
     const activeSessionId = activeSession?.id
     const activeSessionStatus = activeSession?.status
 
@@ -142,6 +146,24 @@ export function QuizzesPanel({
 
     const percentageTotal =
         percentages.easy + percentages.medium + percentages.hard
+    const quizGradeLevels = Array.from(
+        new Set(
+            quizzes.flatMap((quiz) =>
+                quiz.question_banks.map((bank) => bank.grade_level)
+            )
+        )
+    ).sort((first, second) => first.localeCompare(second, "fr"))
+    const filteredQuizzes = quizzes.filter(
+        (quiz) =>
+            (!quizFilter ||
+                quiz.title
+                    .toLocaleLowerCase("fr")
+                    .includes(quizFilter.toLocaleLowerCase("fr"))) &&
+            (!gradeLevelFilter ||
+                quiz.question_banks.some(
+                    (bank) => bank.grade_level === gradeLevelFilter
+                ))
+    )
 
     function resetCreationForm(): void {
         setTitle("")
@@ -264,17 +286,117 @@ export function QuizzesPanel({
                     {loadError}
                 </p>
             ) : quizzes.length === 0 ? (
-                <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                    <BookOpenText className="mb-2 size-8" />
-                    <p className="font-medium">{t("no-quiz")}</p>
-                    <p className="mt-1 text-sm">{t("no-quiz-help")}</p>
+                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                    <aside className="h-fit rounded-xl border bg-background p-4">
+                        <h3 className="font-semibold">{t("filters")}</h3>
+                        <FieldGroup className="mt-4 gap-4">
+                            <Field>
+                                <FieldLabel htmlFor="empty-quiz-filter">
+                                    {t("search")}
+                                </FieldLabel>
+                                <Input
+                                    id="empty-quiz-filter"
+                                    value={quizFilter}
+                                    onChange={(event) =>
+                                        setQuizFilter(event.target.value)
+                                    }
+                                    placeholder={t("search-quiz")}
+                                />
+                            </Field>
+                            <Field>
+                                <FieldLabel htmlFor="empty-quiz-grade-filter">
+                                    {t("grade-level")}
+                                </FieldLabel>
+                                <select
+                                    id="empty-quiz-grade-filter"
+                                    className={selectClassName}
+                                    value={gradeLevelFilter}
+                                    onChange={(event) =>
+                                        setGradeLevelFilter(event.target.value)
+                                    }
+                                >
+                                    <option value="">
+                                        {t("all-grade-levels")}
+                                    </option>
+                                    {quizGradeLevels.map((level) => (
+                                        <option key={level} value={level}>
+                                            {level}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                        </FieldGroup>
+                    </aside>
+                    <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                        <BookOpenText className="mb-2 size-8" />
+                        <p className="font-medium">{t("no-quiz")}</p>
+                        <p className="mt-1 text-sm">{t("no-quiz-help")}</p>
+                    </div>
                 </div>
             ) : (
-                <ul className="grid gap-4 xl:grid-cols-2">
-                    {quizzes.map((quiz) => (
+                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                    <aside className="h-fit rounded-xl border bg-background p-4">
+                        <h3 className="font-semibold">{t("filters")}</h3>
+                        <FieldGroup className="mt-4 gap-4">
+                            <Field>
+                                <FieldLabel htmlFor="quiz-filter">
+                                    {t("search")}
+                                </FieldLabel>
+                                <Input
+                                    id="quiz-filter"
+                                    value={quizFilter}
+                                    onChange={(event) =>
+                                        setQuizFilter(event.target.value)
+                                    }
+                                    placeholder={t("search-quiz")}
+                                />
+                            </Field>
+                            <Field>
+                                <FieldLabel htmlFor="quiz-grade-filter">
+                                    {t("grade-level")}
+                                </FieldLabel>
+                                <select
+                                    id="quiz-grade-filter"
+                                    className={selectClassName}
+                                    value={gradeLevelFilter}
+                                    onChange={(event) =>
+                                        setGradeLevelFilter(event.target.value)
+                                    }
+                                >
+                                    <option value="">
+                                        {t("all-grade-levels")}
+                                    </option>
+                                    {quizGradeLevels.map((level) => (
+                                        <option key={level} value={level}>
+                                            {level}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                            {(quizFilter || gradeLevelFilter) && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setQuizFilter("")
+                                        setGradeLevelFilter("")
+                                    }}
+                                >
+                                    {t("clear-filters")}
+                                </Button>
+                            )}
+                        </FieldGroup>
+                    </aside>
+                    {filteredQuizzes.length === 0 ? (
+                        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                            {t("no-quiz-filtered")}
+                        </p>
+                    ) : (
+                <ul className="grid gap-4 lg:grid-cols-2">
+                    {filteredQuizzes.map((quiz) => (
                         <li
                             key={quiz.id}
-                            className="rounded-xl border bg-background p-4"
+                            className="flex h-full flex-col rounded-xl border bg-background p-4"
                         >
                             <div className="flex items-start justify-between gap-3">
                                 <div>
@@ -328,7 +450,7 @@ export function QuizzesPanel({
                                     )
                                     .join(" · ")}
                             </p>
-                            <div className="mt-4 flex flex-wrap gap-2">
+                            <div className="mt-auto flex flex-wrap gap-2 pt-4">
                                 <Button
                                     type="button"
                                     size="sm"
@@ -353,6 +475,8 @@ export function QuizzesPanel({
                         </li>
                     ))}
                 </ul>
+                    )}
+                </div>
             )}
 
             <Dialog
