@@ -11,7 +11,7 @@ fi
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
 backup_directory="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/backups"
 backup_file="$backup_directory/open-quiz-$timestamp.db"
-container_backup="/tmp/open-quiz-$timestamp.db"
+container_backup="/data/.open-quiz-backup-$timestamp.db"
 
 mkdir -p "$backup_directory"
 

@@ -8,7 +8,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerId)) {
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $backupDirectory = Join-Path $PSScriptRoot "backups"
 $backupFile = Join-Path $backupDirectory "open-quiz-$timestamp.db"
-$containerBackup = "/tmp/open-quiz-$timestamp.db"
+$containerBackup = "/data/.open-quiz-backup-$timestamp.db"
 
 New-Item -ItemType Directory -Force -Path $backupDirectory | Out-Null
 
