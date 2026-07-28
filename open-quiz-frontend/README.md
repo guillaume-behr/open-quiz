@@ -1,67 +1,47 @@
 # Open Quiz Frontend
 
-## Technologies utilisées
+Interface React 19 et TypeScript de l’application Open Quiz.
 
-### Frontend
+## Démarrage
 
-- TypeScript 6
-- React 19
-- React DOM 19
-- React Router 8
-- Vite 8
+Le backend doit être accessible sur `http://localhost:8000`.
 
-### Interface et styles
+```shell
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
+```
 
-- Tailwind CSS 4
-- shadcn/ui
-- Base UI React
-- Lucide React
-- Police Inter Variable
-- Class Variance Authority
-- clsx
-- tailwind-merge
-- tw-animate-css
+L’interface est ensuite disponible sur `http://localhost:5173`. Le proxy Vite
+transmet `/api` au backend.
 
-### Internationalisation
+## Vérifications
 
-- i18next
-- react-i18next
-- i18next-http-backend
-- i18next-browser-languagedetector
-- Français, anglais, allemand, espagnol, portugais, ukrainien, arabe et chinois
-  simplifié
-- Mise en page bidirectionnelle avec prise en charge de l’arabe de droite à
-  gauche
+```shell
+pnpm lint
+pnpm typecheck
+pnpm build
+```
 
-### Qualité du code
+La compilation de production est écrite dans `dist`.
 
-- ESLint 10
-- TypeScript ESLint
-- ESLint React Hooks
-- ESLint React Refresh
-- Prettier
-- Prettier Tailwind CSS
+## Architecture
 
-### Gestion du projet
+- `src/api` centralise les appels HTTP et la rotation de session ;
+- `src/pages` contient les espaces public, enseignant et administrateur ;
+- `src/components` regroupe les fonctions métier et les composants d’interface ;
+- `public/locales` contient les traductions française, anglaise, allemande,
+  espagnole, portugaise, ukrainienne, arabe et chinoise simplifiée ;
+- `public/pyodide` fournit le runtime Python utilisé entièrement dans le
+  navigateur.
 
-- pnpm avec Corepack
-- pnpm workspace
-- Git
+Les pages sont chargées à la demande. Les extraits Python s’exécutent dans un
+Web Worker isolé et sont interrompus après dix secondes afin qu’un programme
+bloqué ne fige pas l’interface.
 
-### Conteneurisation et déploiement
+## Production
 
-- Docker
-- Docker Compose depuis le fichier `docker-compose.yml` à la racine du dépôt
-- Node.js pour la compilation
-- Caddy comme serveur web statique
-- Réseau Docker interne dédié
-- Content Security Policy et en-têtes de sécurité HTTP
-
-### Formats et standards
-
-- HTML5
-- CSS
-- JSON
-- YAML
-- Dockerfile
-- Caddyfile
+Le `Dockerfile` compile les ressources avec Node.js puis les sert avec Caddy.
+Caddy applique les en-têtes de sécurité, sert l’application monopage et transmet
+`/api` au service backend. Le déploiement normal se fait avec le
+`docker-compose.yml` situé à la racine du dépôt.

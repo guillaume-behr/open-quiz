@@ -10,6 +10,8 @@
 
 ## Démarrage
 
+Prérequis : Python 3.14 et `uv`.
+
 Copiez `.env.example` vers `.env`, puis renseignez deux secrets aléatoires
 distincts d'au moins 32 caractères pour les jetons JWT et le chiffrement TOTP,
 ainsi qu'un mot de passe administrateur robuste. Le compte administrateur est
@@ -19,10 +21,22 @@ créer un second administrateur. Ses droits, son état et son mot de passe reste
 synchronisés avec `.env`.
 
 ```shell
+uv sync
 uv run fastapi dev main.py
 ```
 
 La documentation interactive est disponible sur `http://localhost:8000/docs`.
+
+## Vérifications
+
+```shell
+uv run ruff check .
+uv run pytest -q
+```
+
+La suite teste les parcours d’administration et d’enseignement, la participation
+des élèves, la notation, la migration du schéma SQLite, les limites de débit et
+la rotation des sessions d’authentification.
 
 Le point `/api/health` vérifie à la fois le processus HTTP et l’accès réel à la
 base de données. Il doit être utilisé pour les contrôles de disponibilité.
@@ -90,7 +104,9 @@ persistant et sauvegardé avec les scripts situés à la racine du dépôt.
 
 Les images de questions sont décodées, limitées en dimensions puis réencodées
 avant stockage. Les métadonnées et les trames d'animation ne sont pas
-conservées.
+conservées. Une image destinée à un élève n’est accessible qu’avec son jeton de
+participation, pour sa question courante et pendant que la session est
+effectivement en cours.
 
 Les événements de sécurité sont émis en JSON sur la sortie standard avec un
 horodatage UTC. En production, envoyez-les vers un collecteur central en
@@ -98,7 +114,7 @@ horodatage UTC. En production, envoyez-les vers un collecteur central en
 de rétention. Alertez notamment sur `auth.refresh_reuse_detected`,
 `auth.login_rate_limited` et les événements `security.*`.
 
-Le fichier `docker-compose.yml` situé à la racine du dépôt démarre le backend sur un
-réseau interne, conserve SQLite dans un volume dédié et fait passer `/api` par
-Caddy. L'origine publique configurée dans `FRONTEND_ORIGIN` doit correspondre
-exactement à l'adresse utilisée par le navigateur.
+Le fichier `docker-compose.yml` situé à la racine du dépôt démarre le backend
+sur un réseau interne, conserve SQLite dans un volume dédié et fait passer
+`/api` par Caddy. L'origine publique configurée dans `FRONTEND_ORIGIN` doit
+correspondre exactement à l'adresse utilisée par le navigateur.
