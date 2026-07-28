@@ -191,7 +191,11 @@ export function JoinQuizForm() {
             void getStudentQuizSession(session.join_code, participantToken)
                 .then((updated) => {
                     if (!active) return
-                    if (updated.question?.id !== session.question?.id) {
+                    if (
+                        updated.question &&
+                        updated.question.id !== session.question?.id &&
+                        session.status !== "paused"
+                    ) {
                         setSelectedChoiceIds(updated.selected_choice_ids ?? [])
                         setWrittenAnswer(updated.written_answer ?? "")
                     }
@@ -318,9 +322,9 @@ export function JoinQuizForm() {
             !["finished", "cancelled"].includes(session.status)
         ) {
             return (
-                <div className="relative flex w-full max-w-lg flex-col gap-5 rounded-2xl border bg-secondary px-8 pt-20 pb-10 text-center shadow-lg">
+                <div className="flex w-full max-w-lg flex-col gap-5 rounded-2xl border bg-secondary px-8 py-10 text-center shadow-lg">
                     <Button
-                        className="absolute top-5 right-5"
+                        className="fixed top-4 right-4 z-50"
                         type="button"
                         size="sm"
                         variant="outline"
@@ -350,9 +354,9 @@ export function JoinQuizForm() {
         }
         const question = session.question
         return (
-            <div className="relative flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 pt-20 pb-8 shadow-lg sm:px-10">
+            <div className="flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 py-8 shadow-lg sm:px-10">
                 <Button
-                    className="absolute top-5 right-5"
+                    className="fixed top-4 right-4 z-50"
                     type="button"
                     size="sm"
                     variant="outline"

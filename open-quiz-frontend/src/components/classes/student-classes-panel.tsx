@@ -3,7 +3,9 @@ import {
     createStudentClass,
     deleteStudent,
     deleteStudentClass,
+    downloadStudents,
     getStudentClasses,
+    importStudents,
     updateStudent,
     updateStudentClass,
 } from "@/api/classes"
@@ -20,15 +22,17 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+    Download,
     LoaderCircle,
     Eye,
     Pencil,
     Plus,
     Trash2,
+    Upload,
     UserPlus,
     UsersRound,
 } from "lucide-react"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 type StudentClassesPanelProps = {
@@ -38,6 +42,27 @@ type StudentClassesPanelProps = {
 
 const selectClassName =
     "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+
+function saveBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function studentsFilename(studentClass: StudentClass): string {
+    const safeName = studentClass.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .toLowerCase()
+    return `classe-${safeName || studentClass.id}-eleves.json`
+}
 
 export function StudentClassesPanel({
     isCreateDialogOpen,
@@ -67,11 +92,20 @@ export function StudentClassesPanel({
         null
     )
     const [studentToDelete, setStudentToDelete] = useState<Student | null>(null)
+    const [classForImport, setClassForImport] = useState<StudentClass | null>(
+        null
+    )
+    const [importFile, setImportFile] = useState<File | null>(null)
+    const [isStudentBatchBusy, setIsStudentBatchBusy] = useState(false)
+    const [studentBatchError, setStudentBatchError] = useState<string | null>(
+        null
+    )
     const [isDeleting, setIsDeleting] = useState(false)
     const [deleteError, setDeleteError] = useState<string | null>(null)
     const [managedClassId, setManagedClassId] = useState<number | null>(null)
     const [classFilter, setClassFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
+    const importInputRef = useRef<HTMLInputElement>(null)
     const managedClass =
         classes.find((studentClass) => studentClass.id === managedClassId) ??
         null
@@ -83,6 +117,54 @@ export function StudentClassesPanel({
                     .includes(classFilter.toLocaleLowerCase("fr"))) &&
             (!gradeLevelFilter || studentClass.grade_level === gradeLevelFilter)
     )
+
+    async function handleExportStudents(
+        studentClass: StudentClass
+    ): Promise<void> {
+        setStudentBatchError(null)
+        setIsStudentBatchBusy(true)
+        try {
+            saveBlob(
+                await downloadStudents(studentClass.id),
+                studentsFilename(studentClass)
+            )
+        } catch {
+            setStudentBatchError(t("students-export-error"))
+        } finally {
+            setIsStudentBatchBusy(false)
+        }
+    }
+
+    async function handleImportStudents(
+        event: FormEvent<HTMLFormElement>
+    ): Promise<void> {
+        event.preventDefault()
+        if (!classForImport || !importFile) return
+        setStudentBatchError(null)
+        setIsStudentBatchBusy(true)
+        try {
+            const updatedClass = await importStudents(
+                classForImport.id,
+                importFile
+            )
+            setClasses((current) =>
+                current.map((item) =>
+                    item.id === updatedClass.id ? updatedClass : item
+                )
+            )
+            setClassForImport(null)
+            setImportFile(null)
+        } catch (caughtError) {
+            setStudentBatchError(
+                caughtError instanceof ApiError && caughtError.status === 409
+                    ? t("students-import-duplicate-error")
+                    : t("students-import-error")
+            )
+        } finally {
+            setIsStudentBatchBusy(false)
+            if (importInputRef.current) importInputRef.current.value = ""
+        }
+    }
 
     useEffect(() => {
         let isActive = true
@@ -474,6 +556,30 @@ export function StudentClassesPanel({
                             </Button>
                             <Button
                                 type="button"
+                                variant="outline"
+                                disabled={isStudentBatchBusy}
+                                onClick={() => {
+                                    setStudentBatchError(null)
+                                    setImportFile(null)
+                                    setClassForImport(managedClass)
+                                }}
+                            >
+                                <Upload />
+                                {t("import-students")}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={isStudentBatchBusy}
+                                onClick={() =>
+                                    void handleExportStudents(managedClass)
+                                }
+                            >
+                                <Download />
+                                {t("export-students")}
+                            </Button>
+                            <Button
+                                type="button"
                                 variant="destructive"
                                 onClick={() => setClassToDelete(managedClass)}
                             >
@@ -481,6 +587,11 @@ export function StudentClassesPanel({
                                 {t("delete-class")}
                             </Button>
                         </div>
+                        {studentBatchError && classForImport === null && (
+                            <p className="mt-3 text-sm text-destructive">
+                                {studentBatchError}
+                            </p>
+                        )}
                         {managedClass.students.length === 0 ? (
                             <p className="mt-5 rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
                                 {t("no-student")}
@@ -547,6 +658,76 @@ export function StudentClassesPanel({
                         )}
                     </div>
                 )}
+            </Dialog>
+
+            <Dialog
+                open={classForImport !== null}
+                onOpenChange={(open) => {
+                    if (!open && !isStudentBatchBusy) {
+                        setClassForImport(null)
+                        setImportFile(null)
+                        setStudentBatchError(null)
+                    }
+                }}
+                title={t("import-students")}
+                description={t("import-students-help", {
+                    className: classForImport?.name,
+                })}
+                className="max-w-lg"
+            >
+                <form onSubmit={handleImportStudents}>
+                    <FieldGroup>
+                        <Field>
+                            <FieldLabel htmlFor="students-import-file">
+                                {t("json-file")}
+                            </FieldLabel>
+                            <Input
+                                ref={importInputRef}
+                                id="students-import-file"
+                                type="file"
+                                accept="application/json,.json"
+                                onChange={(event) =>
+                                    setImportFile(
+                                        event.target.files?.[0] ?? null
+                                    )
+                                }
+                                required
+                            />
+                        </Field>
+                        {studentBatchError && (
+                            <FieldError>{studentBatchError}</FieldError>
+                        )}
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={isStudentBatchBusy}
+                                onClick={() => {
+                                    setClassForImport(null)
+                                    setImportFile(null)
+                                    setStudentBatchError(null)
+                                }}
+                            >
+                                {t("cancel")}
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={isStudentBatchBusy || !importFile}
+                            >
+                                {isStudentBatchBusy ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <Upload />
+                                )}
+                                {t(
+                                    isStudentBatchBusy
+                                        ? "importing-json"
+                                        : "import-students"
+                                )}
+                            </Button>
+                        </div>
+                    </FieldGroup>
+                </form>
             </Dialog>
 
             <Dialog

@@ -1,14 +1,26 @@
-import { deleteQuizSession, getQuizResults } from "@/api/quizzes"
-import type { QuizSession } from "@/api/types"
+import {
+    deleteQuizSession,
+    getParticipantAnswers,
+    getQuizResults,
+    gradeWrittenAnswer,
+} from "@/api/quizzes"
+import type {
+    QuizAnswerReview,
+    QuizParticipant,
+    QuizSession,
+} from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import {
     CalendarDays,
     ChartColumn,
     CheckCircle2,
     Eye,
+    FileText,
     LoaderCircle,
     School,
+    Save,
     Trash2,
     UserRound,
 } from "lucide-react"
@@ -34,6 +46,13 @@ export function ResultsPanel() {
     )
     const [isDeleting, setIsDeleting] = useState(false)
     const [deleteError, setDeleteError] = useState(false)
+    const [selectedParticipant, setSelectedParticipant] =
+        useState<QuizParticipant | null>(null)
+    const [answers, setAnswers] = useState<QuizAnswerReview[]>([])
+    const [areAnswersLoading, setAreAnswersLoading] = useState(false)
+    const [answersError, setAnswersError] = useState(false)
+    const [scoreDrafts, setScoreDrafts] = useState<Record<number, string>>({})
+    const [gradingAnswerId, setGradingAnswerId] = useState<number | null>(null)
 
     useEffect(() => {
         let isActive = true
@@ -84,6 +103,82 @@ export function ResultsPanel() {
             setDeleteError(true)
         } finally {
             setIsDeleting(false)
+        }
+    }
+
+    async function openParticipantAnswers(
+        participant: QuizParticipant
+    ): Promise<void> {
+        if (!selectedResult) return
+        setSelectedParticipant(participant)
+        setAreAnswersLoading(true)
+        setAnswersError(false)
+        try {
+            const loadedAnswers = await getParticipantAnswers(
+                selectedResult.id,
+                participant.id
+            )
+            setAnswers(loadedAnswers)
+            setScoreDrafts(
+                Object.fromEntries(
+                    loadedAnswers.map((answer) => [
+                        answer.id,
+                        String(answer.score),
+                    ])
+                )
+            )
+        } catch {
+            setAnswersError(true)
+        } finally {
+            setAreAnswersLoading(false)
+        }
+    }
+
+    async function handleGrade(answer: QuizAnswerReview): Promise<void> {
+        if (!selectedResult) return
+        const score = Number(scoreDrafts[answer.id])
+        if (!Number.isFinite(score)) return
+        setGradingAnswerId(answer.id)
+        setAnswersError(false)
+        try {
+            const graded = await gradeWrittenAnswer(
+                selectedResult.id,
+                answer.id,
+                score
+            )
+            const scoreDifference = graded.score - answer.score
+            const pendingDifference = answer.is_graded ? 0 : -1
+            setAnswers((current) =>
+                current.map((item) => (item.id === graded.id ? graded : item))
+            )
+            const updateSession = (session: QuizSession): QuizSession => ({
+                ...session,
+                participants: session.participants.map((participant) =>
+                    participant.id === selectedParticipant?.id
+                        ? {
+                              ...participant,
+                              score: participant.score + scoreDifference,
+                              pending_manual_grading_count:
+                                  participant.pending_manual_grading_count +
+                                  pendingDifference,
+                          }
+                        : participant
+                ),
+            })
+            setSelectedResult((current) =>
+                current ? updateSession(current) : current
+            )
+            setResults((current) =>
+                current.map((result) =>
+                    result.id === selectedResult.id
+                        ? updateSession(result)
+                        : result
+                )
+            )
+        } catch {
+            setAnswersError(true)
+        } finally {
+            setGradingAnswerId(null)
         }
     }
 
@@ -212,17 +307,18 @@ export function ResultsPanel() {
                         </div>
 
                         <div className="overflow-hidden rounded-xl border">
-                            <div className="hidden grid-cols-[minmax(0,1fr)_140px_120px] gap-4 border-b bg-muted/60 px-4 py-3 text-xs font-semibold text-muted-foreground sm:grid">
+                            <div className="hidden grid-cols-[minmax(0,1fr)_140px_120px_auto] gap-4 border-b bg-muted/60 px-4 py-3 text-xs font-semibold text-muted-foreground sm:grid">
                                 <span>{t("student-name")}</span>
                                 <span>{t("result-progress")}</span>
                                 <span>{t("result-score")}</span>
+                                <span>{t("answers")}</span>
                             </div>
                             <div className="divide-y">
                                 {selectedResult.participants.map(
                                     (participant) => (
                                         <div
                                             key={participant.id}
-                                            className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_140px_120px] sm:items-center sm:gap-4"
+                                            className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_140px_120px_auto] sm:items-center sm:gap-4"
                                         >
                                             <div className="flex min-w-0 items-center gap-3">
                                                 <div className="rounded-full bg-primary/10 p-2 text-primary">
@@ -258,6 +354,32 @@ export function ResultsPanel() {
                                                 )}{" "}
                                                 {t("points-short")}
                                             </p>
+                                            <div>
+                                                {participant.pending_manual_grading_count >
+                                                    0 && (
+                                                    <p className="mb-1 text-xs font-medium text-amber-700">
+                                                        {t(
+                                                            "answers-pending-grading",
+                                                            {
+                                                                count: participant.pending_manual_grading_count,
+                                                            }
+                                                        )}
+                                                    </p>
+                                                )}
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        void openParticipantAnswers(
+                                                            participant
+                                                        )
+                                                    }
+                                                >
+                                                    <FileText />
+                                                    {t("view-answers")}
+                                                </Button>
+                                            </div>
                                         </div>
                                     )
                                 )}
@@ -268,6 +390,149 @@ export function ResultsPanel() {
                                 )}
                             </div>
                         </div>
+                    </div>
+                )}
+            </Dialog>
+
+            <Dialog
+                open={selectedParticipant !== null}
+                onOpenChange={(open) => {
+                    if (!open && gradingAnswerId === null) {
+                        setSelectedParticipant(null)
+                        setAnswers([])
+                        setAnswersError(false)
+                    }
+                }}
+                title={t("student-answers")}
+                description={
+                    selectedParticipant?.student_display_name ??
+                    selectedParticipant?.student_identifier
+                }
+                className="max-w-3xl"
+            >
+                {areAnswersLoading ? (
+                    <div className="flex min-h-40 items-center justify-center">
+                        <LoaderCircle className="size-7 animate-spin text-primary" />
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {answersError && (
+                            <p
+                                className="text-sm text-destructive"
+                                role="alert"
+                            >
+                                {t("answers-load-error")}
+                            </p>
+                        )}
+                        {answers.map((answer) => (
+                            <article
+                                key={answer.id}
+                                className="rounded-xl border p-4"
+                            >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <p className="text-xs font-semibold text-muted-foreground">
+                                            {t("question-number", {
+                                                number: answer.position,
+                                            })}{" "}
+                                            ·{" "}
+                                            {t(
+                                                `difficulty-${answer.difficulty}`
+                                            )}
+                                        </p>
+                                        <h3 className="mt-1 font-semibold">
+                                            {answer.prompt}
+                                        </h3>
+                                    </div>
+                                    <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+                                        {formatScore(
+                                            answer.score,
+                                            i18n.language
+                                        )}{" "}
+                                        /{" "}
+                                        {formatScore(
+                                            answer.max_score,
+                                            i18n.language
+                                        )}
+                                    </span>
+                                </div>
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-lg bg-muted/60 p-3">
+                                        <p className="text-xs font-medium text-muted-foreground">
+                                            {t("student-answer")}
+                                        </p>
+                                        <p className="mt-1 text-sm whitespace-pre-wrap">
+                                            {answer.submitted_answers.join(
+                                                ", "
+                                            ) || t("no-answer")}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg bg-primary/5 p-3">
+                                        <p className="text-xs font-medium text-muted-foreground">
+                                            {t("expected-answer-help")}
+                                        </p>
+                                        <p className="mt-1 text-sm whitespace-pre-wrap">
+                                            {answer.expected_answers.join(", ")}
+                                        </p>
+                                    </div>
+                                </div>
+                                {answer.answer_mode === "written" && (
+                                    <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
+                                        <label className="text-sm font-medium">
+                                            {t("manual-score")}
+                                            <span className="mt-1 flex items-center gap-2">
+                                                <Input
+                                                    className="w-28"
+                                                    type="number"
+                                                    min={0}
+                                                    max={answer.max_score}
+                                                    step="0.25"
+                                                    value={
+                                                        scoreDrafts[
+                                                            answer.id
+                                                        ] ?? ""
+                                                    }
+                                                    onChange={(event) =>
+                                                        setScoreDrafts(
+                                                            (current) => ({
+                                                                ...current,
+                                                                [answer.id]:
+                                                                    event.target
+                                                                        .value,
+                                                            })
+                                                        )
+                                                    }
+                                                />
+                                                <span className="text-muted-foreground">
+                                                    / {answer.max_score}
+                                                </span>
+                                            </span>
+                                        </label>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            disabled={
+                                                gradingAnswerId === answer.id
+                                            }
+                                            onClick={() =>
+                                                void handleGrade(answer)
+                                            }
+                                        >
+                                            {gradingAnswerId === answer.id ? (
+                                                <LoaderCircle className="animate-spin" />
+                                            ) : (
+                                                <Save />
+                                            )}
+                                            {t(
+                                                answer.is_graded
+                                                    ? "update-grade"
+                                                    : "grade-answer"
+                                            )}
+                                        </Button>
+                                    </div>
+                                )}
+                            </article>
+                        ))}
                     </div>
                 )}
             </Dialog>

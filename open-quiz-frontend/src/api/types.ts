@@ -37,6 +37,9 @@ export type QuestionBank = {
     chapter: string
     created_at: string
     question_count: number
+    easy_question_count: number
+    medium_question_count: number
+    hard_question_count: number
 }
 
 export type NewQuestionBank = {
@@ -131,6 +134,9 @@ export type Quiz = {
         grade_level: string
         chapter: string
         question_count: number
+        easy_question_count: number
+        medium_question_count: number
+        hard_question_count: number
     }>
     created_at: string
 }
@@ -152,10 +158,25 @@ export type QuizParticipant = {
     student_display_name: string | null
     answered_count: number
     score: number
+    pending_manual_grading_count: number
     violation_count: number
     last_violation_type: string | null
     last_violation_at: string | null
     joined_at: string
+}
+
+export type QuizAnswerReview = {
+    id: number
+    question_id: number
+    position: number
+    prompt: string
+    difficulty: QuestionDifficulty
+    answer_mode: AnswerMode
+    submitted_answers: string[]
+    expected_answers: string[]
+    score: number
+    max_score: number
+    is_graded: boolean
 }
 
 export type QuizSession = {

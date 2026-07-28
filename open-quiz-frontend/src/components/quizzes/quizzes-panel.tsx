@@ -12,6 +12,7 @@ import {
     previewQuiz,
     resumeQuizSession,
     startQuizSession,
+    updateQuiz,
 } from "@/api/quizzes"
 import type {
     Question,
@@ -30,12 +31,14 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import {
     BookOpenText,
     AlertTriangle,
     Eye,
     LoaderCircle,
     Pause,
+    Pencil,
     Play,
     Plus,
     RefreshCw,
@@ -53,6 +56,12 @@ type QuizzesPanelProps = {
 }
 
 const difficultyKeys = ["easy", "medium", "hard"] as const
+type Difficulty = (typeof difficultyKeys)[number]
+const easePriority: Record<Difficulty, number> = {
+    easy: 2,
+    medium: 1,
+    hard: 0,
+}
 const selectClassName =
     "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
@@ -64,6 +73,57 @@ function sessionStatusKey(status: QuizSession["status"]): string {
         finished: "quiz-finished",
         cancelled: "quiz-cancelled",
     }[status]
+}
+
+function calculateDifficultyCounts(
+    questionCount: number,
+    percentages: Record<Difficulty, number>,
+    available: Record<Difficulty, number>
+): Record<Difficulty, number> {
+    const exact = Object.fromEntries(
+        difficultyKeys.map((difficulty) => [
+            difficulty,
+            (questionCount * percentages[difficulty]) / 100,
+        ])
+    ) as Record<Difficulty, number>
+    let counts = Object.fromEntries(
+        difficultyKeys.map((difficulty) => [
+            difficulty,
+            Math.floor(exact[difficulty]),
+        ])
+    ) as Record<Difficulty, number>
+    let remaining =
+        questionCount - Object.values(counts).reduce((a, b) => a + b)
+    const roundingOrder = [...difficultyKeys].sort(
+        (first, second) =>
+            exact[second] - counts[second] - (exact[first] - counts[first]) ||
+            percentages[second] - percentages[first] ||
+            easePriority[second] - easePriority[first]
+    )
+    for (const difficulty of roundingOrder.slice(0, remaining)) {
+        counts[difficulty] += 1
+    }
+    counts = Object.fromEntries(
+        difficultyKeys.map((difficulty) => [
+            difficulty,
+            Math.min(counts[difficulty], available[difficulty]),
+        ])
+    ) as Record<Difficulty, number>
+    remaining = questionCount - Object.values(counts).reduce((a, b) => a + b)
+    while (remaining > 0) {
+        const candidates = difficultyKeys.filter(
+            (difficulty) => counts[difficulty] < available[difficulty]
+        )
+        if (candidates.length === 0) break
+        const difficulty = candidates.sort(
+            (first, second) =>
+                percentages[second] - percentages[first] ||
+                easePriority[second] - easePriority[first]
+        )[0]
+        counts[difficulty] += 1
+        remaining -= 1
+    }
+    return counts
 }
 
 export function QuizzesPanel({
@@ -89,6 +149,7 @@ export function QuizzesPanel({
     })
     const [isCreating, setIsCreating] = useState(false)
     const [createError, setCreateError] = useState<string | null>(null)
+    const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null)
     const [previewedQuiz, setPreviewedQuiz] = useState<Quiz | null>(null)
     const [previewQuestions, setPreviewQuestions] = useState<Question[]>([])
     const [isPreviewLoading, setIsPreviewLoading] = useState(false)
@@ -182,6 +243,31 @@ export function QuizzesPanel({
 
     const percentageTotal =
         percentages.easy + percentages.medium + percentages.hard
+    const availableByDifficulty = difficultyKeys.reduce(
+        (result, difficulty) => {
+            result[difficulty] = banks
+                .filter((bank) => selectedBankIds.includes(bank.id))
+                .reduce(
+                    (total, bank) =>
+                        total + bank[`${difficulty}_question_count`],
+                    0
+                )
+            return result
+        },
+        { easy: 0, medium: 0, hard: 0 } as Record<Difficulty, number>
+    )
+    const difficultyPreview =
+        percentageTotal === 100
+            ? calculateDifficultyCounts(
+                  questionCount,
+                  percentages,
+                  availableByDifficulty
+              )
+            : { easy: 0, medium: 0, hard: 0 }
+    const previewQuestionTotal = Object.values(difficultyPreview).reduce(
+        (total, count) => total + count,
+        0
+    )
     const quizGradeLevels = Array.from(
         new Set(
             quizzes.flatMap((quiz) =>
@@ -209,6 +295,22 @@ export function QuizzesPanel({
         setAllowPreviousQuestions(false)
         setPercentages({ easy: 30, medium: 40, hard: 30 })
         setCreateError(null)
+        setEditingQuiz(null)
+    }
+
+    function openQuizEditor(quiz: Quiz): void {
+        setEditingQuiz(quiz)
+        setTitle(quiz.title)
+        setSelectedBankIds(quiz.question_banks.map((bank) => bank.id))
+        setQuestionCount(quiz.question_count)
+        setDurationMinutes(quiz.duration_seconds / 60)
+        setAllowPreviousQuestions(quiz.allow_previous_questions)
+        setPercentages({
+            easy: quiz.easy_percentage,
+            medium: quiz.medium_percentage,
+            hard: quiz.hard_percentage,
+        })
+        setCreateError(null)
     }
 
     async function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -217,7 +319,7 @@ export function QuizzesPanel({
         setCreateError(null)
         setIsCreating(true)
         try {
-            const quiz = await createQuiz({
+            const payload = {
                 title: title.trim(),
                 question_bank_ids: selectedBankIds,
                 question_count: questionCount,
@@ -226,12 +328,21 @@ export function QuizzesPanel({
                 easy_percentage: percentages.easy,
                 medium_percentage: percentages.medium,
                 hard_percentage: percentages.hard,
-            })
-            setQuizzes((current) => [quiz, ...current])
+            }
+            const quiz = editingQuiz
+                ? await updateQuiz(editingQuiz.id, payload)
+                : await createQuiz(payload)
+            setQuizzes((current) =>
+                editingQuiz
+                    ? current.map((item) => (item.id === quiz.id ? quiz : item))
+                    : [quiz, ...current]
+            )
             onCreateDialogOpenChange(false)
             resetCreationForm()
         } catch {
-            setCreateError(t("quiz-create-error"))
+            setCreateError(
+                t(editingQuiz ? "quiz-update-error" : "quiz-create-error")
+            )
         } finally {
             setIsCreating(false)
         }
@@ -554,6 +665,15 @@ export function QuizzesPanel({
                                             type="button"
                                             size="sm"
                                             variant="outline"
+                                            onClick={() => openQuizEditor(quiz)}
+                                        >
+                                            <Pencil />
+                                            {t("edit-quiz")}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
                                             onClick={() =>
                                                 void openPreview(quiz)
                                             }
@@ -581,13 +701,13 @@ export function QuizzesPanel({
             )}
 
             <Dialog
-                open={isCreateDialogOpen}
+                open={isCreateDialogOpen || editingQuiz !== null}
                 onOpenChange={(open) => {
                     if (isCreating) return
                     onCreateDialogOpenChange(open)
                     if (!open) resetCreationForm()
                 }}
-                title={t("create-quiz")}
+                title={t(editingQuiz ? "edit-quiz" : "create-quiz")}
                 description={t("create-quiz-help")}
             >
                 <form onSubmit={handleCreate}>
@@ -692,16 +812,7 @@ export function QuizzesPanel({
                             )}
                         </Field>
                         <Field>
-                            <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
-                                <input
-                                    type="checkbox"
-                                    checked={allowPreviousQuestions}
-                                    onChange={(event) =>
-                                        setAllowPreviousQuestions(
-                                            event.target.checked
-                                        )
-                                    }
-                                />
+                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
                                 <span>
                                     <span className="block font-medium">
                                         {t("allow-previous-questions")}
@@ -710,6 +821,11 @@ export function QuizzesPanel({
                                         {t("allow-previous-questions-help")}
                                     </span>
                                 </span>
+                                <Switch
+                                    checked={allowPreviousQuestions}
+                                    onCheckedChange={setAllowPreviousQuestions}
+                                    aria-label={t("allow-previous-questions")}
+                                />
                             </label>
                         </Field>
                         <Field>
@@ -784,6 +900,60 @@ export function QuizzesPanel({
                                     {t("difficulty-total-error")}
                                 </FieldError>
                             )}
+                            {selectedBankIds.length > 0 &&
+                                percentageTotal === 100 && (
+                                    <div className="mt-4 rounded-lg border bg-muted/30 p-3">
+                                        <p className="text-sm font-medium">
+                                            {t("difficulty-preview")}
+                                        </p>
+                                        <div className="mt-2 grid grid-cols-3 gap-2">
+                                            {difficultyKeys.map(
+                                                (difficulty) => (
+                                                    <div
+                                                        key={difficulty}
+                                                        className="rounded-md bg-background p-2 text-center"
+                                                    >
+                                                        <p className="text-lg font-bold text-primary">
+                                                            {
+                                                                difficultyPreview[
+                                                                    difficulty
+                                                                ]
+                                                            }
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {t(
+                                                                `difficulty-${difficulty}`
+                                                            )}{" "}
+                                                            ·{" "}
+                                                            {t(
+                                                                "difficulty-available",
+                                                                {
+                                                                    count: availableByDifficulty[
+                                                                        difficulty
+                                                                    ],
+                                                                }
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                )
+                                            )}
+                                        </div>
+                                        {previewQuestionTotal <
+                                            questionCount && (
+                                            <FieldError className="mt-2">
+                                                {t(
+                                                    "quiz-insufficient-total-questions",
+                                                    {
+                                                        available:
+                                                            previewQuestionTotal,
+                                                        requested:
+                                                            questionCount,
+                                                    }
+                                                )}
+                                            </FieldError>
+                                        )}
+                                    </div>
+                                )}
                         </Field>
                         {createError && <FieldError>{createError}</FieldError>}
                         <div className="flex justify-end gap-2 border-t pt-4">
@@ -791,7 +961,10 @@ export function QuizzesPanel({
                                 type="button"
                                 variant="outline"
                                 disabled={isCreating}
-                                onClick={() => onCreateDialogOpenChange(false)}
+                                onClick={() => {
+                                    onCreateDialogOpenChange(false)
+                                    resetCreationForm()
+                                }}
                             >
                                 {t("cancel")}
                             </Button>
@@ -800,15 +973,18 @@ export function QuizzesPanel({
                                 disabled={
                                     isCreating ||
                                     percentageTotal !== 100 ||
-                                    selectedBankIds.length === 0
+                                    selectedBankIds.length === 0 ||
+                                    previewQuestionTotal < questionCount
                                 }
                             >
                                 {isCreating ? (
                                     <LoaderCircle className="animate-spin" />
+                                ) : editingQuiz ? (
+                                    <Pencil />
                                 ) : (
                                     <Plus />
                                 )}
-                                {t("create-quiz")}
+                                {t(editingQuiz ? "save-quiz" : "create-quiz")}
                             </Button>
                         </div>
                     </FieldGroup>

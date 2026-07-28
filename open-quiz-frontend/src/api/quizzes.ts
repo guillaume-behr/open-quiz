@@ -2,6 +2,7 @@ import { request, requestBlob } from "./client"
 import type {
     NewQuiz,
     Question,
+    QuizAnswerReview,
     Quiz,
     QuizSession,
     StudentQuizAnswer,
@@ -15,6 +16,13 @@ export function getQuizzes(): Promise<Quiz[]> {
 
 export function createQuiz(quiz: NewQuiz): Promise<Quiz> {
     return request<Quiz>("/api/quizzes", {
+        method: "POST",
+        body: JSON.stringify(quiz),
+    })
+}
+
+export function updateQuiz(quizId: number, quiz: NewQuiz): Promise<Quiz> {
+    return request<Quiz>(`/api/quizzes/${quizId}/update`, {
         method: "POST",
         body: JSON.stringify(quiz),
     })
@@ -44,6 +52,29 @@ export function getActiveQuizSessions(): Promise<QuizSession[]> {
 
 export function getQuizResults(): Promise<QuizSession[]> {
     return request<QuizSession[]>("/api/quizzes/sessions/results")
+}
+
+export function getParticipantAnswers(
+    sessionId: number,
+    participantId: number
+): Promise<QuizAnswerReview[]> {
+    return request<QuizAnswerReview[]>(
+        `/api/quizzes/sessions/${sessionId}/participants/${participantId}/answers`
+    )
+}
+
+export function gradeWrittenAnswer(
+    sessionId: number,
+    answerId: number,
+    score: number
+): Promise<QuizAnswerReview> {
+    return request<QuizAnswerReview>(
+        `/api/quizzes/sessions/${sessionId}/answers/${answerId}/grade`,
+        {
+            method: "POST",
+            body: JSON.stringify({ score }),
+        }
+    )
 }
 
 export function deleteQuizSession(sessionId: number): Promise<void> {

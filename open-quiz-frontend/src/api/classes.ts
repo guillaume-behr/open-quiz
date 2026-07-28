@@ -1,4 +1,4 @@
-import { request } from "./client"
+import { request, requestBlob } from "./client"
 import type { Student, StudentClass } from "./types"
 
 export function getStudentClasses(): Promise<StudentClass[]> {
@@ -53,5 +53,20 @@ export function updateStudent(
     return request<Student>(`/api/classes/students/${studentId}/update`, {
         method: "POST",
         body: JSON.stringify({ display_name: displayName }),
+    })
+}
+
+export function downloadStudents(classId: number): Promise<Blob> {
+    return requestBlob(`/api/classes/${classId}/students/export`)
+}
+
+export async function importStudents(
+    classId: number,
+    file: File
+): Promise<StudentClass> {
+    const payload: unknown = JSON.parse(await file.text())
+    return request<StudentClass>(`/api/classes/${classId}/students/import`, {
+        method: "POST",
+        body: JSON.stringify(payload),
     })
 }

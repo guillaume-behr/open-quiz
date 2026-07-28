@@ -18,6 +18,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Code2, ImagePlus, LoaderCircle, Plus, Trash2 } from "lucide-react"
 import {
@@ -542,15 +543,13 @@ export function QuestionForm({
                 </div>
 
                 {answerMode !== "written" && (
-                    <label className="flex items-center gap-2 text-sm">
-                        <input
-                            type="checkbox"
+                    <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4 text-sm">
+                        <span>{t("disclose-answer-mode")}</span>
+                        <Switch
                             checked={answerModeDisclosed}
-                            onChange={(event) =>
-                                setAnswerModeDisclosed(event.target.checked)
-                            }
+                            onCheckedChange={setAnswerModeDisclosed}
+                            aria-label={t("disclose-answer-mode")}
                         />
-                        {t("disclose-answer-mode")}
                     </label>
                 )}
 
