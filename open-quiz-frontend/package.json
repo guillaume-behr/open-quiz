@@ -25,7 +25,6 @@
         "i18next-http-backend": "^4.0.0",
         "lucide-react": "^1.25.0",
         "prism-react-renderer": "^2.4.1",
-        "pyodide": "^314.0.3",
         "qrcode.react": "^4.2.0",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",

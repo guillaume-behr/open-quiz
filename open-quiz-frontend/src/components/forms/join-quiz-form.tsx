@@ -19,16 +19,26 @@ import { Input } from "@/components/ui/input"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { useObjectUrl } from "@/hooks/use-object-url"
 import { cn } from "@/lib/utils"
-import { LoaderCircle, LogOut } from "lucide-react"
+import { LoaderCircle, LogOut, UserRound } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 const QUIZ_SESSION_STORAGE_KEY = "open-quiz-student-session"
+const MONITORING_GRACE_PERIOD_MS = 1500
 
 type StoredQuizSession = {
     joinCode: string
     studentIdentifier: string
     participantToken: string
+}
+
+function StudentNameBadge({ name }: { name: string }) {
+    return (
+        <div className="fixed top-4 left-4 z-50 flex max-w-[calc(100vw-10rem)] items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm font-semibold shadow-sm backdrop-blur">
+            <UserRound className="size-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{name}</span>
+        </div>
+    )
 }
 
 function readStoredQuizSession(): StoredQuizSession | null {
@@ -99,9 +109,21 @@ export function JoinQuizForm() {
         Boolean(document.fullscreenElement)
     )
     const isLeavingQuiz = useRef(false)
-    const violationTimes = useRef<Record<string, number>>({})
+    const monitoringArmedAt = useRef<number | null>(null)
+    const wasMonitoredFullscreen = useRef(false)
+    const lastViolationAt = useRef(0)
     const monitoredJoinCode =
         session?.status === "in_progress" ? session.join_code : undefined
+
+    useEffect(() => {
+        const fullscreenChanged = () => {
+            setIsFullscreen(Boolean(document.fullscreenElement))
+        }
+        document.addEventListener("fullscreenchange", fullscreenChanged)
+        return () => {
+            document.removeEventListener("fullscreenchange", fullscreenChanged)
+        }
+    }, [])
 
     useEffect(() => {
         if (!restoredSession) return
@@ -133,7 +155,11 @@ export function JoinQuizForm() {
     }, [restoredSession, t])
 
     useEffect(() => {
-        if (!monitoredJoinCode || !participantToken) return
+        if (!monitoredJoinCode || !participantToken) {
+            monitoringArmedAt.current = null
+            wasMonitoredFullscreen.current = false
+            return
+        }
         const report = (
             eventType:
                 | "fullscreen_exit"
@@ -142,42 +168,51 @@ export function JoinQuizForm() {
                 | "page_hidden"
         ) => {
             if (isLeavingQuiz.current) return
+            if (
+                eventType !== "fullscreen_exit" &&
+                !document.fullscreenElement
+            )
+                return
             const now = Date.now()
-            if (now - (violationTimes.current[eventType] ?? 0) < 1000) return
-            violationTimes.current[eventType] = now
+            const armedAt = monitoringArmedAt.current
+            if (
+                armedAt === null ||
+                now - armedAt < MONITORING_GRACE_PERIOD_MS ||
+                now - lastViolationAt.current < MONITORING_GRACE_PERIOD_MS
+            )
+                return
+            lastViolationAt.current = now
             void reportStudentQuizViolation(
                 monitoredJoinCode,
                 participantToken,
                 eventType
             )
         }
-        const fullscreenChanged = () => {
-            const active = Boolean(document.fullscreenElement)
-            setIsFullscreen(active)
-            if (!active) report("fullscreen_exit")
+
+        if (isFullscreen && !wasMonitoredFullscreen.current) {
+            monitoringArmedAt.current = Date.now()
+        } else if (!isFullscreen && wasMonitoredFullscreen.current) {
+            report("fullscreen_exit")
         }
-        const pointerLeft = (event: MouseEvent) => {
-            if (event.relatedTarget === null) report("pointer_exit")
-        }
+        wasMonitoredFullscreen.current = isFullscreen
+
+        const pointerLeft = () => report("pointer_exit")
         const blurred = () => report("window_blur")
         const visibilityChanged = () => {
             if (document.hidden) report("page_hidden")
         }
-        document.addEventListener("fullscreenchange", fullscreenChanged)
-        document.documentElement.addEventListener("mouseout", pointerLeft)
+        document.documentElement.addEventListener("mouseleave", pointerLeft)
         window.addEventListener("blur", blurred)
         document.addEventListener("visibilitychange", visibilityChanged)
-        if (!document.fullscreenElement) report("fullscreen_exit")
         return () => {
-            document.removeEventListener("fullscreenchange", fullscreenChanged)
             document.documentElement.removeEventListener(
-                "mouseout",
+                "mouseleave",
                 pointerLeft
             )
             window.removeEventListener("blur", blurred)
             document.removeEventListener("visibilitychange", visibilityChanged)
         }
-    }, [monitoredJoinCode, participantToken])
+    }, [isFullscreen, monitoredJoinCode, participantToken])
 
     useEffect(() => {
         if (
@@ -323,6 +358,7 @@ export function JoinQuizForm() {
         ) {
             return (
                 <div className="flex w-full max-w-lg flex-col gap-5 rounded-2xl border bg-secondary px-8 py-10 text-center shadow-lg">
+                    <StudentNameBadge name={session.student_name} />
                     <Button
                         className="fixed top-4 right-4 z-50"
                         type="button"
@@ -355,6 +391,7 @@ export function JoinQuizForm() {
         const question = session.question
         return (
             <div className="flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 py-8 shadow-lg sm:px-10">
+                <StudentNameBadge name={session.student_name} />
                 <Button
                     className="fixed top-4 right-4 z-50"
                     type="button"

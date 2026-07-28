@@ -221,6 +221,7 @@ export type StudentQuizQuestion = {
 export type StudentQuizSession = {
     quiz_title: string
     class_name: string
+    student_name: string
     join_code: string
     status: "waiting" | "in_progress" | "paused" | "finished" | "cancelled"
     ends_at: string | null

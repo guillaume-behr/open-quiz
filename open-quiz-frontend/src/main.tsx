@@ -1,4 +1,4 @@
-import { StrictMode } from "react"
+import { StrictMode, Suspense } from "react"
 import { createRoot } from "react-dom/client"
 import { BrowserRouter, Route, Routes } from "react-router"
 
@@ -8,26 +8,37 @@ import { ThemeProvider } from "@/components/theme/theme-provider.tsx"
 import "./lib/i18n.ts"
 
 import { MainLayout } from "./layouts/main-layout.tsx"
-import { HomePage } from "./pages/HomePage.tsx"
 
 import { LanguageDirection } from "@/components/language/language-direction"
-import { AdminDashboard } from "./pages/AdminDashboard.tsx"
-import { Dashboard } from "./pages/Dashboard.tsx"
+import {
+    AdminDashboard,
+    Dashboard,
+    HomePage,
+} from "./pages/lazy-pages.ts"
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
         <ThemeProvider>
             <BrowserRouter>
-                <Routes>
-                    <Route path="/" element={<MainLayout />}>
-                        <Route index element={<HomePage />} />
-                        <Route path="dashboard" element={<Dashboard />} />
-                        <Route
-                            path="admin/dashboard"
-                            element={<AdminDashboard />}
+                <Suspense
+                    fallback={
+                        <div
+                            className="min-h-screen bg-background"
+                            aria-busy="true"
                         />
-                    </Route>
-                </Routes>
+                    }
+                >
+                    <Routes>
+                        <Route path="/" element={<MainLayout />}>
+                            <Route index element={<HomePage />} />
+                            <Route path="dashboard" element={<Dashboard />} />
+                            <Route
+                                path="admin/dashboard"
+                                element={<AdminDashboard />}
+                            />
+                        </Route>
+                    </Routes>
+                </Suspense>
             </BrowserRouter>
             <LanguageDirection />
         </ThemeProvider>

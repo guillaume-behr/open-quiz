@@ -1,7 +1,7 @@
 import type { CodeLanguage } from "@/api/types"
 import { Button } from "@/components/ui/button"
+import { runPython as executePython } from "@/components/question-banks/python-runner"
 import { LoaderCircle, Play } from "lucide-react"
-import { loadPyodide, type PyodideAPI } from "pyodide"
 import { Highlight, themes } from "prism-react-renderer"
 import {
     type KeyboardEvent,
@@ -12,16 +12,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-let pythonRuntime: Promise<PyodideAPI> | undefined
 let pythonExecutionQueue: Promise<void> = Promise.resolve()
-
-function getPythonRuntime() {
-    pythonRuntime ??= loadPyodide({ indexURL: "/pyodide/" }).catch((error) => {
-        pythonRuntime = undefined
-        throw error
-    })
-    return pythonRuntime
-}
 
 function serializePythonExecution<T>(task: () => Promise<T>): Promise<T> {
     const execution = pythonExecutionQueue.then(task, task)
@@ -76,13 +67,7 @@ export function CodeBlock({
         setResult(null)
         try {
             const output = await serializePythonExecution(async () => {
-                const runtime = await getPythonRuntime()
-                const lines: string[] = []
-                runtime.setStdout({ batched: (line) => lines.push(line) })
-                runtime.setStderr({ batched: (line) => lines.push(line) })
-                const value = await runtime.runPythonAsync(source)
-                if (value !== undefined) lines.push(String(value))
-                return lines.join("\n") || t("python-no-output")
+                return (await executePython(source)) || t("python-no-output")
             })
             if (currentCodeRef.current === source) setResult(output)
         } catch (error) {
