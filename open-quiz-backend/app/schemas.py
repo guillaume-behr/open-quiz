@@ -45,15 +45,25 @@ class UserResponse(BaseModel):
 
 
 class StudentCreate(BaseModel):
-    identifier: str = Field(min_length=1, max_length=80)
+    identifier: str | None = Field(default=None, min_length=1, max_length=80)
     display_name: str = Field(min_length=1, max_length=120)
 
-    @field_validator("identifier", "display_name")
+    @field_validator("display_name")
     @classmethod
     def normalize_student_text(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
             raise ValueError("This field cannot be empty")
+        return normalized
+
+    @field_validator("identifier")
+    @classmethod
+    def normalize_student_identifier(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = "".join(value.split()).lower()
+        if not normalized:
+            raise ValueError("The identifier cannot be empty")
         return normalized
 
 
@@ -83,6 +93,7 @@ class StudentClassResponse(BaseModel):
     name: str
     grade_level: str
     student_count: int
+    completed_quiz_count: int
     students: list[StudentResponse]
     created_at: datetime
 

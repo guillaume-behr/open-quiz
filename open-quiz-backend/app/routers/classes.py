@@ -1,5 +1,8 @@
+import re
+import unicodedata
+
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
@@ -17,6 +20,40 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
+
+
+def identifier_base(display_name: str) -> str:
+    normalized = unicodedata.normalize("NFKD", display_name)
+    ascii_name = normalized.encode("ascii", "ignore").decode().lower()
+    parts = re.findall(r"[a-z0-9]+", ascii_name)
+    return ".".join(parts)[:72] or "eleve"
+
+
+def generated_student_identifier(
+    class_id: int,
+    display_name: str,
+    session: DbSession,
+    excluded_student_id: int | None = None,
+) -> str:
+    base = identifier_base(display_name)
+    existing = set(
+        session.scalars(
+            select(Student.identifier).where(
+                Student.class_id == class_id,
+                *(
+                    [Student.id != excluded_student_id]
+                    if excluded_student_id is not None
+                    else []
+                ),
+            )
+        )
+    )
+    if base not in existing:
+        return base
+    suffix = 2
+    while f"{base[: 80 - len(str(suffix))]}{suffix}" in existing:
+        suffix += 1
+    return f"{base[: 80 - len(str(suffix))]}{suffix}"
 
 
 def owned_class(
@@ -70,11 +107,18 @@ def class_response(
             .order_by(Student.display_name, Student.identifier, Student.id)
         )
     )
+    completed_quiz_count = session.scalar(
+        select(func.count(QuizSession.id)).where(
+            QuizSession.class_id == student_class.id,
+            QuizSession.status == "finished",
+        )
+    )
     return StudentClassResponse(
         id=student_class.id,
         name=student_class.name,
         grade_level=student_class.grade_level,
         student_count=len(students),
+        completed_quiz_count=completed_quiz_count or 0,
         students=[
             StudentResponse(
                 id=student.id,
@@ -208,7 +252,10 @@ def create_student(
     owned_class(class_id, professor, session)
     student = Student(
         class_id=class_id,
-        identifier=payload.identifier,
+        identifier=payload.identifier
+        or generated_student_identifier(
+            class_id, payload.display_name, session
+        ),
         display_name=payload.display_name,
     )
     session.add(student)
@@ -235,7 +282,12 @@ def update_student(
     session: DbSession,
 ) -> Student:
     student = owned_student(student_id, professor, session)
-    student.identifier = payload.identifier
+    student.identifier = payload.identifier or generated_student_identifier(
+        student.class_id,
+        payload.display_name,
+        session,
+        excluded_student_id=student.id,
+    )
     student.display_name = payload.display_name
     try:
         session.commit()

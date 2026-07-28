@@ -163,6 +163,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["name"] == "5e B"
         assert student_class["grade_level"] == "5e"
         assert student_class["students"] == []
+        assert student_class["completed_quiz_count"] == 0
         assert (
             client.post(
                 "/api/classes",
@@ -176,7 +177,6 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             f"/api/classes/{student_class['id']}/students",
             headers=teacher_headers,
             json={
-                "identifier": " martin.g ",
                 "display_name": " Martin   G. ",
             },
         )
@@ -184,6 +184,20 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         student = created_student.json()
         assert student["identifier"] == "martin.g"
         assert student["display_name"] == "Martin G."
+        generated_duplicate = client.post(
+            f"/api/classes/{student_class['id']}/students",
+            headers=teacher_headers,
+            json={"display_name": "Martin G."},
+        )
+        assert generated_duplicate.status_code == 201
+        assert generated_duplicate.json()["identifier"] == "martin.g2"
+        assert (
+            client.delete(
+                f"/api/classes/students/{generated_duplicate.json()['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
         updated_class = client.post(
             f"/api/classes/{student_class['id']}/update",
             headers=teacher_headers,
@@ -780,6 +794,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
 
         assert teacher_state["status"] == "finished"
         assert teacher_state["participants"][0]["score"] > 0
+        completed_class = client.get(
+            "/api/classes", headers=teacher_headers
+        ).json()[0]
+        assert completed_class["completed_quiz_count"] == 1
         assert client.get(
             student_state_url, headers=student_headers
         ).json()["status"] == "finished"
