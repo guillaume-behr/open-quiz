@@ -44,6 +44,15 @@ class UserResponse(BaseModel):
     created_at: datetime
 
 
+class UserStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class UserCredentialReset(BaseModel):
+    password: str = Field(min_length=12, max_length=256)
+    reset_two_factor: bool = True
+
+
 class StudentCreate(BaseModel):
     identifier: str | None = Field(default=None, min_length=1, max_length=80)
     display_name: str = Field(min_length=1, max_length=120)
@@ -53,7 +62,7 @@ class StudentCreate(BaseModel):
     def normalize_student_text(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
-            raise ValueError("This field cannot be empty")
+            raise ValueError("Ce champ ne peut pas être vide")
         return normalized
 
     @field_validator("identifier")
@@ -63,7 +72,7 @@ class StudentCreate(BaseModel):
             return None
         normalized = "".join(value.split()).lower()
         if not normalized:
-            raise ValueError("The identifier cannot be empty")
+            raise ValueError("L’identifiant ne peut pas être vide")
         return normalized
 
 
@@ -84,7 +93,7 @@ class StudentClassCreate(BaseModel):
     def normalize_class_text(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
-            raise ValueError("This field cannot be empty")
+            raise ValueError("Ce champ ne peut pas être vide")
         return normalized
 
 
@@ -107,7 +116,7 @@ class QuestionBankCreate(BaseModel):
     def normalize_text(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
-            raise ValueError("This field cannot be empty")
+            raise ValueError("Ce champ ne peut pas être vide")
         return normalized
 
 
@@ -156,7 +165,7 @@ class QuestionChoiceCreate(BaseModel):
     def normalize_label(cls, value: str) -> str:
         normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
         if not normalized:
-            raise ValueError("A choice cannot be empty")
+            raise ValueError("Une proposition ne peut pas être vide")
         return normalized
 
     @field_validator("code_content")
@@ -168,9 +177,11 @@ class QuestionChoiceCreate(BaseModel):
         return normalized if normalized.strip() else None
 
     @model_validator(mode="after")
-    def validate_code(self) -> "QuestionChoiceCreate":
+    def validate_code(self) -> QuestionChoiceCreate:
         if (self.code_language is None) != (self.code_content is None):
-            raise ValueError("Code language and content must be provided together")
+            raise ValueError(
+                "Le langage et le contenu du code doivent être renseignés ensemble"
+            )
         return self
 
 
@@ -188,7 +199,7 @@ class QuestionCreate(BaseModel):
     def normalize_prompt(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
-            raise ValueError("The question cannot be empty")
+            raise ValueError("La question ne peut pas être vide")
         return normalized
 
     @field_validator("code_content")
@@ -202,33 +213,37 @@ class QuestionCreate(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_correct_choices(self) -> "QuestionCreate":
+    def validate_correct_choices(self) -> QuestionCreate:
         for choice in self.choices:
             if "points" not in choice.model_fields_set:
                 choice.points = 1 if choice.is_correct else 0
         correct_count = sum(choice.is_correct for choice in self.choices)
         if self.answer_mode in {"single", "written"} and correct_count > 1:
-            raise ValueError("A single-choice question can have one correct answer")
+            raise ValueError(
+                "Une question à choix unique ne peut avoir qu’une bonne réponse"
+            )
         if self.answer_mode != "written" and len(self.choices) < 2:
-            raise ValueError("A question requires at least two choices")
+            raise ValueError("Une question nécessite au moins deux propositions")
         if self.answer_mode == "written" and len(self.choices) != 1:
-            raise ValueError("A written answer requires one response")
+            raise ValueError(
+                "Une question rédactionnelle nécessite une réponse attendue"
+            )
         if correct_count == 0:
-            raise ValueError("A question requires a correct answer")
+            raise ValueError("Une question nécessite au moins une bonne réponse")
         if self.answer_mode in {"single", "written"} and correct_count != 1:
-            raise ValueError("A single answer requires one correct answer")
-        if any(
-            choice.points < 0 for choice in self.choices if choice.is_correct
-        ):
-            raise ValueError("A correct answer cannot deduct points")
-        if any(
-            choice.points > 0
-            for choice in self.choices
-            if not choice.is_correct
-        ):
-            raise ValueError("An incorrect answer cannot award positive points")
+            raise ValueError(
+                "Une question à choix unique nécessite une seule bonne réponse"
+            )
+        if any(choice.points < 0 for choice in self.choices if choice.is_correct):
+            raise ValueError("Une bonne réponse ne peut pas retirer de points")
+        if any(choice.points > 0 for choice in self.choices if not choice.is_correct):
+            raise ValueError(
+                "Une mauvaise réponse ne peut pas attribuer de points positifs"
+            )
         if (self.code_language is None) != (self.code_content is None):
-            raise ValueError("Code language and content must be provided together")
+            raise ValueError(
+                "Le langage et le contenu du code doivent être renseignés ensemble"
+            )
         return self
 
 
@@ -293,20 +308,19 @@ class QuizCreate(BaseModel):
     def normalize_quiz_title(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
-            raise ValueError("The quiz title cannot be empty")
+            raise ValueError("Le titre du quiz ne peut pas être vide")
         return normalized
 
     @model_validator(mode="after")
-    def validate_distribution(self) -> "QuizCreate":
-        if (
-            self.easy_percentage
-            + self.medium_percentage
-            + self.hard_percentage
-            != 100
-        ):
-            raise ValueError("Difficulty percentages must total 100")
+    def validate_distribution(self) -> QuizCreate:
+        if self.easy_percentage + self.medium_percentage + self.hard_percentage != 100:
+            raise ValueError(
+                "La somme des pourcentages de difficulté doit être égale à 100"
+            )
         if len(set(self.question_bank_ids)) != len(self.question_bank_ids):
-            raise ValueError("Question banks must be unique")
+            raise ValueError(
+                "Chaque banque de questions ne peut être sélectionnée qu’une fois"
+            )
         return self
 
 
@@ -442,5 +456,5 @@ class QuizJoin(BaseModel):
     def normalize_student_identifier(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
-            raise ValueError("The student identifier cannot be empty")
+            raise ValueError("L’identifiant de l’élève ne peut pas être vide")
         return normalized

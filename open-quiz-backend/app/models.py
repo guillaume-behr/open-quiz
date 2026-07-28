@@ -64,9 +64,7 @@ class Student(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    class_id: Mapped[int] = mapped_column(
-        ForeignKey("student_classes.id"), index=True
-    )
+    class_id: Mapped[int] = mapped_column(ForeignKey("student_classes.id"), index=True)
     identifier: Mapped[str] = mapped_column(String(80))
     display_name: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(
@@ -153,9 +151,7 @@ class Quiz(Base):
     title: Mapped[str] = mapped_column(String(160))
     question_count: Mapped[int] = mapped_column(Integer)
     duration_seconds: Mapped[int] = mapped_column(Integer, default=1800)
-    allow_previous_questions: Mapped[bool] = mapped_column(
-        Boolean, default=False
-    )
+    allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
     easy_percentage: Mapped[int] = mapped_column(Integer)
     medium_percentage: Mapped[int] = mapped_column(Integer)
     hard_percentage: Mapped[int] = mapped_column(Integer)
@@ -167,9 +163,7 @@ class Quiz(Base):
 class QuizQuestionBank(Base):
     __tablename__ = "quiz_question_banks"
 
-    quiz_id: Mapped[int] = mapped_column(
-        ForeignKey("quizzes.id"), primary_key=True
-    )
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), primary_key=True)
     question_bank_id: Mapped[int] = mapped_column(
         ForeignKey("question_banks.id"), primary_key=True
     )
@@ -224,26 +218,18 @@ class QuizParticipant(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    session_id: Mapped[int] = mapped_column(
-        ForeignKey("quiz_sessions.id"), index=True
-    )
+    session_id: Mapped[int] = mapped_column(ForeignKey("quiz_sessions.id"), index=True)
     student_id: Mapped[int | None] = mapped_column(
         ForeignKey("students.id"), nullable=True, index=True
     )
     student_identifier: Mapped[str] = mapped_column(String(80))
-    student_display_name: Mapped[str | None] = mapped_column(
-        String(120), nullable=True
-    )
+    student_display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     access_token_hash: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True
     )
-    current_position: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
+    current_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
     violation_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_violation_type: Mapped[str | None] = mapped_column(
-        String(40), nullable=True
-    )
+    last_violation_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     last_violation_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -264,15 +250,11 @@ class QuizAnswer(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    session_id: Mapped[int] = mapped_column(
-        ForeignKey("quiz_sessions.id"), index=True
-    )
+    session_id: Mapped[int] = mapped_column(ForeignKey("quiz_sessions.id"), index=True)
     participant_id: Mapped[int] = mapped_column(
         ForeignKey("quiz_participants.id"), index=True
     )
-    question_id: Mapped[int] = mapped_column(
-        ForeignKey("questions.id"), index=True
-    )
+    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True)
     answer_data: Mapped[str] = mapped_column(Text)
     score: Mapped[float] = mapped_column(Float, default=0.0)
     submitted_at: Mapped[datetime] = mapped_column(

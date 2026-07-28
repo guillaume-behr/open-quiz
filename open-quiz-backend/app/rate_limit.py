@@ -130,11 +130,20 @@ class FixedWindowRateLimiter:
         self.window_seconds = window_seconds
         self.namespace = namespace
 
+    def check(self, session: Session, subject: str) -> int:
+        now = int(time())
+        limiter = session.get(LoginRateLimit, self._key(subject))
+        if limiter is None:
+            return 0
+        elapsed = now - limiter.window_started_at
+        if elapsed >= self.window_seconds or limiter.attempts < self.limit:
+            return 0
+        return max(1, self.window_seconds - elapsed)
+
     def reserve(self, session: Session, subject: str) -> int:
         now = int(time())
         cutoff = now - self.window_seconds
-        digest = sha256(subject.encode()).hexdigest()
-        limiter_key = f"{self.namespace}:{digest}"
+        limiter_key = self._key(subject)
         session.execute(
             delete(LoginRateLimit).where(
                 LoginRateLimit.limiter_key.like(f"{self.namespace}:%"),
@@ -172,3 +181,7 @@ class FixedWindowRateLimiter:
         if attempts <= self.limit:
             return 0
         return max(1, self.window_seconds - (now - window_started_at))
+
+    def _key(self, subject: str) -> str:
+        digest = sha256(subject.encode()).hexdigest()
+        return f"{self.namespace}:{digest}"

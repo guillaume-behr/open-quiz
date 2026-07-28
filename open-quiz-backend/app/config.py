@@ -25,6 +25,7 @@ class Settings:
     quiz_participant_attempts: int = 240
     quiz_violation_attempts: int = 20
     quiz_rate_window_seconds: int = 60
+    quiz_result_retention_days: int = 365
     max_request_body_bytes: int = 65536
     environment: str = "development"
 
@@ -61,19 +62,15 @@ class Settings:
         if not 5 <= self.quiz_join_attempts <= 100:
             raise ValueError("QUIZ_JOIN_ATTEMPTS must be between 5 and 100")
         if not 30 <= self.quiz_participant_attempts <= 1000:
-            raise ValueError(
-                "QUIZ_PARTICIPANT_ATTEMPTS must be between 30 and 1000"
-            )
+            raise ValueError("QUIZ_PARTICIPANT_ATTEMPTS must be between 30 and 1000")
         if not 5 <= self.quiz_violation_attempts <= 100:
             raise ValueError("QUIZ_VIOLATION_ATTEMPTS must be between 5 and 100")
         if not 10 <= self.quiz_rate_window_seconds <= 3600:
-            raise ValueError(
-                "QUIZ_RATE_WINDOW_SECONDS must be between 10 and 3600"
-            )
+            raise ValueError("QUIZ_RATE_WINDOW_SECONDS must be between 10 and 3600")
+        if not 1 <= self.quiz_result_retention_days <= 3650:
+            raise ValueError("QUIZ_RESULT_RETENTION_DAYS must be between 1 and 3650")
         if not 1024 <= self.max_request_body_bytes <= 1048576:
-            raise ValueError(
-                "MAX_REQUEST_BODY_BYTES must be between 1024 and 1048576"
-            )
+            raise ValueError("MAX_REQUEST_BODY_BYTES must be between 1024 and 1048576")
 
         origin = urlparse(self.frontend_origin)
         if origin.scheme not in {"http", "https"} or not origin.netloc:
@@ -112,15 +109,10 @@ def get_settings() -> Settings:
         login_account_attempts=int(os.getenv("LOGIN_ACCOUNT_ATTEMPTS", "20")),
         login_window_seconds=int(os.getenv("LOGIN_WINDOW_SECONDS", "900")),
         quiz_join_attempts=int(os.getenv("QUIZ_JOIN_ATTEMPTS", "20")),
-        quiz_participant_attempts=int(
-            os.getenv("QUIZ_PARTICIPANT_ATTEMPTS", "240")
-        ),
-        quiz_violation_attempts=int(
-            os.getenv("QUIZ_VIOLATION_ATTEMPTS", "20")
-        ),
-        quiz_rate_window_seconds=int(
-            os.getenv("QUIZ_RATE_WINDOW_SECONDS", "60")
-        ),
+        quiz_participant_attempts=int(os.getenv("QUIZ_PARTICIPANT_ATTEMPTS", "240")),
+        quiz_violation_attempts=int(os.getenv("QUIZ_VIOLATION_ATTEMPTS", "20")),
+        quiz_rate_window_seconds=int(os.getenv("QUIZ_RATE_WINDOW_SECONDS", "60")),
+        quiz_result_retention_days=int(os.getenv("QUIZ_RESULT_RETENTION_DAYS", "365")),
         max_request_body_bytes=int(os.getenv("MAX_REQUEST_BODY_BYTES", "65536")),
         environment=required_environment("APP_ENV"),
     )

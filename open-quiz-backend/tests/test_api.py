@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from base64 import b64decode, b64encode
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -19,6 +20,10 @@ JWT_SECRET = "test-secret-that-is-at-least-32-bytes-long"
 TOTP_ENCRYPTION_KEY = "test-totp-key-that-is-at-least-32-bytes"
 ADMIN_PASSWORD = "a-strong-test-password"
 FRONTEND_ORIGIN = "http://localhost:5173"
+VALID_PNG = b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
+    "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
+)
 
 
 def settings_for(database: Path, **overrides: Any) -> Settings:
@@ -43,6 +48,15 @@ def make_client(settings: Settings) -> TestClient:
     )
 
 
+def test_health_checks_database_readiness(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "health.db")) as client:
+        response = client.get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert response.headers["cache-control"] == "no-store"
+
+
 def test_public_quiz_join_is_rate_limited(tmp_path: Path) -> None:
     settings = settings_for(
         tmp_path / "quiz-rate-limit.db",
@@ -57,7 +71,7 @@ def test_public_quiz_join_is_rate_limited(tmp_path: Path) -> None:
         for _ in range(5):
             response = client.post("/api/quizzes/join", json=payload)
             assert response.status_code == 403
-            assert response.json()["detail"] == "Unable to join this quiz"
+            assert response.json()["detail"] == "Impossible de rejoindre ce quiz"
 
         limited = client.post("/api/quizzes/join", json=payload)
         assert limited.status_code == 429
@@ -91,7 +105,7 @@ def test_expired_public_quiz_rate_limits_are_removed(tmp_path: Path) -> None:
                 "SELECT COUNT(*) FROM login_rate_limits "
                 "WHERE limiter_key LIKE 'quiz-join:%'"
             ).fetchone()[0]
-        assert public_limit_count == 2
+        assert public_limit_count == 1
 
 
 def complete_first_login(
@@ -306,8 +320,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert question_banks.status_code == 200
         assert [
-            (bank["grade_level"], bank["chapter"])
-            for bank in question_banks.json()
+            (bank["grade_level"], bank["chapter"]) for bank in question_banks.json()
         ] == [("4e", "Calcul littéral"), ("5e", "Les fractions")]
 
         duplicate = client.post(
@@ -316,9 +329,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             json={"grade_level": "5e", "chapter": "Les fractions"},
         )
         assert duplicate.status_code == 409
-        assert (
-            client.get("/api/question-banks", headers=headers).status_code == 403
-        )
+        assert client.get("/api/question-banks", headers=headers).status_code == 403
 
         question_payload = {
             "prompt": "Quelle fraction est égale à un demi ?",
@@ -334,7 +345,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     "points": 2.5,
                     "image": {
                         "content_type": "image/png",
-                        "data_base64": "iVBORw0KGgoAY2hvaWNlLWltYWdl",
+                        "data_base64": b64encode(VALID_PNG).decode(),
                     },
                     "code_language": "python",
                     "code_content": "print(1 / 2)",
@@ -349,7 +360,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             files={
                 "image": (
                     "fraction.png",
-                    b"\x89PNG\r\n\x1a\nquestion-image",
+                    VALID_PNG,
                     "image/png",
                 )
             },
@@ -369,6 +380,19 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert question["choices"][0]["has_image"] is True
         assert question["choices"][0]["code_language"] == "python"
         assert question["choices"][0]["code_content"] == "print(1 / 2)"
+        invalid_image = client.post(
+            f"/api/question-banks/{first_bank.json()['id']}/questions",
+            headers=teacher_headers,
+            data={"payload": json.dumps(question_payload)},
+            files={
+                "image": (
+                    "not-an-image.png",
+                    b"\x89PNG\r\n\x1a\nnot-a-real-image",
+                    "image/png",
+                )
+            },
+        )
+        assert invalid_image.status_code == 422
         reordered_payload = {
             **question_payload,
             "choices": [
@@ -517,8 +541,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert imported_payload["questions"][0]["has_image"] is True
         assert imported_payload["questions"][0]["choices"][0]["has_image"] is True
         assert (
-            imported_payload["questions"][0]["choices"][0]["code_language"]
-            == "python"
+            imported_payload["questions"][0]["choices"][0]["code_language"] == "python"
         )
 
         duplicate_import = client.post(
@@ -578,9 +601,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "multiple",
             "written",
         }
-        assert all(
-            "correction_mode" not in item for item in example_batch["questions"]
-        )
+        assert all("correction_mode" not in item for item in example_batch["questions"])
         assert any(item["image"] for item in example_batch["questions"])
         assert any(item["code_content"] for item in example_batch["questions"])
         assert any(
@@ -612,8 +633,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert imported_example.status_code == 201
         assert imported_example.json()["question_bank"]["question_count"] == 3
         assert {
-            question["answer_mode"]
-            for question in imported_example.json()["questions"]
+            question["answer_mode"] for question in imported_example.json()["questions"]
         } == {"single", "multiple", "written"}
 
         invalid_quiz_distribution = client.post(
@@ -621,9 +641,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
             json={
                 "title": "Révisions invalides",
-                "question_bank_ids": [
-                    imported_example.json()["question_bank"]["id"]
-                ],
+                "question_bank_ids": [imported_example.json()["question_bank"]["id"]],
                 "question_count": 3,
                 "easy_percentage": 30,
                 "medium_percentage": 30,
@@ -637,9 +655,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
             json={
                 "title": " Révisions   générales ",
-                "question_bank_ids": [
-                    imported_example.json()["question_bank"]["id"]
-                ],
+                "question_bank_ids": [imported_example.json()["question_bank"]["id"]],
                 "question_count": 3,
                 "allow_previous_questions": True,
                 "easy_percentage": 34,
@@ -654,9 +670,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert quiz["duration_seconds"] == 1800
         assert quiz["allow_previous_questions"] is True
         assert len(quiz["question_banks"]) == 1
-        assert client.get("/api/quizzes", headers=teacher_headers).json()[0][
-            "id"
-        ] == quiz["id"]
+        assert (
+            client.get("/api/quizzes", headers=teacher_headers).json()[0]["id"]
+            == quiz["id"]
+        )
 
         preview = client.get(
             f"/api/quizzes/{quiz['id']}/preview",
@@ -680,10 +697,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert quiz_session["class_name"] == "5e B"
         assert quiz_session["status"] == "waiting"
         assert len(quiz_session["join_code"]) == 6
-        assert client.get(
-            "/api/quizzes/sessions/active",
-            headers=teacher_headers,
-        ).json()[0]["id"] == quiz_session["id"]
+        assert (
+            client.get(
+                "/api/quizzes/sessions/active",
+                headers=teacher_headers,
+            ).json()[0]["id"]
+            == quiz_session["id"]
+        )
         assert (
             client.delete(
                 f"/api/classes/{student_class['id']}",
@@ -702,6 +722,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert joined.status_code == 201
         assert joined.json()["quiz_title"] == quiz["title"]
         assert "participants" not in joined.json()
+        with sqlite3.connect(tmp_path / "test.db") as connection:
+            successful_join_limits = connection.execute(
+                "SELECT COUNT(*) FROM login_rate_limits "
+                "WHERE limiter_key LIKE 'quiz-join:%'"
+            ).fetchone()[0]
+        assert successful_join_limits == 0
         assert (
             client.post(
                 "/api/quizzes/join",
@@ -720,7 +746,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             },
         )
         assert joined_again.status_code == 403
-        assert joined_again.json()["detail"] == "Unable to join this quiz"
+        assert joined_again.json()["detail"] == "Impossible de rejoindre ce quiz"
         participant_token = joined.json()["participant_token"]
         student_headers = {"X-Quiz-Token": participant_token}
         assert (
@@ -740,12 +766,11 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             waiting_room.json()["participants"][0]["student_display_name"]
             == "Martin Giraud"
         )
-        student_state_url = (
-            f"/api/quizzes/student/sessions/{quiz_session['join_code']}"
+        student_state_url = f"/api/quizzes/student/sessions/{quiz_session['join_code']}"
+        assert (
+            client.get(student_state_url, headers=student_headers).json()["status"]
+            == "waiting"
         )
-        assert client.get(
-            student_state_url, headers=student_headers
-        ).json()["status"] == "waiting"
 
         started = client.post(
             f"/api/quizzes/sessions/{quiz_session['id']}/start",
@@ -808,9 +833,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             item["prompt"]: item for item in example_batch["questions"]
         }
         for question_number in range(1, 4):
-            student_state = client.get(
-                student_state_url, headers=student_headers
-            )
+            student_state = client.get(student_state_url, headers=student_headers)
             assert student_state.status_code == 200
             state_payload = student_state.json()
             assert state_payload["question_number"] == question_number
@@ -819,14 +842,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             def collect_keys(value):
                 if isinstance(value, dict):
                     return set(value) | {
-                        key
-                        for child in value.values()
-                        for key in collect_keys(child)
+                        key for child in value.values() for key in collect_keys(child)
                     }
                 if isinstance(value, list):
-                    return {
-                        key for child in value for key in collect_keys(child)
-                    }
+                    return {key for child in value for key in collect_keys(child)}
                 return set()
 
             assert collect_keys(state_payload).isdisjoint(
@@ -843,6 +862,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     )
                 }
             else:
+                missing_answer = client.post(
+                    f"{student_state_url}/answer",
+                    headers=student_headers,
+                    json={},
+                )
+                assert missing_answer.status_code == 422
                 empty_answer = client.post(
                     f"{student_state_url}/answer",
                     headers=student_headers,
@@ -906,10 +931,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
 
         assert teacher_state["status"] == "finished"
         assert teacher_state["participants"][0]["score"] > 0
-        assert client.get(
-            "/api/quizzes/sessions/active",
-            headers=teacher_headers,
-        ).json() == []
+        assert (
+            client.get(
+                "/api/quizzes/sessions/active",
+                headers=teacher_headers,
+            ).json()
+            == []
+        )
         results = client.get(
             "/api/quizzes/sessions/results",
             headers=teacher_headers,
@@ -925,16 +953,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         previous_score = results.json()[0]["participants"][0]["score"]
         regraded_question = preview.json()[0]
-        original_choice_ids = [
-            choice["id"] for choice in regraded_question["choices"]
-        ]
+        original_choice_ids = [choice["id"] for choice in regraded_question["choices"]]
         regraded_payload = {
             "prompt": regraded_question["prompt"],
             "difficulty": regraded_question["difficulty"],
             "answer_mode": regraded_question["answer_mode"],
-            "answer_mode_disclosed": regraded_question[
-                "answer_mode_disclosed"
-            ],
+            "answer_mode_disclosed": regraded_question["answer_mode_disclosed"],
             "code_language": regraded_question["code_language"],
             "code_content": regraded_question["code_content"],
             "choices": [
@@ -979,10 +1003,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             },
         )
         assert expiring_join.status_code == 201
-        assert client.post(
-            f"/api/quizzes/sessions/{expiring_session['id']}/start",
-            headers=teacher_headers,
-        ).status_code == 200
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{expiring_session['id']}/start",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
         with sqlite3.connect(tmp_path / "test.db") as connection:
             connection.execute(
                 "UPDATE quiz_sessions SET started_at = ? WHERE id = ?",
@@ -990,25 +1017,34 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             )
             connection.commit()
 
+        expired_session_details = client.get(
+            f"/api/quizzes/sessions/{expiring_session['id']}",
+            headers=teacher_headers,
+        )
+        assert expired_session_details.status_code == 200
+        assert expired_session_details.json()["status"] == "finished"
+
         results_after_expiry = client.get(
             "/api/quizzes/sessions/results",
             headers=teacher_headers,
         )
         assert results_after_expiry.status_code == 200
-        assert expiring_session["id"] in {
+        assert expiring_session["id"] not in {
             result["id"] for result in results_after_expiry.json()
         }
-        assert client.get(
-            "/api/quizzes/sessions/active",
-            headers=teacher_headers,
-        ).json() == []
-        completed_class = client.get(
-            "/api/classes", headers=teacher_headers
-        ).json()[0]
-        assert completed_class["completed_quiz_count"] == 2
-        assert client.get(
-            student_state_url, headers=student_headers
-        ).json()["status"] == "finished"
+        assert (
+            client.get(
+                "/api/quizzes/sessions/active",
+                headers=teacher_headers,
+            ).json()
+            == []
+        )
+        completed_class = client.get("/api/classes", headers=teacher_headers).json()[0]
+        assert completed_class["completed_quiz_count"] == 1
+        assert (
+            client.get(student_state_url, headers=student_headers).json()["status"]
+            == "finished"
+        )
         assert (
             client.delete(
                 f"/api/classes/students/{student['id']}",
@@ -1021,9 +1057,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
         ).json()
         assert (
-            session_after_student_delete["participants"][0][
-                "student_display_name"
-            ]
+            session_after_student_delete["participants"][0]["student_display_name"]
             == "Martin Giraud"
         )
         assert (
@@ -1039,6 +1073,20 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 headers=teacher_headers,
             ).json()["class_id"]
             is None
+        )
+        assert (
+            client.delete(
+                f"/api/quizzes/sessions/{quiz_session['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
+        assert (
+            client.get(
+                f"/api/quizzes/sessions/{quiz_session['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 404
         )
 
         updated_payload = {
@@ -1124,6 +1172,51 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             == 404
         )
 
+        disabled = client.post(
+            f"/api/admin/users/{created.json()['id']}/status",
+            headers=headers,
+            json={"is_active": False},
+        )
+        assert disabled.status_code == 200
+        assert disabled.json()["is_active"] is False
+        assert client.get("/api/users/me", headers=teacher_headers).status_code == 401
+        assert (
+            client.post(
+                "/api/auth/login",
+                json={
+                    "username": "teacher.one",
+                    "password": "another-strong-password",
+                    "audience": "professor",
+                },
+            ).status_code
+            == 401
+        )
+        enabled = client.post(
+            f"/api/admin/users/{created.json()['id']}/status",
+            headers=headers,
+            json={"is_active": True},
+        )
+        assert enabled.status_code == 200
+        reset_access = client.post(
+            f"/api/admin/users/{created.json()['id']}/credentials",
+            headers=headers,
+            json={
+                "password": "replacement-strong-password",
+                "reset_two_factor": True,
+            },
+        )
+        assert reset_access.status_code == 200
+        recovery_login = client.post(
+            "/api/auth/login",
+            json={
+                "username": "teacher.one",
+                "password": "replacement-strong-password",
+                "audience": "professor",
+            },
+        )
+        assert recovery_login.status_code == 200
+        assert recovery_login.json()["status"] == "setup_required"
+
 
 def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
     database_path = tmp_path / "legacy-question-choices.db"
@@ -1144,8 +1237,7 @@ def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
 
     with sqlite3.connect(database_path) as database:
         columns = {
-            row[1]
-            for row in database.execute("PRAGMA table_info(question_choices)")
+            row[1] for row in database.execute("PRAGMA table_info(question_choices)")
         }
     assert {
         "points",
@@ -1192,15 +1284,10 @@ def test_existing_quiz_sessions_gain_class_and_student_links(
             row[1] for row in database.execute("PRAGMA table_info(quiz_sessions)")
         }
         participant_columns = {
-            row[1]
-            for row in database.execute(
-                "PRAGMA table_info(quiz_participants)"
-            )
+            row[1] for row in database.execute("PRAGMA table_info(quiz_participants)")
         }
     assert "class_id" in session_columns
-    assert {"student_id", "student_display_name"}.issubset(
-        participant_columns
-    )
+    assert {"student_id", "student_display_name"}.issubset(participant_columns)
 
 
 def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
@@ -1402,6 +1489,7 @@ def test_login_rate_limit_reserves_concurrent_attempts_atomically(
     )
 
     with make_client(app_settings) as client:
+
         def attempt_login() -> int:
             barrier.wait()
             return client.post(
@@ -1486,9 +1574,7 @@ def test_environment_admin_rename_moves_managed_account(tmp_path: Path) -> None:
         )
         renamed_user = client.get(
             "/api/users/me",
-            headers={
-                "Authorization": f"Bearer {verified.json()['access_token']}"
-            },
+            headers={"Authorization": f"Bearer {verified.json()['access_token']}"},
         ).json()
         assert renamed_user["id"] == original["id"]
         assert renamed_user["username"] == "renamed-admin"
@@ -1516,8 +1602,7 @@ def test_two_factor_code_and_challenge_are_consumed_atomically(
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             statuses = sorted(
-                future.result()
-                for future in (pool.submit(verify), pool.submit(verify))
+                future.result() for future in (pool.submit(verify), pool.submit(verify))
             )
         assert statuses == [200, 401]
 

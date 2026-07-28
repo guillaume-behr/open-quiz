@@ -1,7 +1,7 @@
+import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-import json
 from random import SystemRandom
 from secrets import token_urlsafe
 from string import ascii_uppercase, digits
@@ -12,6 +12,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
+from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
 from app.grading import compute_final_scores
 from app.models import (
@@ -28,6 +29,7 @@ from app.models import (
     Student,
     StudentClass,
 )
+from app.requests import client_ip
 from app.routers.question_banks import question_response
 from app.schemas import (
     QuestionResponse,
@@ -38,24 +40,20 @@ from app.schemas import (
     QuizParticipantResponse,
     QuizResponse,
     QuizSessionResponse,
-    StudentQuizSessionResponse,
     StudentQuizAnswer,
     StudentQuizChoiceResponse,
     StudentQuizJoinResponse,
     StudentQuizNavigation,
-    StudentQuizViolation,
     StudentQuizQuestionResponse,
+    StudentQuizSessionResponse,
     StudentQuizStateResponse,
+    StudentQuizViolation,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 randomizer = SystemRandom()
 JOIN_CODE_ALPHABET = ascii_uppercase + digits
 VIOLATION_DEDUPLICATION_SECONDS = 2
-
-
-def client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
 
 
 def enforce_public_rate_limit(
@@ -69,7 +67,7 @@ def enforce_public_rate_limit(
     if retry_after:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many quiz requests",
+            detail="Trop de tentatives pour rejoindre le quiz",
             headers={"Retry-After": str(retry_after)},
         )
 
@@ -77,8 +75,38 @@ def enforce_public_rate_limit(
 def quiz_join_rejected() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Unable to join this quiz",
+        detail="Impossible de rejoindre ce quiz",
     )
+
+
+def enforce_existing_public_rate_limit(
+    request: Request,
+    session: DbSession,
+    limiter_name: str,
+    subject: str,
+) -> None:
+    limiter = getattr(request.app.state, limiter_name)
+    retry_after = limiter.check(session, subject)
+    if retry_after:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Trop de requêtes pour ce quiz",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def reject_quiz_join(
+    request: Request,
+    session: DbSession,
+    subject: str,
+) -> None:
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_join_rate_limiter",
+        subject,
+    )
+    raise quiz_join_rejected()
 
 
 def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
@@ -113,7 +141,7 @@ def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Qu
     if quiz is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Quiz not found",
+            detail="Quiz introuvable",
         )
     return quiz
 
@@ -144,7 +172,7 @@ def validate_bank_selection(
     if len(banks) != len(payload.question_bank_ids):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="One or more question banks are invalid",
+            detail="Une ou plusieurs banques de questions sont invalides",
         )
     validate_question_availability(
         payload.question_bank_ids,
@@ -176,7 +204,7 @@ def validate_question_availability(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Not enough questions for the requested difficulty distribution: "
+                "Nombre de questions insuffisant pour la répartition demandée : "
                 + ", ".join(shortages)
             ),
         )
@@ -228,9 +256,7 @@ def load_question_responses(
     codes_by_question = {
         code.question_id: code
         for code in session.scalars(
-            select(QuestionCode).where(
-                QuestionCode.question_id.in_(question_ids)
-            )
+            select(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
         )
     }
     return [
@@ -293,7 +319,7 @@ def owned_quiz_session(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Quiz session not found",
+            detail="Session de quiz introuvable",
         )
     return row
 
@@ -316,10 +342,7 @@ def current_question_id(
     participant: QuizParticipant,
     session: DbSession,
 ) -> int | None:
-    if (
-        quiz_session.status != "in_progress"
-        or participant.current_position is None
-    ):
+    if quiz_session.status != "in_progress" or participant.current_position is None:
         return None
     return session.scalar(
         select(QuizSessionQuestion.question_id).where(
@@ -448,9 +471,7 @@ def expire_quiz_session(
     ):
         quiz_session.status = "finished"
         for participant in session.scalars(
-            select(QuizParticipant).where(
-                QuizParticipant.session_id == quiz_session.id
-            )
+            select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
         ):
             participant.current_position = None
         compute_final_scores(quiz_session, session)
@@ -475,6 +496,55 @@ def expire_owned_quiz_sessions(
         expire_quiz_session(quiz_session, quiz, session)
 
 
+def delete_quiz_session_records(
+    session_ids: list[int],
+    session: DbSession,
+) -> None:
+    if not session_ids:
+        return
+    session.execute(delete(QuizAnswer).where(QuizAnswer.session_id.in_(session_ids)))
+    session.execute(
+        delete(QuizParticipant).where(QuizParticipant.session_id.in_(session_ids))
+    )
+    session.execute(
+        delete(QuizSessionQuestion).where(
+            QuizSessionQuestion.session_id.in_(session_ids)
+        )
+    )
+    session.execute(delete(QuizSession).where(QuizSession.id.in_(session_ids)))
+
+
+def purge_expired_quiz_results(
+    professor: ProfessorUser,
+    request: Request,
+    session: DbSession,
+) -> int:
+    cutoff = datetime.now(UTC) - timedelta(
+        days=request.app.state.settings.quiz_result_retention_days
+    )
+    expired_ids = list(
+        session.scalars(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                Quiz.owner_id == professor.id,
+                QuizSession.status == "finished",
+                QuizSession.started_at.is_not(None),
+                QuizSession.started_at <= cutoff,
+            )
+        )
+    )
+    if expired_ids:
+        delete_quiz_session_records(expired_ids, session)
+        session.commit()
+        audit_event(
+            "quiz.results_retention_purged",
+            professor_id=professor.id,
+            deleted_count=len(expired_ids),
+        )
+    return len(expired_ids)
+
+
 def participant_token_hash(token: str) -> str:
     return sha256(token.encode()).hexdigest()
 
@@ -494,7 +564,7 @@ def authenticated_participant(
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing quiz participant token",
+            detail="Jeton de participation au quiz manquant",
         )
     row = session.execute(
         select(QuizSession, Quiz, QuizParticipant)
@@ -505,8 +575,7 @@ def authenticated_participant(
         )
         .where(
             QuizSession.join_code == join_code.strip().upper(),
-            QuizParticipant.access_token_hash
-            == participant_token_hash(token),
+            QuizParticipant.access_token_hash == participant_token_hash(token),
         )
     ).first()
     if row is None:
@@ -518,7 +587,7 @@ def authenticated_participant(
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid quiz participant token",
+            detail="Jeton de participation au quiz invalide",
         )
     return row
 
@@ -531,7 +600,7 @@ def student_question_response(
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="The current question is unavailable",
+            detail="La question actuelle n’est pas disponible",
         )
     choices = list(
         session.scalars(
@@ -597,9 +666,7 @@ def student_state_response(
         else None
     )
     saved_answer = (
-        json.loads(existing_answer.answer_data)
-        if existing_answer is not None
-        else {}
+        json.loads(existing_answer.answer_data) if existing_answer is not None else {}
     )
     answered_count = session.scalar(
         select(func.count(QuizAnswer.id)).where(
@@ -632,13 +699,14 @@ def student_state_response(
 def generate_join_code(session: DbSession) -> str:
     for _ in range(20):
         code = "".join(randomizer.choice(JOIN_CODE_ALPHABET) for _ in range(6))
-        if session.scalar(
-            select(QuizSession.id).where(QuizSession.join_code == code)
-        ) is None:
+        if (
+            session.scalar(select(QuizSession.id).where(QuizSession.join_code == code))
+            is None
+        ):
             return code
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Unable to generate a quiz code",
+        detail="Impossible de générer un code de quiz",
     )
 
 
@@ -706,17 +774,18 @@ def list_active_sessions(
         .limit(20)
     )
     return [
-        session_response(quiz_session, quiz, session)
-        for quiz_session, quiz in rows
+        session_response(quiz_session, quiz, session) for quiz_session, quiz in rows
     ]
 
 
 @router.get("/sessions/results", response_model=list[QuizSessionResponse])
 def list_quiz_results(
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuizSessionResponse]:
     expire_owned_quiz_sessions(professor, session)
+    purge_expired_quiz_results(professor, request, session)
     rows = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
@@ -731,8 +800,7 @@ def list_quiz_results(
         )
     )
     return [
-        session_response(quiz_session, quiz, session)
-        for quiz_session, quiz in rows
+        session_response(quiz_session, quiz, session) for quiz_session, quiz in rows
     ]
 
 
@@ -746,7 +814,34 @@ def get_quiz_session(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    expire_quiz_session(quiz_session, quiz, session)
     return session_response(quiz_session, quiz, session)
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_quiz_session(
+    session_id: int,
+    request: Request,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> None:
+    quiz_session, _ = owned_quiz_session(session_id, professor, session)
+    if quiz_session.status != "finished":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Seules les sessions terminées peuvent être supprimées",
+        )
+    delete_quiz_session_records([quiz_session.id], session)
+    session.commit()
+    audit_event(
+        "quiz.result_deleted",
+        professor_id=professor.id,
+        session_id=session_id,
+        ip=client_ip(request),
+    )
 
 
 @router.post(
@@ -770,7 +865,7 @@ def start_quiz_session(
         if not participants:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="At least one student must join before starting",
+                detail="Au moins un élève doit rejoindre le quiz avant son démarrage",
             )
         quiz_session.status = "in_progress"
         quiz_session.started_at = datetime.now(UTC)
@@ -813,7 +908,7 @@ def launch_quiz(
     if student_class is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="The selected class is invalid",
+            detail="La classe sélectionnée est invalide",
         )
     quiz_session = QuizSession(
         quiz_id=quiz.id,
@@ -847,17 +942,12 @@ def join_quiz(
     request: Request,
     session: DbSession,
 ) -> StudentQuizJoinResponse:
-    enforce_public_rate_limit(
+    join_subject = f"join-ip:{client_ip(request)}"
+    enforce_existing_public_rate_limit(
         request,
         session,
         "quiz_join_rate_limiter",
-        f"join-ip:{client_ip(request)}",
-    )
-    enforce_public_rate_limit(
-        request,
-        session,
-        "quiz_join_rate_limiter",
-        f"join-code:{payload.join_code}",
+        join_subject,
     )
     row = session.execute(
         select(QuizSession, Quiz)
@@ -865,12 +955,12 @@ def join_quiz(
         .where(QuizSession.join_code == payload.join_code)
     ).first()
     if row is None:
-        raise quiz_join_rejected()
+        reject_quiz_join(request, session, join_subject)
     quiz_session, quiz = row
     if quiz_session.status != "waiting":
-        raise quiz_join_rejected()
+        reject_quiz_join(request, session, join_subject)
     if quiz_session.class_id is None:
-        raise quiz_join_rejected()
+        reject_quiz_join(request, session, join_subject)
     student = session.scalar(
         select(Student).where(
             Student.class_id == quiz_session.class_id,
@@ -878,7 +968,7 @@ def join_quiz(
         )
     )
     if student is None:
-        raise quiz_join_rejected()
+        reject_quiz_join(request, session, join_subject)
     existing = session.scalar(
         select(QuizParticipant).where(
             QuizParticipant.session_id == quiz_session.id,
@@ -886,7 +976,7 @@ def join_quiz(
         )
     )
     if existing is not None:
-        raise quiz_join_rejected()
+        reject_quiz_join(request, session, join_subject)
     participant_token = token_urlsafe(32)
     participant = QuizParticipant(
         session_id=quiz_session.id,
@@ -900,7 +990,7 @@ def join_quiz(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise quiz_join_rejected() from None
+        reject_quiz_join(request, session, join_subject)
     state = student_state_response(quiz_session, quiz, participant, session)
     return StudentQuizJoinResponse(
         **state.model_dump(),
@@ -916,9 +1006,7 @@ def get_student_quiz_state(
     join_code: str,
     request: Request,
     session: DbSession,
-    quiz_token: Annotated[
-        str | None, Header(alias="X-Quiz-Token")
-    ] = None,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> StudentQuizStateResponse:
     quiz_session, quiz, participant = authenticated_participant(
         join_code, quiz_token, request, session
@@ -941,9 +1029,7 @@ def submit_student_answer(
     payload: StudentQuizAnswer,
     request: Request,
     session: DbSession,
-    quiz_token: Annotated[
-        str | None, Header(alias="X-Quiz-Token")
-    ] = None,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> StudentQuizStateResponse:
     quiz_session, quiz, participant = authenticated_participant(
         join_code, quiz_token, request, session
@@ -958,18 +1044,18 @@ def submit_student_answer(
     if quiz_session.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="The quiz is not accepting answers",
+            detail="Le quiz n’accepte pas de réponses actuellement",
         )
     if participant.student_id is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="The student no longer exists",
+            detail="L’élève n’existe plus",
         )
     question_id = current_question_id(quiz_session, participant, session)
     if question_id is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No current question",
+            detail="Aucune question en cours",
         )
     existing_answer = session.scalar(
         select(QuizAnswer).where(
@@ -990,7 +1076,7 @@ def submit_student_answer(
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="The current question is unavailable",
+            detail="La question actuelle n’est pas disponible",
         )
 
     if question.answer_mode == "written":
@@ -998,37 +1084,42 @@ def submit_student_answer(
         if not written_answer or payload.selected_choice_ids is not None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="A written answer is required",
+                detail="Une réponse rédactionnelle est requise",
             )
         answer_data = {"written_answer": written_answer}
     else:
+        if payload.selected_choice_ids is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Au moins une proposition doit être sélectionnée",
+            )
         selected_ids = list(dict.fromkeys(payload.selected_choice_ids or []))
         if payload.written_answer is not None or (
             question.answer_mode == "single" and len(selected_ids) != 1
         ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="The submitted answer does not match the question type",
+                detail="La réponse envoyée ne correspond pas au type de la question",
             )
         if any(choice_id not in choices_by_id for choice_id in selected_ids):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="An answer choice is invalid",
+                detail="Une proposition sélectionnée est invalide",
             )
         answer_data = {"selected_choice_ids": selected_ids}
 
     if existing_answer is None:
-        session.add(QuizAnswer(
-            session_id=quiz_session.id,
-            participant_id=participant.id,
-            question_id=question_id,
-            answer_data=json.dumps(answer_data, ensure_ascii=False),
-            score=0,
-        ))
-    else:
-        existing_answer.answer_data = json.dumps(
-            answer_data, ensure_ascii=False
+        session.add(
+            QuizAnswer(
+                session_id=quiz_session.id,
+                participant_id=participant.id,
+                question_id=question_id,
+                answer_data=json.dumps(answer_data, ensure_ascii=False),
+                score=0,
+            )
         )
+    else:
+        existing_answer.answer_data = json.dumps(answer_data, ensure_ascii=False)
         existing_answer.score = 0
     total_questions = len(session_question_ids(quiz_session, session))
     if (
@@ -1061,9 +1152,7 @@ def navigate_student_quiz(
     payload: StudentQuizNavigation,
     request: Request,
     session: DbSession,
-    quiz_token: Annotated[
-        str | None, Header(alias="X-Quiz-Token")
-    ] = None,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> StudentQuizStateResponse:
     quiz_session, quiz, participant = authenticated_participant(
         join_code, quiz_token, request, session
@@ -1085,7 +1174,7 @@ def navigate_student_quiz(
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Navigation to this question is not allowed",
+            detail="Le retour à cette question n’est pas autorisé",
         )
     participant.current_position = target_position
     session.commit()
@@ -1101,9 +1190,7 @@ def report_student_violation(
     payload: StudentQuizViolation,
     request: Request,
     session: DbSession,
-    quiz_token: Annotated[
-        str | None, Header(alias="X-Quiz-Token")
-    ] = None,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> Response:
     quiz_session, quiz, participant = authenticated_participant(
         join_code, quiz_token, request, session
@@ -1124,8 +1211,7 @@ def report_student_violation(
     if (
         participant.last_violation_type == payload.event_type
         and last_violation_at is not None
-        and (now - last_violation_at).total_seconds()
-        < VIOLATION_DEDUPLICATION_SECONDS
+        and (now - last_violation_at).total_seconds() < VIOLATION_DEDUPLICATION_SECONDS
     ):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     participant.violation_count += 1
@@ -1135,17 +1221,13 @@ def report_student_violation(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get(
-    "/student/sessions/{join_code}/questions/{question_id}/image"
-)
+@router.get("/student/sessions/{join_code}/questions/{question_id}/image")
 def get_student_question_image(
     join_code: str,
     question_id: int,
     request: Request,
     session: DbSession,
-    quiz_token: Annotated[
-        str | None, Header(alias="X-Quiz-Token")
-    ] = None,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> Response:
     quiz_session, _, participant = authenticated_participant(
         join_code, quiz_token, request, session
@@ -1159,7 +1241,7 @@ def get_student_question_image(
     if current_question_id(quiz_session, participant, session) != question_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Question image not found",
+            detail="Image de la question introuvable",
         )
     question = session.get(Question, question_id)
     if (
@@ -1169,7 +1251,7 @@ def get_student_question_image(
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Question image not found",
+            detail="Image de la question introuvable",
         )
     return Response(
         content=question.image_data,
@@ -1177,17 +1259,13 @@ def get_student_question_image(
     )
 
 
-@router.get(
-    "/student/sessions/{join_code}/choices/{choice_id}/image"
-)
+@router.get("/student/sessions/{join_code}/choices/{choice_id}/image")
 def get_student_choice_image(
     join_code: str,
     choice_id: int,
     request: Request,
     session: DbSession,
-    quiz_token: Annotated[
-        str | None, Header(alias="X-Quiz-Token")
-    ] = None,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> Response:
     quiz_session, _, participant = authenticated_participant(
         join_code, quiz_token, request, session
@@ -1205,14 +1283,10 @@ def get_student_choice_image(
             QuestionChoice.question_id == question_id,
         )
     )
-    if (
-        choice is None
-        or choice.image_data is None
-        or choice.image_content_type is None
-    ):
+    if choice is None or choice.image_data is None or choice.image_content_type is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Answer image not found",
+            detail="Image de la réponse introuvable",
         )
     return Response(
         content=choice.image_data,

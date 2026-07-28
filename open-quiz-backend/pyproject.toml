@@ -8,6 +8,7 @@ dependencies = [
     "argon2-cffi>=25.1.0",
     "cryptography>=49.0.0",
     "fastapi[standard]>=0.139.2",
+    "pillow>=12.1.0",
     "pwdlib>=0.3.0",
     "pyjwt>=2.13.0",
     "pyotp>=2.10.0",
@@ -19,7 +20,14 @@ dependencies = [
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
+    "ruff>=0.16.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.ruff.lint]
+ignore = [
+    # FastAPI dependency declarations intentionally call parameter helpers.
+    "B008",
+]

@@ -70,7 +70,7 @@ def owned_class(
     if student_class is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Class not found",
+            detail="Classe introuvable",
         )
     return student_class
 
@@ -91,7 +91,7 @@ def owned_student(
     if student is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found",
+            detail="Élève introuvable",
         )
     return student
 
@@ -174,7 +174,7 @@ def create_class(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A class with this name already exists",
+            detail="Une classe porte déjà ce nom",
         ) from None
     session.refresh(student_class)
     return class_response(student_class, session)
@@ -187,15 +187,18 @@ def delete_class(
     session: DbSession,
 ) -> None:
     owned_class(class_id, professor, session)
-    if session.scalar(
-        select(QuizSession.id).where(
-            QuizSession.class_id == class_id,
-            QuizSession.status.in_(["waiting", "in_progress"]),
+    if (
+        session.scalar(
+            select(QuizSession.id).where(
+                QuizSession.class_id == class_id,
+                QuizSession.status.in_(["waiting", "in_progress"]),
+            )
         )
-    ) is not None:
+        is not None
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This class is used by an active quiz waiting room",
+            detail="Cette classe est utilisée par une salle d’attente active",
         )
     student_ids = select(Student.id).where(Student.class_id == class_id)
     session.execute(
@@ -232,7 +235,7 @@ def update_class(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A class with this name already exists",
+            detail="Une classe porte déjà ce nom",
         ) from None
     session.refresh(student_class)
     return class_response(student_class, session)
@@ -253,9 +256,7 @@ def create_student(
     student = Student(
         class_id=class_id,
         identifier=payload.identifier
-        or generated_student_identifier(
-            class_id, payload.display_name, session
-        ),
+        or generated_student_identifier(class_id, payload.display_name, session),
         display_name=payload.display_name,
     )
     session.add(student)
@@ -265,7 +266,7 @@ def create_student(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This student identifier already exists in the class",
+            detail="Cet identifiant d’élève existe déjà dans la classe",
         ) from None
     session.refresh(student)
     return student
@@ -295,7 +296,7 @@ def update_student(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This student identifier already exists in the class",
+            detail="Cet identifiant d’élève existe déjà dans la classe",
         ) from None
     session.refresh(student)
     return student
@@ -311,15 +312,18 @@ def delete_student(
     session: DbSession,
 ) -> None:
     student = owned_student(student_id, professor, session)
-    if session.scalar(
-        select(QuizSession.id).where(
-            QuizSession.class_id == student.class_id,
-            QuizSession.status.in_(["waiting", "in_progress"]),
+    if (
+        session.scalar(
+            select(QuizSession.id).where(
+                QuizSession.class_id == student.class_id,
+                QuizSession.status.in_(["waiting", "in_progress"]),
+            )
         )
-    ) is not None:
+        is not None
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This student belongs to an active quiz session",
+            detail="Cet élève participe à une session de quiz active",
         )
     session.execute(
         update(QuizParticipant)

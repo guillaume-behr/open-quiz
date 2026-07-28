@@ -61,9 +61,7 @@ def synchronize_security_state(
                     .values(revoked_at=now)
                 )
                 audit_event("security.legacy_sessions_revoked")
-            session.add(
-                SecurityState(key=JWT_FINGERPRINT_KEY, value=fingerprint)
-            )
+            session.add(SecurityState(key=JWT_FINGERPRINT_KEY, value=fingerprint))
         elif fingerprint_state.value != fingerprint:
             session.execute(
                 update(RefreshSession)
@@ -244,8 +242,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 declared_length = None
             if response is None and (
-                declared_length is not None
-                and declared_length > request_size_limit
+                declared_length is not None and declared_length > request_size_limit
             ):
                 response = JSONResponse(
                     status_code=413,
@@ -273,7 +270,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["Permissions-Policy"] = (
             "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
         )
-        if request.url.path.startswith("/api") and request.url.path != "/api/health":
+        if request.url.path.startswith("/api"):
             response.headers["Cache-Control"] = "no-store"
         if production:
             response.headers["Strict-Transport-Security"] = (

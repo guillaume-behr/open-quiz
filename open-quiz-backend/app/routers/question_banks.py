@@ -18,6 +18,12 @@ from sqlalchemy.orm import defer
 
 from app.dependencies import DbSession, ProfessorUser
 from app.grading import recompute_finished_scores_for_question
+from app.images import (
+    ALLOWED_IMAGE_TYPES,
+    MAX_IMAGE_BYTES,
+    InvalidImage,
+    normalize_image,
+)
 from app.models import (
     Question,
     QuestionBank,
@@ -40,8 +46,6 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-MAX_QUESTION_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 def downloadable_json(content: object, filename: str) -> Response:
@@ -101,7 +105,7 @@ def create_question_bank(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A question bank already exists for this grade level and chapter",
+            detail="Une banque existe déjà pour ce niveau et ce titre",
         ) from None
     session.refresh(question_bank)
     return question_bank
@@ -118,14 +122,17 @@ def delete_question_bank(
 ) -> None:
     """Delete a question bank and every question it contains."""
     owned_question_bank(question_bank_id, professor, session)
-    if session.scalar(
-        select(QuizQuestionBank.quiz_id).where(
-            QuizQuestionBank.question_bank_id == question_bank_id
+    if (
+        session.scalar(
+            select(QuizQuestionBank.quiz_id).where(
+                QuizQuestionBank.question_bank_id == question_bank_id
+            )
         )
-    ) is not None:
+        is not None
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This question bank is used by a quiz",
+            detail="Cette banque est utilisée par un quiz",
         )
     question_ids = select(Question.id).where(
         Question.question_bank_id == question_bank_id
@@ -157,7 +164,7 @@ def owned_question_bank(
     if question_bank is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Question bank not found",
+            detail="Banque de questions introuvable",
         )
     return question_bank
 
@@ -178,7 +185,7 @@ def owned_question(
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Question not found",
+            detail="Question introuvable",
         )
     return question
 
@@ -304,9 +311,7 @@ def list_questions(
     codes_by_question = {
         code.question_id: code
         for code in session.scalars(
-            select(QuestionCode).where(
-                QuestionCode.question_id.in_(question_ids)
-            )
+            select(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
         )
     }
     return [
@@ -377,8 +382,8 @@ def download_import_example(_: ProfessorUser) -> Response:
                         "image": {
                             "content_type": "image/png",
                             "data_base64": (
-                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
-                                "AAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
+                                "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
                             ),
                         },
                         "code_language": None,
@@ -391,8 +396,8 @@ def download_import_example(_: ProfessorUser) -> Response:
                         "image": {
                             "content_type": "image/png",
                             "data_base64": (
-                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
-                                "AAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
+                                "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
                             ),
                         },
                         "code_language": "javascript",
@@ -404,8 +409,8 @@ def download_import_example(_: ProfessorUser) -> Response:
                 "image": {
                     "content_type": "image/png",
                     "data_base64": (
-                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
-                        "AAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
+                        "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
                     ),
                 },
             },
@@ -466,9 +471,7 @@ def export_questions(
         codes_by_question = {
             code.question_id: code
             for code in session.scalars(
-                select(QuestionCode).where(
-                    QuestionCode.question_id.in_(question_ids)
-                )
+                select(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
             )
         }
     exported_questions = []
@@ -488,9 +491,7 @@ def export_questions(
                         "image": (
                             {
                                 "content_type": choice.image_content_type,
-                                "data_base64": b64encode(
-                                    choice.image_data
-                                ).decode(),
+                                "data_base64": b64encode(choice.image_data).decode(),
                             }
                             if choice.image_data is not None
                             and choice.image_content_type is not None
@@ -534,17 +535,23 @@ def decode_image_payload(
         return None, None
     try:
         image_data = b64decode(image.data_base64, validate=True)
-    except (Base64Error, ValueError):
+    except Base64Error, ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="An imported image is not valid base64",
+            detail="Une image importée n’est pas encodée correctement",
         ) from None
-    if not image_data or len(image_data) > MAX_QUESTION_IMAGE_BYTES:
+    if not image_data or len(image_data) > MAX_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="An imported image is empty or too large",
+            detail="Une image importée est vide ou trop volumineuse",
         )
-    return image_data, image.content_type
+    try:
+        return normalize_image(image_data, image.content_type)
+    except InvalidImage as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from None
 
 
 def decode_import_image(
@@ -581,7 +588,7 @@ def import_question_bank(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A question bank already exists for this grade level and chapter",
+            detail="Une banque existe déjà pour ce niveau et ce titre",
         ) from None
 
     created = [
@@ -632,10 +639,10 @@ async def create_question(
     owned_question_bank(question_bank_id, professor, session)
     try:
         question_payload = QuestionCreate.model_validate(json.loads(payload))
-    except (json.JSONDecodeError, ValidationError):
+    except json.JSONDecodeError, ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Invalid question",
+            detail="Question invalide",
         ) from None
 
     image_data = None
@@ -644,18 +651,27 @@ async def create_question(
         if image.content_type not in ALLOWED_IMAGE_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail="Unsupported image format",
+                detail="Format d’image non pris en charge",
             )
-        image_data = await image.read(MAX_QUESTION_IMAGE_BYTES + 1)
-        if len(image_data) > MAX_QUESTION_IMAGE_BYTES:
+        image_data = await image.read(MAX_IMAGE_BYTES + 1)
+        if len(image_data) > MAX_IMAGE_BYTES:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="The image is too large",
+                detail="L’image est trop volumineuse",
             )
         if not image_data:
             image_data = None
         else:
-            image_content_type = image.content_type
+            try:
+                image_data, image_content_type = normalize_image(
+                    image_data,
+                    image.content_type,
+                )
+            except InvalidImage as error:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=str(error),
+                ) from None
 
     question, choices, code = add_question(
         question_bank_id,
@@ -682,27 +698,30 @@ async def update_question(
 ) -> QuestionResponse:
     """Update a professor's question and replace its answer configuration."""
     question = owned_question(question_id, professor, session)
-    if session.scalar(
-        select(QuizSessionQuestion.session_id)
-        .join(
-            QuizSession,
-            QuizSession.id == QuizSessionQuestion.session_id,
+    if (
+        session.scalar(
+            select(QuizSessionQuestion.session_id)
+            .join(
+                QuizSession,
+                QuizSession.id == QuizSessionQuestion.session_id,
+            )
+            .where(
+                QuizSessionQuestion.question_id == question_id,
+                QuizSession.status.in_(["waiting", "in_progress"]),
+            )
         )
-        .where(
-            QuizSessionQuestion.question_id == question_id,
-            QuizSession.status.in_(["waiting", "in_progress"]),
-        )
-    ) is not None:
+        is not None
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This question is used by an active quiz",
+            detail="Cette question est utilisée par un quiz actif",
         )
     try:
         question_payload = QuestionUpdate.model_validate(json.loads(payload))
-    except (json.JSONDecodeError, ValidationError):
+    except json.JSONDecodeError, ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Invalid question",
+            detail="Question invalide",
         ) from None
 
     image_data = None
@@ -711,16 +730,25 @@ async def update_question(
         if image.content_type not in ALLOWED_IMAGE_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail="Unsupported image format",
+                detail="Format d’image non pris en charge",
             )
-        image_data = await image.read(MAX_QUESTION_IMAGE_BYTES + 1)
-        if len(image_data) > MAX_QUESTION_IMAGE_BYTES:
+        image_data = await image.read(MAX_IMAGE_BYTES + 1)
+        if len(image_data) > MAX_IMAGE_BYTES:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="The image is too large",
+                detail="L’image est trop volumineuse",
             )
         if image_data:
-            image_content_type = image.content_type
+            try:
+                image_data, image_content_type = normalize_image(
+                    image_data,
+                    image.content_type,
+                )
+            except InvalidImage as error:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=str(error),
+                ) from None
 
     question.prompt = question_payload.prompt
     question.difficulty = question_payload.difficulty
@@ -736,9 +764,7 @@ async def update_question(
 
     existing_choices = list(
         session.scalars(
-            select(QuestionChoice).where(
-                QuestionChoice.question_id == question.id
-            )
+            select(QuestionChoice).where(QuestionChoice.question_id == question.id)
         )
     )
     # Move existing rows out of the final position range before applying a
@@ -757,15 +783,13 @@ async def update_question(
     if not submitted_choice_ids.issubset(existing_choices_by_id):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Invalid answer choice",
+            detail="Proposition de réponse invalide",
         )
     replacement_choice_images = []
     for choice in question_payload.choices:
         new_image_data, new_image_content_type = decode_image_payload(choice.image)
         existing_choice = (
-            existing_choices_by_id.get(choice.id)
-            if choice.id is not None
-            else None
+            existing_choices_by_id.get(choice.id) if choice.id is not None else None
         )
         if (
             new_image_data is None
@@ -774,13 +798,9 @@ async def update_question(
         ):
             new_image_data = existing_choice.image_data
             new_image_content_type = existing_choice.image_content_type
-        replacement_choice_images.append(
-            (new_image_data, new_image_content_type)
-        )
+        replacement_choice_images.append((new_image_data, new_image_content_type))
 
-    session.execute(
-        delete(QuestionCode).where(QuestionCode.question_id == question.id)
-    )
+    session.execute(delete(QuestionCode).where(QuestionCode.question_id == question.id))
     choices = []
     for position, (
         choice_payload,
@@ -810,9 +830,7 @@ async def update_question(
     removed_choice_ids = set(existing_choices_by_id) - submitted_choice_ids
     if removed_choice_ids:
         session.execute(
-            delete(QuestionChoice).where(
-                QuestionChoice.id.in_(removed_choice_ids)
-            )
+            delete(QuestionChoice).where(QuestionChoice.id.in_(removed_choice_ids))
         )
     code = None
     if (
@@ -843,21 +861,22 @@ def delete_question(
 ) -> None:
     """Delete one question owned by the authenticated professor."""
     owned_question(question_id, professor, session)
-    if session.scalar(
-        select(QuizSessionQuestion.session_id).where(
-            QuizSessionQuestion.question_id == question_id
+    if (
+        session.scalar(
+            select(QuizSessionQuestion.session_id).where(
+                QuizSessionQuestion.question_id == question_id
+            )
         )
-    ) is not None:
+        is not None
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This question is used by a launched quiz",
+            detail="Cette question est utilisée par un quiz déjà lancé",
         )
     session.execute(
         delete(QuestionChoice).where(QuestionChoice.question_id == question_id)
     )
-    session.execute(
-        delete(QuestionCode).where(QuestionCode.question_id == question_id)
-    )
+    session.execute(delete(QuestionCode).where(QuestionCode.question_id == question_id))
     session.execute(delete(Question).where(Question.id == question_id))
     session.commit()
 
@@ -884,7 +903,7 @@ def get_question_image(
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Question image not found",
+            detail="Image de la question introuvable",
         )
     return Response(
         content=question.image_data,
@@ -908,14 +927,10 @@ def get_choice_image(
             QuestionBank.owner_id == professor.id,
         )
     )
-    if (
-        choice is None
-        or choice.image_data is None
-        or choice.image_content_type is None
-    ):
+    if choice is None or choice.image_data is None or choice.image_content_type is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Answer image not found",
+            detail="Image de la réponse introuvable",
         )
     return Response(
         content=choice.image_data,

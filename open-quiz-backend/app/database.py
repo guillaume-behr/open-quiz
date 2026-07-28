@@ -5,6 +5,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    event,
     inspect,
     text,
 )
@@ -16,10 +17,24 @@ class Base(DeclarativeBase):
 
 
 def build_session_factory(database_url: str) -> sessionmaker[Session]:
-    connect_args = (
-        {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+    sqlite = database_url.startswith("sqlite")
+    connect_args = {"check_same_thread": False, "timeout": 30} if sqlite else {}
+    engine = create_engine(
+        database_url,
+        connect_args=connect_args,
+        pool_pre_ping=True,
     )
-    engine = create_engine(database_url, connect_args=connect_args)
+    if sqlite:
+
+        @event.listens_for(engine, "connect")
+        def configure_sqlite(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.close()
+
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
         choice_columns = {
@@ -27,8 +42,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             for column in inspect(connection).get_columns("question_choices")
         }
         quiz_columns = {
-            column["name"]
-            for column in inspect(connection).get_columns("quizzes")
+            column["name"] for column in inspect(connection).get_columns("quizzes")
         }
         if "duration_seconds" not in quiz_columns:
             connection.execute(
@@ -58,9 +72,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             ("code_content", Text()),
         ):
             if column_name not in choice_columns:
-                compiled_type = column_type.compile(
-                    dialect=connection.dialect
-                )
+                compiled_type = column_type.compile(dialect=connection.dialect)
                 connection.execute(
                     text(
                         f"ALTER TABLE question_choices "
@@ -72,21 +84,15 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             ("quiz_participants", "student_id"),
         ):
             columns = {
-                column["name"]
-                for column in inspect(connection).get_columns(table_name)
+                column["name"] for column in inspect(connection).get_columns(table_name)
             }
             if column_name not in columns:
                 connection.execute(
-                    text(
-                        f"ALTER TABLE {table_name} "
-                        f"ADD COLUMN {column_name} INTEGER"
-                    )
+                    text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} INTEGER")
                 )
         participant_columns = {
             column["name"]
-            for column in inspect(connection).get_columns(
-                "quiz_participants"
-            )
+            for column in inspect(connection).get_columns("quiz_participants")
         }
         if "student_display_name" not in participant_columns:
             connection.execute(
@@ -105,8 +111,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
         if "current_position" not in participant_columns:
             connection.execute(
                 text(
-                    "ALTER TABLE quiz_participants "
-                    "ADD COLUMN current_position INTEGER"
+                    "ALTER TABLE quiz_participants ADD COLUMN current_position INTEGER"
                 )
             )
         for column_name, column_type, suffix in (
@@ -115,9 +120,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             ("last_violation_at", DateTime(timezone=True), ""),
         ):
             if column_name not in participant_columns:
-                compiled_type = column_type.compile(
-                    dialect=connection.dialect
-                )
+                compiled_type = column_type.compile(dialect=connection.dialect)
                 connection.execute(
                     text(
                         f"ALTER TABLE quiz_participants "

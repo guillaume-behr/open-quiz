@@ -23,9 +23,7 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
     choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
     if question_ids:
         for choice in session.scalars(
-            select(QuestionChoice).where(
-                QuestionChoice.question_id.in_(question_ids)
-            )
+            select(QuestionChoice).where(QuestionChoice.question_id.in_(question_ids))
         ):
             choices_by_question[choice.question_id].append(choice)
     questions = {
@@ -41,9 +39,7 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
         if question is None:
             answer.score = 0
         elif question.answer_mode == "written":
-            expected = next(
-                (choice for choice in choices if choice.is_correct), None
-            )
+            expected = next((choice for choice in choices if choice.is_correct), None)
             written = str(submitted.get("written_answer", "")).strip()
             answer.score = (
                 expected.points
