@@ -513,7 +513,7 @@ export function QuestionBanksPanel({
                             {filteredQuestionBanks.map((bank) => (
                                 <li
                                     key={bank.id}
-                                    className="relative rounded-xl border bg-background p-4 pb-16"
+                                    className="relative rounded-xl border bg-background p-4"
                                 >
                                     <span className="absolute top-4 right-4 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
                                         {t("question-count", {
@@ -524,7 +524,7 @@ export function QuestionBanksPanel({
                                         <div className="rounded-lg bg-primary/10 p-2 text-primary">
                                             <BookOpenText className="size-5" />
                                         </div>
-                                        <div className="min-w-0">
+                                        <div className="min-w-0 flex-1">
                                             <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                                 {bank.grade_level}
                                             </p>
@@ -555,23 +555,27 @@ export function QuestionBanksPanel({
                                                     <Download />
                                                     {t("export-json")}
                                                 </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="icon-sm"
+                                                    variant="destructive"
+                                                    className="ml-auto"
+                                                    aria-label={t(
+                                                        "delete-question-bank"
+                                                    )}
+                                                    title={t(
+                                                        "delete-question-bank"
+                                                    )}
+                                                    onClick={() => {
+                                                        setDeleteBankError(null)
+                                                        setBankToDelete(bank)
+                                                    }}
+                                                >
+                                                    <Trash2 />
+                                                </Button>
                                             </div>
                                         </div>
                                     </div>
-                                    <Button
-                                        type="button"
-                                        size="icon"
-                                        variant="destructive"
-                                        className="absolute right-4 bottom-4"
-                                        aria-label={t("delete-question-bank")}
-                                        title={t("delete-question-bank")}
-                                        onClick={() => {
-                                            setDeleteBankError(null)
-                                            setBankToDelete(bank)
-                                        }}
-                                    >
-                                        <Trash2 />
-                                    </Button>
                                 </li>
                             ))}
                         </ul>

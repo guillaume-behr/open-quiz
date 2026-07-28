@@ -1,7 +1,7 @@
 import type { CodeLanguage } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { LoaderCircle, Play } from "lucide-react"
-import type { PyodideAPI } from "pyodide"
+import { loadPyodide, type PyodideAPI } from "pyodide"
 import { Highlight, themes } from "prism-react-renderer"
 import {
     type KeyboardEvent,
@@ -16,9 +16,10 @@ let pythonRuntime: Promise<PyodideAPI> | undefined
 let pythonExecutionQueue: Promise<void> = Promise.resolve()
 
 function getPythonRuntime() {
-    pythonRuntime ??= import("pyodide").then(({ loadPyodide }) =>
-        loadPyodide({ indexURL: "/pyodide/" })
-    )
+    pythonRuntime ??= loadPyodide({ indexURL: "/pyodide/" }).catch((error) => {
+        pythonRuntime = undefined
+        throw error
+    })
     return pythonRuntime
 }
 
