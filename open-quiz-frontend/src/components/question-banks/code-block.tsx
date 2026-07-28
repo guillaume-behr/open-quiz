@@ -31,6 +31,8 @@ type CodeBlockProps = {
     onCodeChange?: (code: string) => void
     onCodeKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void
     editorClassName?: string
+    maxLength?: number
+    required?: boolean
 }
 
 export function CodeBlock({
@@ -41,6 +43,8 @@ export function CodeBlock({
     onCodeChange,
     onCodeKeyDown,
     editorClassName = "min-h-40",
+    maxLength = 20000,
+    required = false,
 }: CodeBlockProps) {
     const { t } = useTranslation()
     const [isRunning, setIsRunning] = useState(false)
@@ -165,7 +169,8 @@ export function CodeBlock({
                                 }
                                 onKeyDown={onCodeKeyDown}
                                 onScroll={syncCodeScroll}
-                                maxLength={20000}
+                                maxLength={maxLength}
+                                required={required}
                                 spellCheck={false}
                                 aria-label={t("source-code")}
                             />

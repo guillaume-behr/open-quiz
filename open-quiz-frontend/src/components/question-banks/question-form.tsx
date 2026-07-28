@@ -632,7 +632,37 @@ export function QuestionForm({
                                                 )}
                                             />
                                         ) : null}
-                                        {answerMode === "written" ? (
+                                        {answerMode === "written" &&
+                                        responseLanguage ? (
+                                            <div className="min-w-0 flex-1">
+                                                <CodeBlock
+                                                    code={choice.label}
+                                                    language={responseLanguage}
+                                                    editable
+                                                    onCodeChange={(value) =>
+                                                        updateChoice(index, {
+                                                            label: value,
+                                                        })
+                                                    }
+                                                    onCodeKeyDown={(event) =>
+                                                        indentCode(
+                                                            event,
+                                                            choice.label,
+                                                            (value) =>
+                                                                updateChoice(
+                                                                    index,
+                                                                    {
+                                                                        label: value,
+                                                                    }
+                                                                )
+                                                        )
+                                                    }
+                                                    editorClassName="min-h-48"
+                                                    maxLength={4000}
+                                                    required
+                                                />
+                                            </div>
+                                        ) : answerMode === "written" ? (
                                             <Textarea
                                                 value={choice.label}
                                                 onChange={(event) =>
