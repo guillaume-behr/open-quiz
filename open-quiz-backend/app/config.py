@@ -19,7 +19,6 @@ class Settings:
     access_token_minutes: int = 15
     refresh_token_days: int = 7
     login_attempts: int = 5
-    login_account_attempts: int = 20
     login_window_seconds: int = 900
     quiz_join_attempts: int = 20
     quiz_participant_attempts: int = 240
@@ -52,11 +51,6 @@ class Settings:
             raise ValueError("REFRESH_TOKEN_DAYS must be between 1 and 30")
         if not 3 <= self.login_attempts <= 20:
             raise ValueError("LOGIN_ATTEMPTS must be between 3 and 20")
-        if not self.login_attempts < self.login_account_attempts <= 100:
-            raise ValueError(
-                "LOGIN_ACCOUNT_ATTEMPTS must be greater than LOGIN_ATTEMPTS "
-                "and no more than 100"
-            )
         if self.login_window_seconds < 60:
             raise ValueError("LOGIN_WINDOW_SECONDS must be at least 60")
         if not 5 <= self.quiz_join_attempts <= 100:
@@ -106,7 +100,6 @@ def get_settings() -> Settings:
         access_token_minutes=int(os.getenv("ACCESS_TOKEN_MINUTES", "15")),
         refresh_token_days=int(os.getenv("REFRESH_TOKEN_DAYS", "7")),
         login_attempts=int(os.getenv("LOGIN_ATTEMPTS", "5")),
-        login_account_attempts=int(os.getenv("LOGIN_ACCOUNT_ATTEMPTS", "20")),
         login_window_seconds=int(os.getenv("LOGIN_WINDOW_SECONDS", "900")),
         quiz_join_attempts=int(os.getenv("QUIZ_JOIN_ATTEMPTS", "20")),
         quiz_participant_attempts=int(os.getenv("QUIZ_PARTICIPANT_ATTEMPTS", "240")),

@@ -67,9 +67,9 @@ interactive est désactivée et les requêtes HTTP sont redirigées vers HTTPS.
 
 La limitation d'authentification réserve chaque tentative atomiquement en base
 de données avant le calcul Argon2 ou la vérification TOTP et fonctionne donc
-avec plusieurs processus. `LOGIN_ATTEMPTS` limite une adresse IP tandis que
-`LOGIN_ACCOUNT_ATTEMPTS`, volontairement plus élevé, protège un compte contre
-une attaque distribuée. Configurez le reverse proxy comme seule entrée vers le
+avec plusieurs processus. `LOGIN_ATTEMPTS` limite les tentatives par nom
+d'utilisateur normalisé, sans dépendre de l'adresse IP transmise par le reverse
+proxy. Configurez tout de même le reverse proxy comme seule entrée vers le
 backend et n'acceptez les en-têtes `Forwarded` que de ce proxy. Le conteneur
 fourni respecte cette contrainte grâce au réseau Docker interne.
 

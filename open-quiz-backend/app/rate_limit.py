@@ -13,18 +13,15 @@ class LoginRateLimiter:
 
     def __init__(
         self,
-        ip_limit: int,
         account_limit: int,
         window_seconds: int,
     ) -> None:
-        self.ip_limit = ip_limit
         self.account_limit = account_limit
         self.window_seconds = window_seconds
 
     def reserve(
         self,
         session: Session,
-        ip_address: str,
         username: str,
     ) -> int:
         """Atomically reserve an authentication attempt.
@@ -34,66 +31,50 @@ class LoginRateLimiter:
         """
         now = int(time())
         cutoff = now - self.window_seconds
-        limits = (
-            (self._ip_key(ip_address), self.ip_limit),
-            (self._account_key(username), self.account_limit),
-        )
-        retry_after = 0
-        for limiter_key, limit in limits:
-            expired = LoginRateLimit.window_started_at <= cutoff
-            statement = (
-                insert(LoginRateLimit)
-                .values(
-                    limiter_key=limiter_key,
-                    window_started_at=now,
-                    attempts=1,
-                )
-                .on_conflict_do_update(
-                    index_elements=[LoginRateLimit.limiter_key],
-                    set_={
-                        "window_started_at": case(
-                            (expired, now),
-                            else_=LoginRateLimit.window_started_at,
-                        ),
-                        "attempts": case(
-                            (expired, 1),
-                            else_=LoginRateLimit.attempts + 1,
-                        ),
-                    },
-                )
-                .returning(
-                    LoginRateLimit.attempts,
-                    LoginRateLimit.window_started_at,
-                )
+        expired = LoginRateLimit.window_started_at <= cutoff
+        statement = (
+            insert(LoginRateLimit)
+            .values(
+                limiter_key=self._account_key(username),
+                window_started_at=now,
+                attempts=1,
             )
-            attempts, window_started_at = session.execute(statement).one()
-            if attempts > limit:
-                retry_after = max(
-                    retry_after,
-                    max(1, self.window_seconds - (now - window_started_at)),
-                )
+            .on_conflict_do_update(
+                index_elements=[LoginRateLimit.limiter_key],
+                set_={
+                    "window_started_at": case(
+                        (expired, now),
+                        else_=LoginRateLimit.window_started_at,
+                    ),
+                    "attempts": case(
+                        (expired, 1),
+                        else_=LoginRateLimit.attempts + 1,
+                    ),
+                },
+            )
+            .returning(
+                LoginRateLimit.attempts,
+                LoginRateLimit.window_started_at,
+            )
+        )
+        attempts, window_started_at = session.execute(statement).one()
         session.commit()
 
-        if retry_after:
-            self.release(session, ip_address, username)
-        return retry_after
+        if attempts <= self.account_limit:
+            return 0
+        self.release(session, username)
+        return max(1, self.window_seconds - (now - window_started_at))
 
     def release(
         self,
         session: Session,
-        ip_address: str,
         username: str,
     ) -> None:
         """Release the reservation for a successful authentication step."""
         session.execute(
             update(LoginRateLimit)
             .where(
-                LoginRateLimit.limiter_key.in_(
-                    (
-                        self._ip_key(ip_address),
-                        self._account_key(username),
-                    )
-                ),
+                LoginRateLimit.limiter_key == self._account_key(username),
                 LoginRateLimit.attempts > 0,
             )
             .values(attempts=LoginRateLimit.attempts - 1)
@@ -111,10 +92,6 @@ class LoginRateLimiter:
             )
         )
         session.commit()
-
-    @staticmethod
-    def _ip_key(ip_address: str) -> str:
-        return f"ip:{ip_address}"
 
     @staticmethod
     def _account_key(username: str) -> str:

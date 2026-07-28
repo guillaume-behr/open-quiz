@@ -1197,6 +1197,27 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             json={"is_active": True},
         )
         assert enabled.status_code == 200
+        for _ in range(4):
+            failed_login = client.post(
+                "/api/auth/login",
+                json={
+                    "username": "teacher.one",
+                    "password": "incorrect-password",
+                    "audience": "professor",
+                },
+            )
+            assert failed_login.status_code == 401
+        assert (
+            client.post(
+                "/api/auth/login",
+                json={
+                    "username": "teacher.one",
+                    "password": "incorrect-password",
+                    "audience": "professor",
+                },
+            ).status_code
+            == 429
+        )
         reset_access = client.post(
             f"/api/admin/users/{created.json()['id']}/credentials",
             headers=headers,
@@ -1422,6 +1443,11 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
         )
         assert limited.status_code == 429
         assert int(limited.headers["retry-after"]) > 0
+        other_account = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        assert other_account.status_code == 200
 
     with make_client(app_settings) as client:
         still_limited = client.post(

@@ -228,7 +228,7 @@ def login(
     validate_origin(request)
     ip_address = client_ip(request)
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.reserve(session, ip_address, payload.username)
+    retry_after = limiter.reserve(session, payload.username)
     if retry_after:
         audit_event("auth.login_rate_limited", ip=ip_address)
         raise HTTPException(
@@ -246,7 +246,7 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiant ou mot de passe incorrect",
         )
-    limiter.release(session, ip_address, payload.username)
+    limiter.release(session, payload.username)
     if payload.audience == "professor" and user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
@@ -363,7 +363,7 @@ def verify_two_factor(
         )
 
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.reserve(session, ip_address, user.username)
+    retry_after = limiter.reserve(session, user.username)
     if retry_after:
         audit_event("auth.two_factor_rate_limited", ip=ip_address, user_id=user.id)
         raise HTTPException(
@@ -429,7 +429,7 @@ def verify_two_factor(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Demande de double authentification invalide ou déjà utilisée",
         )
-    limiter.release(session, ip_address, user.username)
+    limiter.release(session, user.username)
     limiter.clear_account(session, user.username)
     audit_event("auth.two_factor_succeeded", ip=ip_address, user_id=user.id)
     return issue_session(user, request, response, session)

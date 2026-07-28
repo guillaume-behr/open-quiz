@@ -184,7 +184,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = session_factory
     app.state.login_rate_limiter = LoginRateLimiter(
         settings.login_attempts,
-        settings.login_account_attempts,
         settings.login_window_seconds,
     )
     app.state.quiz_join_rate_limiter = FixedWindowRateLimiter(

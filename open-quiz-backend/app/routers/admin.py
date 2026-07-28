@@ -139,6 +139,7 @@ def reset_user_credentials(
             delete(TwoFactorCredential).where(TwoFactorCredential.user_id == user.id)
         )
     session.commit()
+    request.app.state.login_rate_limiter.clear_account(session, user.username)
     session.refresh(user)
     audit_event(
         "admin.user_credentials_reset",
