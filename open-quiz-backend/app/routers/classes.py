@@ -146,7 +146,7 @@ def delete_class(
     if session.scalar(
         select(QuizSession.id).where(
             QuizSession.class_id == class_id,
-            QuizSession.status == "waiting",
+            QuizSession.status.in_(["waiting", "in_progress"]),
         )
     ) is not None:
         raise HTTPException(
@@ -258,7 +258,17 @@ def delete_student(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    owned_student(student_id, professor, session)
+    student = owned_student(student_id, professor, session)
+    if session.scalar(
+        select(QuizSession.id).where(
+            QuizSession.class_id == student.class_id,
+            QuizSession.status.in_(["waiting", "in_progress"]),
+        )
+    ) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This student belongs to an active quiz session",
+        )
     session.execute(
         update(QuizParticipant)
         .where(QuizParticipant.student_id == student_id)

@@ -201,7 +201,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         allow_credentials=True,
         allow_methods=["GET", "POST", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Quiz-Token"],
     )
 
     @app.middleware("http")

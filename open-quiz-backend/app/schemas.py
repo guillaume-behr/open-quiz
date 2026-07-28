@@ -271,6 +271,8 @@ class QuizCreate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     question_bank_ids: list[int] = Field(min_length=1, max_length=100)
     question_count: int = Field(ge=1, le=200)
+    duration_seconds: int = Field(default=1800, ge=60, le=28800)
+    allow_previous_questions: bool = False
     easy_percentage: int = Field(ge=0, le=100)
     medium_percentage: int = Field(ge=0, le=100)
     hard_percentage: int = Field(ge=0, le=100)
@@ -308,6 +310,8 @@ class QuizResponse(BaseModel):
     id: int
     title: str
     question_count: int
+    duration_seconds: int
+    allow_previous_questions: bool
     easy_percentage: int
     medium_percentage: int
     hard_percentage: int
@@ -323,6 +327,11 @@ class QuizParticipantResponse(BaseModel):
     id: int
     student_identifier: str
     student_display_name: str | None
+    answered_count: int = 0
+    score: float = 0
+    violation_count: int = 0
+    last_violation_type: str | None = None
+    last_violation_at: datetime | None = None
     joined_at: datetime
 
 
@@ -333,18 +342,79 @@ class QuizSessionResponse(BaseModel):
     class_id: int | None
     class_name: str
     join_code: str
-    status: Literal["waiting", "started"]
+    status: Literal["waiting", "in_progress", "finished"]
     participant_count: int
     participants: list[QuizParticipantResponse]
+    current_question_number: int | None
+    total_questions: int
+    current_submission_count: int
     created_at: datetime
     started_at: datetime | None
+    ends_at: datetime | None
 
 
 class StudentQuizSessionResponse(BaseModel):
     quiz_title: str
     class_name: str
     join_code: str
-    status: Literal["waiting", "started"]
+    status: Literal["waiting", "in_progress", "finished"]
+    ends_at: datetime | None
+
+
+class StudentQuizChoiceResponse(BaseModel):
+    id: int
+    label: str
+    position: int
+    has_image: bool
+    code_language: str | None
+    code_content: str | None
+
+
+class StudentQuizQuestionResponse(BaseModel):
+    id: int
+    prompt: str
+    difficulty: Literal["easy", "medium", "hard"]
+    answer_mode: Literal["single", "multiple", "written"]
+    answer_mode_disclosed: bool
+    has_image: bool
+    code_language: str | None
+    code_content: str | None
+    choices: list[StudentQuizChoiceResponse]
+
+
+class StudentQuizStateResponse(StudentQuizSessionResponse):
+    question_number: int | None
+    total_questions: int
+    has_answered: bool
+    answered_count: int
+    allow_previous_questions: bool
+    selected_choice_ids: list[int] | None = None
+    written_answer: str | None = None
+    question: StudentQuizQuestionResponse | None
+
+
+class StudentQuizJoinResponse(StudentQuizStateResponse):
+    participant_token: str
+
+
+class StudentQuizAnswer(BaseModel):
+    selected_choice_ids: list[int] | None = Field(
+        default=None, max_length=12
+    )
+    written_answer: str | None = Field(default=None, max_length=4000)
+
+
+class StudentQuizNavigation(BaseModel):
+    question_number: int = Field(ge=1)
+
+
+class StudentQuizViolation(BaseModel):
+    event_type: Literal[
+        "fullscreen_exit",
+        "pointer_exit",
+        "window_blur",
+        "page_hidden",
+    ]
 
 
 class QuizJoin(BaseModel):

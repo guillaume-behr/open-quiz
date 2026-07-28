@@ -680,6 +680,15 @@ async def update_question(
 ) -> QuestionResponse:
     """Update a professor's question and replace its answer configuration."""
     question = owned_question(question_id, professor, session)
+    if session.scalar(
+        select(QuizSessionQuestion.session_id).where(
+            QuizSessionQuestion.question_id == question_id
+        )
+    ) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This question is used by a launched quiz",
+        )
     try:
         question_payload = QuestionUpdate.model_validate(json.loads(payload))
     except (json.JSONDecodeError, ValidationError):

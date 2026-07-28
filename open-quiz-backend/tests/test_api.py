@@ -532,6 +532,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     imported_example.json()["question_bank"]["id"]
                 ],
                 "question_count": 3,
+                "allow_previous_questions": True,
                 "easy_percentage": 34,
                 "medium_percentage": 33,
                 "hard_percentage": 33,
@@ -541,6 +542,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         quiz = created_quiz.json()
         assert quiz["title"] == "Révisions générales"
         assert quiz["question_count"] == 3
+        assert quiz["duration_seconds"] == 1800
+        assert quiz["allow_previous_questions"] is True
         assert len(quiz["question_banks"]) == 1
         assert client.get("/api/quizzes", headers=teacher_headers).json()[0][
             "id"
@@ -609,6 +612,14 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert joined_again.status_code == 201
         assert "participants" not in joined_again.json()
+        participant_token = joined_again.json()["participant_token"]
+        student_headers = {"X-Quiz-Token": participant_token}
+        assert (
+            client.get(
+                f"/api/quizzes/student/sessions/{quiz_session['join_code']}"
+            ).status_code
+            == 401
+        )
 
         waiting_room = client.get(
             f"/api/quizzes/sessions/{quiz_session['id']}",
@@ -620,20 +631,34 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             waiting_room.json()["participants"][0]["student_display_name"]
             == "Martin Giraud"
         )
-        assert (
-            client.get(
-                f"/api/quizzes/public/sessions/{quiz_session['join_code']}"
-            ).json()["status"]
-            == "waiting"
+        student_state_url = (
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}"
         )
+        assert client.get(
+            student_state_url, headers=student_headers
+        ).json()["status"] == "waiting"
 
         started = client.post(
             f"/api/quizzes/sessions/{quiz_session['id']}/start",
             headers=teacher_headers,
         )
         assert started.status_code == 200
-        assert started.json()["status"] == "started"
+        assert started.json()["status"] == "in_progress"
         assert started.json()["started_at"] is not None
+        assert started.json()["ends_at"] is not None
+        violation = client.post(
+            f"{student_state_url}/violation",
+            headers=student_headers,
+            json={"event_type": "fullscreen_exit"},
+        )
+        assert violation.status_code == 204
+        monitored = client.get(
+            f"/api/quizzes/sessions/{quiz_session['id']}",
+            headers=teacher_headers,
+        ).json()["participants"][0]
+        assert monitored["violation_count"] == 1
+        assert monitored["last_violation_type"] == "fullscreen_exit"
+        assert monitored["last_violation_at"] is not None
         assert (
             client.post(
                 "/api/quizzes/join",
@@ -658,6 +683,106 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             ).status_code
             == 409
         )
+
+        expected_by_prompt = {
+            item["prompt"]: item for item in example_batch["questions"]
+        }
+        for question_number in range(1, 4):
+            student_state = client.get(
+                student_state_url, headers=student_headers
+            )
+            assert student_state.status_code == 200
+            state_payload = student_state.json()
+            assert state_payload["question_number"] == question_number
+            assert state_payload["question"] is not None
+
+            def collect_keys(value):
+                if isinstance(value, dict):
+                    return set(value) | {
+                        key
+                        for child in value.values()
+                        for key in collect_keys(child)
+                    }
+                if isinstance(value, list):
+                    return {
+                        key for child in value for key in collect_keys(child)
+                    }
+                return set()
+
+            assert collect_keys(state_payload).isdisjoint(
+                {"is_correct", "points", "correction_mode"}
+            )
+            safe_question = state_payload["question"]
+            expected = expected_by_prompt[safe_question["prompt"]]
+            if safe_question["answer_mode"] == "written":
+                answer_payload = {
+                    "written_answer": next(
+                        choice["label"]
+                        for choice in expected["choices"]
+                        if choice["is_correct"]
+                    )
+                }
+            else:
+                correct_labels = {
+                    choice["label"]
+                    for choice in expected["choices"]
+                    if choice["is_correct"]
+                }
+                answer_payload = {
+                    "selected_choice_ids": [
+                        choice["id"]
+                        for choice in safe_question["choices"]
+                        if choice["label"] in correct_labels
+                    ]
+                }
+            submitted = client.post(
+                f"{student_state_url}/answer",
+                headers=student_headers,
+                json=answer_payload,
+            )
+            assert submitted.status_code == 200
+            if question_number < 3:
+                assert submitted.json()["question_number"] == question_number + 1
+                assert submitted.json()["question"] is not None
+            else:
+                assert submitted.json()["status"] == "finished"
+                assert submitted.json()["question"] is None
+            teacher_state = client.get(
+                f"/api/quizzes/sessions/{quiz_session['id']}",
+                headers=teacher_headers,
+            ).json()
+            assert teacher_state["participants"][0]["answered_count"] == question_number
+            if question_number < 3:
+                assert teacher_state["participants"][0]["score"] == 0
+            if question_number == 2:
+                previous = client.post(
+                    f"{student_state_url}/navigate",
+                    headers=student_headers,
+                    json={"question_number": 2},
+                )
+                assert previous.status_code == 200
+                assert previous.json()["question_number"] == 2
+                assert previous.json()["has_answered"] is True
+                assert (
+                    previous.json()["selected_choice_ids"] is not None
+                    or previous.json()["written_answer"] is not None
+                )
+                assert collect_keys(previous.json()).isdisjoint(
+                    {"is_correct", "points", "correction_mode", "score"}
+                )
+                resubmitted = client.post(
+                    f"{student_state_url}/answer",
+                    headers=student_headers,
+                    json=answer_payload,
+                )
+                assert resubmitted.status_code == 200
+                assert resubmitted.json()["question_number"] == 3
+
+        assert teacher_state["status"] == "finished"
+        assert teacher_state["participants"][0]["score"] > 0
+        assert client.get(
+            student_state_url, headers=student_headers
+        ).json()["status"] == "finished"
         assert (
             client.delete(
                 f"/api/classes/students/{student['id']}",

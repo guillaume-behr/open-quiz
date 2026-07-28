@@ -152,6 +152,10 @@ class Quiz(Base):
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(160))
     question_count: Mapped[int] = mapped_column(Integer)
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=1800)
+    allow_previous_questions: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )
     easy_percentage: Mapped[int] = mapped_column(Integer)
     medium_percentage: Mapped[int] = mapped_column(Integer)
     hard_percentage: Mapped[int] = mapped_column(Integer)
@@ -230,7 +234,48 @@ class QuizParticipant(Base):
     student_display_name: Mapped[str | None] = mapped_column(
         String(120), nullable=True
     )
+    access_token_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    current_position: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    violation_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_violation_type: Mapped[str | None] = mapped_column(
+        String(40), nullable=True
+    )
+    last_violation_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
+class QuizAnswer(Base):
+    __tablename__ = "quiz_answers"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "participant_id",
+            "question_id",
+            name="uq_quiz_answer_participant_question",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_sessions.id"), index=True
+    )
+    participant_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_participants.id"), index=True
+    )
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("questions.id"), index=True
+    )
+    answer_data: Mapped[str] = mapped_column(Text)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
 
