@@ -1,4 +1,4 @@
-import { Moon, Sun } from "lucide-react"
+import { Check, Moon, Sun } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -11,7 +11,7 @@ import { useTheme } from "@/components/theme/theme-context"
 import { useTranslation } from "react-i18next"
 
 export function ThemeSelector({ className }: React.ComponentProps<"div">) {
-    const { setTheme } = useTheme()
+    const { theme, setTheme } = useTheme()
 
     const { t } = useTranslation()
 
@@ -28,12 +28,15 @@ export function ThemeSelector({ className }: React.ComponentProps<"div">) {
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => setTheme("light")}>
                         {t("light")}
+                        {theme === "light" && <Check className="ms-auto" />}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setTheme("dark")}>
                         {t("dark")}
+                        {theme === "dark" && <Check className="ms-auto" />}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setTheme("system")}>
                         {t("system")}
+                        {theme === "system" && <Check className="ms-auto" />}
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>

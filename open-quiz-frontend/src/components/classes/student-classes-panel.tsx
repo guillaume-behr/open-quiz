@@ -1,16 +1,15 @@
 import {
-    ApiError,
     createStudent,
     createStudentClass,
     deleteStudent,
     deleteStudentClass,
     getStudentClasses,
-    getQuestionBanks,
     updateStudent,
     updateStudentClass,
-    type Student,
-    type StudentClass,
-} from "@/api/api"
+} from "@/api/classes"
+import { ApiError } from "@/api/client"
+import { getQuestionBanks } from "@/api/question-banks"
+import type { Student, StudentClass } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -53,8 +52,9 @@ export function StudentClassesPanel({
     const [isCreatingClass, setIsCreatingClass] = useState(false)
     const [classError, setClassError] = useState<string | null>(null)
     const [editingClass, setEditingClass] = useState<StudentClass | null>(null)
-    const [classForStudent, setClassForStudent] =
-        useState<StudentClass | null>(null)
+    const [classForStudent, setClassForStudent] = useState<StudentClass | null>(
+        null
+    )
     const [studentFirstName, setStudentFirstName] = useState("")
     const [studentLastName, setStudentLastName] = useState("")
     const [gradeLevels, setGradeLevels] = useState<string[]>([])
@@ -64,9 +64,7 @@ export function StudentClassesPanel({
     const [classToDelete, setClassToDelete] = useState<StudentClass | null>(
         null
     )
-    const [studentToDelete, setStudentToDelete] = useState<Student | null>(
-        null
-    )
+    const [studentToDelete, setStudentToDelete] = useState<Student | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
     const [deleteError, setDeleteError] = useState<string | null>(null)
     const [managedClassId, setManagedClassId] = useState<number | null>(null)
@@ -81,8 +79,7 @@ export function StudentClassesPanel({
                 studentClass.name
                     .toLocaleLowerCase("fr")
                     .includes(classFilter.toLocaleLowerCase("fr"))) &&
-            (!gradeLevelFilter ||
-                studentClass.grade_level === gradeLevelFilter)
+            (!gradeLevelFilter || studentClass.grade_level === gradeLevelFilter)
     )
 
     useEffect(() => {
@@ -96,13 +93,10 @@ export function StudentClassesPanel({
                         new Set([
                             ...banks.map((bank) => bank.grade_level),
                             ...loadedClasses.map(
-                                (studentClass) =>
-                                    studentClass.grade_level
+                                (studentClass) => studentClass.grade_level
                             ),
                         ])
-                    ).sort((first, second) =>
-                        first.localeCompare(second, "fr")
-                    )
+                    ).sort((first, second) => first.localeCompare(second, "fr"))
                 )
             })
             .catch(() => {
@@ -127,10 +121,7 @@ export function StudentClassesPanel({
                       className.trim(),
                       gradeLevel.trim()
                   )
-                : await createStudentClass(
-                      className.trim(),
-                      gradeLevel.trim()
-                  )
+                : await createStudentClass(className.trim(), gradeLevel.trim())
             setClasses((current) =>
                 (editingClass
                     ? current.map((studentClass) =>
@@ -177,14 +168,11 @@ export function StudentClassesPanel({
                     studentClass.id === classForStudent.id
                         ? {
                               ...studentClass,
-                              students: (
-                                  editingStudent
-                                      ? studentClass.students.map((item) =>
-                                            item.id === student.id
-                                                ? student
-                                                : item
-                                        )
-                                      : [...studentClass.students, student]
+                              students: (editingStudent
+                                  ? studentClass.students.map((item) =>
+                                        item.id === student.id ? student : item
+                                    )
+                                  : [...studentClass.students, student]
                               ).sort((first, second) =>
                                   first.display_name.localeCompare(
                                       second.display_name,
@@ -221,8 +209,7 @@ export function StudentClassesPanel({
                 await deleteStudentClass(classToDelete.id)
                 setClasses((current) =>
                     current.filter(
-                        (studentClass) =>
-                            studentClass.id !== classToDelete.id
+                        (studentClass) => studentClass.id !== classToDelete.id
                     )
                 )
                 setClassToDelete(null)
@@ -374,50 +361,52 @@ export function StudentClassesPanel({
                             {t("no-class-filtered")}
                         </p>
                     ) : (
-                    <div className="grid gap-4 lg:grid-cols-2">
-                    {filteredClasses.map((studentClass) => (
-                        <article
-                            key={studentClass.id}
-                            className="flex h-full flex-col rounded-xl border bg-background p-4"
-                        >
-                            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                {studentClass.grade_level}
-                            </p>
-                            <h3 className="mt-1 text-lg font-semibold">
-                                {studentClass.name}
-                            </h3>
-                            <div className="mt-4 grid grid-cols-2 gap-3">
-                            <div className="rounded-lg bg-primary/5 p-3">
-                                <p className="text-2xl font-bold text-primary">
-                                    {studentClass.student_count}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                    {t("students")}
-                                </p>
-                            </div>
-                            <div className="rounded-lg bg-primary/5 p-3">
-                                <p className="text-2xl font-bold text-primary">
-                                    {studentClass.completed_quiz_count}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                    {t("completed-quizzes")}
-                                </p>
-                            </div>
-                            </div>
-                            <Button
-                                type="button"
-                                className="mt-4 w-full"
-                                variant="outline"
-                                onClick={() =>
-                                    setManagedClassId(studentClass.id)
-                                }
-                            >
-                                <Eye />
-                                {t("view-class")}
-                            </Button>
-                        </article>
-                    ))}
-                    </div>
+                        <div className="grid gap-4 lg:grid-cols-2">
+                            {filteredClasses.map((studentClass) => (
+                                <article
+                                    key={studentClass.id}
+                                    className="flex h-full flex-col rounded-xl border bg-background p-4"
+                                >
+                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                        {studentClass.grade_level}
+                                    </p>
+                                    <h3 className="mt-1 text-lg font-semibold">
+                                        {studentClass.name}
+                                    </h3>
+                                    <div className="mt-4 grid grid-cols-2 gap-3">
+                                        <div className="rounded-lg bg-primary/5 p-3">
+                                            <p className="text-2xl font-bold text-primary">
+                                                {studentClass.student_count}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {t("students")}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-lg bg-primary/5 p-3">
+                                            <p className="text-2xl font-bold text-primary">
+                                                {
+                                                    studentClass.completed_quiz_count
+                                                }
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {t("completed-quizzes")}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        className="mt-4 w-full"
+                                        variant="outline"
+                                        onClick={() =>
+                                            setManagedClassId(studentClass.id)
+                                        }
+                                    >
+                                        <Eye />
+                                        {t("view-class")}
+                                    </Button>
+                                </article>
+                            ))}
+                        </div>
                     )}
                 </div>
             )}
@@ -430,10 +419,9 @@ export function StudentClassesPanel({
                 title={managedClass?.name ?? ""}
                 description={
                     managedClass
-                        ? `${managedClass.grade_level} — ${t(
-                              "student-count",
-                              { count: managedClass.student_count }
-                          )}`
+                        ? `${managedClass.grade_level} — ${t("student-count", {
+                              count: managedClass.student_count,
+                          })}`
                         : undefined
                 }
                 className="max-w-2xl"
@@ -526,9 +514,7 @@ export function StudentClassesPanel({
                                                 type="button"
                                                 size="icon"
                                                 variant="ghost"
-                                                aria-label={t(
-                                                    "delete-student"
-                                                )}
+                                                aria-label={t("delete-student")}
                                                 onClick={() =>
                                                     setStudentToDelete(student)
                                                 }
@@ -632,9 +618,7 @@ export function StudentClassesPanel({
                                     <Plus />
                                 )}
                                 {t(
-                                    editingClass
-                                        ? "save-class"
-                                        : "create-class"
+                                    editingClass ? "save-class" : "create-class"
                                 )}
                             </Button>
                         </div>
@@ -652,9 +636,7 @@ export function StudentClassesPanel({
                         setStudentLastName("")
                     }
                 }}
-                title={t(
-                    editingStudent ? "edit-student" : "add-student"
-                )}
+                title={t(editingStudent ? "edit-student" : "add-student")}
                 description={classForStudent?.name}
                 className="max-w-lg"
             >
@@ -735,13 +717,9 @@ export function StudentClassesPanel({
                         setDeleteError(null)
                     }
                 }}
-                title={t(
-                    classToDelete ? "delete-class" : "delete-student"
-                )}
+                title={t(classToDelete ? "delete-class" : "delete-student")}
                 description={t(
-                    classToDelete
-                        ? "delete-class-help"
-                        : "delete-student-help",
+                    classToDelete ? "delete-class-help" : "delete-student-help",
                     {
                         name:
                             classToDelete?.name ??

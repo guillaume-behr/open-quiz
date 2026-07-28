@@ -1,5 +1,6 @@
-import { getChoiceImage } from "@/api/api"
-import { useEffect, useState } from "react"
+import { getChoiceImage } from "@/api/question-banks"
+import { useObjectUrl } from "@/hooks/use-object-url"
+import { useCallback } from "react"
 
 type ChoiceImageProps = {
     choiceId: number
@@ -7,27 +8,8 @@ type ChoiceImageProps = {
 }
 
 export function ChoiceImage({ choiceId, alt }: ChoiceImageProps) {
-    const [imageUrl, setImageUrl] = useState<string | null>(null)
-
-    useEffect(() => {
-        let isActive = true
-        let objectUrl: string | null = null
-
-        getChoiceImage(choiceId)
-            .then((blob) => {
-                if (!isActive) return
-                objectUrl = URL.createObjectURL(blob)
-                setImageUrl(objectUrl)
-            })
-            .catch(() => {
-                if (isActive) setImageUrl(null)
-            })
-
-        return () => {
-            isActive = false
-            if (objectUrl) URL.revokeObjectURL(objectUrl)
-        }
-    }, [choiceId])
+    const loadImage = useCallback(() => getChoiceImage(choiceId), [choiceId])
+    const imageUrl = useObjectUrl(loadImage)
 
     if (!imageUrl) return null
 

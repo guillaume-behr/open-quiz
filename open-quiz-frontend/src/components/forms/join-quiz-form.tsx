@@ -1,13 +1,13 @@
+import { ApiError } from "@/api/client"
 import {
-    ApiError,
     getStudentQuizImage,
     getStudentQuizSession,
     joinQuiz,
     navigateStudentQuiz,
     reportStudentQuizViolation,
     submitStudentQuizAnswer,
-    type StudentQuizSession,
-} from "@/api/api"
+} from "@/api/quizzes"
+import type { StudentQuizSession } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import {
     Field,
@@ -17,8 +17,10 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
+import { useObjectUrl } from "@/hooks/use-object-url"
+import { cn } from "@/lib/utils"
 import { LoaderCircle } from "lucide-react"
-import { type FormEvent, useEffect, useRef, useState } from "react"
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 const QUIZ_SESSION_STORAGE_KEY = "open-quiz-student-session"
@@ -63,26 +65,11 @@ function ProtectedQuizImage({
     token: string
     alt: string
 }) {
-    const [source, setSource] = useState<string | null>(null)
-
-    useEffect(() => {
-        let active = true
-        let objectUrl: string | null = null
-        void getStudentQuizImage(path, id, joinCode, token)
-            .then((blob) => {
-                objectUrl = URL.createObjectURL(blob)
-                if (active) {
-                    setSource(objectUrl)
-                } else {
-                    URL.revokeObjectURL(objectUrl)
-                }
-            })
-            .catch(() => undefined)
-        return () => {
-            active = false
-            if (objectUrl) URL.revokeObjectURL(objectUrl)
-        }
-    }, [id, joinCode, path, token])
+    const loadImage = useCallback(
+        () => getStudentQuizImage(path, id, joinCode, token),
+        [id, joinCode, path, token]
+    )
+    const source = useObjectUrl(loadImage)
 
     return source ? (
         <img
@@ -124,9 +111,7 @@ export function JoinQuizForm() {
             .then((restoredState) => {
                 if (!active) return
                 setSession(restoredState)
-                setSelectedChoiceIds(
-                    restoredState.selected_choice_ids ?? []
-                )
+                setSelectedChoiceIds(restoredState.selected_choice_ids ?? [])
                 setWrittenAnswer(restoredState.written_answer ?? "")
             })
             .catch((restoreError: unknown) => {
@@ -218,10 +203,6 @@ export function JoinQuizForm() {
 
     async function handleJoin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
-        void document.documentElement
-            .requestFullscreen()
-            .then(() => setIsFullscreen(true))
-            .catch(() => setIsFullscreen(false))
         setError(null)
         setIsBusy(true)
         try {
@@ -247,6 +228,16 @@ export function JoinQuizForm() {
         } finally {
             setIsBusy(false)
         }
+    }
+
+    function joinAnotherQuiz() {
+        sessionStorage.removeItem(QUIZ_SESSION_STORAGE_KEY)
+        setSession(null)
+        setParticipantToken(null)
+        setJoinCode("")
+        setSelectedChoiceIds([])
+        setWrittenAnswer("")
+        setError(null)
     }
 
     async function goToPreviousQuestion() {
@@ -331,9 +322,9 @@ export function JoinQuizForm() {
         return (
             <div className="flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 py-8 shadow-lg sm:px-10">
                 <div className="text-center">
-                    <p className="text-3xl font-extrabold">
+                    <h1 className="text-3xl font-extrabold">
                         {session.quiz_title}
-                    </p>
+                    </h1>
                     <p className="text-muted-foreground">
                         {session.class_name}
                     </p>
@@ -352,10 +343,17 @@ export function JoinQuizForm() {
                     </div>
                 )}
                 {session.status === "finished" && (
-                    <div className="rounded-xl bg-primary/10 p-8 text-center">
+                    <div className="rounded-xl bg-primary/10 p-6 text-center sm:p-8">
                         <p className="text-2xl font-bold">
                             {t("student-quiz-finished")}
                         </p>
+                        <Button
+                            className="mt-5"
+                            variant="outline"
+                            onClick={joinAnotherQuiz}
+                        >
+                            {t("join-another-quiz")}
+                        </Button>
                     </div>
                 )}
                 {session.status === "in_progress" &&
@@ -408,7 +406,10 @@ export function JoinQuizForm() {
                             />
                         )}
                         {question.code_content && (
-                            <pre className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-sm text-slate-50">
+                            <pre
+                                className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-left text-sm text-slate-50"
+                                dir="ltr"
+                            >
                                 <code>{question.code_content}</code>
                             </pre>
                         )}
@@ -416,6 +417,7 @@ export function JoinQuizForm() {
                             <textarea
                                 className="min-h-32 w-full rounded-md border bg-background p-3"
                                 value={writtenAnswer}
+                                aria-label={t("written-answer")}
                                 onChange={(event) =>
                                     setWrittenAnswer(event.target.value)
                                 }
@@ -430,9 +432,14 @@ export function JoinQuizForm() {
                                     return (
                                         <label
                                             key={choice.id}
-                                            className="flex cursor-pointer gap-3 rounded-xl border bg-background p-4"
+                                            className={cn(
+                                                "flex cursor-pointer gap-3 rounded-xl border bg-background p-4 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50 hover:bg-primary/5",
+                                                checked &&
+                                                    "border-primary bg-primary/10"
+                                            )}
                                         >
                                             <input
+                                                className="mt-1 accent-primary"
                                                 type={
                                                     question.answer_mode ===
                                                     "single"
@@ -460,7 +467,7 @@ export function JoinQuizForm() {
                                                     )
                                                 }
                                             />
-                                            <span>
+                                            <span className="min-w-0 flex-1">
                                                 {choice.label}
                                                 {choice.has_image &&
                                                     participantToken && (
@@ -477,7 +484,10 @@ export function JoinQuizForm() {
                                                         />
                                                     )}
                                                 {choice.code_content && (
-                                                    <pre className="mt-2 overflow-x-auto rounded bg-slate-950 p-3 text-sm text-slate-50">
+                                                    <pre
+                                                        className="mt-2 overflow-x-auto rounded bg-slate-950 p-3 text-left text-sm text-slate-50"
+                                                        dir="ltr"
+                                                    >
                                                         <code>
                                                             {
                                                                 choice.code_content
@@ -492,7 +502,7 @@ export function JoinQuizForm() {
                             </div>
                         )}
                         {error && <FieldError>{error}</FieldError>}
-                        <div className="flex gap-3">
+                        <div className="flex flex-col gap-3 sm:flex-row">
                             {session.allow_previous_questions &&
                                 (session.question_number ?? 1) > 1 && (
                                     <Button
@@ -533,9 +543,9 @@ export function JoinQuizForm() {
             onSubmit={handleJoin}
         >
             <div className="flex flex-col gap-2">
-                <p className="text-center text-4xl font-extrabold">
+                <h1 className="text-center text-4xl font-extrabold">
                     {t("join-quiz-title")}
-                </p>
+                </h1>
                 <p className="text-center font-light">
                     {t("join-quiz-instructions")}
                 </p>
@@ -552,24 +562,30 @@ export function JoinQuizForm() {
                         autoComplete="username"
                         spellCheck={false}
                         value={studentIdentifier}
-                        onChange={(event) =>
+                        onChange={(event) => {
                             setStudentIdentifier(event.target.value)
-                        }
+                            setError(null)
+                        }}
+                        aria-invalid={Boolean(error)}
                         required
                     />
                 </Field>
                 <Field>
                     <FieldLabel htmlFor="quiz-id">{t("quiz-id")}</FieldLabel>
                     <Input
-                        className="py-6"
+                        className="py-6 font-mono tracking-[0.2em] uppercase"
                         id="quiz-id"
                         name="quiz-id"
                         autoComplete="off"
                         spellCheck={false}
                         value={joinCode}
-                        onChange={(event) =>
+                        minLength={4}
+                        maxLength={8}
+                        onChange={(event) => {
                             setJoinCode(event.target.value.toUpperCase())
-                        }
+                            setError(null)
+                        }}
+                        aria-invalid={Boolean(error)}
                         required
                     />
                 </Field>

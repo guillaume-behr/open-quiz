@@ -1,11 +1,10 @@
-import { useTranslation } from "react-i18next"
-
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
-
 import { Button } from "@/components/ui/button"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { errorMessage } from "@/lib/errors"
 import { LoaderCircle } from "lucide-react"
 import { useState, type SyntheticEvent } from "react"
+import { useTranslation } from "react-i18next"
 
 type DashboardLoginProps = {
     onLogin: (username: string, password: string) => Promise<void>
@@ -33,9 +32,7 @@ export function DashboardLogin({
                 String(form.get("password"))
             )
         } catch (caught) {
-            setError(
-                caught instanceof Error ? caught.message : t("login-error")
-            )
+            setError(errorMessage(caught, t("login-error")))
         } finally {
             setIsSubmitting(false)
         }
@@ -47,9 +44,9 @@ export function DashboardLogin({
             className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-15"
         >
             <div className="flex flex-col gap-2">
-                <p className="text-center text-4xl font-extrabold">
+                <h1 className="text-center text-4xl font-extrabold">
                     {title ?? t("login")}
-                </p>
+                </h1>
                 <p className="text-center font-light">
                     {instructions ?? t("login-instructions")}
                 </p>
@@ -65,6 +62,8 @@ export function DashboardLogin({
                         autoComplete="username"
                         spellCheck={false}
                         required
+                        aria-invalid={Boolean(error)}
+                        onChange={() => setError("")}
                     />
                 </Field>
                 <Field>
@@ -79,6 +78,8 @@ export function DashboardLogin({
                         spellCheck={false}
                         type="password"
                         required
+                        aria-invalid={Boolean(error)}
+                        onChange={() => setError("")}
                     />
                 </Field>
 

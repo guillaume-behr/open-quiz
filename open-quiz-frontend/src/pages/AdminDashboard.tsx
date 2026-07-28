@@ -1,24 +1,26 @@
 import {
     createUser,
     getUsers,
-    login,
-    logout,
-    restoreSession,
-    verifyTwoFactor,
-    type NewUser,
-    type TwoFactorChallenge,
-    type User,
-} from "@/api/api"
+    resetUserCredentials,
+    updateUserStatus,
+} from "@/api/admin"
+import { login, logout, restoreSession, verifyTwoFactor } from "@/api/auth"
+import type { NewUser, TwoFactorChallenge, User } from "@/api/types"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { Button } from "@/components/ui/button"
+import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { errorMessage } from "@/lib/errors"
 import {
     LoaderCircle,
+    KeyRound,
     LogOut,
     ShieldCheck,
     UserPlus,
+    UserCheck,
+    UserX,
     Users,
 } from "lucide-react"
 import { useEffect, useState, type SyntheticEvent } from "react"
@@ -40,6 +42,8 @@ export function AdminDashboard() {
     const [error, setError] = useState("")
     const [success, setSuccess] = useState("")
     const [isCreating, setIsCreating] = useState(false)
+    const [recoveryUser, setRecoveryUser] = useState<User | null>(null)
+    const [isUpdatingUser, setIsUpdatingUser] = useState(false)
 
     useEffect(() => {
         restoreSession()
@@ -86,13 +90,61 @@ export function AdminDashboard() {
             setSuccess(t("user-created", { username: created.username }))
             formElement.reset()
         } catch (caught) {
-            setError(
-                caught instanceof Error
-                    ? caught.message
-                    : t("create-user-error")
-            )
+            setError(errorMessage(caught, t("create-user-error")))
         } finally {
             setIsCreating(false)
+        }
+    }
+
+    function replaceUser(updated: User) {
+        setUsers((existing) =>
+            existing.map((user) => (user.id === updated.id ? updated : user))
+        )
+    }
+
+    async function handleStatusChange(user: User) {
+        setError("")
+        setSuccess("")
+        setIsUpdatingUser(true)
+        try {
+            const updated = await updateUserStatus(user.id, !user.is_active)
+            replaceUser(updated)
+            setSuccess(
+                t(updated.is_active ? "user-enabled" : "user-disabled", {
+                    username: updated.username,
+                })
+            )
+        } catch (caught) {
+            setError(errorMessage(caught, t("user-update-error")))
+        } finally {
+            setIsUpdatingUser(false)
+        }
+    }
+
+    async function handleCredentialReset(
+        event: SyntheticEvent<HTMLFormElement>
+    ) {
+        event.preventDefault()
+        if (!recoveryUser) return
+        const form = new FormData(event.currentTarget)
+        setError("")
+        setSuccess("")
+        setIsUpdatingUser(true)
+        try {
+            const updated = await resetUserCredentials(
+                recoveryUser.id,
+                String(form.get("password")),
+                true
+            )
+            replaceUser(updated)
+            setRecoveryUser(null)
+            setSuccess(
+                t("user-credentials-reset", { username: updated.username })
+            )
+        } catch (caught) {
+            setError(errorMessage(caught, t("user-update-error")))
+        } finally {
+            setIsUpdatingUser(false)
         }
     }
 
@@ -258,7 +310,7 @@ export function AdminDashboard() {
                         {users.map((user) => (
                             <div
                                 key={user.id}
-                                className="flex items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
+                                className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
                             >
                                 <div className="min-w-0">
                                     <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -276,14 +328,110 @@ export function AdminDashboard() {
                                         @{user.username}
                                     </p>
                                 </div>
-                                <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 dark:bg-green-950 dark:text-green-300">
-                                    {t("active")}
-                                </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                        className={
+                                            user.is_active
+                                                ? "rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 dark:bg-green-950 dark:text-green-300"
+                                                : "rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                                        }
+                                    >
+                                        {t(
+                                            user.is_active
+                                                ? "active"
+                                                : "inactive"
+                                        )}
+                                    </span>
+                                    {!user.is_admin && (
+                                        <>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() =>
+                                                    setRecoveryUser(user)
+                                                }
+                                                disabled={isUpdatingUser}
+                                            >
+                                                <KeyRound />
+                                                {t("account-recovery")}
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() =>
+                                                    void handleStatusChange(
+                                                        user
+                                                    )
+                                                }
+                                                disabled={isUpdatingUser}
+                                            >
+                                                {user.is_active ? (
+                                                    <UserX />
+                                                ) : (
+                                                    <UserCheck />
+                                                )}
+                                                {t(
+                                                    user.is_active
+                                                        ? "disable"
+                                                        : "enable"
+                                                )}
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
                 </section>
             </div>
+            <Dialog
+                open={recoveryUser !== null}
+                onOpenChange={(open) => {
+                    if (!open && !isUpdatingUser) setRecoveryUser(null)
+                }}
+                title={t("account-recovery")}
+                description={t("account-recovery-help", {
+                    username: recoveryUser?.username,
+                })}
+            >
+                <form className="space-y-4" onSubmit={handleCredentialReset}>
+                    <Field>
+                        <FieldLabel htmlFor="recovery-password">
+                            {t("new-password")}
+                        </FieldLabel>
+                        <Input
+                            id="recovery-password"
+                            name="password"
+                            type="password"
+                            required
+                            minLength={12}
+                            maxLength={256}
+                            autoComplete="new-password"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            {t("account-recovery-security-help")}
+                        </p>
+                    </Field>
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setRecoveryUser(null)}
+                            disabled={isUpdatingUser}
+                        >
+                            {t("cancel")}
+                        </Button>
+                        <Button type="submit" disabled={isUpdatingUser}>
+                            {isUpdatingUser ? (
+                                <LoaderCircle className="animate-spin" />
+                            ) : (
+                                <KeyRound />
+                            )}
+                            {t("reset-access")}
+                        </Button>
+                    </div>
+                </form>
+            </Dialog>
         </div>
     )
 }

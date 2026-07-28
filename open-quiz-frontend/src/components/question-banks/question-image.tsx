@@ -1,5 +1,6 @@
-import { getQuestionImage } from "@/api/api"
-import { useEffect, useState } from "react"
+import { getQuestionImage } from "@/api/question-banks"
+import { useObjectUrl } from "@/hooks/use-object-url"
+import { useCallback } from "react"
 
 type QuestionImageProps = {
     questionId: number
@@ -7,27 +8,11 @@ type QuestionImageProps = {
 }
 
 export function QuestionImage({ questionId, alt }: QuestionImageProps) {
-    const [imageUrl, setImageUrl] = useState<string | null>(null)
-
-    useEffect(() => {
-        let isActive = true
-        let objectUrl: string | null = null
-
-        getQuestionImage(questionId)
-            .then((blob) => {
-                if (!isActive) return
-                objectUrl = URL.createObjectURL(blob)
-                setImageUrl(objectUrl)
-            })
-            .catch(() => {
-                if (isActive) setImageUrl(null)
-            })
-
-        return () => {
-            isActive = false
-            if (objectUrl) URL.revokeObjectURL(objectUrl)
-        }
-    }, [questionId])
+    const loadImage = useCallback(
+        () => getQuestionImage(questionId),
+        [questionId]
+    )
+    const imageUrl = useObjectUrl(loadImage)
 
     if (!imageUrl) return null
 

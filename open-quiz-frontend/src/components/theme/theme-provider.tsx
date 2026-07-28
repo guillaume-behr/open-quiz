@@ -10,39 +10,54 @@ type ThemeProviderProps = {
     storageKey?: string
 }
 
+const themes = new Set<Theme>(["dark", "light", "system"])
+
+function storedTheme(storageKey: string, fallback: Theme): Theme {
+    try {
+        const value = localStorage.getItem(storageKey)
+        return value && themes.has(value as Theme) ? (value as Theme) : fallback
+    } catch {
+        return fallback
+    }
+}
+
 export function ThemeProvider({
     children,
     defaultTheme = "system",
     storageKey = "vite-ui-theme",
     ...props
 }: ThemeProviderProps) {
-    const [theme, setTheme] = useState<Theme>(
-        () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
+    const [theme, setTheme] = useState<Theme>(() =>
+        storedTheme(storageKey, defaultTheme)
     )
 
     useEffect(() => {
         const root = window.document.documentElement
-
         root.classList.remove("light", "dark")
 
-        if (theme === "system") {
-            const systemTheme = window.matchMedia(
-                "(prefers-color-scheme: dark)"
-            ).matches
-                ? "dark"
-                : "light"
-
-            root.classList.add(systemTheme)
-            return
+        if (theme !== "system") {
+            root.classList.add(theme)
+            return undefined
         }
 
-        root.classList.add(theme)
+        const media = window.matchMedia("(prefers-color-scheme: dark)")
+        const applySystemTheme = () => {
+            root.classList.toggle("dark", media.matches)
+            root.classList.toggle("light", !media.matches)
+        }
+        applySystemTheme()
+        media.addEventListener("change", applySystemTheme)
+        return () => media.removeEventListener("change", applySystemTheme)
     }, [theme])
 
     const value = {
         theme,
         setTheme: (theme: Theme) => {
-            localStorage.setItem(storageKey, theme)
+            try {
+                localStorage.setItem(storageKey, theme)
+            } catch {
+                // Theme switching still works when storage is unavailable.
+            }
             setTheme(theme)
         },
     }

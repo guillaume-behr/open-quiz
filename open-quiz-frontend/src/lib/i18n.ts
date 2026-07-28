@@ -3,7 +3,16 @@ import Backend from "i18next-http-backend"
 import LanguageDetector from "i18next-browser-languagedetector"
 import { initReactI18next } from "react-i18next"
 
-export const availableLangages = ["fr"]
+export const availableLanguages = [
+    { code: "fr", label: "Français" },
+    { code: "en", label: "English" },
+    { code: "de", label: "Deutsch" },
+    { code: "es", label: "Español" },
+    { code: "pt", label: "Português" },
+    { code: "uk", label: "Українська" },
+    { code: "ar", label: "العربية" },
+    { code: "zh-CN", label: "简体中文" },
+] as const
 
 i18n
     // load translation using http -> see /public/locales
@@ -18,7 +27,7 @@ i18n
     // for all options read: https://www.i18next.com/overview/configuration-options
     .init({
         fallbackLng: "fr",
-        supportedLngs: availableLangages,
+        supportedLngs: availableLanguages.map(({ code }) => code),
         debug: false,
     })
 

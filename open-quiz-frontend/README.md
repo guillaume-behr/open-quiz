@@ -28,7 +28,10 @@
 - react-i18next
 - i18next-http-backend
 - i18next-browser-languagedetector
-- Français et anglais
+- Français, anglais, allemand, espagnol, portugais, ukrainien, arabe et chinois
+  simplifié
+- Mise en page bidirectionnelle avec prise en charge de l’arabe de droite à
+  gauche
 
 ### Qualité du code
 

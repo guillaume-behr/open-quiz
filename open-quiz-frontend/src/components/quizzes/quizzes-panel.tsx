@@ -1,19 +1,21 @@
+import { getStudentClasses } from "@/api/classes"
+import { getQuestionBanks } from "@/api/question-banks"
 import {
     createQuiz,
     getActiveQuizSessions,
-    getQuestionBanks,
     getQuizSession,
     getQuizzes,
-    getStudentClasses,
     launchQuiz,
     previewQuiz,
     startQuizSession,
-    type Question,
-    type QuestionBank,
-    type Quiz,
-    type QuizSession,
-    type StudentClass,
-} from "@/api/api"
+} from "@/api/quizzes"
+import type {
+    Question,
+    QuestionBank,
+    Quiz,
+    QuizSession,
+    StudentClass,
+} from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
@@ -78,6 +80,9 @@ export function QuizzesPanel({
     const [isLaunching, setIsLaunching] = useState(false)
     const [launchError, setLaunchError] = useState<string | null>(null)
     const [activeSession, setActiveSession] = useState<QuizSession | null>(null)
+    const [activeSessionError, setActiveSessionError] = useState<string | null>(
+        null
+    )
     const [isStarting, setIsStarting] = useState(false)
     const [quizFilter, setQuizFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
@@ -128,6 +133,7 @@ export function QuizzesPanel({
             void getQuizSession(activeSessionId)
                 .then((session) => {
                     if (!isActive) return
+                    setActiveSessionError(null)
                     setActiveSession(session)
                     setSessions((current) =>
                         current.map((item) =>
@@ -135,14 +141,18 @@ export function QuizzesPanel({
                         )
                     )
                 })
-                .catch(() => undefined)
+                .catch(() => {
+                    if (isActive) {
+                        setActiveSessionError(t("quiz-session-refresh-error"))
+                    }
+                })
         }
         const interval = window.setInterval(refresh, 1500)
         return () => {
             isActive = false
             window.clearInterval(interval)
         }
-    }, [activeSessionId, activeSessionStatus])
+    }, [activeSessionId, activeSessionStatus, t])
 
     const percentageTotal =
         percentages.easy + percentages.medium + percentages.hard
@@ -228,6 +238,7 @@ export function QuizzesPanel({
             setSessions((current) => [session, ...current])
             setQuizToLaunch(null)
             setSelectedClassId("")
+            setActiveSessionError(null)
             setActiveSession(session)
         } catch {
             setLaunchError(t("quiz-launch-error"))
@@ -238,6 +249,7 @@ export function QuizzesPanel({
 
     async function handleStart(): Promise<void> {
         if (!activeSession) return
+        setActiveSessionError(null)
         setIsStarting(true)
         try {
             const started = await startQuizSession(activeSession.id)
@@ -247,6 +259,8 @@ export function QuizzesPanel({
                     session.id === started.id ? started : session
                 )
             )
+        } catch {
+            setActiveSessionError(t("quiz-start-error"))
         } finally {
             setIsStarting(false)
         }
@@ -264,7 +278,10 @@ export function QuizzesPanel({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setActiveSession(session)}
+                                onClick={() => {
+                                    setActiveSessionError(null)
+                                    setActiveSession(session)
+                                }}
                             >
                                 <UsersRound />
                                 {session.quiz_title} · {session.class_name} ·{" "}
@@ -392,89 +409,98 @@ export function QuizzesPanel({
                             {t("no-quiz-filtered")}
                         </p>
                     ) : (
-                <ul className="grid gap-4 lg:grid-cols-2">
-                    {filteredQuizzes.map((quiz) => (
-                        <li
-                            key={quiz.id}
-                            className="flex h-full flex-col rounded-xl border bg-background p-4"
-                        >
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <h3 className="font-semibold break-words">
-                                        {quiz.title}
-                                    </h3>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        {t("quiz-summary", {
-                                            questions: quiz.question_count,
-                                            banks: quiz.question_banks.length,
-                                        })}
+                        <ul className="grid gap-4 lg:grid-cols-2">
+                            {filteredQuizzes.map((quiz) => (
+                                <li
+                                    key={quiz.id}
+                                    className="flex h-full flex-col rounded-xl border bg-background p-4"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <h3 className="font-semibold break-words">
+                                                {quiz.title}
+                                            </h3>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                {t("quiz-summary", {
+                                                    questions:
+                                                        quiz.question_count,
+                                                    banks: quiz.question_banks
+                                                        .length,
+                                                })}
+                                            </p>
+                                        </div>
+                                        <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                                            {quiz.question_count}
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted">
+                                        <span
+                                            className="bg-emerald-500"
+                                            style={{
+                                                width: `${quiz.easy_percentage}%`,
+                                            }}
+                                        />
+                                        <span
+                                            className="bg-amber-500"
+                                            style={{
+                                                width: `${quiz.medium_percentage}%`,
+                                            }}
+                                        />
+                                        <span
+                                            className="bg-rose-500"
+                                            style={{
+                                                width: `${quiz.hard_percentage}%`,
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                        {difficultyKeys.map((difficulty) => (
+                                            <span key={difficulty}>
+                                                {t(`difficulty-${difficulty}`)}{" "}
+                                                {
+                                                    quiz[
+                                                        `${difficulty}_percentage`
+                                                    ]
+                                                }{" "}
+                                                %
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <p className="mt-3 text-xs text-muted-foreground">
+                                        {quiz.question_banks
+                                            .map(
+                                                (bank) =>
+                                                    `${bank.grade_level} — ${bank.chapter}`
+                                            )
+                                            .join(" · ")}
                                     </p>
-                                </div>
-                                <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                                    {quiz.question_count}
-                                </span>
-                            </div>
-                            <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted">
-                                <span
-                                    className="bg-emerald-500"
-                                    style={{
-                                        width: `${quiz.easy_percentage}%`,
-                                    }}
-                                />
-                                <span
-                                    className="bg-amber-500"
-                                    style={{
-                                        width: `${quiz.medium_percentage}%`,
-                                    }}
-                                />
-                                <span
-                                    className="bg-rose-500"
-                                    style={{
-                                        width: `${quiz.hard_percentage}%`,
-                                    }}
-                                />
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                                {difficultyKeys.map((difficulty) => (
-                                    <span key={difficulty}>
-                                        {t(`difficulty-${difficulty}`)}{" "}
-                                        {quiz[`${difficulty}_percentage`]} %
-                                    </span>
-                                ))}
-                            </div>
-                            <p className="mt-3 text-xs text-muted-foreground">
-                                {quiz.question_banks
-                                    .map(
-                                        (bank) =>
-                                            `${bank.grade_level} — ${bank.chapter}`
-                                    )
-                                    .join(" · ")}
-                            </p>
-                            <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => void openPreview(quiz)}
-                                >
-                                    <Eye />
-                                    {t("preview-quiz")}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => {
-                                        setLaunchError(null)
-                                        setQuizToLaunch(quiz)
-                                    }}
-                                >
-                                    <Play />
-                                    {t("launch-quiz")}
-                                </Button>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
+                                    <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                                void openPreview(quiz)
+                                            }
+                                        >
+                                            <Eye />
+                                            {t("preview-quiz")}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => {
+                                                setLaunchError(null)
+                                                setQuizToLaunch(quiz)
+                                            }}
+                                        >
+                                            <Play />
+                                            {t("launch-quiz")}
+                                        </Button>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
                     )}
                 </div>
             )}
@@ -845,7 +871,10 @@ export function QuizzesPanel({
             <Dialog
                 open={activeSession !== null}
                 onOpenChange={(open) => {
-                    if (!open) setActiveSession(null)
+                    if (!open) {
+                        setActiveSession(null)
+                        setActiveSessionError(null)
+                    }
                 }}
                 title={activeSession?.quiz_title ?? t("quiz-waiting-room")}
                 description={
@@ -853,7 +882,9 @@ export function QuizzesPanel({
                         ? `${activeSession.class_name} — ${t(
                               activeSession.status === "waiting"
                                   ? "waiting-for-students"
-                                  : "quiz-started"
+                                  : activeSession.status === "in_progress"
+                                    ? "quiz-started"
+                                    : "quiz-finished"
                           )}`
                         : undefined
                 }
@@ -954,6 +985,11 @@ export function QuizzesPanel({
                                     )
                                 )}
                             </ul>
+                        )}
+                        {activeSessionError && (
+                            <FieldError className="mt-4">
+                                {activeSessionError}
+                            </FieldError>
                         )}
                         {activeSession.status === "waiting" && (
                             <div className="mt-5 flex justify-end border-t pt-4">

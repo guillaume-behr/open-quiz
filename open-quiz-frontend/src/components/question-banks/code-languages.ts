@@ -1,4 +1,4 @@
-import type { CodeLanguage } from "@/api/api"
+import type { CodeLanguage } from "@/api/types"
 
 export const CODE_LANGUAGES: Array<{
     value: CodeLanguage

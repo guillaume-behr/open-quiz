@@ -1,11 +1,5 @@
-import {
-    login,
-    logout,
-    restoreSession,
-    verifyTwoFactor,
-    type TwoFactorChallenge,
-    type User,
-} from "@/api/api"
+import { login, logout, restoreSession, verifyTwoFactor } from "@/api/auth"
+import type { TwoFactorChallenge, User } from "@/api/types"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { StudentClassesPanel } from "@/components/classes/student-classes-panel"
@@ -96,12 +90,12 @@ export function Dashboard() {
 
     useEffect(() => {
         const previousTitle = document.title
-        document.title = "Espace Professeur"
+        document.title = t("professor-space")
 
         return () => {
             document.title = previousTitle
         }
-    }, [])
+    }, [t])
 
     async function handleLogin(username: string, password: string) {
         setChallenge(await login(username, password, "professor"))

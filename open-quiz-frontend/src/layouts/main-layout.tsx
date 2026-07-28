@@ -1,5 +1,6 @@
-import { restoreSession, type User } from "@/api/api"
-import { LanguageSelector } from "@/components/langage/langage-selector"
+import { restoreSession } from "@/api/auth"
+import type { User } from "@/api/types"
+import { LanguageSelector } from "@/components/language/language-selector"
 import { ThemeSelector } from "@/components/theme/theme-selector"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -28,12 +29,15 @@ export function MainLayout() {
     return (
         <div className="flex min-h-dvh flex-col items-center">
             <header className="flex w-full shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
-                <p className="text-2xl font-extrabold text-primary sm:text-3xl">
+                <Link
+                    to="/"
+                    className="shrink-0 text-2xl font-extrabold text-primary transition-opacity hover:opacity-80 focus-visible:rounded focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:text-3xl"
+                >
                     {t("app-name")}
-                </p>
+                </Link>
                 <Link
                     to={link.url}
-                    className="text-right text-sm font-bold text-primary underline sm:text-base"
+                    className="max-w-[60%] text-end text-sm leading-tight font-bold text-primary underline underline-offset-4 sm:text-base"
                 >
                     {t(link.text)}
                 </Link>
@@ -44,7 +48,7 @@ export function MainLayout() {
             </main>
 
             <footer className="flex w-full shrink-0 flex-wrap items-center justify-center gap-x-5 gap-y-3 bg-sidebar-primary px-4 py-3 sm:justify-between sm:px-10">
-                <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center gap-3">
                     <p className="text-sm whitespace-nowrap">v 2026.01</p>
                     <LanguageSelector />
                     <ThemeSelector />

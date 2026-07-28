@@ -1,7 +1,8 @@
-import type { TwoFactorChallenge } from "@/api/api"
+import type { TwoFactorChallenge } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { errorMessage } from "@/lib/errors"
 import { LoaderCircle, ShieldCheck } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { useState, type SyntheticEvent } from "react"
@@ -31,9 +32,7 @@ export function TwoFactorForm({
         try {
             await onVerify(String(form.get("code")))
         } catch (caught) {
-            setError(
-                caught instanceof Error ? caught.message : t("two-factor-error")
-            )
+            setError(errorMessage(caught, t("two-factor-error")))
         } finally {
             setIsSubmitting(false)
         }
@@ -96,6 +95,8 @@ export function TwoFactorForm({
                         placeholder="000000"
                         className="py-6 text-center text-xl tracking-[0.35em]"
                         autoFocus
+                        aria-invalid={Boolean(error)}
+                        onChange={() => setError("")}
                         required
                     />
                 </Field>

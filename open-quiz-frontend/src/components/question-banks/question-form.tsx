@@ -1,14 +1,13 @@
-import {
-    createQuestion,
-    updateQuestion,
-    ApiError,
-    type AnswerMode,
-    type CodeLanguage,
-    type EncodedImage,
-    type NewQuestion,
-    type Question,
-    type QuestionDifficulty,
-} from "@/api/api"
+import { ApiError } from "@/api/client"
+import { createQuestion, updateQuestion } from "@/api/question-banks"
+import type {
+    AnswerMode,
+    CodeLanguage,
+    EncodedImage,
+    NewQuestion,
+    Question,
+    QuestionDifficulty,
+} from "@/api/types"
 import { CodeBlock } from "@/components/question-banks/code-block"
 import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
 import { Button } from "@/components/ui/button"
@@ -283,9 +282,7 @@ export function QuestionForm({
                           ...choice,
                           is_correct: index === 0,
                           points:
-                              index === 0
-                                  ? Math.max(0, choice.points || 1)
-                                  : 0,
+                              index === 0 ? Math.max(0, choice.points || 1) : 0,
                       }))
                     : restoredChoices
             )

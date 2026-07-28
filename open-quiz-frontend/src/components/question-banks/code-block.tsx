@@ -1,18 +1,34 @@
-import type { CodeLanguage } from "@/api/api"
+import type { CodeLanguage } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { LoaderCircle, Play } from "lucide-react"
 import type { PyodideAPI } from "pyodide"
 import { Highlight, themes } from "prism-react-renderer"
-import { type KeyboardEvent, type UIEvent, useRef, useState } from "react"
+import {
+    type KeyboardEvent,
+    type UIEvent,
+    useEffect,
+    useRef,
+    useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 let pythonRuntime: Promise<PyodideAPI> | undefined
+let pythonExecutionQueue: Promise<void> = Promise.resolve()
 
 function getPythonRuntime() {
     pythonRuntime ??= import("pyodide").then(({ loadPyodide }) =>
         loadPyodide({ indexURL: "/pyodide/" })
     )
     return pythonRuntime
+}
+
+function serializePythonExecution<T>(task: () => Promise<T>): Promise<T> {
+    const execution = pythonExecutionQueue.then(task, task)
+    pythonExecutionQueue = execution.then(
+        () => undefined,
+        () => undefined
+    )
+    return execution
 }
 
 type CodeBlockProps = {
@@ -38,6 +54,11 @@ export function CodeBlock({
     const [isRunning, setIsRunning] = useState(false)
     const [result, setResult] = useState<string | null>(null)
     const highlightedCodeRef = useRef<HTMLPreElement>(null)
+    const currentCodeRef = useRef(code)
+
+    useEffect(() => {
+        currentCodeRef.current = code
+    }, [code])
 
     const canRun = runnable && language === "python"
 
@@ -49,28 +70,35 @@ export function CodeBlock({
     }
 
     async function runPython() {
+        const source = code
         setIsRunning(true)
         setResult(null)
         try {
-            const runtime = await getPythonRuntime()
-            const output: string[] = []
-            runtime.setStdout({ batched: (line) => output.push(line) })
-            runtime.setStderr({ batched: (line) => output.push(line) })
-            const value = await runtime.runPythonAsync(code)
-            if (value !== undefined) output.push(String(value))
-            setResult(output.join("\n") || t("python-no-output"))
+            const output = await serializePythonExecution(async () => {
+                const runtime = await getPythonRuntime()
+                const lines: string[] = []
+                runtime.setStdout({ batched: (line) => lines.push(line) })
+                runtime.setStderr({ batched: (line) => lines.push(line) })
+                const value = await runtime.runPythonAsync(source)
+                if (value !== undefined) lines.push(String(value))
+                return lines.join("\n") || t("python-no-output")
+            })
+            if (currentCodeRef.current === source) setResult(output)
         } catch (error) {
-            setResult(
-                `${t("python-run-error")}\n${
-                    error instanceof Error ? error.message : String(error)
-                }`
-            )
+            if (currentCodeRef.current === source) {
+                setResult(
+                    `${t("python-run-error")}\n${
+                        error instanceof Error ? error.message : String(error)
+                    }`
+                )
+            }
         } finally {
             setIsRunning(false)
         }
     }
 
     function changeCode(value: string) {
+        currentCodeRef.current = value
         setResult(null)
         onCodeChange?.(value)
     }
@@ -85,7 +113,7 @@ export function CodeBlock({
                     getLineProps,
                     getTokenProps,
                 }) => (
-                    <div className="relative">
+                    <div className="relative" dir="ltr">
                         {canRun && (
                             <Button
                                 type="button"
@@ -164,7 +192,10 @@ export function CodeBlock({
                     <p className="mb-1 text-xs font-semibold text-muted-foreground">
                         {t("execution-result")}
                     </p>
-                    <pre className="overflow-x-auto font-mono text-sm whitespace-pre-wrap">
+                    <pre
+                        className="overflow-x-auto font-mono text-sm whitespace-pre-wrap"
+                        dir="ltr"
+                    >
                         {result}
                     </pre>
                 </div>

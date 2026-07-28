@@ -10,7 +10,7 @@ import "./lib/i18n.ts"
 import { MainLayout } from "./layouts/main-layout.tsx"
 import { HomePage } from "./pages/HomePage.tsx"
 
-import { LanguageDirection } from "./components/langage/langage-direction.tsx"
+import { LanguageDirection } from "@/components/language/language-direction"
 import { AdminDashboard } from "./pages/AdminDashboard.tsx"
 import { Dashboard } from "./pages/Dashboard.tsx"
 

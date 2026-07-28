@@ -1,5 +1,4 @@
 import {
-    ApiError,
     createQuestionBank,
     deleteQuestionBank,
     deleteQuestion,
@@ -8,9 +7,9 @@ import {
     getQuestionBanks,
     getQuestions,
     importQuestionBatch,
-    type Question,
-    type QuestionBank,
-} from "@/api/api"
+} from "@/api/question-banks"
+import { ApiError } from "@/api/client"
+import type { Question, QuestionBank } from "@/api/types"
 import { QuestionForm } from "@/components/question-banks/question-form"
 import { QuestionImage } from "@/components/question-banks/question-image"
 import { ChoiceImage } from "@/components/question-banks/choice-image"
@@ -1014,7 +1013,7 @@ export function QuestionBanksPanel({
                                                             : question.answer_mode ===
                                                                 "multiple"
                                                               ? "multiple-choice"
-                                                            : "written-answer"
+                                                              : "written-answer"
                                                     )}
                                                 </span>
                                                 {!question.answer_mode_disclosed && (
@@ -1071,9 +1070,7 @@ export function QuestionBanksPanel({
                                     type="button"
                                     variant="destructive"
                                     disabled={isDeletingQuestion}
-                                    onClick={() =>
-                                        void handleDeleteQuestion()
-                                    }
+                                    onClick={() => void handleDeleteQuestion()}
                                 >
                                     {isDeletingQuestion && (
                                         <LoaderCircle className="animate-spin" />

@@ -1,4 +1,5 @@
-import { getQuizResults, type QuizSession } from "@/api/api"
+import { deleteQuizSession, getQuizResults } from "@/api/quizzes"
+import type { QuizSession } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -8,6 +9,7 @@ import {
     Eye,
     LoaderCircle,
     School,
+    Trash2,
     UserRound,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
@@ -27,6 +29,11 @@ export function ResultsPanel() {
     )
     const [isLoading, setIsLoading] = useState(true)
     const [loadError, setLoadError] = useState(false)
+    const [resultToDelete, setResultToDelete] = useState<QuizSession | null>(
+        null
+    )
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [deleteError, setDeleteError] = useState(false)
 
     useEffect(() => {
         let isActive = true
@@ -58,6 +65,26 @@ export function ResultsPanel() {
         return dateFormatter.format(
             new Date(result.started_at ?? result.created_at)
         )
+    }
+
+    async function handleDeleteResult() {
+        if (!resultToDelete) return
+        setIsDeleting(true)
+        setDeleteError(false)
+        try {
+            await deleteQuizSession(resultToDelete.id)
+            setResults((existing) =>
+                existing.filter((result) => result.id !== resultToDelete.id)
+            )
+            if (selectedResult?.id === resultToDelete.id) {
+                setSelectedResult(null)
+            }
+            setResultToDelete(null)
+        } catch {
+            setDeleteError(true)
+        } finally {
+            setIsDeleting(false)
+        }
     }
 
     if (isLoading) {
@@ -118,14 +145,26 @@ export function ResultsPanel() {
                                     {result.class_name}
                                 </p>
                             </div>
-                            <Button
-                                className="mt-5 w-full"
-                                variant="outline"
-                                onClick={() => setSelectedResult(result)}
-                            >
-                                <Eye />
-                                {t("view-results")}
-                            </Button>
+                            <div className="mt-5 flex gap-2">
+                                <Button
+                                    className="flex-1"
+                                    variant="outline"
+                                    onClick={() => setSelectedResult(result)}
+                                >
+                                    <Eye />
+                                    {t("view-results")}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    aria-label={t("delete-result")}
+                                    onClick={() => {
+                                        setDeleteError(false)
+                                        setResultToDelete(result)
+                                    }}
+                                >
+                                    <Trash2 />
+                                </Button>
+                            </div>
                         </article>
                     ))}
                 </div>
@@ -203,12 +242,11 @@ export function ResultsPanel() {
                                             </div>
                                             <p className="text-sm">
                                                 <span className="sm:hidden">
-                                                    {t("result-progress")} :{" "}
+                                                    {t("result-progress")}{" "}
+                                                    :{" "}
                                                 </span>
                                                 {participant.answered_count} /{" "}
-                                                {
-                                                    selectedResult.total_questions
-                                                }
+                                                {selectedResult.total_questions}
                                             </p>
                                             <p className="font-bold text-primary">
                                                 <span className="font-normal text-foreground sm:hidden">
@@ -232,6 +270,46 @@ export function ResultsPanel() {
                         </div>
                     </div>
                 )}
+            </Dialog>
+
+            <Dialog
+                open={resultToDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open && !isDeleting) setResultToDelete(null)
+                }}
+                title={t("delete-result")}
+                description={t("delete-result-help", {
+                    title: resultToDelete?.quiz_title,
+                })}
+            >
+                <div className="space-y-4">
+                    {deleteError && (
+                        <p className="text-sm text-destructive" role="alert">
+                            {t("delete-result-error")}
+                        </p>
+                    )}
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setResultToDelete(null)}
+                            disabled={isDeleting}
+                        >
+                            {t("cancel")}
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => void handleDeleteResult()}
+                            disabled={isDeleting}
+                        >
+                            {isDeleting ? (
+                                <LoaderCircle className="animate-spin" />
+                            ) : (
+                                <Trash2 />
+                            )}
+                            {t("delete")}
+                        </Button>
+                    </div>
+                </div>
             </Dialog>
         </>
     )
