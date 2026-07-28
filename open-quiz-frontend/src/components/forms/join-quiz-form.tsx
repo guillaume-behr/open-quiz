@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
+import { CodeBlock } from "@/components/question-banks/code-block"
 import { useObjectUrl } from "@/hooks/use-object-url"
 import { cn } from "@/lib/utils"
 import { LoaderCircle, LogOut, UserRound } from "lucide-react"
@@ -512,13 +513,12 @@ export function JoinQuizForm() {
                                 alt={question.prompt}
                             />
                         )}
-                        {question.code_content && (
-                            <pre
-                                className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-left text-sm text-slate-50"
-                                dir="ltr"
-                            >
-                                <code>{question.code_content}</code>
-                            </pre>
+                        {question.code_content && question.code_language && (
+                            <CodeBlock
+                                code={question.code_content}
+                                language={question.code_language}
+                                runnable
+                            />
                         )}
                         {question.answer_mode === "written" ? (
                             <textarea
