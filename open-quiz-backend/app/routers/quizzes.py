@@ -457,6 +457,24 @@ def expire_quiz_session(
         session.commit()
 
 
+def expire_owned_quiz_sessions(
+    professor: ProfessorUser,
+    session: DbSession,
+) -> None:
+    rows = list(
+        session.execute(
+            select(QuizSession, Quiz)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                Quiz.owner_id == professor.id,
+                QuizSession.status == "in_progress",
+            )
+        )
+    )
+    for quiz_session, quiz in rows:
+        expire_quiz_session(quiz_session, quiz, session)
+
+
 def participant_token_hash(token: str) -> str:
     return sha256(token.encode()).hexdigest()
 
@@ -676,6 +694,7 @@ def list_active_sessions(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuizSessionResponse]:
+    expire_owned_quiz_sessions(professor, session)
     rows = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
@@ -697,6 +716,7 @@ def list_quiz_results(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuizSessionResponse]:
+    expire_owned_quiz_sessions(professor, session)
     rows = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)

@@ -64,6 +64,36 @@ def test_public_quiz_join_is_rate_limited(tmp_path: Path) -> None:
         assert int(limited.headers["retry-after"]) > 0
 
 
+def test_expired_public_quiz_rate_limits_are_removed(tmp_path: Path) -> None:
+    database = tmp_path / "quiz-rate-limit-cleanup.db"
+    with make_client(settings_for(database)) as client:
+        first = client.post(
+            "/api/quizzes/join",
+            json={"join_code": "ABC123", "student_identifier": "student"},
+        )
+        assert first.status_code == 403
+
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "UPDATE login_rate_limits SET window_started_at = 0 "
+                "WHERE limiter_key LIKE 'quiz-join:%'"
+            )
+            connection.commit()
+
+        second = client.post(
+            "/api/quizzes/join",
+            json={"join_code": "XYZ789", "student_identifier": "student"},
+        )
+        assert second.status_code == 403
+
+        with sqlite3.connect(database) as connection:
+            public_limit_count = connection.execute(
+                "SELECT COUNT(*) FROM login_rate_limits "
+                "WHERE limiter_key LIKE 'quiz-join:%'"
+            ).fetchone()[0]
+        assert public_limit_count == 2
+
+
 def complete_first_login(
     client: TestClient,
     username: str,
@@ -826,6 +856,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
 
         assert teacher_state["status"] == "finished"
         assert teacher_state["participants"][0]["score"] > 0
+        assert client.get(
+            "/api/quizzes/sessions/active",
+            headers=teacher_headers,
+        ).json() == []
         results = client.get(
             "/api/quizzes/sessions/results",
             headers=teacher_headers,
@@ -879,10 +913,49 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
         ).json()
         assert refreshed_results[0]["participants"][0]["score"] > previous_score
+
+        expiring_launch = client.post(
+            f"/api/quizzes/{quiz['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        )
+        assert expiring_launch.status_code == 201
+        expiring_session = expiring_launch.json()
+        expiring_join = client.post(
+            "/api/quizzes/join",
+            json={
+                "join_code": expiring_session["join_code"],
+                "student_identifier": student["identifier"],
+            },
+        )
+        assert expiring_join.status_code == 201
+        assert client.post(
+            f"/api/quizzes/sessions/{expiring_session['id']}/start",
+            headers=teacher_headers,
+        ).status_code == 200
+        with sqlite3.connect(tmp_path / "test.db") as connection:
+            connection.execute(
+                "UPDATE quiz_sessions SET started_at = ? WHERE id = ?",
+                ("2000-01-01 00:00:00", expiring_session["id"]),
+            )
+            connection.commit()
+
+        results_after_expiry = client.get(
+            "/api/quizzes/sessions/results",
+            headers=teacher_headers,
+        )
+        assert results_after_expiry.status_code == 200
+        assert expiring_session["id"] in {
+            result["id"] for result in results_after_expiry.json()
+        }
+        assert client.get(
+            "/api/quizzes/sessions/active",
+            headers=teacher_headers,
+        ).json() == []
         completed_class = client.get(
             "/api/classes", headers=teacher_headers
         ).json()[0]
-        assert completed_class["completed_quiz_count"] == 1
+        assert completed_class["completed_quiz_count"] == 2
         assert client.get(
             student_state_url, headers=student_headers
         ).json()["status"] == "finished"
@@ -1431,4 +1504,26 @@ def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> No
         settings_for(
             tmp_path / "production.db",
             environment="production",
+        )
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "value", "expected_message"),
+    [
+        ("quiz_join_attempts", 4, "QUIZ_JOIN_ATTEMPTS"),
+        ("quiz_participant_attempts", 29, "QUIZ_PARTICIPANT_ATTEMPTS"),
+        ("quiz_violation_attempts", 4, "QUIZ_VIOLATION_ATTEMPTS"),
+        ("quiz_rate_window_seconds", 9, "QUIZ_RATE_WINDOW_SECONDS"),
+    ],
+)
+def test_rejects_unsafe_quiz_rate_limit_configuration(
+    tmp_path: Path,
+    setting_name: str,
+    value: int,
+    expected_message: str,
+) -> None:
+    with pytest.raises(ValueError, match=expected_message):
+        settings_for(
+            tmp_path / f"{setting_name}.db",
+            **{setting_name: value},
         )

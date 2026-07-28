@@ -223,6 +223,7 @@
     "two-factor-verifying": "Vérification…",
     "two-factor-error": "Impossible de vérifier ce code.",
     "back-to-login": "Retour à la connexion",
+    "close": "Fermer",
 
     "sign-in": "Se connecter",
     "legal": "Mentions légales",
@@ -237,6 +238,7 @@
     "language": "Changer de langue",
     "theme": "Changer de thème",
     "student-session-error": "La connexion au quiz a été interrompue.",
+    "student-session-restore-error": "La session précédente n’est plus disponible. Demandez de l’aide à votre professeur.",
     "student-answer-error": "Impossible d’enregistrer cette réponse.",
     "student-quiz-finished": "Le quiz est terminé. Merci pour votre participation !",
     "student-answer-recorded": "Réponse enregistrée",

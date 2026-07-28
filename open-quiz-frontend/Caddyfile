@@ -15,7 +15,7 @@
 
     handle /api/* {
         request_body {
-            max_size 64KB
+            max_size 64MB
         }
         reverse_proxy open-quiz-backend:8000 {
             header_up X-Forwarded-Proto https

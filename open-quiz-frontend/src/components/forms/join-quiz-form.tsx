@@ -1,6 +1,7 @@
 import {
-    getStudentQuizSession,
+    ApiError,
     getStudentQuizImage,
+    getStudentQuizSession,
     joinQuiz,
     navigateStudentQuiz,
     reportStudentQuizViolation,
@@ -19,6 +20,35 @@ import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { LoaderCircle } from "lucide-react"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+
+const QUIZ_SESSION_STORAGE_KEY = "open-quiz-student-session"
+
+type StoredQuizSession = {
+    joinCode: string
+    studentIdentifier: string
+    participantToken: string
+}
+
+function readStoredQuizSession(): StoredQuizSession | null {
+    try {
+        const value = JSON.parse(
+            sessionStorage.getItem(QUIZ_SESSION_STORAGE_KEY) ?? "null"
+        ) as Partial<StoredQuizSession> | null
+        return value &&
+            typeof value.joinCode === "string" &&
+            typeof value.studentIdentifier === "string" &&
+            typeof value.participantToken === "string"
+            ? {
+                  joinCode: value.joinCode,
+                  studentIdentifier: value.studentIdentifier,
+                  participantToken: value.participantToken,
+              }
+            : null
+    } catch {
+        sessionStorage.removeItem(QUIZ_SESSION_STORAGE_KEY)
+        return null
+    }
+}
 
 function ProtectedQuizImage({
     path,
@@ -59,10 +89,13 @@ function ProtectedQuizImage({
 
 export function JoinQuizForm() {
     const { t } = useTranslation()
-    const [studentIdentifier, setStudentIdentifier] = useState("")
-    const [joinCode, setJoinCode] = useState("")
+    const [restoredSession] = useState(readStoredQuizSession)
+    const [studentIdentifier, setStudentIdentifier] = useState(
+        restoredSession?.studentIdentifier ?? ""
+    )
+    const [joinCode, setJoinCode] = useState(restoredSession?.joinCode ?? "")
     const [participantToken, setParticipantToken] = useState<string | null>(
-        null
+        restoredSession?.participantToken ?? null
     )
     const [session, setSession] = useState<StudentQuizSession | null>(null)
     const [selectedChoiceIds, setSelectedChoiceIds] = useState<number[]>([])
@@ -74,6 +107,37 @@ export function JoinQuizForm() {
     )
     const violationTimes = useRef<Record<string, number>>({})
     const monitoredJoinCode = session?.join_code
+
+    useEffect(() => {
+        if (!restoredSession) return
+        let active = true
+        void getStudentQuizSession(
+            restoredSession.joinCode,
+            restoredSession.participantToken
+        )
+            .then((restoredState) => {
+                if (!active) return
+                setSession(restoredState)
+                setSelectedChoiceIds(
+                    restoredState.selected_choice_ids ?? []
+                )
+                setWrittenAnswer(restoredState.written_answer ?? "")
+            })
+            .catch((restoreError: unknown) => {
+                if (!active) return
+                if (
+                    restoreError instanceof ApiError &&
+                    [401, 403, 404].includes(restoreError.status)
+                ) {
+                    sessionStorage.removeItem(QUIZ_SESSION_STORAGE_KEY)
+                    setParticipantToken(null)
+                }
+                setError(t("student-session-restore-error"))
+            })
+        return () => {
+            active = false
+        }
+    }, [restoredSession, t])
 
     useEffect(() => {
         if (!monitoredJoinCode || !participantToken) return
@@ -160,6 +224,14 @@ export function JoinQuizForm() {
                 studentIdentifier.trim()
             )
             const { participant_token, ...state } = joined
+            sessionStorage.setItem(
+                QUIZ_SESSION_STORAGE_KEY,
+                JSON.stringify({
+                    joinCode: state.join_code,
+                    studentIdentifier: studentIdentifier.trim(),
+                    participantToken: participant_token,
+                } satisfies StoredQuizSession)
+            )
             setParticipantToken(participant_token)
             setSession(state)
             setSelectedChoiceIds(state.selected_choice_ids ?? [])
@@ -451,7 +523,7 @@ export function JoinQuizForm() {
 
     return (
         <form
-            className="flex w-full max-w-fit min-w-sm flex-col gap-5 rounded-2xl border bg-secondary px-10 py-15 shadow-lg"
+            className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-15"
             onSubmit={handleJoin}
         >
             <div className="flex flex-col gap-2">
@@ -468,7 +540,11 @@ export function JoinQuizForm() {
                         {t("student-id")}
                     </FieldLabel>
                     <Input
+                        className="py-6"
                         id="student-id"
+                        name="student-id"
+                        autoComplete="username"
+                        spellCheck={false}
                         value={studentIdentifier}
                         onChange={(event) =>
                             setStudentIdentifier(event.target.value)
@@ -479,7 +555,11 @@ export function JoinQuizForm() {
                 <Field>
                     <FieldLabel htmlFor="quiz-id">{t("quiz-id")}</FieldLabel>
                     <Input
+                        className="py-6"
                         id="quiz-id"
+                        name="quiz-id"
+                        autoComplete="off"
+                        spellCheck={false}
                         value={joinCode}
                         onChange={(event) =>
                             setJoinCode(event.target.value.toUpperCase())
@@ -487,8 +567,16 @@ export function JoinQuizForm() {
                         required
                     />
                 </Field>
-                {error && <FieldError>{error}</FieldError>}
-                <Button className="py-7" disabled={isBusy}>
+                {error && (
+                    <p className="text-sm text-destructive" role="alert">
+                        {error}
+                    </p>
+                )}
+                <Button
+                    className="text-md py-7 shadow"
+                    type="submit"
+                    disabled={isBusy}
+                >
                     {isBusy && <LoaderCircle className="animate-spin" />}
                     {t(isBusy ? "joining-quiz" : "join-quiz-button")}
                 </Button>
