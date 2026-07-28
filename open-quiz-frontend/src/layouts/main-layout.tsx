@@ -1,6 +1,7 @@
 import { restoreSession } from "@/api/auth"
 import type { User } from "@/api/types"
 import { LanguageSelector } from "@/components/language/language-selector"
+import { PageTransition } from "@/components/navigation/page-transition"
 import { ThemeSelector } from "@/components/theme/theme-selector"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -44,7 +45,9 @@ export function MainLayout() {
             </header>
 
             <main className="flex min-h-0 w-full flex-1">
-                <Outlet />
+                <PageTransition>
+                    <Outlet />
+                </PageTransition>
             </main>
 
             <footer className="flex w-full shrink-0 flex-wrap items-center justify-center gap-x-5 gap-y-3 bg-sidebar-primary px-4 py-3 sm:justify-between sm:px-10">
