@@ -43,7 +43,7 @@ export function GradeLevelSelect({
     }
 
     return (
-        <div className="flex gap-2">
+        <div className="flex min-w-0 flex-1 gap-2">
             <select
                 id={id}
                 value={value}

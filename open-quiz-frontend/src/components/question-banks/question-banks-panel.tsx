@@ -635,6 +635,12 @@ export function QuestionBanksPanel({
                                         onChange={(event) =>
                                             setNewGradeLevel(event.target.value)
                                         }
+                                        onKeyDown={(event) => {
+                                            if (event.key === "Enter") {
+                                                event.preventDefault()
+                                                void addGradeLevel()
+                                            }
+                                        }}
                                         maxLength={80}
                                         placeholder={t(
                                             "grade-level-placeholder"
