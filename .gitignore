@@ -7,4 +7,3 @@
 **/*.db-*
 **/node_modules/
 **/dist/
-backups/
