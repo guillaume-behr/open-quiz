@@ -58,6 +58,8 @@ export function StudentClassesPanel({
     const [studentFirstName, setStudentFirstName] = useState("")
     const [studentLastName, setStudentLastName] = useState("")
     const [gradeLevels, setGradeLevels] = useState<string[]>([])
+    const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
+    const [newGradeLevel, setNewGradeLevel] = useState("")
     const [isCreatingStudent, setIsCreatingStudent] = useState(false)
     const [studentError, setStudentError] = useState<string | null>(null)
     const [editingStudent, setEditingStudent] = useState<Student | null>(null)
@@ -139,6 +141,8 @@ export function StudentClassesPanel({
             )
             setClassName("")
             setGradeLevel("")
+            setNewGradeLevel("")
+            setIsAddingGradeLevel(false)
             setEditingClass(null)
             onCreateDialogOpenChange(false)
         } catch (error) {
@@ -150,6 +154,21 @@ export function StudentClassesPanel({
         } finally {
             setIsCreatingClass(false)
         }
+    }
+
+    function addGradeLevel(): void {
+        const normalizedLevel = newGradeLevel.trim()
+        if (!normalizedLevel) return
+        setGradeLevels((levels) =>
+            levels.includes(normalizedLevel)
+                ? levels
+                : [...levels, normalizedLevel].sort((first, second) =>
+                      first.localeCompare(second, "fr")
+                  )
+        )
+        setGradeLevel(normalizedLevel)
+        setNewGradeLevel("")
+        setIsAddingGradeLevel(false)
     }
 
     async function handleCreateStudent(event: FormEvent<HTMLFormElement>) {
@@ -539,6 +558,8 @@ export function StudentClassesPanel({
                         setEditingClass(null)
                         setClassName("")
                         setGradeLevel("")
+                        setNewGradeLevel("")
+                        setIsAddingGradeLevel(false)
                         setClassError(null)
                     }
                 }}
@@ -576,24 +597,58 @@ export function StudentClassesPanel({
                             <FieldLabel htmlFor="class-grade">
                                 {t("grade-level")}
                             </FieldLabel>
-                            <select
-                                id="class-grade"
-                                className={selectClassName}
-                                value={gradeLevel}
-                                onChange={(event) =>
-                                    setGradeLevel(event.target.value)
-                                }
-                                required
-                            >
-                                <option value="" disabled>
-                                    {t("choose-grade-level")}
-                                </option>
-                                {gradeLevels.map((level) => (
-                                    <option key={level} value={level}>
-                                        {level}
+                            <div className="flex gap-2">
+                                <select
+                                    id="class-grade"
+                                    className={selectClassName}
+                                    value={gradeLevel}
+                                    onChange={(event) =>
+                                        setGradeLevel(event.target.value)
+                                    }
+                                    required
+                                >
+                                    <option value="" disabled>
+                                        {t("choose-grade-level")}
                                     </option>
-                                ))}
-                            </select>
+                                    {gradeLevels.map((level) => (
+                                        <option key={level} value={level}>
+                                            {level}
+                                        </option>
+                                    ))}
+                                </select>
+                                <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    aria-label={t("add-grade-level")}
+                                    onClick={() =>
+                                        setIsAddingGradeLevel((value) => !value)
+                                    }
+                                >
+                                    <Plus />
+                                </Button>
+                            </div>
+                            {isAddingGradeLevel && (
+                                <div className="mt-2 flex gap-2">
+                                    <Input
+                                        value={newGradeLevel}
+                                        onChange={(event) =>
+                                            setNewGradeLevel(event.target.value)
+                                        }
+                                        maxLength={80}
+                                        placeholder={t(
+                                            "grade-level-placeholder"
+                                        )}
+                                    />
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={addGradeLevel}
+                                    >
+                                        {t("save-grade-level")}
+                                    </Button>
+                                </div>
+                            )}
                         </Field>
                         {classError && <FieldError>{classError}</FieldError>}
                         <div className="flex justify-end gap-2">
@@ -605,6 +660,8 @@ export function StudentClassesPanel({
                                     setEditingClass(null)
                                     setClassName("")
                                     setGradeLevel("")
+                                    setNewGradeLevel("")
+                                    setIsAddingGradeLevel(false)
                                     setClassError(null)
                                     onCreateDialogOpenChange(false)
                                 }}
