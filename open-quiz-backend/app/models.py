@@ -186,6 +186,10 @@ class QuizSession(Base):
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    paused_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    paused_duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class QuizSessionQuestion(Base):

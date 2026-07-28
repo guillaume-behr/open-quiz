@@ -254,6 +254,7 @@
     "student-answer-error": "Diese Antwort konnte nicht gespeichert werden.",
     "student-quiz-finished": "Das Quiz ist beendet. Vielen Dank für Ihre Teilnahme!",
     "join-another-quiz": "An einem anderen Quiz teilnehmen",
+    "leave-quiz": "Quiz verlassen",
     "student-answer-recorded": "Antwort aufgezeichnet",
     "student-waiting-next": "Warten Sie, bis der Lehrer mit der nächsten Frage fortfährt.",
     "student-question-progress": "Frage {{current}} zu {{total}}",
@@ -296,5 +297,19 @@
     "result-participants": "Teilnehmer",
     "result-progress": "Fragen beantwortet",
     "result-score": "Punktzahl",
-    "result-no-participants": "An diesem Quiz haben keine Schüler teilgenommen."
+    "result-no-participants": "An diesem Quiz haben keine Schüler teilgenommen.",
+    "quiz-paused": "Quiz pausiert",
+    "quiz-cancelled": "Quiz abgebrochen",
+    "pause-quiz": "Quiz pausieren",
+    "resume-quiz": "Quiz fortsetzen",
+    "cancel-quiz": "Quiz abbrechen",
+    "delete-session": "Sitzung löschen",
+    "cancel-quiz-help": "Dieses Quiz abbrechen? Die Schüler können danach nicht mehr antworten. Die Sitzung kann anschließend gelöscht werden.",
+    "delete-session-help": "Diese Sitzung, ihre Teilnehmer und alle Antworten dauerhaft löschen?",
+    "confirm-cancellation": "Abbruch bestätigen",
+    "quiz-session-action-error": "Der Status dieser Sitzung konnte nicht geändert werden.",
+    "quiz-session-delete-error": "Diese Sitzung konnte nicht gelöscht werden.",
+    "student-quiz-paused": "Das Quiz ist pausiert",
+    "student-quiz-paused-help": "Warte, bis deine Lehrkraft das Quiz fortsetzt.",
+    "student-quiz-cancelled": "Dieses Quiz wurde von deiner Lehrkraft abgebrochen."
 }

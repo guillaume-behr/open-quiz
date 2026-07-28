@@ -278,6 +278,7 @@
     "student-answer-error": "لا يمكن حفظ هذا الرد.",
     "student-quiz-finished": "انتهى الاختبار. شكرا لمشاركتك!",
     "join-another-quiz": "الانضمام إلى اختبار آخر",
+    "leave-quiz": "مغادرة الاختبار",
     "student-answer-recorded": "تم تسجيل الاستجابة",
     "student-waiting-next": "انتظر حتى ينتقل المعلم إلى السؤال التالي.",
     "student-question-progress": "سؤال {{current}} على {{total}}",
@@ -344,5 +345,19 @@
     "result-participants": "المشاركون",
     "result-progress": "تمت الإجابة على الأسئلة",
     "result-score": "النتيجة",
-    "result-no-participants": "لم يشارك أي طالب في هذا الاختبار."
+    "result-no-participants": "لم يشارك أي طالب في هذا الاختبار.",
+    "quiz-paused": "الاختبار متوقف مؤقتًا",
+    "quiz-cancelled": "تم إلغاء الاختبار",
+    "pause-quiz": "إيقاف الاختبار مؤقتًا",
+    "resume-quiz": "استئناف الاختبار",
+    "cancel-quiz": "إلغاء الاختبار",
+    "delete-session": "حذف الجلسة",
+    "cancel-quiz-help": "هل تريد إلغاء هذا الاختبار؟ لن يتمكن الطلاب من متابعة الإجابة، ويمكن حذف الجلسة بعد ذلك.",
+    "delete-session-help": "هل تريد حذف هذه الجلسة والمشاركين وجميع إجاباتهم نهائيًا؟",
+    "confirm-cancellation": "تأكيد الإلغاء",
+    "quiz-session-action-error": "تعذر تغيير حالة هذه الجلسة.",
+    "quiz-session-delete-error": "تعذر حذف هذه الجلسة.",
+    "student-quiz-paused": "الاختبار متوقف مؤقتًا",
+    "student-quiz-paused-help": "انتظر حتى يستأنف المعلم الاختبار.",
+    "student-quiz-cancelled": "ألغى المعلم هذا الاختبار."
 }

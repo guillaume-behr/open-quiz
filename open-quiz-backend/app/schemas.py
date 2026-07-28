@@ -367,7 +367,7 @@ class QuizSessionResponse(BaseModel):
     class_id: int | None
     class_name: str
     join_code: str
-    status: Literal["waiting", "in_progress", "finished"]
+    status: Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
     participant_count: int
     participants: list[QuizParticipantResponse]
     current_question_number: int | None
@@ -382,7 +382,7 @@ class StudentQuizSessionResponse(BaseModel):
     quiz_title: str
     class_name: str
     join_code: str
-    status: Literal["waiting", "in_progress", "finished"]
+    status: Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
     ends_at: datetime | None
 
 

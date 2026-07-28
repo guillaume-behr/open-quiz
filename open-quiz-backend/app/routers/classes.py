@@ -191,7 +191,7 @@ def delete_class(
         session.scalar(
             select(QuizSession.id).where(
                 QuizSession.class_id == class_id,
-                QuizSession.status.in_(["waiting", "in_progress"]),
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
             )
         )
         is not None
@@ -316,7 +316,7 @@ def delete_student(
         session.scalar(
             select(QuizSession.id).where(
                 QuizSession.class_id == student.class_id,
-                QuizSession.status.in_(["waiting", "in_progress"]),
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
             )
         )
         is not None

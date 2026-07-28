@@ -254,6 +254,7 @@
     "student-answer-error": "无法保存此回复。",
     "student-quiz-finished": "测验结束了。感谢您的参与！",
     "join-another-quiz": "参加其他测验",
+    "leave-quiz": "退出测验",
     "student-answer-recorded": "响应已记录",
     "student-waiting-next": "等待老师进入下一个问题。",
     "student-question-progress": "关于 {{total}} 的问题 {{current}}",
@@ -296,5 +297,19 @@
     "result-participants": "参与者",
     "result-progress": "问题解答",
     "result-score": "分数",
-    "result-no-participants": "没有学生参加此测验。"
+    "result-no-participants": "没有学生参加此测验。",
+    "quiz-paused": "测验已暂停",
+    "quiz-cancelled": "测验已取消",
+    "pause-quiz": "暂停测验",
+    "resume-quiz": "继续测验",
+    "cancel-quiz": "取消测验",
+    "delete-session": "删除会话",
+    "cancel-quiz-help": "要取消此测验吗？学生将无法继续作答，之后可以删除该会话。",
+    "delete-session-help": "要永久删除此会话、参与者及其所有答案吗？",
+    "confirm-cancellation": "确认取消",
+    "quiz-session-action-error": "无法更改此会话的状态。",
+    "quiz-session-delete-error": "无法删除此会话。",
+    "student-quiz-paused": "测验已暂停",
+    "student-quiz-paused-help": "请等待老师继续测验。",
+    "student-quiz-cancelled": "老师已取消此测验。"
 }

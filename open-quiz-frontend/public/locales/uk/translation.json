@@ -266,6 +266,7 @@
     "student-answer-error": "Цю відповідь не вдалося зберегти.",
     "student-quiz-finished": "Вікторину закінчено. Дякуємо за участь!",
     "join-another-quiz": "Приєднатися до іншої вікторини",
+    "leave-quiz": "Вийти з вікторини",
     "student-answer-recorded": "Відповідь записано",
     "student-waiting-next": "Зачекайте, поки вчитель перейде до наступного запитання.",
     "student-question-progress": "Питання {{current}} на {{total}}",
@@ -320,5 +321,19 @@
     "result-participants": "Учасники",
     "result-progress": "Відповіді на запитання",
     "result-score": "Оцінка",
-    "result-no-participants": "Жоден студент не брав участі в цьому тесті."
+    "result-no-participants": "Жоден студент не брав участі в цьому тесті.",
+    "quiz-paused": "Вікторину призупинено",
+    "quiz-cancelled": "Вікторину скасовано",
+    "pause-quiz": "Призупинити вікторину",
+    "resume-quiz": "Продовжити вікторину",
+    "cancel-quiz": "Скасувати вікторину",
+    "delete-session": "Видалити сеанс",
+    "cancel-quiz-help": "Скасувати цю вікторину? Учні більше не зможуть відповідати. Після цього сеанс можна буде видалити.",
+    "delete-session-help": "Назавжди видалити цей сеанс, його учасників і всі їхні відповіді?",
+    "confirm-cancellation": "Підтвердити скасування",
+    "quiz-session-action-error": "Не вдалося змінити стан цього сеансу.",
+    "quiz-session-delete-error": "Не вдалося видалити цей сеанс.",
+    "student-quiz-paused": "Вікторину призупинено",
+    "student-quiz-paused-help": "Зачекайте, поки вчитель продовжить вікторину.",
+    "student-quiz-cancelled": "Цю вікторину скасував ваш учитель."
 }

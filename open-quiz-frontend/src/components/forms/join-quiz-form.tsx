@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { useObjectUrl } from "@/hooks/use-object-url"
 import { cn } from "@/lib/utils"
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle, LogOut } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -98,8 +98,10 @@ export function JoinQuizForm() {
     const [isFullscreen, setIsFullscreen] = useState(
         Boolean(document.fullscreenElement)
     )
+    const isLeavingQuiz = useRef(false)
     const violationTimes = useRef<Record<string, number>>({})
-    const monitoredJoinCode = session?.join_code
+    const monitoredJoinCode =
+        session?.status === "in_progress" ? session.join_code : undefined
 
     useEffect(() => {
         if (!restoredSession) return
@@ -139,6 +141,7 @@ export function JoinQuizForm() {
                 | "window_blur"
                 | "page_hidden"
         ) => {
+            if (isLeavingQuiz.current) return
             const now = Date.now()
             if (now - (violationTimes.current[eventType] ?? 0) < 1000) return
             violationTimes.current[eventType] = now
@@ -177,7 +180,11 @@ export function JoinQuizForm() {
     }, [monitoredJoinCode, participantToken])
 
     useEffect(() => {
-        if (!session || !participantToken || session.status === "finished")
+        if (
+            !session ||
+            !participantToken ||
+            ["finished", "cancelled"].includes(session.status)
+        )
             return
         let active = true
         const refresh = () => {
@@ -230,7 +237,8 @@ export function JoinQuizForm() {
         }
     }
 
-    function joinAnotherQuiz() {
+    function leaveQuiz() {
+        isLeavingQuiz.current = true
         sessionStorage.removeItem(QUIZ_SESSION_STORAGE_KEY)
         setSession(null)
         setParticipantToken(null)
@@ -238,6 +246,15 @@ export function JoinQuizForm() {
         setSelectedChoiceIds([])
         setWrittenAnswer("")
         setError(null)
+        if (document.fullscreenElement) {
+            void document.exitFullscreen().finally(() => {
+                window.setTimeout(() => {
+                    isLeavingQuiz.current = false
+                }, 0)
+            })
+        } else {
+            isLeavingQuiz.current = false
+        }
     }
 
     async function goToPreviousQuestion() {
@@ -296,9 +313,22 @@ export function JoinQuizForm() {
     }
 
     if (session) {
-        if (!isFullscreen && session.status !== "finished") {
+        if (
+            !isFullscreen &&
+            !["finished", "cancelled"].includes(session.status)
+        ) {
             return (
-                <div className="flex w-full max-w-lg flex-col gap-5 rounded-2xl border bg-secondary px-8 py-10 text-center shadow-lg">
+                <div className="relative flex w-full max-w-lg flex-col gap-5 rounded-2xl border bg-secondary px-8 pt-20 pb-10 text-center shadow-lg">
+                    <Button
+                        className="absolute top-5 right-5"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={leaveQuiz}
+                    >
+                        <LogOut />
+                        {t("leave-quiz")}
+                    </Button>
                     <p className="text-2xl font-bold">
                         {t("fullscreen-required")}
                     </p>
@@ -320,7 +350,18 @@ export function JoinQuizForm() {
         }
         const question = session.question
         return (
-            <div className="flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 py-8 shadow-lg sm:px-10">
+            <div className="relative flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 pt-20 pb-8 shadow-lg sm:px-10">
+                <Button
+                    className="absolute top-5 right-5"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={isBusy}
+                    onClick={leaveQuiz}
+                >
+                    <LogOut />
+                    {t("leave-quiz")}
+                </Button>
                 <div className="text-center">
                     <h1 className="text-3xl font-extrabold">
                         {session.quiz_title}
@@ -342,6 +383,31 @@ export function JoinQuizForm() {
                         </p>
                     </div>
                 )}
+                {session.status === "paused" && (
+                    <div className="rounded-xl border border-dashed p-8 text-center">
+                        <LoaderCircle className="mx-auto size-8 animate-spin text-primary" />
+                        <p className="mt-3 text-xl font-bold">
+                            {t("student-quiz-paused")}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            {t("student-quiz-paused-help")}
+                        </p>
+                    </div>
+                )}
+                {session.status === "cancelled" && (
+                    <div className="rounded-xl bg-destructive/10 p-6 text-center sm:p-8">
+                        <p className="text-2xl font-bold">
+                            {t("student-quiz-cancelled")}
+                        </p>
+                        <Button
+                            className="mt-5"
+                            variant="outline"
+                            onClick={leaveQuiz}
+                        >
+                            {t("join-another-quiz")}
+                        </Button>
+                    </div>
+                )}
                 {session.status === "finished" && (
                     <div className="rounded-xl bg-primary/10 p-6 text-center sm:p-8">
                         <p className="text-2xl font-bold">
@@ -350,7 +416,7 @@ export function JoinQuizForm() {
                         <Button
                             className="mt-5"
                             variant="outline"
-                            onClick={joinAnotherQuiz}
+                            onClick={leaveQuiz}
                         >
                             {t("join-another-quiz")}
                         </Button>

@@ -809,6 +809,17 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             client.get(student_state_url, headers=student_headers).json()["status"]
             == "waiting"
         )
+        waiting_violation = client.post(
+            f"{student_state_url}/violation",
+            headers=student_headers,
+            json={"event_type": "fullscreen_exit"},
+        )
+        assert waiting_violation.status_code == 204
+        waiting_participant = client.get(
+            f"/api/quizzes/sessions/{quiz_session['id']}",
+            headers=teacher_headers,
+        ).json()["participants"][0]
+        assert waiting_participant["violation_count"] == 0
 
         started = client.post(
             f"/api/quizzes/sessions/{quiz_session['id']}/start",
@@ -818,6 +829,34 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert started.json()["status"] == "in_progress"
         assert started.json()["started_at"] is not None
         assert started.json()["ends_at"] is not None
+        original_ends_at = started.json()["ends_at"]
+        paused = client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/pause",
+            headers=teacher_headers,
+        )
+        assert paused.status_code == 200
+        assert paused.json()["status"] == "paused"
+        paused_student_state = client.get(
+            student_state_url,
+            headers=student_headers,
+        ).json()
+        assert paused_student_state["status"] == "paused"
+        assert paused_student_state["question"] is None
+        assert (
+            client.post(
+                f"{student_state_url}/answer",
+                headers=student_headers,
+                json={},
+            ).status_code
+            == 409
+        )
+        resumed = client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/resume",
+            headers=teacher_headers,
+        )
+        assert resumed.status_code == 200
+        assert resumed.json()["status"] == "in_progress"
+        assert resumed.json()["ends_at"] >= original_ends_at
         violation = client.post(
             f"{student_state_url}/violation",
             headers=student_headers,
@@ -876,6 +915,16 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             state_payload = student_state.json()
             assert state_payload["question_number"] == question_number
             assert state_payload["question"] is not None
+            repeated_state = client.get(
+                student_state_url,
+                headers=student_headers,
+            ).json()
+            assert [
+                choice["id"] for choice in repeated_state["question"]["choices"]
+            ] == [choice["id"] for choice in state_payload["question"]["choices"]]
+            assert [
+                choice["position"] for choice in state_payload["question"]["choices"]
+            ] == list(range(len(state_payload["question"]["choices"])))
 
             def collect_keys(value):
                 if isinstance(value, dict):
@@ -1025,6 +1074,55 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
         ).json()
         assert refreshed_results[0]["participants"][0]["score"] > previous_score
+
+        cancelled_launch = client.post(
+            f"/api/quizzes/{quiz['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        )
+        assert cancelled_launch.status_code == 201
+        cancelled_session = cancelled_launch.json()
+        cancelled_join = client.post(
+            "/api/quizzes/join",
+            json={
+                "join_code": cancelled_session["join_code"],
+                "student_identifier": student["identifier"],
+            },
+        )
+        assert cancelled_join.status_code == 201
+        cancelled_headers = {"X-Quiz-Token": cancelled_join.json()["participant_token"]}
+        cancelled = client.post(
+            f"/api/quizzes/sessions/{cancelled_session['id']}/cancel",
+            headers=teacher_headers,
+        )
+        assert cancelled.status_code == 200
+        assert cancelled.json()["status"] == "cancelled"
+        cancelled_student_state = client.get(
+            f"/api/quizzes/student/sessions/{cancelled_session['join_code']}",
+            headers=cancelled_headers,
+        )
+        assert cancelled_student_state.status_code == 200
+        assert cancelled_student_state.json()["status"] == "cancelled"
+        assert cancelled_student_state.json()["question"] is None
+        assert cancelled_session["id"] in {
+            item["id"]
+            for item in client.get(
+                "/api/quizzes/sessions/active",
+                headers=teacher_headers,
+            ).json()
+        }
+        deleted_cancelled = client.delete(
+            f"/api/quizzes/sessions/{cancelled_session['id']}",
+            headers=teacher_headers,
+        )
+        assert deleted_cancelled.status_code == 204
+        assert (
+            client.get(
+                f"/api/quizzes/sessions/{cancelled_session['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 404
+        )
 
         expiring_launch = client.post(
             f"/api/quizzes/{quiz['id']}/launch",
@@ -1346,6 +1444,7 @@ def test_existing_quiz_sessions_gain_class_and_student_links(
             row[1] for row in database.execute("PRAGMA table_info(quiz_participants)")
         }
     assert "class_id" in session_columns
+    assert {"paused_at", "paused_duration_seconds"}.issubset(session_columns)
     assert {"student_id", "student_display_name"}.issubset(participant_columns)
 
 

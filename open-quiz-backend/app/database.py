@@ -44,6 +44,10 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
         quiz_columns = {
             column["name"] for column in inspect(connection).get_columns("quizzes")
         }
+        quiz_session_columns = {
+            column["name"]
+            for column in inspect(connection).get_columns("quiz_sessions")
+        }
         if "duration_seconds" not in quiz_columns:
             connection.execute(
                 text(
@@ -56,6 +60,17 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                 text(
                     "ALTER TABLE quizzes ADD COLUMN "
                     "allow_previous_questions BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            )
+        if "paused_at" not in quiz_session_columns:
+            connection.execute(
+                text("ALTER TABLE quiz_sessions ADD COLUMN paused_at DATETIME")
+            )
+        if "paused_duration_seconds" not in quiz_session_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quiz_sessions ADD COLUMN "
+                    "paused_duration_seconds INTEGER NOT NULL DEFAULT 0"
                 )
             )
         if "points" not in choice_columns:

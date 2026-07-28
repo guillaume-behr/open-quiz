@@ -165,7 +165,7 @@ export type QuizSession = {
     class_id: number | null
     class_name: string
     join_code: string
-    status: "waiting" | "in_progress" | "finished"
+    status: "waiting" | "in_progress" | "paused" | "finished" | "cancelled"
     participant_count: number
     participants: QuizParticipant[]
     current_question_number: number | null
@@ -201,7 +201,7 @@ export type StudentQuizSession = {
     quiz_title: string
     class_name: string
     join_code: string
-    status: "waiting" | "in_progress" | "finished"
+    status: "waiting" | "in_progress" | "paused" | "finished" | "cancelled"
     ends_at: string | null
     question_number: number | null
     total_questions: number

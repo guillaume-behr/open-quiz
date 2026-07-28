@@ -258,6 +258,7 @@
     "student-answer-error": "Impossible d’enregistrer cette réponse.",
     "student-quiz-finished": "Le quiz est terminé. Merci pour votre participation !",
     "join-another-quiz": "Rejoindre un autre quiz",
+    "leave-quiz": "Quitter le quiz",
     "student-answer-recorded": "Réponse enregistrée",
     "student-waiting-next": "Attendez que l’enseignant passe à la question suivante.",
     "student-question-progress": "Question {{current}} sur {{total}}",
@@ -300,5 +301,19 @@
     "result-participants": "Participants",
     "result-progress": "Questions répondues",
     "result-score": "Score",
-    "result-no-participants": "Aucun élève n’a participé à ce quiz."
+    "result-no-participants": "Aucun élève n’a participé à ce quiz.",
+    "quiz-paused": "Quiz en pause",
+    "quiz-cancelled": "Quiz annulé",
+    "pause-quiz": "Mettre en pause",
+    "resume-quiz": "Reprendre le quiz",
+    "cancel-quiz": "Annuler le quiz",
+    "delete-session": "Supprimer la session",
+    "cancel-quiz-help": "Annuler ce quiz ? Les élèves ne pourront plus répondre. La session pourra ensuite être supprimée.",
+    "delete-session-help": "Supprimer définitivement cette session, ses participants et toutes leurs réponses ?",
+    "confirm-cancellation": "Confirmer l’annulation",
+    "quiz-session-action-error": "Impossible de modifier l’état de cette session.",
+    "quiz-session-delete-error": "Impossible de supprimer cette session.",
+    "student-quiz-paused": "Le quiz est en pause",
+    "student-quiz-paused-help": "Attendez que votre enseignant reprenne le quiz.",
+    "student-quiz-cancelled": "Ce quiz a été annulé par votre enseignant."
 }

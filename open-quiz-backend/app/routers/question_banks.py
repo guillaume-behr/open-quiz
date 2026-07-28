@@ -707,7 +707,7 @@ async def update_question(
             )
             .where(
                 QuizSessionQuestion.question_id == question_id,
-                QuizSession.status.in_(["waiting", "in_progress"]),
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
             )
         )
         is not None

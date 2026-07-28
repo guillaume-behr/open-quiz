@@ -58,6 +58,24 @@ export function startQuizSession(sessionId: number): Promise<QuizSession> {
     })
 }
 
+export function pauseQuizSession(sessionId: number): Promise<QuizSession> {
+    return request<QuizSession>(`/api/quizzes/sessions/${sessionId}/pause`, {
+        method: "POST",
+    })
+}
+
+export function resumeQuizSession(sessionId: number): Promise<QuizSession> {
+    return request<QuizSession>(`/api/quizzes/sessions/${sessionId}/resume`, {
+        method: "POST",
+    })
+}
+
+export function cancelQuizSession(sessionId: number): Promise<QuizSession> {
+    return request<QuizSession>(`/api/quizzes/sessions/${sessionId}/cancel`, {
+        method: "POST",
+    })
+}
+
 export function joinQuiz(
     joinCode: string,
     studentIdentifier: string

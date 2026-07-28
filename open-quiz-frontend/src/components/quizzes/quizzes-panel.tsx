@@ -1,12 +1,16 @@
 import { getStudentClasses } from "@/api/classes"
 import { getQuestionBanks } from "@/api/question-banks"
 import {
+    cancelQuizSession,
     createQuiz,
+    deleteQuizSession,
     getActiveQuizSessions,
     getQuizSession,
     getQuizzes,
     launchQuiz,
+    pauseQuizSession,
     previewQuiz,
+    resumeQuizSession,
     startQuizSession,
 } from "@/api/quizzes"
 import type {
@@ -31,10 +35,14 @@ import {
     AlertTriangle,
     Eye,
     LoaderCircle,
+    Pause,
     Play,
     Plus,
     RefreshCw,
+    RotateCcw,
+    Trash2,
     UsersRound,
+    XCircle,
 } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -47,6 +55,16 @@ type QuizzesPanelProps = {
 const difficultyKeys = ["easy", "medium", "hard"] as const
 const selectClassName =
     "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+
+function sessionStatusKey(status: QuizSession["status"]): string {
+    return {
+        waiting: "waiting-for-students",
+        in_progress: "quiz-started",
+        paused: "quiz-paused",
+        finished: "quiz-finished",
+        cancelled: "quiz-cancelled",
+    }[status]
+}
 
 export function QuizzesPanel({
     isCreateDialogOpen,
@@ -84,6 +102,12 @@ export function QuizzesPanel({
         null
     )
     const [isStarting, setIsStarting] = useState(false)
+    const [sessionAction, setSessionAction] = useState<
+        "pause" | "resume" | "cancel" | "delete" | null
+    >(null)
+    const [sessionActionToConfirm, setSessionActionToConfirm] = useState<
+        "cancel" | "delete" | null
+    >(null)
     const [quizFilter, setQuizFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
     const activeSessionId = activeSession?.id
@@ -125,7 +149,9 @@ export function QuizzesPanel({
     useEffect(() => {
         if (
             !activeSessionId ||
-            !["waiting", "in_progress"].includes(activeSessionStatus ?? "")
+            !["waiting", "in_progress", "paused"].includes(
+                activeSessionStatus ?? ""
+            )
         )
             return
         let isActive = true
@@ -263,6 +289,55 @@ export function QuizzesPanel({
             setActiveSessionError(t("quiz-start-error"))
         } finally {
             setIsStarting(false)
+        }
+    }
+
+    function updateSession(updated: QuizSession): void {
+        setActiveSession(updated)
+        setSessions((current) =>
+            current.map((session) =>
+                session.id === updated.id ? updated : session
+            )
+        )
+    }
+
+    async function handleSessionAction(
+        action: "pause" | "resume" | "cancel"
+    ): Promise<void> {
+        if (!activeSession) return
+        setActiveSessionError(null)
+        setSessionAction(action)
+        try {
+            const updated =
+                action === "pause"
+                    ? await pauseQuizSession(activeSession.id)
+                    : action === "resume"
+                      ? await resumeQuizSession(activeSession.id)
+                      : await cancelQuizSession(activeSession.id)
+            updateSession(updated)
+            setSessionActionToConfirm(null)
+        } catch {
+            setActiveSessionError(t("quiz-session-action-error"))
+        } finally {
+            setSessionAction(null)
+        }
+    }
+
+    async function handleDeleteSession(): Promise<void> {
+        if (!activeSession) return
+        setActiveSessionError(null)
+        setSessionAction("delete")
+        try {
+            await deleteQuizSession(activeSession.id)
+            setSessions((current) =>
+                current.filter((session) => session.id !== activeSession.id)
+            )
+            setSessionActionToConfirm(null)
+            setActiveSession(null)
+        } catch {
+            setActiveSessionError(t("quiz-session-delete-error"))
+        } finally {
+            setSessionAction(null)
         }
     }
 
@@ -880,11 +955,7 @@ export function QuizzesPanel({
                 description={
                     activeSession
                         ? `${activeSession.class_name} — ${t(
-                              activeSession.status === "waiting"
-                                  ? "waiting-for-students"
-                                  : activeSession.status === "in_progress"
-                                    ? "quiz-started"
-                                    : "quiz-finished"
+                              sessionStatusKey(activeSession.status)
                           )}`
                         : undefined
                 }
@@ -902,6 +973,12 @@ export function QuizzesPanel({
                                 <div className="mt-3">
                                     <QuizTimer endsAt={activeSession.ends_at} />
                                 </div>
+                            )}
+                            {activeSession.status === "paused" && (
+                                <p className="mt-3 flex items-center justify-center gap-2 font-semibold text-amber-600">
+                                    <Pause />
+                                    {t("quiz-paused")}
+                                </p>
                             )}
                         </div>
                         <div className="mt-5 flex items-center justify-between gap-3">
@@ -954,8 +1031,9 @@ export function QuizzesPanel({
                                                     )}
                                                 </span>
                                             )}
-                                            {activeSession.status ===
-                                                "in_progress" && (
+                                            {["in_progress", "paused"].includes(
+                                                activeSession.status
+                                            ) && (
                                                 <span className="block text-sm font-semibold text-primary">
                                                     {t(
                                                         "teacher-student-progress",
@@ -991,8 +1069,8 @@ export function QuizzesPanel({
                                 {activeSessionError}
                             </FieldError>
                         )}
-                        {activeSession.status === "waiting" && (
-                            <div className="mt-5 flex justify-end border-t pt-4">
+                        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t pt-4">
+                            {activeSession.status === "waiting" && (
                                 <Button
                                     type="button"
                                     size="lg"
@@ -1009,10 +1087,136 @@ export function QuizzesPanel({
                                     )}
                                     {t("start-quiz")}
                                 </Button>
-                            </div>
-                        )}
+                            )}
+                            {activeSession.status === "in_progress" && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={sessionAction !== null}
+                                    onClick={() =>
+                                        void handleSessionAction("pause")
+                                    }
+                                >
+                                    {sessionAction === "pause" ? (
+                                        <LoaderCircle className="animate-spin" />
+                                    ) : (
+                                        <Pause />
+                                    )}
+                                    {t("pause-quiz")}
+                                </Button>
+                            )}
+                            {activeSession.status === "paused" && (
+                                <Button
+                                    type="button"
+                                    disabled={sessionAction !== null}
+                                    onClick={() =>
+                                        void handleSessionAction("resume")
+                                    }
+                                >
+                                    {sessionAction === "resume" ? (
+                                        <LoaderCircle className="animate-spin" />
+                                    ) : (
+                                        <RotateCcw />
+                                    )}
+                                    {t("resume-quiz")}
+                                </Button>
+                            )}
+                            {["waiting", "in_progress", "paused"].includes(
+                                activeSession.status
+                            ) && (
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={
+                                        isStarting || sessionAction !== null
+                                    }
+                                    onClick={() => {
+                                        setActiveSessionError(null)
+                                        setSessionActionToConfirm("cancel")
+                                    }}
+                                >
+                                    <XCircle />
+                                    {t("cancel-quiz")}
+                                </Button>
+                            )}
+                            {["cancelled", "finished"].includes(
+                                activeSession.status
+                            ) && (
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={sessionAction !== null}
+                                    onClick={() => {
+                                        setActiveSessionError(null)
+                                        setSessionActionToConfirm("delete")
+                                    }}
+                                >
+                                    <Trash2 />
+                                    {t("delete-session")}
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 )}
+            </Dialog>
+
+            <Dialog
+                open={sessionActionToConfirm !== null}
+                onOpenChange={(open) => {
+                    if (!open && sessionAction === null) {
+                        setSessionActionToConfirm(null)
+                    }
+                }}
+                title={t(
+                    sessionActionToConfirm === "delete"
+                        ? "delete-session"
+                        : "cancel-quiz"
+                )}
+                description={t(
+                    sessionActionToConfirm === "delete"
+                        ? "delete-session-help"
+                        : "cancel-quiz-help"
+                )}
+                className="max-w-md"
+            >
+                {activeSessionError && (
+                    <FieldError className="mb-4">
+                        {activeSessionError}
+                    </FieldError>
+                )}
+                <div className="flex justify-end gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={sessionAction !== null}
+                        onClick={() => setSessionActionToConfirm(null)}
+                    >
+                        {t("cancel")}
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={sessionAction !== null}
+                        onClick={() =>
+                            sessionActionToConfirm === "delete"
+                                ? void handleDeleteSession()
+                                : void handleSessionAction("cancel")
+                        }
+                    >
+                        {sessionAction !== null ? (
+                            <LoaderCircle className="animate-spin" />
+                        ) : sessionActionToConfirm === "delete" ? (
+                            <Trash2 />
+                        ) : (
+                            <XCircle />
+                        )}
+                        {t(
+                            sessionActionToConfirm === "delete"
+                                ? "delete"
+                                : "confirm-cancellation"
+                        )}
+                    </Button>
+                </div>
             </Dialog>
         </div>
     )

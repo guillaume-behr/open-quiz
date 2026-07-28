@@ -254,6 +254,7 @@
     "student-answer-error": "Esta respuesta no se pudo guardar.",
     "student-quiz-finished": "La prueba ha terminado. ¡Gracias por tu participación!",
     "join-another-quiz": "Unirse a otro cuestionario",
+    "leave-quiz": "Salir del cuestionario",
     "student-answer-recorded": "Respuesta registrada",
     "student-waiting-next": "Espera a que el profesor pase a la siguiente pregunta.",
     "student-question-progress": "Pregunta {{current}} el {{total}}",
@@ -296,5 +297,19 @@
     "result-participants": "Participantes",
     "result-progress": "Preguntas respondidas",
     "result-score": "Puntuación",
-    "result-no-participants": "Ningún estudiante participó en este cuestionario."
+    "result-no-participants": "Ningún estudiante participó en este cuestionario.",
+    "quiz-paused": "Cuestionario en pausa",
+    "quiz-cancelled": "Cuestionario cancelado",
+    "pause-quiz": "Pausar cuestionario",
+    "resume-quiz": "Reanudar cuestionario",
+    "cancel-quiz": "Cancelar cuestionario",
+    "delete-session": "Eliminar sesión",
+    "cancel-quiz-help": "¿Cancelar este cuestionario? Los estudiantes ya no podrán responder. Después podrá eliminarse la sesión.",
+    "delete-session-help": "¿Eliminar permanentemente esta sesión, sus participantes y todas sus respuestas?",
+    "confirm-cancellation": "Confirmar cancelación",
+    "quiz-session-action-error": "No se pudo cambiar el estado de esta sesión.",
+    "quiz-session-delete-error": "No se pudo eliminar esta sesión.",
+    "student-quiz-paused": "El cuestionario está en pausa",
+    "student-quiz-paused-help": "Espera a que tu profesor reanude el cuestionario.",
+    "student-quiz-cancelled": "Tu profesor canceló este cuestionario."
 }

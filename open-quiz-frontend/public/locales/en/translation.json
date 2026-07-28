@@ -254,6 +254,7 @@
     "student-answer-error": "This response could not be saved.",
     "student-quiz-finished": "The quiz is over. Thank you for your participation!",
     "join-another-quiz": "Join another quiz",
+    "leave-quiz": "Leave quiz",
     "student-answer-recorded": "Response recorded",
     "student-waiting-next": "Wait for the teacher to move on to the next question.",
     "student-question-progress": "Question {{current}} on {{total}}",
@@ -296,5 +297,19 @@
     "result-participants": "Participants",
     "result-progress": "Questions answered",
     "result-score": "Score",
-    "result-no-participants": "No students participated in this quiz."
+    "result-no-participants": "No students participated in this quiz.",
+    "quiz-paused": "Quiz paused",
+    "quiz-cancelled": "Quiz cancelled",
+    "pause-quiz": "Pause quiz",
+    "resume-quiz": "Resume quiz",
+    "cancel-quiz": "Cancel quiz",
+    "delete-session": "Delete session",
+    "cancel-quiz-help": "Cancel this quiz? Students will no longer be able to answer. The session can then be deleted.",
+    "delete-session-help": "Permanently delete this session, its participants, and all their answers?",
+    "confirm-cancellation": "Confirm cancellation",
+    "quiz-session-action-error": "Unable to change this session’s status.",
+    "quiz-session-delete-error": "Unable to delete this session.",
+    "student-quiz-paused": "The quiz is paused",
+    "student-quiz-paused-help": "Wait for your teacher to resume the quiz.",
+    "student-quiz-cancelled": "This quiz was cancelled by your teacher."
 }

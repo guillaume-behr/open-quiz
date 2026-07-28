@@ -2,6 +2,7 @@ import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from math import ceil
 from random import SystemRandom
 from secrets import token_urlsafe
 from string import ascii_uppercase, digits
@@ -455,7 +456,13 @@ def quiz_ends_at(quiz_session: QuizSession, quiz: Quiz) -> datetime | None:
         return None
     if started_at.tzinfo is None:
         started_at = started_at.replace(tzinfo=UTC)
-    return started_at + timedelta(seconds=quiz.duration_seconds)
+    paused_duration = quiz_session.paused_duration_seconds or 0
+    if quiz_session.status == "paused" and quiz_session.paused_at is not None:
+        paused_at = quiz_session.paused_at
+        if paused_at.tzinfo is None:
+            paused_at = paused_at.replace(tzinfo=UTC)
+        paused_duration += ceil(max(0, (datetime.now(UTC) - paused_at).total_seconds()))
+    return started_at + timedelta(seconds=quiz.duration_seconds + paused_duration)
 
 
 def expire_quiz_session(
@@ -600,6 +607,8 @@ def authenticated_participant(
 
 def student_question_response(
     question_id: int,
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
     session: DbSession,
 ) -> StudentQuizQuestionResponse:
     question = session.get(Question, question_id)
@@ -616,6 +625,11 @@ def student_question_response(
             .order_by(QuestionChoice.position)
         )
     )
+    choices.sort(
+        key=lambda choice: sha256(
+            (f"{quiz_session.id}:{participant.id}:{question.id}:{choice.id}").encode()
+        ).digest()
+    )
     code = session.get(QuestionCode, question.id)
     return StudentQuizQuestionResponse(
         id=question.id,
@@ -630,12 +644,12 @@ def student_question_response(
             StudentQuizChoiceResponse(
                 id=choice.id,
                 label=choice.label,
-                position=choice.position,
+                position=position,
                 has_image=choice.image_content_type is not None,
                 code_language=choice.code_language,
                 code_content=choice.code_content,
             )
-            for choice in choices
+            for position, choice in enumerate(choices)
         ],
     )
 
@@ -695,7 +709,12 @@ def student_state_response(
         selected_choice_ids=saved_answer.get("selected_choice_ids"),
         written_answer=saved_answer.get("written_answer"),
         question=(
-            student_question_response(question_id, session)
+            student_question_response(
+                question_id,
+                quiz_session,
+                participant,
+                session,
+            )
             if question_id is not None
             else None
         ),
@@ -774,7 +793,7 @@ def list_active_sessions(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             Quiz.owner_id == professor.id,
-            QuizSession.status.in_(["waiting", "in_progress"]),
+            QuizSession.status.in_(["waiting", "in_progress", "paused", "cancelled"]),
         )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
         .limit(20)
@@ -835,15 +854,17 @@ def delete_quiz_session(
     session: DbSession,
 ) -> None:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status != "finished":
+    if quiz_session.status not in {"finished", "cancelled"}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Seules les sessions terminées peuvent être supprimées",
+            detail=(
+                "Seules les sessions terminées ou annulées peuvent être supprimées"
+            ),
         )
     delete_quiz_session_records([quiz_session.id], session)
     session.commit()
     audit_event(
-        "quiz.result_deleted",
+        "quiz.session_deleted",
         professor_id=professor.id,
         session_id=session_id,
         ip=client_ip(request),
@@ -879,6 +900,84 @@ def start_quiz_session(
             participant.current_position = 0
         session.commit()
         session.refresh(quiz_session)
+    return session_response(quiz_session, quiz, session)
+
+
+@router.post(
+    "/sessions/{session_id}/pause",
+    response_model=QuizSessionResponse,
+)
+def pause_quiz_session(
+    session_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> QuizSessionResponse:
+    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    expire_quiz_session(quiz_session, quiz, session)
+    if quiz_session.status != "in_progress":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Seul un quiz en cours peut être mis en pause",
+        )
+    quiz_session.status = "paused"
+    quiz_session.paused_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(quiz_session)
+    return session_response(quiz_session, quiz, session)
+
+
+@router.post(
+    "/sessions/{session_id}/resume",
+    response_model=QuizSessionResponse,
+)
+def resume_quiz_session(
+    session_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> QuizSessionResponse:
+    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    if quiz_session.status != "paused" or quiz_session.paused_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Seul un quiz en pause peut être repris",
+        )
+    paused_at = quiz_session.paused_at
+    if paused_at.tzinfo is None:
+        paused_at = paused_at.replace(tzinfo=UTC)
+    quiz_session.paused_duration_seconds = (
+        quiz_session.paused_duration_seconds or 0
+    ) + ceil(max(0, (datetime.now(UTC) - paused_at).total_seconds()))
+    quiz_session.paused_at = None
+    quiz_session.status = "in_progress"
+    session.commit()
+    session.refresh(quiz_session)
+    return session_response(quiz_session, quiz, session)
+
+
+@router.post(
+    "/sessions/{session_id}/cancel",
+    response_model=QuizSessionResponse,
+)
+def cancel_quiz_session(
+    session_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> QuizSessionResponse:
+    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    expire_quiz_session(quiz_session, quiz, session)
+    if quiz_session.status not in {"waiting", "in_progress", "paused"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cette session ne peut plus être annulée",
+        )
+    quiz_session.status = "cancelled"
+    quiz_session.paused_at = None
+    for participant in session.scalars(
+        select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
+    ):
+        participant.current_position = None
+    session.commit()
+    session.refresh(quiz_session)
     return session_response(quiz_session, quiz, session)
 
 
@@ -1208,7 +1307,7 @@ def report_student_violation(
         participant_token_hash(quiz_token),
     )
     expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status not in {"waiting", "in_progress"}:
+    if quiz_session.status != "in_progress":
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     now = datetime.now(UTC)
     last_violation_at = participant.last_violation_at
