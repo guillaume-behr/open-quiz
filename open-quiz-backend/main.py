@@ -14,7 +14,15 @@ from app.config import Settings, get_settings
 from app.database import build_session_factory
 from app.models import RefreshSession, RefreshSessionFamily, SecurityState, User
 from app.rate_limit import LoginRateLimiter
-from app.routers import admin, auth, health, question_banks, quizzes, users
+from app.routers import (
+    admin,
+    auth,
+    classes,
+    health,
+    question_banks,
+    quizzes,
+    users,
+)
 from app.security import hash_password, verify_password
 
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
@@ -192,7 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else None
         ),
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
 
@@ -262,6 +270,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(admin.router)
+    app.include_router(classes.router)
     app.include_router(quizzes.router)
     app.include_router(question_banks.router)
     return app

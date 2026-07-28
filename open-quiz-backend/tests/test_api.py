@@ -153,6 +153,72 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert admin_login.status_code == 403
 
+        created_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": " 5e   B ", "grade_level": " 5e "},
+        )
+        assert created_class.status_code == 201
+        student_class = created_class.json()
+        assert student_class["name"] == "5e B"
+        assert student_class["grade_level"] == "5e"
+        assert student_class["students"] == []
+        assert (
+            client.post(
+                "/api/classes",
+                headers=teacher_headers,
+                json={"name": "5e B", "grade_level": "5e"},
+            ).status_code
+            == 409
+        )
+
+        created_student = client.post(
+            f"/api/classes/{student_class['id']}/students",
+            headers=teacher_headers,
+            json={
+                "identifier": " martin.g ",
+                "display_name": " Martin   G. ",
+            },
+        )
+        assert created_student.status_code == 201
+        student = created_student.json()
+        assert student["identifier"] == "martin.g"
+        assert student["display_name"] == "Martin G."
+        updated_class = client.post(
+            f"/api/classes/{student_class['id']}/update",
+            headers=teacher_headers,
+            json={"name": "5e B", "grade_level": "Cinquième"},
+        )
+        assert updated_class.status_code == 200
+        assert updated_class.json()["grade_level"] == "Cinquième"
+        updated_student_record = client.post(
+            f"/api/classes/students/{student['id']}/update",
+            headers=teacher_headers,
+            json={
+                "identifier": "martin.g",
+                "display_name": "Martin Giraud",
+            },
+        )
+        assert updated_student_record.status_code == 200
+        student = updated_student_record.json()
+        assert (
+            client.post(
+                f"/api/classes/{student_class['id']}/students",
+                headers=teacher_headers,
+                json={
+                    "identifier": "martin.g",
+                    "display_name": "Autre élève",
+                },
+            ).status_code
+            == 409
+        )
+        listed_classes = client.get(
+            "/api/classes",
+            headers=teacher_headers,
+        )
+        assert listed_classes.status_code == 200
+        assert listed_classes.json()[0]["student_count"] == 1
+
         first_bank = client.post(
             "/api/question-banks",
             headers=teacher_headers,
@@ -194,7 +260,6 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "difficulty": "easy",
             "answer_mode": "single",
             "answer_mode_disclosed": False,
-            "correction_mode": "automatic",
             "code_language": "python",
             "code_content": "def half(value):\n    return value / 2",
             "choices": [
@@ -227,6 +292,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert created_question.status_code == 201
         question = created_question.json()
         assert question["has_image"] is True
+        assert "correction_mode" not in question
         assert question["answer_mode_disclosed"] is False
         assert question["code_language"] == "python"
         assert "return value / 2" in question["code_content"]
@@ -270,7 +336,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert choice_image.headers["content-type"] == "image/png"
         assert choice_image.content.startswith(b"\x89PNG")
 
-        invalid_automatic_question = {
+        question_without_correct_answer = {
             **question_payload,
             "choices": [
                 {"label": "1/2", "is_correct": False},
@@ -280,7 +346,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         invalid_question = client.post(
             f"/api/question-banks/{first_bank.json()['id']}/questions",
             headers=teacher_headers,
-            data={"payload": json.dumps(invalid_automatic_question)},
+            data={"payload": json.dumps(question_without_correct_answer)},
         )
         assert invalid_question.status_code == 422
 
@@ -298,17 +364,6 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert invalid_points.status_code == 422
 
-        invalid_manual_question = {
-            **question_payload,
-            "correction_mode": "manual",
-        }
-        invalid_manual = client.post(
-            f"/api/question-banks/{first_bank.json()['id']}/questions",
-            headers=teacher_headers,
-            data={"payload": json.dumps(invalid_manual_question)},
-        )
-        assert invalid_manual.status_code == 422
-
         exported = client.get(
             f"/api/question-banks/{first_bank.json()['id']}/export",
             headers=teacher_headers,
@@ -324,6 +379,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "chapter": "Les fractions",
         }
         assert exported_batch["questions"][0]["image"]["content_type"] == "image/png"
+        assert "correction_mode" not in exported_batch["questions"][0]
         assert exported_batch["questions"][0]["code_language"] == "python"
         assert exported_batch["questions"][0]["choices"][0]["points"] == 2.5
         assert exported_batch["questions"][0]["choices"][1]["points"] == -0.5
@@ -369,6 +425,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "chapter": "Import sans points",
         }
         for imported_question in legacy_batch["questions"]:
+            imported_question["correction_mode"] = "automatic"
             for choice in imported_question["choices"]:
                 choice.pop("points")
         legacy_import = client.post(
@@ -407,14 +464,14 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert '"prompt": "Quelle est la capitale' in example.text
         example_batch = example.json()
         assert example_batch["version"] == 1
-        assert {
-            (item["answer_mode"], item["correction_mode"])
-            for item in example_batch["questions"]
-        } == {
-            ("single", "automatic"),
-            ("multiple", "automatic"),
-            ("written", "automatic"),
+        assert {item["answer_mode"] for item in example_batch["questions"]} == {
+            "single",
+            "multiple",
+            "written",
         }
+        assert all(
+            "correction_mode" not in item for item in example_batch["questions"]
+        )
         assert any(item["image"] for item in example_batch["questions"])
         assert any(item["code_content"] for item in example_batch["questions"])
         assert any(
@@ -449,6 +506,189 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             question["answer_mode"]
             for question in imported_example.json()["questions"]
         } == {"single", "multiple", "written"}
+
+        invalid_quiz_distribution = client.post(
+            "/api/quizzes",
+            headers=teacher_headers,
+            json={
+                "title": "Révisions invalides",
+                "question_bank_ids": [
+                    imported_example.json()["question_bank"]["id"]
+                ],
+                "question_count": 3,
+                "easy_percentage": 30,
+                "medium_percentage": 30,
+                "hard_percentage": 30,
+            },
+        )
+        assert invalid_quiz_distribution.status_code == 422
+
+        created_quiz = client.post(
+            "/api/quizzes",
+            headers=teacher_headers,
+            json={
+                "title": " Révisions   générales ",
+                "question_bank_ids": [
+                    imported_example.json()["question_bank"]["id"]
+                ],
+                "question_count": 3,
+                "easy_percentage": 34,
+                "medium_percentage": 33,
+                "hard_percentage": 33,
+            },
+        )
+        assert created_quiz.status_code == 201
+        quiz = created_quiz.json()
+        assert quiz["title"] == "Révisions générales"
+        assert quiz["question_count"] == 3
+        assert len(quiz["question_banks"]) == 1
+        assert client.get("/api/quizzes", headers=teacher_headers).json()[0][
+            "id"
+        ] == quiz["id"]
+
+        preview = client.get(
+            f"/api/quizzes/{quiz['id']}/preview",
+            headers=teacher_headers,
+        )
+        assert preview.status_code == 200
+        assert len(preview.json()) == 3
+        assert {question["difficulty"] for question in preview.json()} == {
+            "easy",
+            "medium",
+            "hard",
+        }
+
+        launched = client.post(
+            f"/api/quizzes/{quiz['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        )
+        assert launched.status_code == 201
+        quiz_session = launched.json()
+        assert quiz_session["class_name"] == "5e B"
+        assert quiz_session["status"] == "waiting"
+        assert len(quiz_session["join_code"]) == 6
+        assert client.get(
+            "/api/quizzes/sessions/active",
+            headers=teacher_headers,
+        ).json()[0]["id"] == quiz_session["id"]
+        assert (
+            client.delete(
+                f"/api/classes/{student_class['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 409
+        )
+
+        joined = client.post(
+            "/api/quizzes/join",
+            json={
+                "join_code": quiz_session["join_code"].lower(),
+                "student_identifier": " martin.g ",
+            },
+        )
+        assert joined.status_code == 201
+        assert joined.json()["quiz_title"] == quiz["title"]
+        assert "participants" not in joined.json()
+        assert (
+            client.post(
+                "/api/quizzes/join",
+                json={
+                    "join_code": quiz_session["join_code"],
+                    "student_identifier": "inconnu",
+                },
+            ).status_code
+            == 403
+        )
+        joined_again = client.post(
+            "/api/quizzes/join",
+            json={
+                "join_code": quiz_session["join_code"],
+                "student_identifier": "martin.g",
+            },
+        )
+        assert joined_again.status_code == 201
+        assert "participants" not in joined_again.json()
+
+        waiting_room = client.get(
+            f"/api/quizzes/sessions/{quiz_session['id']}",
+            headers=teacher_headers,
+        )
+        assert waiting_room.status_code == 200
+        assert waiting_room.json()["participant_count"] == 1
+        assert (
+            waiting_room.json()["participants"][0]["student_display_name"]
+            == "Martin Giraud"
+        )
+        assert (
+            client.get(
+                f"/api/quizzes/public/sessions/{quiz_session['join_code']}"
+            ).json()["status"]
+            == "waiting"
+        )
+
+        started = client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/start",
+            headers=teacher_headers,
+        )
+        assert started.status_code == 200
+        assert started.json()["status"] == "started"
+        assert started.json()["started_at"] is not None
+        assert (
+            client.post(
+                "/api/quizzes/join",
+                json={
+                    "join_code": quiz_session["join_code"],
+                    "student_identifier": "nouvel.eleve",
+                },
+            ).status_code
+            == 409
+        )
+        assert (
+            client.delete(
+                f"/api/question-banks/{imported_example.json()['question_bank']['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 409
+        )
+        assert (
+            client.delete(
+                f"/api/question-banks/questions/{preview.json()[0]['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 409
+        )
+        assert (
+            client.delete(
+                f"/api/classes/students/{student['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
+        session_after_student_delete = client.get(
+            f"/api/quizzes/sessions/{quiz_session['id']}",
+            headers=teacher_headers,
+        ).json()
+        assert (
+            session_after_student_delete["participants"][0][
+                "student_display_name"
+            ]
+            == "Martin Giraud"
+        )
+        assert (
+            client.delete(
+                f"/api/classes/{student_class['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
+        assert (
+            client.get(
+                f"/api/quizzes/sessions/{quiz_session['id']}",
+                headers=teacher_headers,
+            ).json()["class_id"]
+            is None
+        )
 
         updated_payload = {
             **question_payload,
@@ -497,6 +737,42 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             == 404
         )
 
+        deleted_question = client.delete(
+            f"/api/question-banks/questions/{question['id']}",
+            headers=teacher_headers,
+        )
+        assert deleted_question.status_code == 204
+        assert (
+            client.get(
+                f"/api/question-banks/{first_bank.json()['id']}/questions",
+                headers=teacher_headers,
+            ).json()
+            == []
+        )
+        assert (
+            client.get(
+                f"/api/question-banks/choices/{updated_choice['id']}/image",
+                headers=teacher_headers,
+            ).status_code
+            == 404
+        )
+        bank_after_question_delete = next(
+            bank
+            for bank in client.get(
+                "/api/question-banks",
+                headers=teacher_headers,
+            ).json()
+            if bank["id"] == first_bank.json()["id"]
+        )
+        assert bank_after_question_delete["question_count"] == 0
+        assert (
+            client.delete(
+                f"/api/question-banks/questions/{question['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 404
+        )
+
 
 def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
     database_path = tmp_path / "legacy-question-choices.db"
@@ -527,6 +803,53 @@ def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
         "code_language",
         "code_content",
     }.issubset(columns)
+
+
+def test_existing_quiz_sessions_gain_class_and_student_links(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "legacy-quiz-sessions.db"
+    with sqlite3.connect(database_path) as database:
+        database.execute(
+            """
+            CREATE TABLE quiz_sessions (
+                id INTEGER PRIMARY KEY,
+                quiz_id INTEGER NOT NULL,
+                class_name TEXT NOT NULL,
+                join_code TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                started_at DATETIME
+            )
+            """
+        )
+        database.execute(
+            """
+            CREATE TABLE quiz_participants (
+                id INTEGER PRIMARY KEY,
+                session_id INTEGER NOT NULL,
+                student_identifier TEXT NOT NULL,
+                joined_at DATETIME NOT NULL
+            )
+            """
+        )
+
+    create_app(settings_for(database_path))
+
+    with sqlite3.connect(database_path) as database:
+        session_columns = {
+            row[1] for row in database.execute("PRAGMA table_info(quiz_sessions)")
+        }
+        participant_columns = {
+            row[1]
+            for row in database.execute(
+                "PRAGMA table_info(quiz_participants)"
+            )
+        }
+    assert "class_id" in session_columns
+    assert {"student_id", "student_display_name"}.issubset(
+        participant_columns
+    )
 
 
 def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:

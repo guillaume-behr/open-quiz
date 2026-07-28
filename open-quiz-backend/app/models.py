@@ -34,6 +34,46 @@ class User(Base):
     )
 
 
+class StudentClass(Base):
+    __tablename__ = "student_classes"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "name",
+            name="uq_student_class_owner_name",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    grade_level: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
+class Student(Base):
+    __tablename__ = "students"
+    __table_args__ = (
+        UniqueConstraint(
+            "class_id",
+            "identifier",
+            name="uq_student_class_identifier",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    class_id: Mapped[int] = mapped_column(
+        ForeignKey("student_classes.id"), index=True
+    )
+    identifier: Mapped[str] = mapped_column(String(80))
+    display_name: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
 class QuestionBank(Base):
     __tablename__ = "question_banks"
     __table_args__ = (
@@ -103,6 +143,96 @@ class QuestionChoice(Base):
     code_language: Mapped[str | None] = mapped_column(String(30), nullable=True)
     code_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     position: Mapped[int] = mapped_column(Integer)
+
+
+class Quiz(Base):
+    __tablename__ = "quizzes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    question_count: Mapped[int] = mapped_column(Integer)
+    easy_percentage: Mapped[int] = mapped_column(Integer)
+    medium_percentage: Mapped[int] = mapped_column(Integer)
+    hard_percentage: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
+class QuizQuestionBank(Base):
+    __tablename__ = "quiz_question_banks"
+
+    quiz_id: Mapped[int] = mapped_column(
+        ForeignKey("quizzes.id"), primary_key=True
+    )
+    question_bank_id: Mapped[int] = mapped_column(
+        ForeignKey("question_banks.id"), primary_key=True
+    )
+
+
+class QuizSession(Base):
+    __tablename__ = "quiz_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), index=True)
+    class_id: Mapped[int | None] = mapped_column(
+        ForeignKey("student_classes.id"), nullable=True, index=True
+    )
+    class_name: Mapped[str] = mapped_column(String(120))
+    join_code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="waiting")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class QuizSessionQuestion(Base):
+    __tablename__ = "quiz_session_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "position",
+            name="uq_quiz_session_question_position",
+        ),
+    )
+
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_sessions.id"), primary_key=True
+    )
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("questions.id"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer)
+
+
+class QuizParticipant(Base):
+    __tablename__ = "quiz_participants"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "student_identifier",
+            name="uq_quiz_participant_identifier",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_sessions.id"), index=True
+    )
+    student_id: Mapped[int | None] = mapped_column(
+        ForeignKey("students.id"), nullable=True, index=True
+    )
+    student_identifier: Mapped[str] = mapped_column(String(80))
+    student_display_name: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
 
 
 class RefreshSession(Base):

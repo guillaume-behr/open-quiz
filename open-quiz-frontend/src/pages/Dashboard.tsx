@@ -8,7 +8,9 @@ import {
 } from "@/api/api"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
+import { StudentClassesPanel } from "@/components/classes/student-classes-panel"
 import { QuestionBanksPanel } from "@/components/question-banks/question-banks-panel"
+import { QuizzesPanel } from "@/components/quizzes/quizzes-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -44,6 +46,8 @@ export function Dashboard() {
         useState<DashboardSection>("students")
     const [isQuestionBankCreationOpen, setIsQuestionBankCreationOpen] =
         useState(false)
+    const [isQuizCreationOpen, setIsQuizCreationOpen] = useState(false)
+    const [isClassCreationOpen, setIsClassCreationOpen] = useState(false)
 
     const dashboardEntries: DashboardEntry[] = [
         {
@@ -226,6 +230,24 @@ export function Dashboard() {
                                 {t("create-question-bank")}
                             </Button>
                         )}
+                        {activeSection === "students" && (
+                            <Button
+                                type="button"
+                                onClick={() => setIsClassCreationOpen(true)}
+                            >
+                                <Plus />
+                                {t("create-class")}
+                            </Button>
+                        )}
+                        {activeSection === "quizzes" && (
+                            <Button
+                                type="button"
+                                onClick={() => setIsQuizCreationOpen(true)}
+                            >
+                                <Plus />
+                                {t("create-quiz")}
+                            </Button>
+                        )}
                     </div>
                     {activeSection === "question-banks" && (
                         <QuestionBanksPanel
@@ -233,6 +255,18 @@ export function Dashboard() {
                             onCreateDialogOpenChange={
                                 setIsQuestionBankCreationOpen
                             }
+                        />
+                    )}
+                    {activeSection === "students" && (
+                        <StudentClassesPanel
+                            isCreateDialogOpen={isClassCreationOpen}
+                            onCreateDialogOpenChange={setIsClassCreationOpen}
+                        />
+                    )}
+                    {activeSection === "quizzes" && (
+                        <QuizzesPanel
+                            isCreateDialogOpen={isQuizCreationOpen}
+                            onCreateDialogOpenChange={setIsQuizCreationOpen}
                         />
                     )}
                 </section>

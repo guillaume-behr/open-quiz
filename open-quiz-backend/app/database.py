@@ -40,4 +40,32 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                         f"ADD COLUMN {column_name} {compiled_type}"
                     )
                 )
+        for table_name, column_name in (
+            ("quiz_sessions", "class_id"),
+            ("quiz_participants", "student_id"),
+        ):
+            columns = {
+                column["name"]
+                for column in inspect(connection).get_columns(table_name)
+            }
+            if column_name not in columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {table_name} "
+                        f"ADD COLUMN {column_name} INTEGER"
+                    )
+                )
+        participant_columns = {
+            column["name"]
+            for column in inspect(connection).get_columns(
+                "quiz_participants"
+            )
+        }
+        if "student_display_name" not in participant_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quiz_participants "
+                    "ADD COLUMN student_display_name VARCHAR(120)"
+                )
+            )
     return sessionmaker(bind=engine, expire_on_commit=False)

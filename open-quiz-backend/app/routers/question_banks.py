@@ -17,7 +17,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
 from app.dependencies import DbSession, ProfessorUser
-from app.models import Question, QuestionBank, QuestionChoice, QuestionCode
+from app.models import (
+    Question,
+    QuestionBank,
+    QuestionChoice,
+    QuestionCode,
+    QuizQuestionBank,
+    QuizSessionQuestion,
+)
 from app.schemas import (
     QuestionBankCreate,
     QuestionBankResponse,
@@ -109,6 +116,15 @@ def delete_question_bank(
 ) -> None:
     """Delete a question bank and every question it contains."""
     owned_question_bank(question_bank_id, professor, session)
+    if session.scalar(
+        select(QuizQuestionBank.quiz_id).where(
+            QuizQuestionBank.question_bank_id == question_bank_id
+        )
+    ) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This question bank is used by a quiz",
+        )
     question_ids = select(Question.id).where(
         Question.question_bank_id == question_bank_id
     )
@@ -177,7 +193,6 @@ def question_response(
         difficulty=question.difficulty,
         answer_mode=question.answer_mode,
         answer_mode_disclosed=question.answer_mode_disclosed,
-        correction_mode=question.correction_mode,
         has_image=question.image_content_type is not None,
         code_language=code.language if code else None,
         code_content=code.content if code else None,
@@ -217,7 +232,7 @@ def add_question(
         difficulty=payload.difficulty,
         answer_mode=payload.answer_mode,
         answer_mode_disclosed=payload.answer_mode_disclosed,
-        correction_mode=payload.correction_mode,
+        correction_mode="automatic",
         image_data=image_data,
         image_content_type=image_content_type,
     )
@@ -317,7 +332,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                 "difficulty": "easy",
                 "answer_mode": "single",
                 "answer_mode_disclosed": True,
-                "correction_mode": "automatic",
                 "choices": [
                     {
                         "label": "Paris",
@@ -345,7 +359,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                 "difficulty": "medium",
                 "answer_mode": "multiple",
                 "answer_mode_disclosed": False,
-                "correction_mode": "automatic",
                 "choices": [
                     {
                         "label": "2",
@@ -399,7 +412,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                 "difficulty": "hard",
                 "answer_mode": "written",
                 "answer_mode_disclosed": True,
-                "correction_mode": "automatic",
                 "choices": [
                     {
                         "label": "La gravitation maintient la Terre en orbite autour du Soleil.",
@@ -466,7 +478,6 @@ def export_questions(
                 "difficulty": question.difficulty,
                 "answer_mode": question.answer_mode,
                 "answer_mode_disclosed": question.answer_mode_disclosed,
-                "correction_mode": question.correction_mode,
                 "choices": [
                     {
                         "label": choice.label,
@@ -698,7 +709,7 @@ async def update_question(
     question.difficulty = question_payload.difficulty
     question.answer_mode = question_payload.answer_mode
     question.answer_mode_disclosed = question_payload.answer_mode_disclosed
-    question.correction_mode = question_payload.correction_mode
+    question.correction_mode = "automatic"
     if image_data and image_content_type:
         question.image_data = image_data
         question.image_content_type = image_content_type
@@ -785,6 +796,36 @@ async def update_question(
     session.commit()
     session.refresh(question)
     return question_response(question, choices, code)
+
+
+@router.delete(
+    "/questions/{question_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_question(
+    question_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> None:
+    """Delete one question owned by the authenticated professor."""
+    owned_question(question_id, professor, session)
+    if session.scalar(
+        select(QuizSessionQuestion.session_id).where(
+            QuizSessionQuestion.question_id == question_id
+        )
+    ) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This question is used by a launched quiz",
+        )
+    session.execute(
+        delete(QuestionChoice).where(QuestionChoice.question_id == question_id)
+    )
+    session.execute(
+        delete(QuestionCode).where(QuestionCode.question_id == question_id)
+    )
+    session.execute(delete(Question).where(Question.id == question_id))
+    session.commit()
 
 
 @router.get("/questions/{question_id}/image")

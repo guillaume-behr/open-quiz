@@ -18,6 +18,23 @@ export type NewUser = {
     password: string
 }
 
+export type Student = {
+    id: number
+    class_id: number
+    identifier: string
+    display_name: string
+    created_at: string
+}
+
+export type StudentClass = {
+    id: number
+    name: string
+    grade_level: string
+    student_count: number
+    students: Student[]
+    created_at: string
+}
+
 export type QuestionBank = {
     id: number
     grade_level: string
@@ -38,7 +55,6 @@ export type QuestionBankImportResult = {
 
 export type QuestionDifficulty = "easy" | "medium" | "hard"
 export type AnswerMode = "single" | "multiple" | "written"
-export type CorrectionMode = "automatic" | "manual"
 export type CodeLanguage =
     | "javascript"
     | "typescript"
@@ -75,7 +91,6 @@ export type Question = {
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
-    correction_mode: CorrectionMode
     has_image: boolean
     code_language: CodeLanguage | null
     code_content: string | null
@@ -88,7 +103,6 @@ export type NewQuestion = {
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
-    correction_mode: CorrectionMode
     code_language: CodeLanguage | null
     code_content: string | null
     choices: Array<{
@@ -105,6 +119,59 @@ export type NewQuestion = {
 
 export type QuestionUpdate = NewQuestion & {
     remove_image: boolean
+}
+
+export type Quiz = {
+    id: number
+    title: string
+    question_count: number
+    easy_percentage: number
+    medium_percentage: number
+    hard_percentage: number
+    question_banks: Array<{
+        id: number
+        grade_level: string
+        chapter: string
+        question_count: number
+    }>
+    created_at: string
+}
+
+export type NewQuiz = {
+    title: string
+    question_bank_ids: number[]
+    question_count: number
+    easy_percentage: number
+    medium_percentage: number
+    hard_percentage: number
+}
+
+export type QuizParticipant = {
+    id: number
+    student_identifier: string
+    student_display_name: string | null
+    joined_at: string
+}
+
+export type QuizSession = {
+    id: number
+    quiz_id: number
+    quiz_title: string
+    class_id: number | null
+    class_name: string
+    join_code: string
+    status: "waiting" | "started"
+    participant_count: number
+    participants: QuizParticipant[]
+    created_at: string
+    started_at: string | null
+}
+
+export type StudentQuizSession = {
+    quiz_title: string
+    class_name: string
+    join_code: string
+    status: "waiting" | "started"
 }
 
 type TokenResponse = {
@@ -247,6 +314,135 @@ export function getUsers(): Promise<User[]> {
     return request<User[]>("/api/admin/users")
 }
 
+export function getStudentClasses(): Promise<StudentClass[]> {
+    return request<StudentClass[]>("/api/classes")
+}
+
+export function createStudentClass(
+    name: string,
+    gradeLevel: string
+): Promise<StudentClass> {
+    return request<StudentClass>("/api/classes", {
+        method: "POST",
+        body: JSON.stringify({ name, grade_level: gradeLevel }),
+    })
+}
+
+export function deleteStudentClass(classId: number): Promise<void> {
+    return request<void>(`/api/classes/${classId}`, { method: "DELETE" })
+}
+
+export function updateStudentClass(
+    classId: number,
+    name: string,
+    gradeLevel: string
+): Promise<StudentClass> {
+    return request<StudentClass>(`/api/classes/${classId}/update`, {
+        method: "POST",
+        body: JSON.stringify({ name, grade_level: gradeLevel }),
+    })
+}
+
+export function createStudent(
+    classId: number,
+    identifier: string,
+    displayName: string
+): Promise<Student> {
+    return request<Student>(`/api/classes/${classId}/students`, {
+        method: "POST",
+        body: JSON.stringify({
+            identifier,
+            display_name: displayName,
+        }),
+    })
+}
+
+export function deleteStudent(studentId: number): Promise<void> {
+    return request<void>(`/api/classes/students/${studentId}`, {
+        method: "DELETE",
+    })
+}
+
+export function updateStudent(
+    studentId: number,
+    identifier: string,
+    displayName: string
+): Promise<Student> {
+    return request<Student>(`/api/classes/students/${studentId}/update`, {
+        method: "POST",
+        body: JSON.stringify({
+            identifier,
+            display_name: displayName,
+        }),
+    })
+}
+
+export function getQuizzes(): Promise<Quiz[]> {
+    return request<Quiz[]>("/api/quizzes")
+}
+
+export function createQuiz(quiz: NewQuiz): Promise<Quiz> {
+    return request<Quiz>("/api/quizzes", {
+        method: "POST",
+        body: JSON.stringify(quiz),
+    })
+}
+
+export function previewQuiz(quizId: number): Promise<Question[]> {
+    return request<Question[]>(`/api/quizzes/${quizId}/preview`)
+}
+
+export function launchQuiz(
+    quizId: number,
+    classId: number
+): Promise<QuizSession> {
+    return request<QuizSession>(`/api/quizzes/${quizId}/launch`, {
+        method: "POST",
+        body: JSON.stringify({ class_id: classId }),
+    })
+}
+
+export function getQuizSession(sessionId: number): Promise<QuizSession> {
+    return request<QuizSession>(`/api/quizzes/sessions/${sessionId}`)
+}
+
+export function getActiveQuizSessions(): Promise<QuizSession[]> {
+    return request<QuizSession[]>("/api/quizzes/sessions/active")
+}
+
+export function startQuizSession(sessionId: number): Promise<QuizSession> {
+    return request<QuizSession>(`/api/quizzes/sessions/${sessionId}/start`, {
+        method: "POST",
+    })
+}
+
+export function joinQuiz(
+    joinCode: string,
+    studentIdentifier: string
+): Promise<StudentQuizSession> {
+    return request<StudentQuizSession>(
+        "/api/quizzes/join",
+        {
+            method: "POST",
+            body: JSON.stringify({
+                join_code: joinCode,
+                student_identifier: studentIdentifier,
+            }),
+        },
+        false
+    )
+}
+
+export function getPublicQuizSession(
+    joinCode: string
+): Promise<StudentQuizSession> {
+    return request<StudentQuizSession>(
+        `/api/quizzes/public/sessions/${encodeURIComponent(joinCode)}`,
+        {},
+        false
+    )
+}
+
 export function createUser(user: NewUser): Promise<User> {
     return request<User>("/api/admin/users", {
         method: "POST",
@@ -277,6 +473,12 @@ export function getQuestions(questionBankId: number): Promise<Question[]> {
     return request<Question[]>(
         `/api/question-banks/${questionBankId}/questions`
     )
+}
+
+export function deleteQuestion(questionId: number): Promise<void> {
+    return request<void>(`/api/question-banks/questions/${questionId}`, {
+        method: "DELETE",
+    })
 }
 
 export function createQuestion(

@@ -26,6 +26,7 @@ import {
     type KeyboardEvent,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from "react"
 import { useTranslation } from "react-i18next"
@@ -140,7 +141,8 @@ export function QuestionForm({
     const [answerModeDisclosed, setAnswerModeDisclosed] = useState(
         question?.answer_mode_disclosed ?? true
     )
-    const correctionMode = "automatic" as const
+    const choiceModeBackup = useRef<EditableChoice[] | null>(null)
+    const answerModeDisclosedBackup = useRef<boolean | null>(null)
     const [choices, setChoices] = useState<EditableChoice[]>(
         question?.choices.map((choice) => ({
             id: choice.id,
@@ -224,15 +226,73 @@ export function QuestionForm({
     }
 
     function changeAnswerMode(mode: AnswerMode): void {
+        const previousMode = answerMode
         setAnswerMode(mode)
         if (mode === "written") {
+            if (previousMode !== "written") {
+                choiceModeBackup.current = choices
+                answerModeDisclosedBackup.current = answerModeDisclosed
+            }
             setAnswerModeDisclosed(true)
             setChoices((current) => [
-                { ...current[0], is_correct: true, points: 1 },
+                {
+                    ...current[0],
+                    is_correct: true,
+                    points: 1,
+                    image: undefined,
+                    has_image: false,
+                    remove_image: true,
+                    hasCode: false,
+                    codeContent: "",
+                },
             ])
             return
         }
-        if (mode === "single" && correctionMode === "automatic") {
+
+        if (previousMode === "written") {
+            setAnswerModeDisclosed(
+                answerModeDisclosedBackup.current ?? answerModeDisclosed
+            )
+            const restoredChoices = choiceModeBackup.current ?? [
+                {
+                    label: "",
+                    is_correct: true,
+                    points: 1,
+                    has_image: false,
+                    remove_image: false,
+                    hasCode: false,
+                    codeLanguage: "javascript",
+                    codeContent: "",
+                },
+                {
+                    label: "",
+                    is_correct: false,
+                    points: 0,
+                    has_image: false,
+                    remove_image: false,
+                    hasCode: false,
+                    codeLanguage: "javascript",
+                    codeContent: "",
+                },
+            ]
+            choiceModeBackup.current = null
+            answerModeDisclosedBackup.current = null
+            setChoices(
+                mode === "single"
+                    ? restoredChoices.map((choice, index) => ({
+                          ...choice,
+                          is_correct: index === 0,
+                          points:
+                              index === 0
+                                  ? Math.max(0, choice.points || 1)
+                                  : 0,
+                      }))
+                    : restoredChoices
+            )
+            return
+        }
+
+        if (mode === "single") {
             const firstCorrectIndex = choices.findIndex(
                 (choice) => choice.is_correct
             )
@@ -254,10 +314,7 @@ export function QuestionForm({
             const remaining = current.filter(
                 (_, choiceIndex) => choiceIndex !== index
             )
-            if (
-                correctionMode === "automatic" &&
-                !remaining.some((choice) => choice.is_correct)
-            ) {
+            if (!remaining.some((choice) => choice.is_correct)) {
                 return remaining.map((choice, choiceIndex) => ({
                     ...choice,
                     is_correct: choiceIndex === 0,
@@ -294,7 +351,6 @@ export function QuestionForm({
                 difficulty,
                 answer_mode: answerMode,
                 answer_mode_disclosed: answerModeDisclosed,
-                correction_mode: correctionMode,
                 code_language: hasCode ? codeLanguage : null,
                 code_content: hasCode ? codeContent : null,
                 choices: encodedChoices,
@@ -519,8 +575,7 @@ export function QuestionForm({
                                     className="rounded-lg border p-3"
                                 >
                                     <div className="flex items-center gap-2">
-                                        {correctionMode === "automatic" &&
-                                        answerMode !== "written" ? (
+                                        {answerMode !== "written" ? (
                                             <input
                                                 type={
                                                     answerMode === "single"

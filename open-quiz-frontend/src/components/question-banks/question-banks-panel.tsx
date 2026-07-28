@@ -2,6 +2,7 @@ import {
     ApiError,
     createQuestionBank,
     deleteQuestionBank,
+    deleteQuestion,
     downloadQuestionBank,
     downloadQuestionBatchExample,
     getQuestionBanks,
@@ -114,6 +115,13 @@ export function QuestionBanksPanel({
     const [bankToDelete, setBankToDelete] = useState<QuestionBank | null>(null)
     const [isDeletingBank, setIsDeletingBank] = useState(false)
     const [deleteBankError, setDeleteBankError] = useState<string | null>(null)
+    const [questionToDelete, setQuestionToDelete] = useState<Question | null>(
+        null
+    )
+    const [isDeletingQuestion, setIsDeletingQuestion] = useState(false)
+    const [deleteQuestionError, setDeleteQuestionError] = useState<
+        string | null
+    >(null)
     const importInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
@@ -147,7 +155,7 @@ export function QuestionBanksPanel({
     }, [t])
 
     useEffect(() => {
-        if (selectedBankId === null) return
+        if (!isQuestionsDialogOpen || selectedBankId === null) return
         let isActive = true
 
         getQuestions(selectedBankId)
@@ -164,7 +172,7 @@ export function QuestionBanksPanel({
         return () => {
             isActive = false
         }
-    }, [selectedBankId, t])
+    }, [isQuestionsDialogOpen, selectedBankId, t])
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -269,10 +277,52 @@ export function QuestionBanksPanel({
                 setIsQuestionsDialogOpen(false)
             }
             setBankToDelete(null)
-        } catch {
-            setDeleteBankError(t("question-bank-delete-error"))
+        } catch (caughtError) {
+            setDeleteBankError(
+                caughtError instanceof ApiError && caughtError.status === 409
+                    ? t("question-bank-in-use-error")
+                    : t("question-bank-delete-error")
+            )
         } finally {
             setIsDeletingBank(false)
+        }
+    }
+
+    async function handleDeleteQuestion(): Promise<void> {
+        if (!questionToDelete || !selectedBank) return
+
+        setDeleteQuestionError(null)
+        setIsDeletingQuestion(true)
+        try {
+            await deleteQuestion(questionToDelete.id)
+            setQuestions((current) =>
+                current.filter(
+                    (question) => question.id !== questionToDelete.id
+                )
+            )
+            setQuestionBanks((banks) =>
+                banks.map((bank) =>
+                    bank.id === selectedBank.id
+                        ? {
+                              ...bank,
+                              question_count: Math.max(
+                                  0,
+                                  bank.question_count - 1
+                              ),
+                          }
+                        : bank
+                )
+            )
+            setQuestionToDelete(null)
+            setIsQuestionsDialogOpen(true)
+        } catch (caughtError) {
+            setDeleteQuestionError(
+                caughtError instanceof ApiError && caughtError.status === 409
+                    ? t("question-in-use-error")
+                    : t("question-delete-error")
+            )
+        } finally {
+            setIsDeletingQuestion(false)
         }
     }
 
@@ -284,6 +334,11 @@ export function QuestionBanksPanel({
             const imported = await importQuestionBatch(file)
             setQuestionBanks((banks) =>
                 [...banks, imported.question_bank].sort(compareQuestionBanks)
+            )
+            setGradeLevels((levels) =>
+                levels.includes(imported.question_bank.grade_level)
+                    ? levels
+                    : [...levels, imported.question_bank.grade_level]
             )
             setBatchMessage(
                 t("questions-imported", {
@@ -305,6 +360,7 @@ export function QuestionBanksPanel({
     }
 
     function openImportDialog(): void {
+        setBatchError(null)
         setImportError(null)
         setBatchMessage(null)
         setImportFile(null)
@@ -415,18 +471,17 @@ export function QuestionBanksPanel({
                             {batchMessage}
                         </p>
                     )}
-                    {loadError && (
-                        <p
-                            role="alert"
-                            className="mt-3 text-sm text-destructive"
-                        >
-                            {loadError}
-                        </p>
-                    )}
                     {isLoading ? (
                         <div className="flex min-h-32 items-center justify-center">
                             <LoaderCircle className="size-6 animate-spin text-primary" />
                         </div>
+                    ) : loadError ? (
+                        <p
+                            role="alert"
+                            className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+                        >
+                            {loadError}
+                        </p>
                     ) : questionBanks.length === 0 ? (
                         <div className="mt-3 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                             <BookOpenText className="mb-2 size-8" />
@@ -817,6 +872,30 @@ export function QuestionBanksPanel({
                                                         <Pencil />
                                                         {t("edit")}
                                                     </Button>
+                                                    <Button
+                                                        type="button"
+                                                        size="icon"
+                                                        variant="destructive"
+                                                        aria-label={t(
+                                                            "delete-question"
+                                                        )}
+                                                        title={t(
+                                                            "delete-question"
+                                                        )}
+                                                        onClick={() => {
+                                                            setDeleteQuestionError(
+                                                                null
+                                                            )
+                                                            setQuestionToDelete(
+                                                                question
+                                                            )
+                                                            setIsQuestionsDialogOpen(
+                                                                false
+                                                            )
+                                                        }}
+                                                    >
+                                                        <Trash2 />
+                                                    </Button>
                                                 </div>
                                             </div>
                                             {question.has_image && (
@@ -844,7 +923,14 @@ export function QuestionBanksPanel({
                                                         />
                                                     </div>
                                                 )}
-                                            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                                            <ul
+                                                className={`mt-3 grid gap-2 ${
+                                                    question.answer_mode ===
+                                                    "written"
+                                                        ? ""
+                                                        : "sm:grid-cols-2"
+                                                }`}
+                                            >
                                                 {question.choices.map(
                                                     (choice) => (
                                                         <li
@@ -852,30 +938,44 @@ export function QuestionBanksPanel({
                                                             className="rounded-lg bg-muted/60 px-3 py-2 text-sm"
                                                         >
                                                             <div className="flex items-center gap-2">
-                                                                <span
-                                                                    className={
-                                                                        choice.is_correct
-                                                                            ? "text-primary"
-                                                                            : "text-muted-foreground"
-                                                                    }
-                                                                >
-                                                                    {choice.is_correct
-                                                                        ? "✓"
-                                                                        : "○"}
-                                                                </span>
-                                                                <span className="min-w-0 flex-1">
+                                                                {question.answer_mode !==
+                                                                    "written" && (
+                                                                    <span
+                                                                        className={
+                                                                            choice.is_correct
+                                                                                ? "text-primary"
+                                                                                : "text-muted-foreground"
+                                                                        }
+                                                                    >
+                                                                        {choice.is_correct
+                                                                            ? "✓"
+                                                                            : "○"}
+                                                                    </span>
+                                                                )}
+                                                                <span className="min-w-0 flex-1 whitespace-pre-wrap">
+                                                                    {question.answer_mode ===
+                                                                        "written" && (
+                                                                        <span className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                                                            {t(
+                                                                                "expected-written-answer"
+                                                                            )}
+                                                                        </span>
+                                                                    )}
                                                                     {
                                                                         choice.label
                                                                     }
                                                                 </span>
-                                                                <span className="shrink-0 rounded-full bg-background px-2 py-0.5 text-xs font-semibold">
-                                                                    {t(
-                                                                        "points-value",
-                                                                        {
-                                                                            count: choice.points,
-                                                                        }
-                                                                    )}
-                                                                </span>
+                                                                {question.answer_mode !==
+                                                                    "written" && (
+                                                                    <span className="shrink-0 rounded-full bg-background px-2 py-0.5 text-xs font-semibold">
+                                                                        {t(
+                                                                            "points-value",
+                                                                            {
+                                                                                count: choice.points,
+                                                                            }
+                                                                        )}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             {choice.has_image && (
                                                                 <ChoiceImage
@@ -911,16 +1011,10 @@ export function QuestionBanksPanel({
                                                         question.answer_mode ===
                                                             "single"
                                                             ? "single-choice"
-                                                            : "multiple-choice"
-                                                    )}
-                                                </span>
-                                                <span>•</span>
-                                                <span>
-                                                    {t(
-                                                        question.correction_mode ===
-                                                            "automatic"
-                                                            ? "automatic-correction-full"
-                                                            : "manual-correction-full"
+                                                            : question.answer_mode ===
+                                                                "multiple"
+                                                              ? "multiple-choice"
+                                                            : "written-answer"
                                                     )}
                                                 </span>
                                                 {!question.answer_mode_disclosed && (
@@ -942,6 +1036,55 @@ export function QuestionBanksPanel({
                     </Dialog>
 
                     <Dialog
+                        open={questionToDelete !== null}
+                        onOpenChange={(open) => {
+                            if (!open && !isDeletingQuestion) {
+                                setQuestionToDelete(null)
+                                setDeleteQuestionError(null)
+                                setIsQuestionsDialogOpen(true)
+                            }
+                        }}
+                        title={t("delete-question")}
+                        description={t("delete-question-help", {
+                            title: questionToDelete?.prompt ?? "",
+                        })}
+                        className="max-w-md"
+                    >
+                        <div className="space-y-4">
+                            {deleteQuestionError && (
+                                <FieldError>{deleteQuestionError}</FieldError>
+                            )}
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={isDeletingQuestion}
+                                    onClick={() => {
+                                        setQuestionToDelete(null)
+                                        setDeleteQuestionError(null)
+                                        setIsQuestionsDialogOpen(true)
+                                    }}
+                                >
+                                    {t("cancel")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={isDeletingQuestion}
+                                    onClick={() =>
+                                        void handleDeleteQuestion()
+                                    }
+                                >
+                                    {isDeletingQuestion && (
+                                        <LoaderCircle className="animate-spin" />
+                                    )}
+                                    {t("delete-question")}
+                                </Button>
+                            </div>
+                        </div>
+                    </Dialog>
+
+                    <Dialog
                         open={isQuestionFormOpen}
                         onOpenChange={(open) => {
                             setIsQuestionFormOpen(open)
@@ -956,7 +1099,11 @@ export function QuestionBanksPanel({
                             key={editingQuestion?.id ?? "new"}
                             questionBankId={selectedBank.id}
                             question={editingQuestion ?? undefined}
-                            onCancel={() => setIsQuestionFormOpen(false)}
+                            onCancel={() => {
+                                setIsQuestionFormOpen(false)
+                                setEditingQuestion(null)
+                                setIsQuestionsDialogOpen(true)
+                            }}
                             onSaved={(savedQuestion) => {
                                 if (!editingQuestion) {
                                     setQuestionBanks((banks) =>
