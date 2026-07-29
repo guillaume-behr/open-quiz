@@ -39,6 +39,13 @@ La suite teste les parcours d’administration et d’enseignement, la participa
 des élèves, la notation, la migration du schéma SQLite, les limites de débit et
 la rotation des sessions d’authentification.
 
+Chaque quiz conserve dans `source_language` la langue d’interface utilisée lors
+de sa création. Cette valeur est renvoyée dans les réponses destinées à l’élève
+afin que le frontend puisse proposer une traduction lorsque sa propre langue
+diffère. Le backend ne traduit aucun contenu et ne transmet aucune question à
+un service de traduction. Lors de la migration d’une base SQLite existante, les
+anciens quiz reçoivent la valeur par défaut `fr`.
+
 Le point `/api/health` vérifie à la fois le processus HTTP et l’accès réel à la
 base de données. Il doit être utilisé pour les contrôles de disponibilité.
 

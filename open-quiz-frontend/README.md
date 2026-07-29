@@ -47,6 +47,26 @@ Les pages sont chargées à la demande. Les extraits Python s’exécutent dans 
 Web Worker isolé et sont interrompus après dix secondes afin qu’un programme
 bloqué ne fige pas l’interface.
 
+## Traduction des quiz
+
+Le frontend compare la langue d’origine fournie par la session de quiz à la
+langue d’interface résolue par i18next. En cas de différence, il propose à
+l’élève d’activer une traduction automatique avec un avertissement sur les
+erreurs possibles. Le titre, les questions et les choix sont traduits ; les
+blocs de code restent inchangés. Le texte original peut être rétabli sans
+quitter la session.
+
+La traduction repose sur l’API expérimentale `Translator` du navigateur. Elle
+est déclenchée uniquement par le bouton de l’élève et s’exécute localement. Le
+navigateur peut télécharger un modèle lors de la première demande. En l’absence
+de prise en charge du navigateur ou de la paire de langues, le frontend affiche
+le message localisé `automatic-translation-unavailable` et conserve le contenu
+original. Aucun fournisseur de traduction distant ni aucune clé d’API ne sont
+nécessaires.
+
+Les textes de l’encart, du bouton, de la progression et des erreurs sont stockés
+dans les huit catalogues de `public/locales`, comme le reste de l’interface.
+
 ## Production
 
 Le `Dockerfile` compile les ressources avec Node.js puis les sert avec Caddy.

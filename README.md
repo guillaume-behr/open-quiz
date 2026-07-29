@@ -23,6 +23,8 @@ sans créer de compte.
 - notation automatique et correction manuelle des réponses rédactionnelles ;
 - interface claire/sombre traduite en français, anglais, allemand, espagnol,
   portugais, ukrainien, arabe et chinois simplifié ;
+- traduction automatique facultative des quiz lorsque la langue de l’élève
+  diffère de celle enregistrée par le créateur du quiz ;
 - exécution locale et interrompable de courts extraits Python avec Pyodide ;
 - déploiement Docker durci derrière Caddy, avec SQLite persistant.
 
@@ -113,8 +115,8 @@ la même origine frontend.
 
 ### Informations publiques de l’instance
 
-Les pages `/mentions-legales`, `/donnees-personnelles`, `/accessibilite` et
-`/gestion-des-cookies` décrivent le fonctionnement réel du logiciel et chargent
+Les pages `/legal-notice`, `/privacy`, `/accessibility` et
+`/cookie-settings` décrivent le fonctionnement réel du logiciel et chargent
 les informations propres à l’instance depuis l’API. Ces variables sont
 facultatives au démarrage afin de ne pas bloquer le déploiement. Les pages
 publiques affichent un avertissement lorsqu’une information manque ; elle doit
@@ -165,7 +167,33 @@ informer les élèves et représentants légaux. Références officielles :
 4. Il prépare des banques de questions et compose un quiz.
 5. Il lance une salle d’attente pour une classe.
 6. Les élèves rejoignent la session avec le code et leur identifiant.
-7. L’enseignant démarre le quiz, puis consulte et corrige les résultats.
+7. Si leur langue d’interface diffère de celle du quiz, ils peuvent demander
+   une traduction automatique ou conserver le texte original.
+8. L’enseignant démarre le quiz, puis consulte et corrige les résultats.
+
+## Traduction automatique des quiz
+
+La langue d’interface de l’enseignant au moment de la création est enregistrée
+comme langue d’origine du quiz. La modification ultérieure du quiz conserve
+cette valeur. Les quiz créés avant l’ajout de cette information sont considérés
+comme français.
+
+Lorsque la langue d’interface de l’élève est différente, l’espace de
+participation affiche un bouton de traduction. La traduction ne démarre jamais
+sans action de l’élève. Elle porte sur le titre, les questions et les libellés
+des réponses ; les extraits de code ne sont pas traduits. L’élève peut revenir
+au texte original à tout moment.
+
+Un avertissement visible précise que la traduction est automatique et peut être
+erronée. Open Quiz utilise l’API `Translator` intégrée au navigateur : le
+traitement s’effectue localement et le navigateur peut devoir télécharger un
+modèle de langue. Aucun service de traduction externe n’est configuré par
+l’application. Cette API reste à disponibilité limitée ; si le navigateur ou
+la paire de langues ne la prend pas en charge, l’interface le signale sans
+modifier le quiz. Consultez la
+[documentation Chrome](https://developer.chrome.com/docs/ai/translator-api)
+et la
+[fiche de compatibilité MDN](https://developer.mozilla.org/docs/Web/API/Translator).
 
 ## Commandes de qualité
 
@@ -308,6 +336,10 @@ peuvent être appliquées avec `update.ps1` ou `sh ./update.sh`.
   `uv run python -m scripts.reset_two_factor identifiant`.
 - **Le frontend ne trouve pas le backend :** démarrez l’API sur le port 8000 ou
   configurez `VITE_API_URL`.
+- **La traduction automatique est indisponible :** utilisez un navigateur
+  compatible avec l’API `Translator` et vérifiez que la paire de langues est
+  prise en charge. La première utilisation peut nécessiter le téléchargement
+  local d’un modèle par le navigateur.
 - **Docker ne devient pas sain :** consultez `docker compose ps` puis
   `docker compose logs open-quiz-backend open-quiz-frontend`.
 
