@@ -21,32 +21,14 @@ import type {
     QuizSession,
     StudentClass,
 } from "@/api/types"
-import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
-import { QuizTimer } from "@/components/quizzes/quiz-timer"
+import { ActiveQuizSessionDialog } from "@/components/quizzes/active-quiz-session-dialog"
+import { QuizFormDialog } from "@/components/quizzes/quiz-form-dialog"
 import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import {
-    BookOpenText,
-    AlertTriangle,
-    Eye,
-    LoaderCircle,
-    Pause,
-    Pencil,
-    Play,
-    Plus,
-    RefreshCw,
-    RotateCcw,
-    Trash2,
-    UsersRound,
-    XCircle,
-} from "lucide-react"
+    LaunchQuizDialog,
+    QuizPreviewDialog,
+    SessionActionDialog,
+} from "@/components/quizzes/quiz-secondary-dialogs"
+import { QuizzesList } from "@/components/quizzes/quizzes-list"
 import { type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -62,19 +44,6 @@ const easePriority: Record<Difficulty, number> = {
     medium: 1,
     hard: 0,
 }
-const selectClassName =
-    "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-
-function sessionStatusKey(status: QuizSession["status"]): string {
-    return {
-        waiting: "waiting-for-students",
-        in_progress: "quiz-started",
-        paused: "quiz-paused",
-        finished: "quiz-finished",
-        cancelled: "quiz-cancelled",
-    }[status]
-}
-
 function calculateDifficultyCounts(
     questionCount: number,
     percentages: Record<Difficulty, number>,
@@ -458,946 +427,110 @@ export function QuizzesPanel({
 
     return (
         <div className="mt-6">
-            {sessions.length > 0 && (
-                <div className="mb-5 rounded-xl border bg-primary/5 p-4">
-                    <h3 className="font-semibold">{t("recent-sessions")}</h3>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        {sessions.slice(0, 6).map((session) => (
-                            <Button
-                                key={session.id}
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                    setActiveSessionError(null)
-                                    setActiveSession(session)
-                                }}
-                            >
-                                <UsersRound />
-                                {session.quiz_title} · {session.class_name} ·{" "}
-                                {session.participant_count}
-                            </Button>
-                        ))}
-                    </div>
-                </div>
-            )}
-            {isLoading ? (
-                <div className="flex min-h-40 items-center justify-center">
-                    <LoaderCircle className="size-7 animate-spin text-primary" />
-                </div>
-            ) : loadError ? (
-                <p
-                    role="alert"
-                    className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-                >
-                    {loadError}
-                </p>
-            ) : quizzes.length === 0 ? (
-                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                    <aside className="h-fit rounded-xl border bg-background p-4">
-                        <h3 className="font-semibold">{t("filters")}</h3>
-                        <FieldGroup className="mt-4 gap-4">
-                            <Field>
-                                <FieldLabel htmlFor="empty-quiz-filter">
-                                    {t("search")}
-                                </FieldLabel>
-                                <Input
-                                    id="empty-quiz-filter"
-                                    value={quizFilter}
-                                    onChange={(event) =>
-                                        setQuizFilter(event.target.value)
-                                    }
-                                    placeholder={t("search-quiz")}
-                                />
-                            </Field>
-                            <Field>
-                                <FieldLabel htmlFor="empty-quiz-grade-filter">
-                                    {t("grade-level")}
-                                </FieldLabel>
-                                <select
-                                    id="empty-quiz-grade-filter"
-                                    className={selectClassName}
-                                    value={gradeLevelFilter}
-                                    onChange={(event) =>
-                                        setGradeLevelFilter(event.target.value)
-                                    }
-                                >
-                                    <option value="">
-                                        {t("all-grade-levels")}
-                                    </option>
-                                    {quizGradeLevels.map((level) => (
-                                        <option key={level} value={level}>
-                                            {level}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                        </FieldGroup>
-                    </aside>
-                    <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                        <BookOpenText className="mb-2 size-8" />
-                        <p className="font-medium">{t("no-quiz")}</p>
-                        <p className="mt-1 text-sm">{t("no-quiz-help")}</p>
-                    </div>
-                </div>
-            ) : (
-                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                    <aside className="h-fit rounded-xl border bg-background p-4">
-                        <h3 className="font-semibold">{t("filters")}</h3>
-                        <FieldGroup className="mt-4 gap-4">
-                            <Field>
-                                <FieldLabel htmlFor="quiz-filter">
-                                    {t("search")}
-                                </FieldLabel>
-                                <Input
-                                    id="quiz-filter"
-                                    value={quizFilter}
-                                    onChange={(event) =>
-                                        setQuizFilter(event.target.value)
-                                    }
-                                    placeholder={t("search-quiz")}
-                                />
-                            </Field>
-                            <Field>
-                                <FieldLabel htmlFor="quiz-grade-filter">
-                                    {t("grade-level")}
-                                </FieldLabel>
-                                <select
-                                    id="quiz-grade-filter"
-                                    className={selectClassName}
-                                    value={gradeLevelFilter}
-                                    onChange={(event) =>
-                                        setGradeLevelFilter(event.target.value)
-                                    }
-                                >
-                                    <option value="">
-                                        {t("all-grade-levels")}
-                                    </option>
-                                    {quizGradeLevels.map((level) => (
-                                        <option key={level} value={level}>
-                                            {level}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                            {(quizFilter || gradeLevelFilter) && (
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => {
-                                        setQuizFilter("")
-                                        setGradeLevelFilter("")
-                                    }}
-                                >
-                                    {t("clear-filters")}
-                                </Button>
-                            )}
-                        </FieldGroup>
-                    </aside>
-                    {filteredQuizzes.length === 0 ? (
-                        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                            {t("no-quiz-filtered")}
-                        </p>
-                    ) : (
-                        <ul className="grid gap-4 lg:grid-cols-2">
-                            {filteredQuizzes.map((quiz) => (
-                                <li
-                                    key={quiz.id}
-                                    className="flex h-full flex-col rounded-xl border bg-background p-4"
-                                >
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <h3 className="font-semibold break-words">
-                                                {quiz.title}
-                                            </h3>
-                                            <p className="mt-1 text-sm text-muted-foreground">
-                                                {t("quiz-summary", {
-                                                    questions:
-                                                        quiz.question_count,
-                                                    banks: quiz.question_banks
-                                                        .length,
-                                                })}
-                                            </p>
-                                        </div>
-                                        <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                                            {quiz.question_count}
-                                        </span>
-                                    </div>
-                                    <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted">
-                                        <span
-                                            className="bg-emerald-500"
-                                            style={{
-                                                width: `${quiz.easy_percentage}%`,
-                                            }}
-                                        />
-                                        <span
-                                            className="bg-amber-500"
-                                            style={{
-                                                width: `${quiz.medium_percentage}%`,
-                                            }}
-                                        />
-                                        <span
-                                            className="bg-rose-500"
-                                            style={{
-                                                width: `${quiz.hard_percentage}%`,
-                                            }}
-                                        />
-                                    </div>
-                                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                                        {difficultyKeys.map((difficulty) => (
-                                            <span key={difficulty}>
-                                                {t(`difficulty-${difficulty}`)}{" "}
-                                                {
-                                                    quiz[
-                                                        `${difficulty}_percentage`
-                                                    ]
-                                                }{" "}
-                                                %
-                                            </span>
-                                        ))}
-                                    </div>
-                                    <p className="mt-3 text-xs text-muted-foreground">
-                                        {quiz.question_banks
-                                            .map(
-                                                (bank) =>
-                                                    `${bank.grade_level} — ${bank.chapter}`
-                                            )
-                                            .join(" · ")}
-                                    </p>
-                                    <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => openQuizEditor(quiz)}
-                                        >
-                                            <Pencil />
-                                            {t("edit-quiz")}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() =>
-                                                void openPreview(quiz)
-                                            }
-                                        >
-                                            <Eye />
-                                            {t("preview-quiz")}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            onClick={() => {
-                                                setLaunchError(null)
-                                                setQuizToLaunch(quiz)
-                                            }}
-                                        >
-                                            <Play />
-                                            {t("launch-quiz")}
-                                        </Button>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
-            )}
+            <QuizzesList
+                quizzes={quizzes}
+                filteredQuizzes={filteredQuizzes}
+                sessions={sessions}
+                gradeLevels={quizGradeLevels}
+                isLoading={isLoading}
+                loadError={loadError}
+                quizFilter={quizFilter}
+                gradeLevelFilter={gradeLevelFilter}
+                onQuizFilterChange={setQuizFilter}
+                onGradeLevelFilterChange={setGradeLevelFilter}
+                onEdit={openQuizEditor}
+                onPreview={(quiz) => void openPreview(quiz)}
+                onLaunch={(quiz) => {
+                    setLaunchError(null)
+                    setQuizToLaunch(quiz)
+                }}
+                onOpenSession={(quizSession) => {
+                    setActiveSessionError(null)
+                    setActiveSession(quizSession)
+                }}
+            />
 
-            <Dialog
+            <QuizFormDialog
                 open={isCreateDialogOpen || editingQuiz !== null}
-                onOpenChange={(open) => {
-                    if (isCreating) return
-                    onCreateDialogOpenChange(open)
-                    if (!open) resetCreationForm()
+                editingQuiz={editingQuiz}
+                banks={banks}
+                title={title}
+                durationMinutes={durationMinutes}
+                selectedBankIds={selectedBankIds}
+                allowPreviousQuestions={allowPreviousQuestions}
+                questionCount={questionCount}
+                percentages={percentages}
+                difficultyPreview={difficultyPreview}
+                availableByDifficulty={availableByDifficulty}
+                previewQuestionTotal={previewQuestionTotal}
+                isBusy={isCreating}
+                error={createError}
+                onTitleChange={setTitle}
+                onDurationChange={setDurationMinutes}
+                onSelectedBankIdsChange={setSelectedBankIds}
+                onAllowPreviousQuestionsChange={setAllowPreviousQuestions}
+                onQuestionCountChange={setQuestionCount}
+                onPercentagesChange={setPercentages}
+                onClose={() => {
+                    onCreateDialogOpenChange(false)
+                    resetCreationForm()
                 }}
-                title={t(editingQuiz ? "edit-quiz" : "create-quiz")}
-                description={t("create-quiz-help")}
-            >
-                <form onSubmit={handleCreate}>
-                    <FieldGroup className="gap-5">
-                        <Field>
-                            <FieldLabel htmlFor="quiz-title">
-                                {t("quiz-title")}
-                            </FieldLabel>
-                            <Input
-                                id="quiz-title"
-                                value={title}
-                                onChange={(event) =>
-                                    setTitle(event.target.value)
-                                }
-                                maxLength={160}
-                                required
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="quiz-duration">
-                                {t("quiz-duration")}
-                            </FieldLabel>
-                            <Input
-                                id="quiz-duration"
-                                type="number"
-                                min={1}
-                                max={480}
-                                value={durationMinutes}
-                                onChange={(event) =>
-                                    setDurationMinutes(
-                                        Math.min(
-                                            480,
-                                            Math.max(
-                                                1,
-                                                Number(event.target.value)
-                                            )
-                                        )
-                                    )
-                                }
-                                required
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {t("quiz-duration-help")}
-                            </p>
-                        </Field>
-                        <Field>
-                            <FieldLabel>{t("quiz-question-banks")}</FieldLabel>
-                            {banks.length === 0 ? (
-                                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                                    {t("quiz-needs-question-bank")}
-                                </p>
-                            ) : (
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                    {banks.map((bank) => {
-                                        const selected =
-                                            selectedBankIds.includes(bank.id)
-                                        return (
-                                            <label
-                                                key={bank.id}
-                                                className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
-                                                    selected
-                                                        ? "border-primary bg-primary/5"
-                                                        : ""
-                                                }`}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selected}
-                                                    onChange={() =>
-                                                        setSelectedBankIds(
-                                                            (current) =>
-                                                                selected
-                                                                    ? current.filter(
-                                                                          (
-                                                                              id
-                                                                          ) =>
-                                                                              id !==
-                                                                              bank.id
-                                                                      )
-                                                                    : [
-                                                                          ...current,
-                                                                          bank.id,
-                                                                      ]
-                                                        )
-                                                    }
-                                                />
-                                                <span className="min-w-0">
-                                                    <span className="block font-medium">
-                                                        {bank.chapter}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {bank.grade_level} ·{" "}
-                                                        {t("question-count", {
-                                                            count: bank.question_count,
-                                                        })}
-                                                    </span>
-                                                </span>
-                                            </label>
-                                        )
-                                    })}
-                                </div>
-                            )}
-                        </Field>
-                        <Field>
-                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
-                                <span>
-                                    <span className="block font-medium">
-                                        {t("allow-previous-questions")}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t("allow-previous-questions-help")}
-                                    </span>
-                                </span>
-                                <Switch
-                                    checked={allowPreviousQuestions}
-                                    onCheckedChange={setAllowPreviousQuestions}
-                                    aria-label={t("allow-previous-questions")}
-                                />
-                            </label>
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="quiz-question-count">
-                                {t("quiz-question-count")}
-                            </FieldLabel>
-                            <Input
-                                id="quiz-question-count"
-                                type="number"
-                                min={1}
-                                max={200}
-                                value={questionCount}
-                                onChange={(event) =>
-                                    setQuestionCount(
-                                        Math.max(1, Number(event.target.value))
-                                    )
-                                }
-                                required
-                            />
-                        </Field>
-                        <Field>
-                            <div className="flex items-center justify-between gap-3">
-                                <FieldLabel>
-                                    {t("difficulty-distribution")}
-                                </FieldLabel>
-                                <span
-                                    className={`text-sm font-semibold ${
-                                        percentageTotal === 100
-                                            ? "text-primary"
-                                            : "text-destructive"
-                                    }`}
-                                >
-                                    {percentageTotal} %
-                                </span>
-                            </div>
-                            <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                                {difficultyKeys.map((difficulty) => (
-                                    <div key={difficulty}>
-                                        <FieldLabel
-                                            htmlFor={`quiz-${difficulty}`}
-                                        >
-                                            {t(`difficulty-${difficulty}`)}
-                                        </FieldLabel>
-                                        <Input
-                                            id={`quiz-${difficulty}`}
-                                            type="number"
-                                            min={0}
-                                            max={100}
-                                            value={percentages[difficulty]}
-                                            onChange={(event) =>
-                                                setPercentages((current) => ({
-                                                    ...current,
-                                                    [difficulty]: Math.min(
-                                                        100,
-                                                        Math.max(
-                                                            0,
-                                                            Number(
-                                                                event.target
-                                                                    .value
-                                                            )
-                                                        )
-                                                    ),
-                                                }))
-                                            }
-                                            required
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                            {percentageTotal !== 100 && (
-                                <FieldError>
-                                    {t("difficulty-total-error")}
-                                </FieldError>
-                            )}
-                            {selectedBankIds.length > 0 &&
-                                percentageTotal === 100 && (
-                                    <div className="mt-4 rounded-lg border bg-muted/30 p-3">
-                                        <p className="text-sm font-medium">
-                                            {t("difficulty-preview")}
-                                        </p>
-                                        <div className="mt-2 grid grid-cols-3 gap-2">
-                                            {difficultyKeys.map(
-                                                (difficulty) => (
-                                                    <div
-                                                        key={difficulty}
-                                                        className="rounded-md bg-background p-2 text-center"
-                                                    >
-                                                        <p className="text-lg font-bold text-primary">
-                                                            {
-                                                                difficultyPreview[
-                                                                    difficulty
-                                                                ]
-                                                            }
-                                                        </p>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {t(
-                                                                `difficulty-${difficulty}`
-                                                            )}{" "}
-                                                            ·{" "}
-                                                            {t(
-                                                                "difficulty-available",
-                                                                {
-                                                                    count: availableByDifficulty[
-                                                                        difficulty
-                                                                    ],
-                                                                }
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                )
-                                            )}
-                                        </div>
-                                        {previewQuestionTotal <
-                                            questionCount && (
-                                            <FieldError className="mt-2">
-                                                {t(
-                                                    "quiz-insufficient-total-questions",
-                                                    {
-                                                        available:
-                                                            previewQuestionTotal,
-                                                        requested:
-                                                            questionCount,
-                                                    }
-                                                )}
-                                            </FieldError>
-                                        )}
-                                    </div>
-                                )}
-                        </Field>
-                        {createError && <FieldError>{createError}</FieldError>}
-                        <div className="flex justify-end gap-2 border-t pt-4">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isCreating}
-                                onClick={() => {
-                                    onCreateDialogOpenChange(false)
-                                    resetCreationForm()
-                                }}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={
-                                    isCreating ||
-                                    percentageTotal !== 100 ||
-                                    selectedBankIds.length === 0 ||
-                                    previewQuestionTotal < questionCount
-                                }
-                            >
-                                {isCreating ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : editingQuiz ? (
-                                    <Pencil />
-                                ) : (
-                                    <Plus />
-                                )}
-                                {t(editingQuiz ? "save-quiz" : "create-quiz")}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                </form>
-            </Dialog>
+                onSubmit={handleCreate}
+            />
 
-            <Dialog
-                open={previewedQuiz !== null}
-                onOpenChange={(open) => {
-                    if (!open) setPreviewedQuiz(null)
-                }}
-                title={previewedQuiz?.title ?? t("preview-quiz")}
-                description={t("quiz-random-preview-help")}
-            >
-                <div className="flex justify-end">
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={isPreviewLoading || !previewedQuiz}
-                        onClick={() => {
-                            if (previewedQuiz) void openPreview(previewedQuiz)
-                        }}
-                    >
-                        <RefreshCw />
-                        {t("draw-again")}
-                    </Button>
-                </div>
-                {isPreviewLoading ? (
-                    <div className="flex min-h-40 items-center justify-center">
-                        <LoaderCircle className="size-7 animate-spin text-primary" />
-                    </div>
-                ) : previewError ? (
-                    <FieldError>{previewError}</FieldError>
-                ) : (
-                    <ol className="mt-4 space-y-3">
-                        {previewQuestions.map((question, index) => (
-                            <li
-                                key={question.id}
-                                className="rounded-xl border p-4"
-                            >
-                                <div className="flex items-start justify-between gap-3">
-                                    <p className="font-semibold">
-                                        {index + 1}. {question.prompt}
-                                    </p>
-                                    <span className="rounded-full bg-muted px-2 py-1 text-xs">
-                                        {t(`difficulty-${question.difficulty}`)}
-                                    </span>
-                                </div>
-                                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                                    {question.choices.map((choice) => (
-                                        <li
-                                            key={choice.id}
-                                            className="rounded-lg bg-muted/60 px-3 py-2 text-sm"
-                                        >
-                                            {choice.is_correct ? "✓ " : "○ "}
-                                            {choice.label}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </li>
-                        ))}
-                    </ol>
-                )}
-            </Dialog>
+            <QuizPreviewDialog
+                quiz={previewedQuiz}
+                questions={previewQuestions}
+                isLoading={isPreviewLoading}
+                error={previewError}
+                onClose={() => setPreviewedQuiz(null)}
+                onRefresh={(quiz) => void openPreview(quiz)}
+            />
 
-            <Dialog
-                open={quizToLaunch !== null}
-                onOpenChange={(open) => {
-                    if (!open && !isLaunching) setQuizToLaunch(null)
-                }}
-                title={t("launch-quiz")}
-                description={quizToLaunch?.title}
-                className="max-w-lg"
-            >
-                <form onSubmit={handleLaunch}>
-                    <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="quiz-class-name">
-                                {t("class-name")}
-                            </FieldLabel>
-                            <select
-                                id="quiz-class-name"
-                                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                                value={selectedClassId}
-                                onChange={(event) =>
-                                    setSelectedClassId(event.target.value)
-                                }
-                                required
-                            >
-                                <option value="" disabled>
-                                    {t("choose-class")}
-                                </option>
-                                {classes.map((studentClass) => (
-                                    <option
-                                        key={studentClass.id}
-                                        value={studentClass.id}
-                                    >
-                                        {studentClass.grade_level} —{" "}
-                                        {studentClass.name} (
-                                        {studentClass.student_count})
-                                    </option>
-                                ))}
-                            </select>
-                            {classes.length === 0 && (
-                                <FieldError>{t("quiz-needs-class")}</FieldError>
-                            )}
-                        </Field>
-                        {launchError && <FieldError>{launchError}</FieldError>}
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isLaunching}
-                                onClick={() => setQuizToLaunch(null)}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={isLaunching || !selectedClassId}
-                            >
-                                {isLaunching ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <Play />
-                                )}
-                                {t("open-waiting-room")}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                </form>
-            </Dialog>
+            <LaunchQuizDialog
+                quiz={quizToLaunch}
+                classes={classes}
+                selectedClassId={selectedClassId}
+                isBusy={isLaunching}
+                error={launchError}
+                onSelectedClassIdChange={setSelectedClassId}
+                onClose={() => setQuizToLaunch(null)}
+                onSubmit={handleLaunch}
+            />
 
-            <Dialog
-                open={activeSession !== null}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        setActiveSession(null)
-                        setActiveSessionError(null)
-                    }
+            <ActiveQuizSessionDialog
+                session={activeSession}
+                error={activeSessionError}
+                isStarting={isStarting}
+                action={sessionAction}
+                onClose={() => {
+                    setActiveSession(null)
+                    setActiveSessionError(null)
                 }}
-                title={activeSession?.quiz_title ?? t("quiz-waiting-room")}
-                description={
-                    activeSession
-                        ? `${activeSession.class_name} — ${t(
-                              sessionStatusKey(activeSession.status)
-                          )}`
-                        : undefined
+                onStart={() => void handleStart()}
+                onPause={() => void handleSessionAction("pause")}
+                onResume={() => void handleSessionAction("resume")}
+                onConfirmCancel={() => {
+                    setActiveSessionError(null)
+                    setSessionActionToConfirm("cancel")
+                }}
+                onConfirmDelete={() => {
+                    setActiveSessionError(null)
+                    setSessionActionToConfirm("delete")
+                }}
+            />
+
+            <SessionActionDialog
+                actionToConfirm={sessionActionToConfirm}
+                currentAction={sessionAction}
+                error={activeSessionError}
+                onClose={() => setSessionActionToConfirm(null)}
+                onConfirm={(action) =>
+                    action === "delete"
+                        ? void handleDeleteSession()
+                        : void handleSessionAction("cancel")
                 }
-            >
-                {activeSession && (
-                    <div>
-                        <div className="rounded-xl bg-primary/10 p-5 text-center">
-                            <p className="text-sm text-muted-foreground">
-                                {t("quiz-join-code")}
-                            </p>
-                            <p className="mt-1 text-4xl font-black tracking-[0.2em] text-primary">
-                                {activeSession.join_code}
-                            </p>
-                            {activeSession.status === "in_progress" && (
-                                <div className="mt-3">
-                                    <QuizTimer endsAt={activeSession.ends_at} />
-                                </div>
-                            )}
-                            {activeSession.status === "paused" && (
-                                <p className="mt-3 flex items-center justify-center gap-2 font-semibold text-amber-600">
-                                    <Pause />
-                                    {t("quiz-paused")}
-                                </p>
-                            )}
-                        </div>
-                        <div className="mt-5 flex items-center justify-between gap-3">
-                            <h4 className="flex items-center gap-2 font-semibold">
-                                <UsersRound className="size-5" />
-                                {t("joined-students", {
-                                    count: activeSession.participant_count,
-                                })}
-                            </h4>
-                            {activeSession.status === "waiting" && (
-                                <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
-                                    {t("live-updates")}
-                                </span>
-                            )}
-                        </div>
-                        {activeSession.participants.length === 0 ? (
-                            <p className="mt-3 rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">
-                                {t("no-student-joined")}
-                            </p>
-                        ) : (
-                            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                                {activeSession.participants.map(
-                                    (participant) => (
-                                        <li
-                                            key={participant.id}
-                                            className="rounded-lg border bg-background px-3 py-2 font-medium"
-                                        >
-                                            <span className="block">
-                                                {participant.student_display_name ??
-                                                    participant.student_identifier}
-                                            </span>
-                                            {participant.student_display_name && (
-                                                <span className="block text-xs font-normal text-muted-foreground">
-                                                    {
-                                                        participant.student_identifier
-                                                    }
-                                                </span>
-                                            )}
-                                            {activeSession.status ===
-                                                "finished" && (
-                                                <span className="block text-sm font-semibold text-primary">
-                                                    {t(
-                                                        "teacher-student-result",
-                                                        {
-                                                            score: participant.score,
-                                                            count: participant.answered_count,
-                                                            total: activeSession.total_questions,
-                                                        }
-                                                    )}
-                                                </span>
-                                            )}
-                                            {["in_progress", "paused"].includes(
-                                                activeSession.status
-                                            ) && (
-                                                <span className="block text-sm font-semibold text-primary">
-                                                    {t(
-                                                        "teacher-student-progress",
-                                                        {
-                                                            count: participant.answered_count,
-                                                            total: activeSession.total_questions,
-                                                        }
-                                                    )}
-                                                </span>
-                                            )}
-                                            {participant.violation_count >
-                                                0 && (
-                                                <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
-                                                    <AlertTriangle className="size-3" />
-                                                    {t(
-                                                        "student-monitoring-alert",
-                                                        {
-                                                            count: participant.violation_count,
-                                                            event: t(
-                                                                `violation-${participant.last_violation_type}`
-                                                            ),
-                                                        }
-                                                    )}
-                                                </span>
-                                            )}
-                                        </li>
-                                    )
-                                )}
-                            </ul>
-                        )}
-                        {activeSessionError && (
-                            <FieldError className="mt-4">
-                                {activeSessionError}
-                            </FieldError>
-                        )}
-                        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t pt-4">
-                            {activeSession.status === "waiting" && (
-                                <Button
-                                    type="button"
-                                    size="lg"
-                                    disabled={
-                                        isStarting ||
-                                        activeSession.participant_count === 0
-                                    }
-                                    onClick={() => void handleStart()}
-                                >
-                                    {isStarting ? (
-                                        <LoaderCircle className="animate-spin" />
-                                    ) : (
-                                        <Play />
-                                    )}
-                                    {t("start-quiz")}
-                                </Button>
-                            )}
-                            {activeSession.status === "in_progress" && (
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    disabled={sessionAction !== null}
-                                    onClick={() =>
-                                        void handleSessionAction("pause")
-                                    }
-                                >
-                                    {sessionAction === "pause" ? (
-                                        <LoaderCircle className="animate-spin" />
-                                    ) : (
-                                        <Pause />
-                                    )}
-                                    {t("pause-quiz")}
-                                </Button>
-                            )}
-                            {activeSession.status === "paused" && (
-                                <Button
-                                    type="button"
-                                    disabled={sessionAction !== null}
-                                    onClick={() =>
-                                        void handleSessionAction("resume")
-                                    }
-                                >
-                                    {sessionAction === "resume" ? (
-                                        <LoaderCircle className="animate-spin" />
-                                    ) : (
-                                        <RotateCcw />
-                                    )}
-                                    {t("resume-quiz")}
-                                </Button>
-                            )}
-                            {["waiting", "in_progress", "paused"].includes(
-                                activeSession.status
-                            ) && (
-                                <Button
-                                    type="button"
-                                    variant="destructive"
-                                    disabled={
-                                        isStarting || sessionAction !== null
-                                    }
-                                    onClick={() => {
-                                        setActiveSessionError(null)
-                                        setSessionActionToConfirm("cancel")
-                                    }}
-                                >
-                                    <XCircle />
-                                    {t("cancel-quiz")}
-                                </Button>
-                            )}
-                            {["cancelled", "finished"].includes(
-                                activeSession.status
-                            ) && (
-                                <Button
-                                    type="button"
-                                    variant="destructive"
-                                    disabled={sessionAction !== null}
-                                    onClick={() => {
-                                        setActiveSessionError(null)
-                                        setSessionActionToConfirm("delete")
-                                    }}
-                                >
-                                    <Trash2 />
-                                    {t("delete-session")}
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-                )}
-            </Dialog>
-
-            <Dialog
-                open={sessionActionToConfirm !== null}
-                onOpenChange={(open) => {
-                    if (!open && sessionAction === null) {
-                        setSessionActionToConfirm(null)
-                    }
-                }}
-                title={t(
-                    sessionActionToConfirm === "delete"
-                        ? "delete-session"
-                        : "cancel-quiz"
-                )}
-                description={t(
-                    sessionActionToConfirm === "delete"
-                        ? "delete-session-help"
-                        : "cancel-quiz-help"
-                )}
-                className="max-w-md"
-            >
-                {activeSessionError && (
-                    <FieldError className="mb-4">
-                        {activeSessionError}
-                    </FieldError>
-                )}
-                <div className="flex justify-end gap-2">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={sessionAction !== null}
-                        onClick={() => setSessionActionToConfirm(null)}
-                    >
-                        {t("cancel")}
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="destructive"
-                        disabled={sessionAction !== null}
-                        onClick={() =>
-                            sessionActionToConfirm === "delete"
-                                ? void handleDeleteSession()
-                                : void handleSessionAction("cancel")
-                        }
-                    >
-                        {sessionAction !== null ? (
-                            <LoaderCircle className="animate-spin" />
-                        ) : sessionActionToConfirm === "delete" ? (
-                            <Trash2 />
-                        ) : (
-                            <XCircle />
-                        )}
-                        {t(
-                            sessionActionToConfirm === "delete"
-                                ? "delete"
-                                : "confirm-cancellation"
-                        )}
-                    </Button>
-                </div>
-            </Dialog>
+            />
         </div>
     )
 }

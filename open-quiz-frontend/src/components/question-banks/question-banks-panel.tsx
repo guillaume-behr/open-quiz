@@ -10,39 +10,16 @@ import {
 } from "@/api/question-banks"
 import { ApiError } from "@/api/client"
 import type { GradeLevel, Question, QuestionBank } from "@/api/types"
-import { GradeLevelSelect } from "@/components/grade-level-select"
-import { QuestionForm } from "@/components/question-banks/question-form"
-import { QuestionImage } from "@/components/question-banks/question-image"
-import { ChoiceImage } from "@/components/question-banks/choice-image"
-import { CodeBlock } from "@/components/question-banks/code-block"
-import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
-import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
+import { QuestionBankFormDialog } from "@/components/question-banks/question-bank-form-dialog"
 import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import {
-    BookOpenText,
-    Download,
-    Eye,
-    FileJson,
-    ImageIcon,
-    LoaderCircle,
-    Pencil,
-    Plus,
-    Settings2,
-    Trash2,
-    Upload,
-} from "lucide-react"
+    DeleteEntityDialog,
+    ImportQuestionBankDialog,
+    QuestionFormDialog,
+} from "@/components/question-banks/question-bank-secondary-dialogs"
+import { QuestionBanksList } from "@/components/question-banks/question-banks-list"
+import { QuestionsDialog } from "@/components/question-banks/questions-dialog"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-
-const selectClassName =
-    "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 function compareQuestionBanks(
     first: QuestionBank,
@@ -368,799 +345,168 @@ export function QuestionBanksPanel({
 
     return (
         <div className="mt-6">
-            <div className="grid gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                <aside className="h-fit rounded-xl border bg-background p-4">
-                    <h3 className="font-semibold">{t("filters")}</h3>
-                    <FieldGroup className="mt-4 gap-4">
-                        <Field>
-                            <FieldLabel htmlFor="question-bank-title-filter">
-                                {t("search")}
-                            </FieldLabel>
-                            <Input
-                                id="question-bank-title-filter"
-                                value={titleFilter}
-                                onChange={(event) =>
-                                    setTitleFilter(event.target.value)
-                                }
-                                placeholder={t("search-question-bank")}
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="question-bank-grade-filter">
-                                {t("grade-level")}
-                            </FieldLabel>
-                            <select
-                                id="question-bank-grade-filter"
-                                className={selectClassName}
-                                value={gradeLevelFilter}
-                                onChange={(event) =>
-                                    setGradeLevelFilter(event.target.value)
-                                }
-                            >
-                                <option value="">
-                                    {t("all-grade-levels")}
-                                </option>
-                                {gradeLevels.map((level) => (
-                                    <option key={level.id} value={level.name}>
-                                        {level.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
-                        {(titleFilter || gradeLevelFilter) && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                    setTitleFilter("")
-                                    setGradeLevelFilter("")
-                                }}
-                            >
-                                {t("clear-filters")}
-                            </Button>
-                        )}
-                    </FieldGroup>
-                </aside>
+            <QuestionBanksList
+                banks={questionBanks}
+                filteredBanks={filteredQuestionBanks}
+                gradeLevels={gradeLevels}
+                titleFilter={titleFilter}
+                gradeLevelFilter={gradeLevelFilter}
+                isLoading={isLoading}
+                loadError={loadError}
+                isBatchBusy={isBatchBusy}
+                batchError={batchError}
+                batchMessage={batchMessage}
+                onTitleFilterChange={setTitleFilter}
+                onGradeLevelFilterChange={setGradeLevelFilter}
+                onImport={openImportDialog}
+                onDownloadExample={() => void handleDownloadExample()}
+                onOpen={openQuestions}
+                onExport={(bank) => void handleExport(bank)}
+                onDelete={(bank) => {
+                    setDeleteBankError(null)
+                    setBankToDelete(bank)
+                }}
+            />
 
-                <div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="font-semibold">
-                            {t("my-question-banks")}
-                        </h3>
-                        <div className="flex flex-wrap gap-2">
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={isBatchBusy}
-                                onClick={openImportDialog}
-                            >
-                                <Upload />
-                                {t("import-json")}
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={isBatchBusy}
-                                onClick={() => void handleDownloadExample()}
-                            >
-                                <FileJson />
-                                {t("download-json-example")}
-                            </Button>
-                        </div>
-                    </div>
-                    {batchError && (
-                        <p
-                            role="alert"
-                            className="mt-3 text-sm text-destructive"
-                        >
-                            {batchError}
-                        </p>
-                    )}
-                    {batchMessage && (
-                        <p role="status" className="mt-3 text-sm text-primary">
-                            {batchMessage}
-                        </p>
-                    )}
-                    {isLoading ? (
-                        <div className="flex min-h-32 items-center justify-center">
-                            <LoaderCircle className="size-6 animate-spin text-primary" />
-                        </div>
-                    ) : loadError ? (
-                        <p
-                            role="alert"
-                            className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-                        >
-                            {loadError}
-                        </p>
-                    ) : questionBanks.length === 0 ? (
-                        <div className="mt-3 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                            <BookOpenText className="mb-2 size-8" />
-                            <p className="font-medium">
-                                {t("no-question-bank")}
-                            </p>
-                            <p className="mt-1 text-sm">
-                                {t("no-question-bank-help")}
-                            </p>
-                        </div>
-                    ) : filteredQuestionBanks.length === 0 ? (
-                        <div className="mt-3 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                            <p className="font-medium">
-                                {t("no-question-bank-filtered")}
-                            </p>
-                            <Button
-                                type="button"
-                                className="mt-3"
-                                variant="outline"
-                                onClick={() => {
-                                    setTitleFilter("")
-                                    setGradeLevelFilter("")
-                                }}
-                            >
-                                {t("clear-filters")}
-                            </Button>
-                        </div>
-                    ) : (
-                        <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-                            {filteredQuestionBanks.map((bank) => (
-                                <li
-                                    key={bank.id}
-                                    className="relative rounded-xl border bg-background p-4"
-                                >
-                                    <span className="absolute top-4 right-4 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                                        {t("question-count", {
-                                            count: bank.question_count,
-                                        })}
-                                    </span>
-                                    <div className="flex items-start gap-3 pr-16">
-                                        <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                                            <BookOpenText className="size-5" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                                {bank.grade_level}
-                                            </p>
-                                            <p className="mt-1 font-semibold break-words">
-                                                {bank.chapter}
-                                            </p>
-                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() =>
-                                                        openQuestions(bank.id)
-                                                    }
-                                                >
-                                                    <Eye />
-                                                    {t("view-questions")}
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    disabled={isBatchBusy}
-                                                    onClick={() =>
-                                                        void handleExport(bank)
-                                                    }
-                                                >
-                                                    <Download />
-                                                    {t("export-json")}
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    size="icon-sm"
-                                                    variant="destructive"
-                                                    className="ml-auto"
-                                                    aria-label={t(
-                                                        "delete-question-bank"
-                                                    )}
-                                                    title={t(
-                                                        "delete-question-bank"
-                                                    )}
-                                                    onClick={() => {
-                                                        setDeleteBankError(null)
-                                                        setBankToDelete(bank)
-                                                    }}
-                                                >
-                                                    <Trash2 />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
-            </div>
-
-            <Dialog
+            <QuestionBankFormDialog
                 open={isCreateDialogOpen}
-                onOpenChange={(open) => {
-                    if (!isCreating) {
-                        onCreateDialogOpenChange(open)
-                        if (!open) setCreateError(null)
+                gradeLevels={gradeLevels}
+                gradeLevel={gradeLevel}
+                title={title}
+                newGradeLevel={newGradeLevel}
+                isAddingGradeLevel={isAddingGradeLevel}
+                isBusy={isCreating}
+                error={createError}
+                onGradeLevelChange={setGradeLevel}
+                onTitleChange={setTitle}
+                onNewGradeLevelChange={setNewGradeLevel}
+                onAddingGradeLevelChange={setIsAddingGradeLevel}
+                onDeleteGradeLevel={async (level) => {
+                    setCreateError(null)
+                    try {
+                        await onDeleteGradeLevel(level)
+                    } catch (error) {
+                        setCreateError(
+                            error instanceof ApiError && error.status === 409
+                                ? t("grade-level-in-use-error")
+                                : t("grade-level-delete-error")
+                        )
+                        throw error
                     }
                 }}
-                title={t("create-question-bank")}
-                description={t("create-question-bank-help")}
-                className="max-w-lg"
-            >
-                <form onSubmit={handleSubmit}>
-                    <FieldGroup className="gap-4">
-                        <Field>
-                            <FieldLabel htmlFor="question-bank-grade-level">
-                                {t("grade-level")}
-                            </FieldLabel>
-                            <div className="flex gap-2">
-                                <GradeLevelSelect
-                                    id="question-bank-grade-level"
-                                    value={gradeLevel}
-                                    levels={gradeLevels}
-                                    onChange={setGradeLevel}
-                                    onDelete={async (level) => {
-                                        setCreateError(null)
-                                        try {
-                                            await onDeleteGradeLevel(level)
-                                        } catch (error) {
-                                            setCreateError(
-                                                error instanceof ApiError &&
-                                                    error.status === 409
-                                                    ? t(
-                                                          "grade-level-in-use-error"
-                                                      )
-                                                    : t(
-                                                          "grade-level-delete-error"
-                                                      )
-                                            )
-                                            throw error
-                                        }
-                                    }}
-                                    disabled={isCreating}
-                                />
-                                <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="outline"
-                                    aria-label={t("add-grade-level")}
-                                    onClick={() =>
-                                        setIsAddingGradeLevel((value) => !value)
-                                    }
-                                >
-                                    <Plus />
-                                </Button>
-                            </div>
-                            {isAddingGradeLevel && (
-                                <div className="mt-2 flex gap-2">
-                                    <Input
-                                        value={newGradeLevel}
-                                        onChange={(event) =>
-                                            setNewGradeLevel(event.target.value)
-                                        }
-                                        onKeyDown={(event) => {
-                                            if (event.key === "Enter") {
-                                                event.preventDefault()
-                                                void addGradeLevel()
-                                            }
-                                        }}
-                                        maxLength={80}
-                                        placeholder={t(
-                                            "grade-level-placeholder"
-                                        )}
-                                    />
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={() => void addGradeLevel()}
-                                    >
-                                        {t("save-grade-level")}
-                                    </Button>
-                                </div>
-                            )}
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="question-bank-title">
-                                {t("question-bank-title")}
-                            </FieldLabel>
-                            <Input
-                                id="question-bank-title"
-                                value={title}
-                                onChange={(event) =>
-                                    setTitle(event.target.value)
-                                }
-                                maxLength={160}
-                                placeholder={t(
-                                    "question-bank-title-placeholder"
-                                )}
-                                required
-                            />
-                        </Field>
-                        {createError && <FieldError>{createError}</FieldError>}
-                        <div className="flex justify-end gap-2 border-t pt-4">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isCreating}
-                                onClick={() => onCreateDialogOpenChange(false)}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button type="submit" disabled={isCreating}>
-                                {isCreating ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <Plus />
-                                )}
-                                {isCreating
-                                    ? t("creating-question-bank")
-                                    : t("create-question-bank-action")}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                </form>
-            </Dialog>
+                onAddGradeLevel={() => void addGradeLevel()}
+                onClose={() => {
+                    onCreateDialogOpenChange(false)
+                    setCreateError(null)
+                }}
+                onSubmit={handleSubmit}
+            />
 
-            <Dialog
+            <ImportQuestionBankDialog
                 open={isImportDialogOpen}
-                onOpenChange={(open) => {
-                    setIsImportDialogOpen(open)
-                    if (!open) {
-                        setImportError(null)
-                        setImportFile(null)
-                    }
+                file={importFile}
+                inputRef={importInputRef}
+                isBusy={isBatchBusy}
+                error={importError}
+                onFileChange={setImportFile}
+                onClose={() => {
+                    setIsImportDialogOpen(false)
+                    setImportError(null)
+                    setImportFile(null)
                 }}
-                title={t("import-json-title")}
-                description={t("import-json-help")}
-                className="max-w-lg"
-            >
-                <form onSubmit={handleImportSubmit}>
-                    <FieldGroup className="gap-4">
-                        <Field>
-                            <FieldLabel htmlFor="import-json-file">
-                                {t("json-file")}
-                            </FieldLabel>
-                            <Input
-                                ref={importInputRef}
-                                id="import-json-file"
-                                type="file"
-                                accept="application/json,.json"
-                                onChange={(event) =>
-                                    setImportFile(
-                                        event.target.files?.[0] ?? null
-                                    )
-                                }
-                                required
-                            />
-                        </Field>
-                        {importError && <FieldError>{importError}</FieldError>}
-                        <div className="flex justify-end gap-2 border-t pt-4">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setIsImportDialogOpen(false)}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={isBatchBusy || !importFile}
-                            >
-                                {isBatchBusy ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <Upload />
-                                )}
-                                {isBatchBusy
-                                    ? t("importing-json")
-                                    : t("import-json")}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                </form>
-            </Dialog>
+                onSubmit={handleImportSubmit}
+            />
 
-            <Dialog
+            <DeleteEntityDialog
                 open={bankToDelete !== null}
-                onOpenChange={(open) => {
-                    if (!open && !isDeletingBank) {
-                        setBankToDelete(null)
-                        setDeleteBankError(null)
-                    }
+                kind="bank"
+                title={bankToDelete?.chapter ?? ""}
+                isBusy={isDeletingBank}
+                error={deleteBankError}
+                onClose={() => {
+                    setBankToDelete(null)
+                    setDeleteBankError(null)
                 }}
-                title={t("delete-question-bank")}
-                description={t("delete-question-bank-help", {
-                    title: bankToDelete?.chapter ?? "",
-                })}
-                className="max-w-md"
-            >
-                <div className="space-y-4">
-                    {deleteBankError && (
-                        <FieldError>{deleteBankError}</FieldError>
-                    )}
-                    <div className="flex justify-end gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isDeletingBank}
-                            onClick={() => setBankToDelete(null)}
-                        >
-                            {t("cancel")}
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={isDeletingBank}
-                            onClick={() => void handleDeleteBank()}
-                        >
-                            {isDeletingBank && (
-                                <LoaderCircle className="animate-spin" />
-                            )}
-                            {t("delete-question-bank")}
-                        </Button>
-                    </div>
-                </div>
-            </Dialog>
+                onConfirm={() => void handleDeleteBank()}
+            />
 
             {selectedBank && (
                 <>
-                    <Dialog
+                    <QuestionsDialog
+                        bank={selectedBank}
+                        questions={questions}
                         open={isQuestionsDialogOpen}
+                        isLoading={areQuestionsLoading}
+                        error={questionsError}
                         onOpenChange={setIsQuestionsDialogOpen}
-                        title={selectedBank.chapter}
-                        description={`${selectedBank.grade_level} — ${t("bank-questions")}`}
-                    >
-                        <div className="flex flex-wrap justify-end gap-2">
-                            <Button
-                                type="button"
-                                onClick={() => {
-                                    setIsQuestionsDialogOpen(false)
-                                    setEditingQuestion(null)
-                                    setIsQuestionFormOpen(true)
-                                }}
-                            >
-                                <Plus />
-                                {t("add-question")}
-                            </Button>
-                        </div>
+                        onAdd={() => {
+                            setIsQuestionsDialogOpen(false)
+                            setEditingQuestion(null)
+                            setIsQuestionFormOpen(true)
+                        }}
+                        onEdit={(question) => {
+                            setEditingQuestion(question)
+                            setIsQuestionsDialogOpen(false)
+                            setIsQuestionFormOpen(true)
+                        }}
+                        onDelete={(question) => {
+                            setDeleteQuestionError(null)
+                            setQuestionToDelete(question)
+                            setIsQuestionsDialogOpen(false)
+                        }}
+                    />
 
-                        <div className="mt-5">
-                            <h4 className="font-semibold">
-                                {t("bank-questions")}
-                            </h4>
-                            {areQuestionsLoading ? (
-                                <div className="flex min-h-24 items-center justify-center">
-                                    <LoaderCircle className="size-6 animate-spin text-primary" />
-                                </div>
-                            ) : questionsError ? (
-                                <p
-                                    role="alert"
-                                    className="mt-3 text-sm text-destructive"
-                                >
-                                    {questionsError}
-                                </p>
-                            ) : questions.length === 0 ? (
-                                <p className="mt-3 rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">
-                                    {t("no-question")}
-                                </p>
-                            ) : (
-                                <ol className="mt-3 space-y-3">
-                                    {questions.map((question, index) => (
-                                        <li
-                                            key={question.id}
-                                            className="rounded-xl border bg-background p-4"
-                                        >
-                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                                <p className="min-w-0 font-semibold break-words">
-                                                    {index + 1}.{" "}
-                                                    {question.prompt}
-                                                </p>
-                                                <div className="flex shrink-0 flex-wrap items-center gap-2">
-                                                    <span className="rounded-full bg-muted px-2 py-1 text-xs whitespace-nowrap">
-                                                        {t(
-                                                            `difficulty-${question.difficulty}`
-                                                        )}
-                                                    </span>
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => {
-                                                            setEditingQuestion(
-                                                                question
-                                                            )
-                                                            setIsQuestionsDialogOpen(
-                                                                false
-                                                            )
-                                                            setIsQuestionFormOpen(
-                                                                true
-                                                            )
-                                                        }}
-                                                    >
-                                                        <Pencil />
-                                                        {t("edit")}
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        size="icon"
-                                                        variant="destructive"
-                                                        aria-label={t(
-                                                            "delete-question"
-                                                        )}
-                                                        title={t(
-                                                            "delete-question"
-                                                        )}
-                                                        onClick={() => {
-                                                            setDeleteQuestionError(
-                                                                null
-                                                            )
-                                                            setQuestionToDelete(
-                                                                question
-                                                            )
-                                                            setIsQuestionsDialogOpen(
-                                                                false
-                                                            )
-                                                        }}
-                                                    >
-                                                        <Trash2 />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                            {question.has_image && (
-                                                <>
-                                                    <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                                                        <ImageIcon className="size-3.5" />
-                                                        {t("image-attached")}
-                                                    </div>
-                                                    <QuestionImage
-                                                        questionId={question.id}
-                                                        alt={question.prompt}
-                                                    />
-                                                </>
-                                            )}
-                                            {question.code_content &&
-                                                question.code_language && (
-                                                    <div className="mt-3">
-                                                        <CodeBlock
-                                                            code={
-                                                                question.code_content
-                                                            }
-                                                            language={
-                                                                question.code_language
-                                                            }
-                                                        />
-                                                    </div>
-                                                )}
-                                            <ul
-                                                className={`mt-3 grid gap-2 ${
-                                                    question.answer_mode ===
-                                                    "written"
-                                                        ? ""
-                                                        : "sm:grid-cols-2"
-                                                }`}
-                                            >
-                                                {question.choices.map(
-                                                    (choice) => (
-                                                        <li
-                                                            key={choice.id}
-                                                            className="rounded-lg bg-muted/60 px-3 py-2 text-sm"
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                {question.answer_mode !==
-                                                                    "written" && (
-                                                                    <span
-                                                                        className={
-                                                                            choice.is_correct
-                                                                                ? "text-primary"
-                                                                                : "text-muted-foreground"
-                                                                        }
-                                                                    >
-                                                                        {choice.is_correct
-                                                                            ? "✓"
-                                                                            : "○"}
-                                                                    </span>
-                                                                )}
-                                                                <span className="min-w-0 flex-1 whitespace-pre-wrap">
-                                                                    {question.answer_mode ===
-                                                                        "written" && (
-                                                                        <span className="mb-1 block text-xs font-semibold text-muted-foreground">
-                                                                            {t(
-                                                                                "expected-written-answer"
-                                                                            )}
-                                                                        </span>
-                                                                    )}
-                                                                    {
-                                                                        choice.label
-                                                                    }
-                                                                </span>
-                                                                {question.answer_mode !==
-                                                                    "written" && (
-                                                                    <span className="shrink-0 rounded-full bg-background px-2 py-0.5 text-xs font-semibold">
-                                                                        {t(
-                                                                            "points-value",
-                                                                            {
-                                                                                count: choice.points,
-                                                                            }
-                                                                        )}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            {choice.has_image && (
-                                                                <ChoiceImage
-                                                                    choiceId={
-                                                                        choice.id
-                                                                    }
-                                                                    alt={
-                                                                        choice.label
-                                                                    }
-                                                                />
-                                                            )}
-                                                            {choice.code_content &&
-                                                                choice.code_language && (
-                                                                    <div className="mt-2">
-                                                                        <CodeBlock
-                                                                            code={
-                                                                                choice.code_content
-                                                                            }
-                                                                            language={
-                                                                                choice.code_language
-                                                                            }
-                                                                        />
-                                                                    </div>
-                                                                )}
-                                                        </li>
-                                                    )
-                                                )}
-                                            </ul>
-                                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                                <span className="flex items-center gap-1">
-                                                    <Settings2 className="size-3.5" />
-                                                    {t(
-                                                        question.answer_mode ===
-                                                            "single"
-                                                            ? "single-choice"
-                                                            : question.answer_mode ===
-                                                                "multiple"
-                                                              ? "multiple-choice"
-                                                              : "written-answer"
-                                                    )}
-                                                </span>
-                                                {question.answer_mode ===
-                                                    "written" && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <span>
-                                                            {question.response_language
-                                                                ? (CODE_LANGUAGES.find(
-                                                                      (
-                                                                          language
-                                                                      ) =>
-                                                                          language.value ===
-                                                                          question.response_language
-                                                                  )?.label ??
-                                                                  question.response_language)
-                                                                : t(
-                                                                      "plain-text"
-                                                                  )}
-                                                        </span>
-                                                    </>
-                                                )}
-                                                {!question.answer_mode_disclosed && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <span>
-                                                            {t(
-                                                                "answer-mode-not-disclosed"
-                                                            )}
-                                                        </span>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ol>
-                            )}
-                        </div>
-                    </Dialog>
-
-                    <Dialog
+                    <DeleteEntityDialog
                         open={questionToDelete !== null}
-                        onOpenChange={(open) => {
-                            if (!open && !isDeletingQuestion) {
-                                setQuestionToDelete(null)
-                                setDeleteQuestionError(null)
-                                setIsQuestionsDialogOpen(true)
-                            }
+                        kind="question"
+                        title={questionToDelete?.prompt ?? ""}
+                        isBusy={isDeletingQuestion}
+                        error={deleteQuestionError}
+                        onClose={() => {
+                            setQuestionToDelete(null)
+                            setDeleteQuestionError(null)
+                            setIsQuestionsDialogOpen(true)
                         }}
-                        title={t("delete-question")}
-                        description={t("delete-question-help", {
-                            title: questionToDelete?.prompt ?? "",
-                        })}
-                        className="max-w-md"
-                    >
-                        <div className="space-y-4">
-                            {deleteQuestionError && (
-                                <FieldError>{deleteQuestionError}</FieldError>
-                            )}
-                            <div className="flex justify-end gap-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    disabled={isDeletingQuestion}
-                                    onClick={() => {
-                                        setQuestionToDelete(null)
-                                        setDeleteQuestionError(null)
-                                        setIsQuestionsDialogOpen(true)
-                                    }}
-                                >
-                                    {t("cancel")}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="destructive"
-                                    disabled={isDeletingQuestion}
-                                    onClick={() => void handleDeleteQuestion()}
-                                >
-                                    {isDeletingQuestion && (
-                                        <LoaderCircle className="animate-spin" />
-                                    )}
-                                    {t("delete-question")}
-                                </Button>
-                            </div>
-                        </div>
-                    </Dialog>
+                        onConfirm={() => void handleDeleteQuestion()}
+                    />
 
-                    <Dialog
+                    <QuestionFormDialog
+                        bank={selectedBank}
+                        question={editingQuestion}
                         open={isQuestionFormOpen}
-                        onOpenChange={(open) => {
-                            setIsQuestionFormOpen(open)
-                            if (!open) setEditingQuestion(null)
+                        onClose={() => {
+                            setIsQuestionFormOpen(false)
+                            setEditingQuestion(null)
+                            setIsQuestionsDialogOpen(true)
                         }}
-                        title={t(
-                            editingQuestion ? "edit-question" : "add-question"
-                        )}
-                        description={`${selectedBank.grade_level} — ${selectedBank.chapter}`}
-                    >
-                        <QuestionForm
-                            key={editingQuestion?.id ?? "new"}
-                            questionBankId={selectedBank.id}
-                            question={editingQuestion ?? undefined}
-                            onCancel={() => {
-                                setIsQuestionFormOpen(false)
-                                setEditingQuestion(null)
-                                setIsQuestionsDialogOpen(true)
-                            }}
-                            onSaved={(savedQuestion) => {
-                                if (!editingQuestion) {
-                                    setQuestionBanks((banks) =>
-                                        banks.map((bank) =>
-                                            bank.id === selectedBank.id
-                                                ? {
-                                                      ...bank,
-                                                      question_count:
-                                                          bank.question_count +
-                                                          1,
-                                                  }
-                                                : bank
-                                        )
+                        onSaved={(savedQuestion) => {
+                            if (!editingQuestion) {
+                                setQuestionBanks((banks) =>
+                                    banks.map((bank) =>
+                                        bank.id === selectedBank.id
+                                            ? {
+                                                  ...bank,
+                                                  question_count:
+                                                      bank.question_count + 1,
+                                              }
+                                            : bank
                                     )
-                                }
-                                setQuestions((current) =>
-                                    editingQuestion
-                                        ? current.map((question) =>
-                                              question.id === savedQuestion.id
-                                                  ? savedQuestion
-                                                  : question
-                                          )
-                                        : [savedQuestion, ...current]
                                 )
-                                setIsQuestionFormOpen(false)
-                                setEditingQuestion(null)
-                                setIsQuestionsDialogOpen(true)
-                            }}
-                        />
-                    </Dialog>
+                            }
+                            setQuestions((current) =>
+                                editingQuestion
+                                    ? current.map((question) =>
+                                          question.id === savedQuestion.id
+                                              ? savedQuestion
+                                              : question
+                                      )
+                                    : [savedQuestion, ...current]
+                            )
+                            setIsQuestionFormOpen(false)
+                            setEditingQuestion(null)
+                            setIsQuestionsDialogOpen(true)
+                        }}
+                    />
                 </>
             )}
         </div>

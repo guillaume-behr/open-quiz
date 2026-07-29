@@ -8,40 +8,15 @@ import type {
     Question,
     QuestionDifficulty,
 } from "@/api/types"
-import { CodeBlock } from "@/components/question-banks/code-block"
-import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
 import { Button } from "@/components/ui/button"
-import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
-import { Code2, ImagePlus, LoaderCircle, Plus, Trash2 } from "lucide-react"
-import {
-    type FormEvent,
-    type KeyboardEvent,
-    useEffect,
-    useRef,
-    useState,
-} from "react"
+import { FieldError, FieldGroup } from "@/components/ui/field"
+import { LoaderCircle } from "lucide-react"
+import { type FormEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-
-type EditableChoice = {
-    id?: number
-    label: string
-    is_correct: boolean
-    points: number
-    has_image: boolean
-    image?: File
-    remove_image: boolean
-    hasCode: boolean
-    codeLanguage: CodeLanguage
-    codeContent: string
-}
+import { QuestionChoicesEditor } from "./question-choices-editor"
+import { QuestionContentFields } from "./question-content-fields"
+import type { EditableChoice } from "./question-form-types"
+import { QuestionSettingsFields } from "./question-settings-fields"
 
 type QuestionFormProps = {
     questionBankId: number
@@ -49,9 +24,6 @@ type QuestionFormProps = {
     onSaved: (question: Question) => void
     onCancel: () => void
 }
-
-const selectClassName =
-    "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 function encodeImage(file: File): Promise<EncodedImage> {
     return new Promise((resolve, reject) => {
@@ -73,60 +45,33 @@ function encodeImage(file: File): Promise<EncodedImage> {
     })
 }
 
-function SelectedImagePreview({
-    image,
-    alt,
-    className,
-}: {
-    image: File
-    alt: string
-    className: string
-}) {
-    const imageElement = useRef<HTMLImageElement>(null)
-
-    useEffect(() => {
-        const nextImageUrl = URL.createObjectURL(image)
-        const preview = imageElement.current
-        if (preview) preview.src = nextImageUrl
-        return () => {
-            if (preview) preview.removeAttribute("src")
-            URL.revokeObjectURL(nextImageUrl)
-        }
-    }, [image])
-
-    return <img ref={imageElement} alt={alt} className={className} />
+function initialChoices(question?: Question): EditableChoice[] {
+    return (
+        question?.choices.map((choice) => ({
+            id: choice.id,
+            label: choice.label,
+            is_correct: choice.is_correct,
+            points: choice.points,
+            has_image: choice.has_image,
+            remove_image: false,
+            hasCode: Boolean(choice.code_content),
+            codeLanguage: choice.code_language ?? "javascript",
+            codeContent: choice.code_content ?? "",
+        })) ?? [createEmptyChoice(true), createEmptyChoice(false)]
+    )
 }
 
-function indentCode(
-    event: KeyboardEvent<HTMLTextAreaElement>,
-    value: string,
-    onChange: (value: string) => void
-): void {
-    if (event.key !== "Tab") return
-
-    event.preventDefault()
-    const textarea = event.currentTarget
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const lineStart = value.lastIndexOf("\n", start - 1) + 1
-
-    if (start !== end) {
-        const selectedCode = value.slice(lineStart, end)
-        const indentedCode = selectedCode.replace(/^/gm, "\t")
-        onChange(value.slice(0, lineStart) + indentedCode + value.slice(end))
-        requestAnimationFrame(() => {
-            textarea.setSelectionRange(
-                start + 1,
-                end + (indentedCode.length - selectedCode.length)
-            )
-        })
-        return
+function createEmptyChoice(isCorrect: boolean): EditableChoice {
+    return {
+        label: "",
+        is_correct: isCorrect,
+        points: isCorrect ? 1 : 0,
+        has_image: false,
+        remove_image: false,
+        hasCode: false,
+        codeLanguage: "javascript",
+        codeContent: "",
     }
-
-    onChange(value.slice(0, start) + "\t" + value.slice(end))
-    requestAnimationFrame(() => {
-        textarea.setSelectionRange(start + 1, start + 1)
-    })
 }
 
 export function QuestionForm({
@@ -148,42 +93,11 @@ export function QuestionForm({
     )
     const [responseLanguage, setResponseLanguage] =
         useState<CodeLanguage | null>(question?.response_language ?? null)
+    const [choices, setChoices] = useState<EditableChoice[]>(() =>
+        initialChoices(question)
+    )
     const choiceModeBackup = useRef<EditableChoice[] | null>(null)
     const answerModeDisclosedBackup = useRef<boolean | null>(null)
-    const [choices, setChoices] = useState<EditableChoice[]>(
-        question?.choices.map((choice) => ({
-            id: choice.id,
-            label: choice.label,
-            is_correct: choice.is_correct,
-            points: choice.points,
-            has_image: choice.has_image,
-            remove_image: false,
-            hasCode: Boolean(choice.code_content),
-            codeLanguage: choice.code_language ?? "javascript",
-            codeContent: choice.code_content ?? "",
-        })) ?? [
-            {
-                label: "",
-                is_correct: true,
-                points: 1,
-                has_image: false,
-                remove_image: false,
-                hasCode: false,
-                codeLanguage: "javascript",
-                codeContent: "",
-            },
-            {
-                label: "",
-                is_correct: false,
-                points: 0,
-                has_image: false,
-                remove_image: false,
-                hasCode: false,
-                codeLanguage: "javascript",
-                codeContent: "",
-            },
-        ]
-    )
     const [image, setImage] = useState<File | undefined>()
     const [removeImage, setRemoveImage] = useState(false)
     const [hasCode, setHasCode] = useState(Boolean(question?.code_content))
@@ -193,19 +107,6 @@ export function QuestionForm({
     const [codeContent, setCodeContent] = useState(question?.code_content ?? "")
     const [isCreating, setIsCreating] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const hasQuestionImage =
-        Boolean(image) || Boolean(question?.has_image && !removeImage)
-
-    function updateChoice(
-        index: number,
-        update: Partial<EditableChoice>
-    ): void {
-        setChoices((current) =>
-            current.map((choice, choiceIndex) =>
-                choiceIndex === index ? { ...choice, ...update } : choice
-            )
-        )
-    }
 
     function selectCorrectChoice(index: number, checked: boolean): void {
         setChoices((current) => {
@@ -235,6 +136,7 @@ export function QuestionForm({
     function changeAnswerMode(mode: AnswerMode): void {
         const previousMode = answerMode
         setAnswerMode(mode)
+
         if (mode === "written") {
             if (previousMode !== "written") {
                 choiceModeBackup.current = choices
@@ -261,26 +163,8 @@ export function QuestionForm({
                 answerModeDisclosedBackup.current ?? answerModeDisclosed
             )
             const restoredChoices = choiceModeBackup.current ?? [
-                {
-                    label: "",
-                    is_correct: true,
-                    points: 1,
-                    has_image: false,
-                    remove_image: false,
-                    hasCode: false,
-                    codeLanguage: "javascript",
-                    codeContent: "",
-                },
-                {
-                    label: "",
-                    is_correct: false,
-                    points: 0,
-                    has_image: false,
-                    remove_image: false,
-                    hasCode: false,
-                    codeLanguage: "javascript",
-                    codeContent: "",
-                },
+                createEmptyChoice(true),
+                createEmptyChoice(false),
             ]
             choiceModeBackup.current = null
             answerModeDisclosedBackup.current = null
@@ -365,10 +249,7 @@ export function QuestionForm({
             const savedQuestion = question
                 ? await updateQuestion(
                       question.id,
-                      {
-                          ...payload,
-                          remove_image: removeImage,
-                      },
+                      { ...payload, remove_image: removeImage },
                       image
                   )
                 : await createQuestion(questionBankId, payload, image)
@@ -387,612 +268,39 @@ export function QuestionForm({
     return (
         <form onSubmit={handleSubmit}>
             <FieldGroup className="gap-4">
-                <Field>
-                    <FieldLabel htmlFor="question-prompt">
-                        {t("question-wording")}
-                    </FieldLabel>
-                    <Textarea
-                        id="question-prompt"
-                        value={prompt}
-                        onChange={(event) => setPrompt(event.target.value)}
-                        maxLength={4000}
-                        rows={3}
-                        required
-                    />
-                </Field>
-
-                <Field>
-                    <Input
-                        id="question-image"
-                        type="file"
-                        className="hidden"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        onChange={(event) => {
-                            const selectedImage = event.target.files?.[0]
-                            setImage(selectedImage)
-                            if (selectedImage) {
-                                setRemoveImage(false)
-                            }
-                        }}
-                    />
-                    <Button
-                        type="button"
-                        variant={hasQuestionImage ? "secondary" : "outline"}
-                        className="w-fit"
-                        onClick={() => {
-                            if (image) {
-                                setImage(undefined)
-                                setRemoveImage(false)
-                                const input = document.getElementById(
-                                    "question-image"
-                                ) as HTMLInputElement | null
-                                if (input) input.value = ""
-                            } else if (question?.has_image && !removeImage) {
-                                setRemoveImage(true)
-                            } else {
-                                document
-                                    .getElementById("question-image")
-                                    ?.click()
-                            }
-                        }}
-                    >
-                        {hasQuestionImage ? <Trash2 /> : <ImagePlus />}
-                        {t(
-                            hasQuestionImage ? "remove-image" : "question-image"
-                        )}
-                    </Button>
-                    {image && (
-                        <SelectedImagePreview
-                            image={image}
-                            alt={t("question-image")}
-                            className="max-h-64 w-full rounded-lg border object-contain"
-                        />
-                    )}
-                </Field>
-
-                <Field>
-                    <Button
-                        type="button"
-                        variant={hasCode ? "secondary" : "outline"}
-                        className="w-fit"
-                        onClick={() => setHasCode((current) => !current)}
-                    >
-                        <Code2 className="size-4" />
-                        {t(hasCode ? "remove-code" : "include-code")}
-                    </Button>
-                    {hasCode && (
-                        <div className="mt-2 space-y-3">
-                            <div className="max-w-xs">
-                                <FieldLabel htmlFor="question-code-language">
-                                    {t("code-language")}
-                                </FieldLabel>
-                                <select
-                                    id="question-code-language"
-                                    className={selectClassName}
-                                    value={codeLanguage}
-                                    onChange={(event) =>
-                                        setCodeLanguage(
-                                            event.target.value as CodeLanguage
-                                        )
-                                    }
-                                >
-                                    {CODE_LANGUAGES.map((language) => (
-                                        <option
-                                            key={language.value}
-                                            value={language.value}
-                                        >
-                                            {language.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <CodeBlock
-                                code={codeContent}
-                                language={codeLanguage}
-                                runnable
-                                editable
-                                onCodeChange={setCodeContent}
-                                onCodeKeyDown={(event) =>
-                                    indentCode(
-                                        event,
-                                        codeContent,
-                                        setCodeContent
-                                    )
-                                }
-                            />
-                        </div>
-                    )}
-                </Field>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                    <Field>
-                        <FieldLabel htmlFor="question-difficulty">
-                            {t("difficulty")}
-                        </FieldLabel>
-                        <select
-                            id="question-difficulty"
-                            className={selectClassName}
-                            value={difficulty}
-                            onChange={(event) =>
-                                setDifficulty(
-                                    event.target.value as QuestionDifficulty
-                                )
-                            }
-                        >
-                            <option value="easy">{t("difficulty-easy")}</option>
-                            <option value="medium">
-                                {t("difficulty-medium")}
-                            </option>
-                            <option value="hard">{t("difficulty-hard")}</option>
-                        </select>
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="question-answer-mode">
-                            {t("answer-mode")}
-                        </FieldLabel>
-                        <select
-                            id="question-answer-mode"
-                            className={selectClassName}
-                            value={answerMode}
-                            onChange={(event) =>
-                                changeAnswerMode(
-                                    event.target.value as AnswerMode
-                                )
-                            }
-                        >
-                            <option value="single">{t("single-choice")}</option>
-                            <option value="multiple">
-                                {t("multiple-choice")}
-                            </option>
-                            <option value="written">
-                                {t("written-answer")}
-                            </option>
-                        </select>
-                    </Field>
-                </div>
-
-                {answerMode !== "written" && (
-                    <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4 text-sm">
-                        <span>{t("disclose-answer-mode")}</span>
-                        <Switch
-                            checked={answerModeDisclosed}
-                            onCheckedChange={setAnswerModeDisclosed}
-                            aria-label={t("disclose-answer-mode")}
-                        />
-                    </label>
-                )}
-
-                {answerMode === "written" && (
-                    <Field>
-                        <FieldLabel htmlFor="written-response-language">
-                            {t("written-response-format")}
-                        </FieldLabel>
-                        <select
-                            id="written-response-language"
-                            className={selectClassName}
-                            value={responseLanguage ?? ""}
-                            onChange={(event) =>
-                                setResponseLanguage(
-                                    (event.target.value ||
-                                        null) as CodeLanguage | null
-                                )
-                            }
-                        >
-                            <option value="">{t("plain-text")}</option>
-                            {CODE_LANGUAGES.map((language) => (
-                                <option
-                                    key={language.value}
-                                    value={language.value}
-                                >
-                                    {language.label}
-                                </option>
-                            ))}
-                        </select>
-                    </Field>
-                )}
-
-                <Field>
-                    <FieldLabel>
-                        {t(
-                            answerMode === "written"
-                                ? "expected-written-answer"
-                                : "answer-choices"
-                        )}
-                    </FieldLabel>
-                    <div className="space-y-2">
-                        {choices.map((choice, index) => {
-                            if (answerMode === "written" && index > 0)
-                                return null
-                            return (
-                                <div
-                                    key={choice.id ?? index}
-                                    className="rounded-lg border p-3"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        {answerMode !== "written" ? (
-                                            <input
-                                                type={
-                                                    answerMode === "single"
-                                                        ? "radio"
-                                                        : "checkbox"
-                                                }
-                                                name="correct-choice"
-                                                checked={choice.is_correct}
-                                                onChange={(event) =>
-                                                    selectCorrectChoice(
-                                                        index,
-                                                        event.target.checked
-                                                    )
-                                                }
-                                                aria-label={t(
-                                                    "correct-answer-number",
-                                                    {
-                                                        number: index + 1,
-                                                    }
-                                                )}
-                                            />
-                                        ) : null}
-                                        {answerMode === "written" &&
-                                        responseLanguage ? (
-                                            <div className="min-w-0 flex-1">
-                                                <CodeBlock
-                                                    code={choice.label}
-                                                    language={responseLanguage}
-                                                    editable
-                                                    onCodeChange={(value) =>
-                                                        updateChoice(index, {
-                                                            label: value,
-                                                        })
-                                                    }
-                                                    onCodeKeyDown={(event) =>
-                                                        indentCode(
-                                                            event,
-                                                            choice.label,
-                                                            (value) =>
-                                                                updateChoice(
-                                                                    index,
-                                                                    {
-                                                                        label: value,
-                                                                    }
-                                                                )
-                                                        )
-                                                    }
-                                                    editorClassName="min-h-48"
-                                                    maxLength={4000}
-                                                    required
-                                                />
-                                            </div>
-                                        ) : answerMode === "written" ? (
-                                            <Textarea
-                                                value={choice.label}
-                                                onChange={(event) =>
-                                                    updateChoice(index, {
-                                                        label: event.target
-                                                            .value,
-                                                    })
-                                                }
-                                                maxLength={4000}
-                                                placeholder={t(
-                                                    "expected-written-answer-placeholder"
-                                                )}
-                                                required
-                                            />
-                                        ) : (
-                                            <Input
-                                                value={choice.label}
-                                                onChange={(event) =>
-                                                    updateChoice(index, {
-                                                        label: event.target
-                                                            .value,
-                                                    })
-                                                }
-                                                maxLength={500}
-                                                placeholder={t(
-                                                    "choice-placeholder",
-                                                    { number: index + 1 }
-                                                )}
-                                                required
-                                            />
-                                        )}
-                                        {answerMode !== "written" && (
-                                            <div className="flex shrink-0 items-center gap-1">
-                                                <Input
-                                                    type="number"
-                                                    className="w-20"
-                                                    value={choice.points}
-                                                    min={
-                                                        choice.is_correct
-                                                            ? 0
-                                                            : -1000
-                                                    }
-                                                    max={1000}
-                                                    step="0.25"
-                                                    onChange={(event) =>
-                                                        updateChoice(index, {
-                                                            points: choice.is_correct
-                                                                ? Math.max(
-                                                                      0,
-                                                                      Number(
-                                                                          event
-                                                                              .target
-                                                                              .value
-                                                                      )
-                                                                  )
-                                                                : Math.min(
-                                                                      0,
-                                                                      Number(
-                                                                          event
-                                                                              .target
-                                                                              .value
-                                                                      )
-                                                                  ),
-                                                        })
-                                                    }
-                                                    aria-label={t(
-                                                        "answer-points-number",
-                                                        {
-                                                            number: index + 1,
-                                                        }
-                                                    )}
-                                                    required
-                                                />
-                                                <span className="text-xs text-muted-foreground">
-                                                    {t("points-short")}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {answerMode !== "written" && (
-                                            <Button
-                                                type="button"
-                                                size="icon"
-                                                variant="ghost"
-                                                aria-label={t(
-                                                    "remove-choice-number",
-                                                    {
-                                                        number: index + 1,
-                                                    }
-                                                )}
-                                                disabled={choices.length <= 2}
-                                                onClick={() =>
-                                                    removeChoice(index)
-                                                }
-                                            >
-                                                <Trash2 />
-                                            </Button>
-                                        )}
-                                    </div>
-                                    {answerMode !== "written" && (
-                                        <div className="mt-3 space-y-3 border-t pt-3">
-                                            <div className="space-y-2">
-                                                <Input
-                                                    id={`choice-image-${index}`}
-                                                    type="file"
-                                                    className="hidden"
-                                                    accept="image/jpeg,image/png,image/webp,image/gif"
-                                                    onChange={(event) => {
-                                                        const selectedImage =
-                                                            event.target
-                                                                .files?.[0]
-                                                        updateChoice(index, {
-                                                            image: selectedImage,
-                                                            remove_image: false,
-                                                        })
-                                                    }}
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant={
-                                                        choice.image ||
-                                                        (choice.has_image &&
-                                                            !choice.remove_image)
-                                                            ? "secondary"
-                                                            : "outline"
-                                                    }
-                                                    size="sm"
-                                                    className="w-56 justify-start"
-                                                    onClick={() => {
-                                                        if (choice.image) {
-                                                            updateChoice(
-                                                                index,
-                                                                {
-                                                                    image: undefined,
-                                                                    remove_image: false,
-                                                                }
-                                                            )
-                                                            const input =
-                                                                document.getElementById(
-                                                                    `choice-image-${index}`
-                                                                ) as HTMLInputElement | null
-                                                            if (input)
-                                                                input.value = ""
-                                                        } else if (
-                                                            choice.has_image &&
-                                                            !choice.remove_image
-                                                        ) {
-                                                            updateChoice(
-                                                                index,
-                                                                {
-                                                                    remove_image: true,
-                                                                }
-                                                            )
-                                                        } else {
-                                                            document
-                                                                .getElementById(
-                                                                    `choice-image-${index}`
-                                                                )
-                                                                ?.click()
-                                                        }
-                                                    }}
-                                                >
-                                                    {choice.image ||
-                                                    (choice.has_image &&
-                                                        !choice.remove_image) ? (
-                                                        <Trash2 />
-                                                    ) : (
-                                                        <ImagePlus />
-                                                    )}
-                                                    {t(
-                                                        choice.image ||
-                                                            (choice.has_image &&
-                                                                !choice.remove_image)
-                                                            ? "remove-image"
-                                                            : "choice-image"
-                                                    )}
-                                                </Button>
-                                                {choice.image && (
-                                                    <SelectedImagePreview
-                                                        image={choice.image}
-                                                        alt={t("choice-image")}
-                                                        className="max-h-48 w-full rounded-md border object-contain"
-                                                    />
-                                                )}
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Button
-                                                    type="button"
-                                                    variant={
-                                                        choice.hasCode
-                                                            ? "secondary"
-                                                            : "outline"
-                                                    }
-                                                    size="sm"
-                                                    className="w-56 justify-start"
-                                                    onClick={() =>
-                                                        updateChoice(index, {
-                                                            hasCode:
-                                                                !choice.hasCode,
-                                                        })
-                                                    }
-                                                >
-                                                    <Code2 className="size-4" />
-                                                    {t(
-                                                        choice.hasCode
-                                                            ? "remove-code"
-                                                            : "choice-code"
-                                                    )}
-                                                </Button>
-                                                {choice.hasCode && (
-                                                    <div className="space-y-2">
-                                                        <select
-                                                            className={
-                                                                selectClassName
-                                                            }
-                                                            value={
-                                                                choice.codeLanguage
-                                                            }
-                                                            onChange={(event) =>
-                                                                updateChoice(
-                                                                    index,
-                                                                    {
-                                                                        codeLanguage:
-                                                                            event
-                                                                                .target
-                                                                                .value as CodeLanguage,
-                                                                    }
-                                                                )
-                                                            }
-                                                            aria-label={t(
-                                                                "choice-code-language",
-                                                                {
-                                                                    number:
-                                                                        index +
-                                                                        1,
-                                                                }
-                                                            )}
-                                                        >
-                                                            {CODE_LANGUAGES.map(
-                                                                (language) => (
-                                                                    <option
-                                                                        key={
-                                                                            language.value
-                                                                        }
-                                                                        value={
-                                                                            language.value
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            language.label
-                                                                        }
-                                                                    </option>
-                                                                )
-                                                            )}
-                                                        </select>
-                                                        <CodeBlock
-                                                            code={
-                                                                choice.codeContent
-                                                            }
-                                                            language={
-                                                                choice.codeLanguage
-                                                            }
-                                                            runnable
-                                                            editable
-                                                            editorClassName="min-h-28"
-                                                            onCodeChange={(
-                                                                codeContent
-                                                            ) =>
-                                                                updateChoice(
-                                                                    index,
-                                                                    {
-                                                                        codeContent,
-                                                                    }
-                                                                )
-                                                            }
-                                                            onCodeKeyDown={(
-                                                                event
-                                                            ) =>
-                                                                indentCode(
-                                                                    event,
-                                                                    choice.codeContent,
-                                                                    (
-                                                                        codeContent
-                                                                    ) =>
-                                                                        updateChoice(
-                                                                            index,
-                                                                            {
-                                                                                codeContent,
-                                                                            }
-                                                                        )
-                                                                )
-                                                            }
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        })}
-                    </div>
-                    {answerMode !== "written" && (
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="mt-2 w-fit"
-                            disabled={choices.length >= 12}
-                            onClick={() =>
-                                setChoices((current) => [
-                                    ...current,
-                                    {
-                                        label: "",
-                                        is_correct: false,
-                                        points: 0,
-                                        has_image: false,
-                                        remove_image: false,
-                                        hasCode: false,
-                                        codeLanguage: "javascript",
-                                        codeContent: "",
-                                    },
-                                ])
-                            }
-                        >
-                            <Plus />
-                            {t("add-choice")}
-                        </Button>
-                    )}
-                </Field>
-
+                <QuestionContentFields
+                    question={question}
+                    prompt={prompt}
+                    image={image}
+                    removeImage={removeImage}
+                    hasCode={hasCode}
+                    codeLanguage={codeLanguage}
+                    codeContent={codeContent}
+                    onPromptChange={setPrompt}
+                    onImageChange={setImage}
+                    onRemoveImageChange={setRemoveImage}
+                    onHasCodeChange={setHasCode}
+                    onCodeLanguageChange={setCodeLanguage}
+                    onCodeContentChange={setCodeContent}
+                />
+                <QuestionSettingsFields
+                    difficulty={difficulty}
+                    answerMode={answerMode}
+                    answerModeDisclosed={answerModeDisclosed}
+                    responseLanguage={responseLanguage}
+                    onDifficultyChange={setDifficulty}
+                    onAnswerModeChange={changeAnswerMode}
+                    onAnswerModeDisclosedChange={setAnswerModeDisclosed}
+                    onResponseLanguageChange={setResponseLanguage}
+                />
+                <QuestionChoicesEditor
+                    choices={choices}
+                    answerMode={answerMode}
+                    responseLanguage={responseLanguage}
+                    onChoicesChange={setChoices}
+                    onCorrectChoiceChange={selectCorrectChoice}
+                    onRemoveChoice={removeChoice}
+                />
                 {error && <FieldError>{error}</FieldError>}
                 <div className="flex justify-end gap-2 border-t pt-4">
                     <Button type="button" variant="outline" onClick={onCancel}>

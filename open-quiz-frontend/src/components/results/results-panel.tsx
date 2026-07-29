@@ -9,9 +9,9 @@ import type {
     QuizParticipant,
     QuizSession,
 } from "@/api/types"
+import { ParticipantAnswersDialog } from "@/components/results/participant-answers-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import {
     CalendarDays,
     ChartColumn,
@@ -20,7 +20,6 @@ import {
     FileText,
     LoaderCircle,
     School,
-    Save,
     Trash2,
     UserRound,
 } from "lucide-react"
@@ -394,148 +393,27 @@ export function ResultsPanel() {
                 )}
             </Dialog>
 
-            <Dialog
-                open={selectedParticipant !== null}
-                onOpenChange={(open) => {
-                    if (!open && gradingAnswerId === null) {
-                        setSelectedParticipant(null)
-                        setAnswers([])
-                        setAnswersError(false)
-                    }
+            <ParticipantAnswersDialog
+                participant={selectedParticipant}
+                answers={answers}
+                isLoading={areAnswersLoading}
+                hasError={answersError}
+                scoreDrafts={scoreDrafts}
+                gradingAnswerId={gradingAnswerId}
+                locale={i18n.language}
+                onClose={() => {
+                    setSelectedParticipant(null)
+                    setAnswers([])
+                    setAnswersError(false)
                 }}
-                title={t("student-answers")}
-                description={
-                    selectedParticipant?.student_display_name ??
-                    selectedParticipant?.student_identifier
+                onScoreDraftChange={(answerId, score) =>
+                    setScoreDrafts((current) => ({
+                        ...current,
+                        [answerId]: score,
+                    }))
                 }
-                className="max-w-3xl"
-            >
-                {areAnswersLoading ? (
-                    <div className="flex min-h-40 items-center justify-center">
-                        <LoaderCircle className="size-7 animate-spin text-primary" />
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {answersError && (
-                            <p
-                                className="text-sm text-destructive"
-                                role="alert"
-                            >
-                                {t("answers-load-error")}
-                            </p>
-                        )}
-                        {answers.map((answer) => (
-                            <article
-                                key={answer.id}
-                                className="rounded-xl border p-4"
-                            >
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <div>
-                                        <p className="text-xs font-semibold text-muted-foreground">
-                                            {t("question-number", {
-                                                number: answer.position,
-                                            })}{" "}
-                                            ·{" "}
-                                            {t(
-                                                `difficulty-${answer.difficulty}`
-                                            )}
-                                        </p>
-                                        <h3 className="mt-1 font-semibold">
-                                            {answer.prompt}
-                                        </h3>
-                                    </div>
-                                    <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
-                                        {formatScore(
-                                            answer.score,
-                                            i18n.language
-                                        )}{" "}
-                                        /{" "}
-                                        {formatScore(
-                                            answer.max_score,
-                                            i18n.language
-                                        )}
-                                    </span>
-                                </div>
-                                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                    <div className="rounded-lg bg-muted/60 p-3">
-                                        <p className="text-xs font-medium text-muted-foreground">
-                                            {t("student-answer")}
-                                        </p>
-                                        <p className="mt-1 text-sm whitespace-pre-wrap">
-                                            {answer.submitted_answers.join(
-                                                ", "
-                                            ) || t("no-answer")}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-lg bg-primary/5 p-3">
-                                        <p className="text-xs font-medium text-muted-foreground">
-                                            {t("expected-answer-help")}
-                                        </p>
-                                        <p className="mt-1 text-sm whitespace-pre-wrap">
-                                            {answer.expected_answers.join(", ")}
-                                        </p>
-                                    </div>
-                                </div>
-                                {answer.answer_mode === "written" && (
-                                    <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
-                                        <label className="text-sm font-medium">
-                                            {t("manual-score")}
-                                            <span className="mt-1 flex items-center gap-2">
-                                                <Input
-                                                    className="w-28"
-                                                    type="number"
-                                                    min={0}
-                                                    max={answer.max_score}
-                                                    step="0.25"
-                                                    value={
-                                                        scoreDrafts[
-                                                            answer.id
-                                                        ] ?? ""
-                                                    }
-                                                    onChange={(event) =>
-                                                        setScoreDrafts(
-                                                            (current) => ({
-                                                                ...current,
-                                                                [answer.id]:
-                                                                    event.target
-                                                                        .value,
-                                                            })
-                                                        )
-                                                    }
-                                                />
-                                                <span className="text-muted-foreground">
-                                                    / {answer.max_score}
-                                                </span>
-                                            </span>
-                                        </label>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            disabled={
-                                                gradingAnswerId === answer.id
-                                            }
-                                            onClick={() =>
-                                                void handleGrade(answer)
-                                            }
-                                        >
-                                            {gradingAnswerId === answer.id ? (
-                                                <LoaderCircle className="animate-spin" />
-                                            ) : (
-                                                <Save />
-                                            )}
-                                            {t(
-                                                answer.is_graded
-                                                    ? "update-grade"
-                                                    : "grade-answer"
-                                            )}
-                                        </Button>
-                                    </div>
-                                )}
-                            </article>
-                        ))}
-                    </div>
-                )}
-            </Dialog>
+                onGrade={(answer) => void handleGrade(answer)}
+            />
 
             <Dialog
                 open={resultToDelete !== null}

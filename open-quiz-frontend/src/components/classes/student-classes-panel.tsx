@@ -11,27 +11,14 @@ import {
 } from "@/api/classes"
 import { ApiError } from "@/api/client"
 import type { GradeLevel, Student, StudentClass } from "@/api/types"
-import { GradeLevelSelect } from "@/components/grade-level-select"
-import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
+import { ClassFormDialog } from "@/components/classes/class-form-dialog"
+import { ManagedClassDialog } from "@/components/classes/managed-class-dialog"
 import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import {
-    Download,
-    LoaderCircle,
-    Eye,
-    Pencil,
-    Plus,
-    Trash2,
-    Upload,
-    UserPlus,
-    UsersRound,
-} from "lucide-react"
+    DeleteClassMemberDialog,
+    ImportStudentsDialog,
+} from "@/components/classes/student-class-secondary-dialogs"
+import { StudentFormDialog } from "@/components/classes/student-form-dialog"
+import { StudentClassesList } from "@/components/classes/student-classes-list"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -42,9 +29,6 @@ type StudentClassesPanelProps = {
     onCreateGradeLevel: (name: string) => Promise<GradeLevel>
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
 }
-
-const selectClassName =
-    "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 function saveBlob(blob: Blob, filename: string): void {
     const url = URL.createObjectURL(blob)
@@ -338,674 +322,144 @@ export function StudentClassesPanel({
 
     return (
         <div className="mt-6">
-            {isLoading ? (
-                <div className="flex min-h-40 items-center justify-center">
-                    <LoaderCircle className="size-7 animate-spin text-primary" />
-                </div>
-            ) : loadError ? (
-                <p
-                    role="alert"
-                    className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-                >
-                    {loadError}
-                </p>
-            ) : classes.length === 0 ? (
-                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                    <aside className="h-fit rounded-xl border bg-background p-4">
-                        <h3 className="font-semibold">{t("filters")}</h3>
-                        <FieldGroup className="mt-4 gap-4">
-                            <Field>
-                                <FieldLabel htmlFor="empty-class-filter">
-                                    {t("search")}
-                                </FieldLabel>
-                                <Input
-                                    id="empty-class-filter"
-                                    value={classFilter}
-                                    onChange={(event) =>
-                                        setClassFilter(event.target.value)
-                                    }
-                                    placeholder={t("search-class")}
-                                />
-                            </Field>
-                            <Field>
-                                <FieldLabel htmlFor="empty-class-grade-filter">
-                                    {t("grade-level")}
-                                </FieldLabel>
-                                <select
-                                    id="empty-class-grade-filter"
-                                    className={selectClassName}
-                                    value={gradeLevelFilter}
-                                    onChange={(event) =>
-                                        setGradeLevelFilter(event.target.value)
-                                    }
-                                >
-                                    <option value="">
-                                        {t("all-grade-levels")}
-                                    </option>
-                                    {gradeLevels.map((level) => (
-                                        <option
-                                            key={level.id}
-                                            value={level.name}
-                                        >
-                                            {level.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                        </FieldGroup>
-                    </aside>
-                    <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                        <UsersRound className="mb-2 size-8" />
-                        <p className="font-medium">{t("no-class")}</p>
-                        <p className="mt-1 text-sm">{t("no-class-help")}</p>
-                    </div>
-                </div>
-            ) : (
-                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                    <aside className="h-fit rounded-xl border bg-background p-4">
-                        <h3 className="font-semibold">{t("filters")}</h3>
-                        <FieldGroup className="mt-4 gap-4">
-                            <Field>
-                                <FieldLabel htmlFor="class-filter">
-                                    {t("search")}
-                                </FieldLabel>
-                                <Input
-                                    id="class-filter"
-                                    value={classFilter}
-                                    onChange={(event) =>
-                                        setClassFilter(event.target.value)
-                                    }
-                                    placeholder={t("search-class")}
-                                />
-                            </Field>
-                            <Field>
-                                <FieldLabel htmlFor="class-grade-filter">
-                                    {t("grade-level")}
-                                </FieldLabel>
-                                <select
-                                    id="class-grade-filter"
-                                    className={selectClassName}
-                                    value={gradeLevelFilter}
-                                    onChange={(event) =>
-                                        setGradeLevelFilter(event.target.value)
-                                    }
-                                >
-                                    <option value="">
-                                        {t("all-grade-levels")}
-                                    </option>
-                                    {gradeLevels.map((level) => (
-                                        <option
-                                            key={level.id}
-                                            value={level.name}
-                                        >
-                                            {level.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                            {(classFilter || gradeLevelFilter) && (
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => {
-                                        setClassFilter("")
-                                        setGradeLevelFilter("")
-                                    }}
-                                >
-                                    {t("clear-filters")}
-                                </Button>
-                            )}
-                        </FieldGroup>
-                    </aside>
-                    {filteredClasses.length === 0 ? (
-                        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                            {t("no-class-filtered")}
-                        </p>
-                    ) : (
-                        <div className="grid gap-4 lg:grid-cols-2">
-                            {filteredClasses.map((studentClass) => (
-                                <article
-                                    key={studentClass.id}
-                                    className="flex h-full flex-col rounded-xl border bg-background p-4"
-                                >
-                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                        {studentClass.grade_level}
-                                    </p>
-                                    <h3 className="mt-1 text-lg font-semibold">
-                                        {studentClass.name}
-                                    </h3>
-                                    <div className="mt-4 grid grid-cols-2 gap-3">
-                                        <div className="rounded-lg bg-primary/5 p-3">
-                                            <p className="text-2xl font-bold text-primary">
-                                                {studentClass.student_count}
-                                            </p>
-                                            <p className="text-sm text-muted-foreground">
-                                                {t("students")}
-                                            </p>
-                                        </div>
-                                        <div className="rounded-lg bg-primary/5 p-3">
-                                            <p className="text-2xl font-bold text-primary">
-                                                {
-                                                    studentClass.completed_quiz_count
-                                                }
-                                            </p>
-                                            <p className="text-sm text-muted-foreground">
-                                                {t("completed-quizzes")}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        className="mt-4 w-full"
-                                        variant="outline"
-                                        onClick={() =>
-                                            setManagedClassId(studentClass.id)
-                                        }
-                                    >
-                                        <Eye />
-                                        {t("view-class")}
-                                    </Button>
-                                </article>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
+            <StudentClassesList
+                classes={classes}
+                filteredClasses={filteredClasses}
+                gradeLevels={gradeLevels}
+                isLoading={isLoading}
+                loadError={loadError}
+                classFilter={classFilter}
+                gradeLevelFilter={gradeLevelFilter}
+                onClassFilterChange={setClassFilter}
+                onGradeLevelFilterChange={setGradeLevelFilter}
+                onManageClass={setManagedClassId}
+            />
 
-            <Dialog
-                open={managedClass !== null}
-                onOpenChange={(open) => {
-                    if (!open) setManagedClassId(null)
+            <ManagedClassDialog
+                studentClass={managedClass}
+                isBatchBusy={isStudentBatchBusy}
+                batchError={studentBatchError}
+                isImportOpen={classForImport !== null}
+                onClose={() => setManagedClassId(null)}
+                onEditClass={(studentClass) => {
+                    setEditingClass(studentClass)
+                    setClassName(studentClass.name)
+                    setGradeLevel(studentClass.grade_level)
+                    setClassError(null)
+                    setManagedClassId(null)
                 }}
-                title={managedClass?.name ?? ""}
-                description={
-                    managedClass
-                        ? `${managedClass.grade_level} — ${t("student-count", {
-                              count: managedClass.student_count,
-                          })}`
-                        : undefined
+                onAddStudent={(studentClass) => {
+                    setStudentError(null)
+                    setClassForStudent(studentClass)
+                }}
+                onImport={(studentClass) => {
+                    setStudentBatchError(null)
+                    setImportFile(null)
+                    setClassForImport(studentClass)
+                }}
+                onExport={(studentClass) =>
+                    void handleExportStudents(studentClass)
                 }
-                className="max-w-2xl"
-            >
-                {managedClass && (
-                    <div>
-                        <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                    setEditingClass(managedClass)
-                                    setClassName(managedClass.name)
-                                    setGradeLevel(managedClass.grade_level)
-                                    setClassError(null)
-                                    setManagedClassId(null)
-                                }}
-                            >
-                                <Pencil />
-                                {t("edit-class")}
-                            </Button>
-                            <Button
-                                type="button"
-                                onClick={() => {
-                                    setStudentError(null)
-                                    setClassForStudent(managedClass)
-                                }}
-                            >
-                                <UserPlus />
-                                {t("add-student")}
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isStudentBatchBusy}
-                                onClick={() => {
-                                    setStudentBatchError(null)
-                                    setImportFile(null)
-                                    setClassForImport(managedClass)
-                                }}
-                            >
-                                <Upload />
-                                {t("import-students")}
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isStudentBatchBusy}
-                                onClick={() =>
-                                    void handleExportStudents(managedClass)
-                                }
-                            >
-                                <Download />
-                                {t("export-students")}
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="destructive"
-                                onClick={() => setClassToDelete(managedClass)}
-                            >
-                                <Trash2 />
-                                {t("delete-class")}
-                            </Button>
-                        </div>
-                        {studentBatchError && classForImport === null && (
-                            <p className="mt-3 text-sm text-destructive">
-                                {studentBatchError}
-                            </p>
-                        )}
-                        {managedClass.students.length === 0 ? (
-                            <p className="mt-5 rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
-                                {t("no-student")}
-                            </p>
-                        ) : (
-                            <ul className="mt-5 divide-y rounded-lg border">
-                                {managedClass.students.map((student) => (
-                                    <li
-                                        key={student.id}
-                                        className="flex items-center justify-between gap-3 px-4 py-3"
-                                    >
-                                        <div className="min-w-0">
-                                            <p className="font-medium">
-                                                {student.display_name}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {student.identifier}
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-1">
-                                            <Button
-                                                type="button"
-                                                size="icon"
-                                                variant="ghost"
-                                                aria-label={t("edit-student")}
-                                                onClick={() => {
-                                                    setClassForStudent(
-                                                        managedClass
-                                                    )
-                                                    setEditingStudent(student)
-                                                    const [
-                                                        firstName,
-                                                        ...lastName
-                                                    ] =
-                                                        student.display_name.split(
-                                                            " "
-                                                        )
-                                                    setStudentFirstName(
-                                                        firstName
-                                                    )
-                                                    setStudentLastName(
-                                                        lastName.join(" ")
-                                                    )
-                                                    setStudentError(null)
-                                                }}
-                                            >
-                                                <Pencil />
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                size="icon"
-                                                variant="ghost"
-                                                aria-label={t("delete-student")}
-                                                onClick={() =>
-                                                    setStudentToDelete(student)
-                                                }
-                                            >
-                                                <Trash2 />
-                                            </Button>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                )}
-            </Dialog>
-
-            <Dialog
-                open={classForImport !== null}
-                onOpenChange={(open) => {
-                    if (!open && !isStudentBatchBusy) {
-                        setClassForImport(null)
-                        setImportFile(null)
-                        setStudentBatchError(null)
-                    }
+                onDeleteClass={setClassToDelete}
+                onEditStudent={(studentClass, student) => {
+                    setClassForStudent(studentClass)
+                    setEditingStudent(student)
+                    const [firstName, ...lastName] =
+                        student.display_name.split(" ")
+                    setStudentFirstName(firstName)
+                    setStudentLastName(lastName.join(" "))
+                    setStudentError(null)
                 }}
-                title={t("import-students")}
-                description={t("import-students-help", {
-                    className: classForImport?.name,
-                })}
-                className="max-w-lg"
-            >
-                <form onSubmit={handleImportStudents}>
-                    <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="students-import-file">
-                                {t("json-file")}
-                            </FieldLabel>
-                            <Input
-                                ref={importInputRef}
-                                id="students-import-file"
-                                type="file"
-                                accept="application/json,.json"
-                                onChange={(event) =>
-                                    setImportFile(
-                                        event.target.files?.[0] ?? null
-                                    )
-                                }
-                                required
-                            />
-                        </Field>
-                        {studentBatchError && (
-                            <FieldError>{studentBatchError}</FieldError>
-                        )}
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isStudentBatchBusy}
-                                onClick={() => {
-                                    setClassForImport(null)
-                                    setImportFile(null)
-                                    setStudentBatchError(null)
-                                }}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={isStudentBatchBusy || !importFile}
-                            >
-                                {isStudentBatchBusy ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <Upload />
-                                )}
-                                {t(
-                                    isStudentBatchBusy
-                                        ? "importing-json"
-                                        : "import-students"
-                                )}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                </form>
-            </Dialog>
+                onDeleteStudent={setStudentToDelete}
+            />
 
-            <Dialog
+            <ImportStudentsDialog
+                studentClass={classForImport}
+                file={importFile}
+                inputRef={importInputRef}
+                isBusy={isStudentBatchBusy}
+                error={studentBatchError}
+                onFileChange={setImportFile}
+                onClose={() => {
+                    setClassForImport(null)
+                    setImportFile(null)
+                    setStudentBatchError(null)
+                }}
+                onSubmit={handleImportStudents}
+            />
+
+            <ClassFormDialog
                 open={isCreateDialogOpen || editingClass !== null}
-                onOpenChange={(open) => {
-                    if (isCreatingClass) return
-                    if (!open) {
-                        onCreateDialogOpenChange(false)
-                        setEditingClass(null)
-                        setClassName("")
-                        setGradeLevel("")
-                        setNewGradeLevel("")
-                        setIsAddingGradeLevel(false)
-                        setClassError(null)
+                editingClass={editingClass}
+                classes={classes}
+                gradeLevels={gradeLevels}
+                className={className}
+                gradeLevel={gradeLevel}
+                newGradeLevel={newGradeLevel}
+                isAddingGradeLevel={isAddingGradeLevel}
+                isBusy={isCreatingClass}
+                error={classError}
+                onClassNameChange={setClassName}
+                onGradeLevelChange={setGradeLevel}
+                onNewGradeLevelChange={setNewGradeLevel}
+                onAddingGradeLevelChange={setIsAddingGradeLevel}
+                onDeleteGradeLevel={async (level) => {
+                    setClassError(null)
+                    try {
+                        await onDeleteGradeLevel(level)
+                    } catch (error) {
+                        setClassError(
+                            error instanceof ApiError && error.status === 409
+                                ? t("grade-level-in-use-error")
+                                : t("grade-level-delete-error")
+                        )
+                        throw error
                     }
                 }}
-                title={t(editingClass ? "edit-class" : "create-class")}
-                description={t("create-class-help")}
-                className="max-w-lg"
-            >
-                <form onSubmit={handleCreateClass}>
-                    <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="class-name">
-                                {t("class-name")}
-                            </FieldLabel>
-                            <Input
-                                id="class-name"
-                                list="existing-class-names"
-                                value={className}
-                                onChange={(event) =>
-                                    setClassName(event.target.value)
-                                }
-                                placeholder={t("class-name-placeholder")}
-                                maxLength={120}
-                                required
-                            />
-                            <datalist id="existing-class-names">
-                                {classes.map((studentClass) => (
-                                    <option
-                                        key={studentClass.id}
-                                        value={studentClass.name}
-                                    />
-                                ))}
-                            </datalist>
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="class-grade">
-                                {t("grade-level")}
-                            </FieldLabel>
-                            <div className="flex gap-2">
-                                <GradeLevelSelect
-                                    id="class-grade"
-                                    value={gradeLevel}
-                                    levels={gradeLevels}
-                                    onChange={setGradeLevel}
-                                    onDelete={async (level) => {
-                                        setClassError(null)
-                                        try {
-                                            await onDeleteGradeLevel(level)
-                                        } catch (error) {
-                                            setClassError(
-                                                error instanceof ApiError &&
-                                                    error.status === 409
-                                                    ? t(
-                                                          "grade-level-in-use-error"
-                                                      )
-                                                    : t(
-                                                          "grade-level-delete-error"
-                                                      )
-                                            )
-                                            throw error
-                                        }
-                                    }}
-                                    disabled={isCreatingClass}
-                                />
-                                <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="outline"
-                                    aria-label={t("add-grade-level")}
-                                    onClick={() =>
-                                        setIsAddingGradeLevel((value) => !value)
-                                    }
-                                >
-                                    <Plus />
-                                </Button>
-                            </div>
-                            {isAddingGradeLevel && (
-                                <div className="mt-2 flex gap-2">
-                                    <Input
-                                        value={newGradeLevel}
-                                        onChange={(event) =>
-                                            setNewGradeLevel(event.target.value)
-                                        }
-                                        onKeyDown={(event) => {
-                                            if (event.key === "Enter") {
-                                                event.preventDefault()
-                                                void addGradeLevel()
-                                            }
-                                        }}
-                                        maxLength={80}
-                                        placeholder={t(
-                                            "grade-level-placeholder"
-                                        )}
-                                    />
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={() => void addGradeLevel()}
-                                    >
-                                        {t("save-grade-level")}
-                                    </Button>
-                                </div>
-                            )}
-                        </Field>
-                        {classError && <FieldError>{classError}</FieldError>}
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isCreatingClass}
-                                onClick={() => {
-                                    setEditingClass(null)
-                                    setClassName("")
-                                    setGradeLevel("")
-                                    setNewGradeLevel("")
-                                    setIsAddingGradeLevel(false)
-                                    setClassError(null)
-                                    onCreateDialogOpenChange(false)
-                                }}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button type="submit" disabled={isCreatingClass}>
-                                {isCreatingClass ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <Plus />
-                                )}
-                                {t(
-                                    editingClass ? "save-class" : "create-class"
-                                )}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                </form>
-            </Dialog>
+                onAddGradeLevel={() => void addGradeLevel()}
+                onClose={() => {
+                    setEditingClass(null)
+                    setClassName("")
+                    setGradeLevel("")
+                    setNewGradeLevel("")
+                    setIsAddingGradeLevel(false)
+                    setClassError(null)
+                    onCreateDialogOpenChange(false)
+                }}
+                onSubmit={handleCreateClass}
+            />
 
-            <Dialog
-                open={classForStudent !== null}
-                onOpenChange={(open) => {
-                    if (!open && !isCreatingStudent) {
-                        setClassForStudent(null)
-                        setEditingStudent(null)
-                        setStudentFirstName("")
-                        setStudentLastName("")
-                    }
+            <StudentFormDialog
+                studentClass={classForStudent}
+                editingStudent={editingStudent}
+                firstName={studentFirstName}
+                lastName={studentLastName}
+                isBusy={isCreatingStudent}
+                error={studentError}
+                onFirstNameChange={setStudentFirstName}
+                onLastNameChange={setStudentLastName}
+                onClose={() => {
+                    setClassForStudent(null)
+                    setEditingStudent(null)
+                    setStudentFirstName("")
+                    setStudentLastName("")
+                    setStudentError(null)
                 }}
-                title={t(editingStudent ? "edit-student" : "add-student")}
-                description={classForStudent?.name}
-                className="max-w-lg"
-            >
-                <form onSubmit={handleCreateStudent}>
-                    <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="student-first-name">
-                                {t("first-name")}
-                            </FieldLabel>
-                            <Input
-                                id="student-first-name"
-                                value={studentFirstName}
-                                onChange={(event) =>
-                                    setStudentFirstName(event.target.value)
-                                }
-                                maxLength={120}
-                                required
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="student-last-name">
-                                {t("last-name")}
-                            </FieldLabel>
-                            <Input
-                                id="student-last-name"
-                                value={studentLastName}
-                                onChange={(event) =>
-                                    setStudentLastName(event.target.value)
-                                }
-                                maxLength={120}
-                                required
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {t("student-id-generated-help")}
-                            </p>
-                        </Field>
-                        {studentError && (
-                            <FieldError>{studentError}</FieldError>
-                        )}
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isCreatingStudent}
-                                onClick={() => {
-                                    setClassForStudent(null)
-                                    setEditingStudent(null)
-                                    setStudentFirstName("")
-                                    setStudentLastName("")
-                                    setStudentError(null)
-                                }}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button type="submit" disabled={isCreatingStudent}>
-                                {isCreatingStudent ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <UserPlus />
-                                )}
-                                {t(
-                                    editingStudent
-                                        ? "save-student"
-                                        : "add-student"
-                                )}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                </form>
-            </Dialog>
+                onSubmit={handleCreateStudent}
+            />
 
-            <Dialog
-                open={classToDelete !== null || studentToDelete !== null}
-                onOpenChange={(open) => {
-                    if (!open && !isDeleting) {
-                        setClassToDelete(null)
-                        setStudentToDelete(null)
-                        setDeleteError(null)
-                    }
+            <DeleteClassMemberDialog
+                studentClass={classToDelete}
+                student={studentToDelete}
+                isBusy={isDeleting}
+                error={deleteError}
+                onClose={() => {
+                    setClassToDelete(null)
+                    setStudentToDelete(null)
+                    setDeleteError(null)
                 }}
-                title={t(classToDelete ? "delete-class" : "delete-student")}
-                description={t(
-                    classToDelete ? "delete-class-help" : "delete-student-help",
-                    {
-                        name:
-                            classToDelete?.name ??
-                            studentToDelete?.display_name ??
-                            "",
-                    }
-                )}
-                className="max-w-md"
-            >
-                {deleteError && <FieldError>{deleteError}</FieldError>}
-                <div className="mt-4 flex justify-end gap-2">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={isDeleting}
-                        onClick={() => {
-                            setClassToDelete(null)
-                            setStudentToDelete(null)
-                        }}
-                    >
-                        {t("cancel")}
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="destructive"
-                        disabled={isDeleting}
-                        onClick={() => void handleDelete()}
-                    >
-                        {isDeleting && (
-                            <LoaderCircle className="animate-spin" />
-                        )}
-                        {t("delete")}
-                    </Button>
-                </div>
-            </Dialog>
+                onConfirm={() => void handleDelete()}
+            />
         </div>
     )
 }

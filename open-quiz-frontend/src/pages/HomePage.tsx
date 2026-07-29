@@ -1,9 +1,9 @@
-import { JoinQuizForm } from "@/components/forms/join-quiz-form"
+import { StudentQuiz } from "@/components/student-quiz/student-quiz"
 
 export function HomePage() {
     return (
         <div className="flex flex-1 items-center justify-center px-4">
-            <JoinQuizForm />
+            <StudentQuiz />
         </div>
     )
 }
