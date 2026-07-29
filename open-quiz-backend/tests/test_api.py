@@ -876,6 +876,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
             json={
                 "title": " Révisions   générales ",
+                "source_language": "en",
                 "question_bank_ids": [imported_example.json()["question_bank"]["id"]],
                 "question_count": 3,
                 "allow_previous_questions": False,
@@ -887,6 +888,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert created_quiz.status_code == 201
         quiz = created_quiz.json()
         assert quiz["title"] == "Révisions générales"
+        assert quiz["source_language"] == "en"
         assert quiz["question_count"] == 3
         assert quiz["duration_seconds"] == 1800
         assert quiz["allow_previous_questions"] is False
@@ -903,6 +905,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
             json={
                 "title": "Révisions générales modifiées",
+                "source_language": "en",
                 "question_bank_ids": [imported_example.json()["question_bank"]["id"]],
                 "question_count": 3,
                 "duration_seconds": 2400,
@@ -915,6 +918,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert updated_quiz.status_code == 200
         quiz = updated_quiz.json()
         assert quiz["title"] == "Révisions générales modifiées"
+        assert quiz["source_language"] == "en"
         assert quiz["duration_seconds"] == 2400
         assert quiz["allow_previous_questions"] is True
 
@@ -953,6 +957,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 headers=teacher_headers,
                 json={
                     "title": quiz["title"],
+                    "source_language": "en",
                     "question_bank_ids": [
                         imported_example.json()["question_bank"]["id"]
                     ],
@@ -983,6 +988,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert joined.status_code == 201
         assert joined.json()["quiz_title"] == quiz["title"]
+        assert joined.json()["source_language"] == "en"
         assert joined.json()["student_name"] == "Martin Giraud"
         assert "participants" not in joined.json()
         with sqlite3.connect(tmp_path / "test.db") as connection:
@@ -1030,6 +1036,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             == "Martin Giraud"
         )
         student_state_url = f"/api/quizzes/student/sessions/{quiz_session['join_code']}"
+        assert (
+            client.get(student_state_url, headers=student_headers).json()[
+                "source_language"
+            ]
+            == "en"
+        )
         assert (
             client.get(student_state_url, headers=student_headers).json()["status"]
             == "waiting"

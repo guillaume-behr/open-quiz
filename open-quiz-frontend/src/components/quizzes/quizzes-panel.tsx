@@ -130,7 +130,7 @@ export function QuizzesPanel({
     isCreateDialogOpen,
     onCreateDialogOpenChange,
 }: QuizzesPanelProps) {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const [quizzes, setQuizzes] = useState<Quiz[]>([])
     const [sessions, setSessions] = useState<QuizSession[]>([])
     const [banks, setBanks] = useState<QuestionBank[]>([])
@@ -321,6 +321,10 @@ export function QuizzesPanel({
         try {
             const payload = {
                 title: title.trim(),
+                source_language:
+                    editingQuiz?.source_language ??
+                    i18n.resolvedLanguage ??
+                    "fr",
                 question_bank_ids: selectedBankIds,
                 question_count: questionCount,
                 duration_seconds: durationMinutes * 60,

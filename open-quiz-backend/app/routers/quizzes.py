@@ -319,6 +319,7 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
     return QuizResponse(
         id=quiz.id,
         title=quiz.title,
+        source_language=quiz.source_language,
         question_count=quiz.question_count,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
@@ -490,6 +491,7 @@ def student_session_response(
 ) -> StudentQuizSessionResponse:
     return StudentQuizSessionResponse(
         quiz_title=quiz.title,
+        source_language=quiz.source_language,
         class_name=quiz_session.class_name,
         student_name=(
             participant.student_display_name or participant.student_identifier
@@ -815,6 +817,7 @@ def create_quiz(
     quiz = Quiz(
         owner_id=professor.id,
         title=payload.title,
+        source_language=payload.source_language,
         question_count=payload.question_count,
         duration_seconds=payload.duration_seconds,
         allow_previous_questions=payload.allow_previous_questions,
@@ -1229,6 +1232,7 @@ def update_quiz(
         )
     validate_bank_selection(payload, professor, session)
     quiz.title = payload.title
+    quiz.source_language = payload.source_language
     quiz.question_count = payload.question_count
     quiz.duration_seconds = payload.duration_seconds
     quiz.allow_previous_questions = payload.allow_previous_questions

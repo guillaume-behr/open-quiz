@@ -7,7 +7,7 @@ import {
     reportStudentQuizViolation,
     submitStudentQuizAnswer,
 } from "@/api/quizzes"
-import type { StudentQuizSession } from "@/api/types"
+import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import {
     Field,
@@ -20,8 +20,19 @@ import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { CodeBlock } from "@/components/question-banks/code-block"
 import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
 import { useObjectUrl } from "@/hooks/use-object-url"
+import {
+    createBrowserTranslator,
+    translationLanguage,
+    type BrowserTranslator,
+} from "@/lib/browser-translator"
 import { cn } from "@/lib/utils"
-import { LoaderCircle, LogOut, UserRound } from "lucide-react"
+import {
+    Languages,
+    LoaderCircle,
+    LogOut,
+    TriangleAlert,
+    UserRound,
+} from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -92,8 +103,26 @@ function ProtectedQuizImage({
     ) : null
 }
 
+async function translateQuestion(
+    translator: BrowserTranslator,
+    question: StudentQuizQuestion
+): Promise<StudentQuizQuestion> {
+    const translatedChoices = []
+    for (const choice of question.choices) {
+        translatedChoices.push({
+            ...choice,
+            label: await translator.translate(choice.label),
+        })
+    }
+    return {
+        ...question,
+        prompt: await translator.translate(question.prompt),
+        choices: translatedChoices,
+    }
+}
+
 export function JoinQuizForm() {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const [restoredSession] = useState(readStoredQuizSession)
     const [studentIdentifier, setStudentIdentifier] = useState(
         restoredSession?.studentIdentifier ?? ""
@@ -107,15 +136,66 @@ export function JoinQuizForm() {
     const [writtenAnswer, setWrittenAnswer] = useState("")
     const [isBusy, setIsBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [translationEnabled, setTranslationEnabled] = useState(false)
+    const [translatedPair, setTranslatedPair] = useState<string | null>(null)
+    const [translatedTitle, setTranslatedTitle] = useState<string | null>(null)
+    const [translatedQuestion, setTranslatedQuestion] =
+        useState<StudentQuizQuestion | null>(null)
+    const [isTranslating, setIsTranslating] = useState(false)
+    const [isDownloadingTranslation, setIsDownloadingTranslation] =
+        useState(false)
+    const [translationErrorPair, setTranslationErrorPair] = useState<
+        string | null
+    >(null)
     const [isFullscreen, setIsFullscreen] = useState(
         Boolean(document.fullscreenElement)
     )
+    const translatorRef = useRef<BrowserTranslator | null>(null)
+    const translatorPairRef = useRef<string | null>(null)
     const isLeavingQuiz = useRef(false)
     const monitoringArmedAt = useRef<number | null>(null)
     const wasMonitoredFullscreen = useRef(false)
     const lastViolationAt = useRef(0)
     const monitoredJoinCode =
         session?.status === "in_progress" ? session.join_code : undefined
+    const sourceLanguage = translationLanguage(session?.source_language)
+    const targetLanguage = translationLanguage(i18n.resolvedLanguage)
+    const translationPair = `${sourceLanguage}:${targetLanguage}`
+    const translationOffered =
+        session !== null && sourceLanguage !== targetLanguage
+    const translationActive =
+        translationEnabled && translatedPair === translationPair
+    const translationError = translationErrorPair === translationPair
+
+    useEffect(
+        () => () => {
+            translatorRef.current?.destroy()
+        },
+        []
+    )
+
+    useEffect(() => {
+        const question = session?.question
+        const translator = translatorRef.current
+        if (!translationActive || !translator || !question) return
+        if (translatedQuestion?.id === question.id) return
+        let active = true
+        void translateQuestion(translator, question)
+            .then((translated) => {
+                if (active) setTranslatedQuestion(translated)
+            })
+            .catch(() => {
+                if (active) setTranslationErrorPair(translationPair)
+            })
+        return () => {
+            active = false
+        }
+    }, [
+        session?.question,
+        translatedQuestion?.id,
+        translationActive,
+        translationPair,
+    ])
 
     useEffect(() => {
         const fullscreenChanged = () => {
@@ -233,7 +313,13 @@ export function JoinQuizForm() {
                         setSelectedChoiceIds(updated.selected_choice_ids ?? [])
                         setWrittenAnswer(updated.written_answer ?? "")
                     }
-                    setSession(updated)
+                    setSession((current) => {
+                        const currentQuestion = current?.question
+                        return currentQuestion &&
+                            currentQuestion.id === updated.question?.id
+                            ? { ...updated, question: currentQuestion }
+                            : updated
+                    })
                 })
                 .catch(() => {
                     if (active) setError(t("student-session-error"))
@@ -284,6 +370,14 @@ export function JoinQuizForm() {
         setSelectedChoiceIds([])
         setWrittenAnswer("")
         setError(null)
+        translatorRef.current?.destroy()
+        translatorRef.current = null
+        translatorPairRef.current = null
+        setTranslationEnabled(false)
+        setTranslatedPair(null)
+        setTranslatedTitle(null)
+        setTranslatedQuestion(null)
+        setTranslationErrorPair(null)
         if (document.fullscreenElement) {
             void document.exitFullscreen().finally(() => {
                 window.setTimeout(() => {
@@ -292,6 +386,50 @@ export function JoinQuizForm() {
             })
         } else {
             isLeavingQuiz.current = false
+        }
+    }
+
+    async function toggleAutomaticTranslation() {
+        if (translationActive) {
+            setTranslationEnabled(false)
+            setTranslationErrorPair(null)
+            return
+        }
+        if (!session || !translationOffered) return
+
+        setTranslationErrorPair(null)
+        setIsTranslating(true)
+        try {
+            let translator = translatorRef.current
+            if (translator && translatorPairRef.current !== translationPair) {
+                translator.destroy()
+                translator = null
+                translatorRef.current = null
+                translatorPairRef.current = null
+            }
+            if (!translator) {
+                translator = await createBrowserTranslator(
+                    sourceLanguage,
+                    targetLanguage,
+                    () => setIsDownloadingTranslation(true)
+                )
+                translatorRef.current = translator
+                translatorPairRef.current = translationPair
+            }
+            const title = await translator.translate(session.quiz_title)
+            let question: StudentQuizQuestion | null = null
+            if (session.question) {
+                question = await translateQuestion(translator, session.question)
+            }
+            setTranslatedTitle(title)
+            setTranslatedQuestion(question)
+            setTranslatedPair(translationPair)
+            setTranslationEnabled(true)
+        } catch {
+            setTranslationErrorPair(translationPair)
+        } finally {
+            setIsTranslating(false)
+            setIsDownloadingTranslation(false)
         }
     }
 
@@ -391,7 +529,11 @@ export function JoinQuizForm() {
                 </div>
             )
         }
-        const question = session.question
+        const originalQuestion = session.question
+        const question =
+            translationActive && translatedQuestion?.id === originalQuestion?.id
+                ? translatedQuestion
+                : originalQuestion
         return (
             <div className="flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 py-8 shadow-lg sm:px-10">
                 <StudentNameBadge name={session.student_name} />
@@ -408,7 +550,9 @@ export function JoinQuizForm() {
                 </Button>
                 <div className="text-center">
                     <h1 className="text-3xl font-extrabold">
-                        {session.quiz_title}
+                        {translationActive && translatedTitle
+                            ? translatedTitle
+                            : session.quiz_title}
                     </h1>
                     <p className="text-muted-foreground">
                         {session.class_name}
@@ -419,6 +563,55 @@ export function JoinQuizForm() {
                         </div>
                     )}
                 </div>
+                {translationOffered && (
+                    <section className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4">
+                        <div className="flex gap-3">
+                            <TriangleAlert
+                                className="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-300"
+                                aria-hidden="true"
+                            />
+                            <div>
+                                <h2 className="font-bold">
+                                    {t("automatic-translation-title")}
+                                </h2>
+                                <p className="mt-1 text-sm leading-6">
+                                    {t("automatic-translation-warning")}
+                                </p>
+                            </div>
+                        </div>
+                        {translationError && (
+                            <p
+                                className="mt-3 text-sm text-destructive"
+                                role="alert"
+                            >
+                                {t("automatic-translation-unavailable")}
+                            </p>
+                        )}
+                        <Button
+                            className="mt-3"
+                            type="button"
+                            variant="outline"
+                            disabled={isTranslating}
+                            onClick={() => void toggleAutomaticTranslation()}
+                        >
+                            {isTranslating ? (
+                                <LoaderCircle
+                                    className="animate-spin"
+                                    aria-hidden="true"
+                                />
+                            ) : (
+                                <Languages aria-hidden="true" />
+                            )}
+                            {isDownloadingTranslation
+                                ? t("automatic-translation-downloading")
+                                : isTranslating
+                                  ? t("automatic-translation-progress")
+                                  : translationActive
+                                    ? t("automatic-translation-original")
+                                    : t("automatic-translation-enable")}
+                        </Button>
+                    </section>
+                )}
                 {session.status === "waiting" && (
                     <div className="text-center">
                         <LoaderCircle className="mx-auto size-10 animate-spin text-primary" />

@@ -93,6 +93,13 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "allow_previous_questions BOOLEAN NOT NULL DEFAULT FALSE"
                 )
             )
+        if "source_language" not in quiz_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quizzes ADD COLUMN "
+                    "source_language VARCHAR(35) NOT NULL DEFAULT 'fr'"
+                )
+            )
         if "paused_at" not in quiz_session_columns:
             connection.execute(
                 text("ALTER TABLE quiz_sessions ADD COLUMN paused_at DATETIME")

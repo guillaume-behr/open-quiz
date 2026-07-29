@@ -378,6 +378,12 @@ class QuestionBatchImportResponse(BaseModel):
 
 class QuizCreate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
+    source_language: str = Field(
+        default="fr",
+        min_length=2,
+        max_length=35,
+        pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+    )
     question_bank_ids: list[int] = Field(min_length=1, max_length=100)
     question_count: int = Field(ge=1, le=200)
     duration_seconds: int = Field(default=1800, ge=60, le=28800)
@@ -420,6 +426,7 @@ class QuizBankSummary(BaseModel):
 class QuizResponse(BaseModel):
     id: int
     title: str
+    source_language: str
     question_count: int
     duration_seconds: int
     allow_previous_questions: bool
@@ -467,6 +474,7 @@ class QuizSessionResponse(BaseModel):
 
 class StudentQuizSessionResponse(BaseModel):
     quiz_title: str
+    source_language: str
     class_name: str
     student_name: str
     join_code: str

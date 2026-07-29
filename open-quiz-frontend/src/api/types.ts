@@ -137,6 +137,7 @@ export type QuestionUpdate = NewQuestion & {
 export type Quiz = {
     id: number
     title: string
+    source_language: string
     question_count: number
     duration_seconds: number
     allow_previous_questions: boolean
@@ -157,6 +158,7 @@ export type Quiz = {
 
 export type NewQuiz = {
     title: string
+    source_language: string
     question_bank_ids: number[]
     question_count: number
     duration_seconds: number
@@ -235,6 +237,7 @@ export type StudentQuizQuestion = {
 
 export type StudentQuizSession = {
     quiz_title: string
+    source_language: string
     class_name: string
     student_name: string
     join_code: string

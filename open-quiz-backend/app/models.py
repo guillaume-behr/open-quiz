@@ -164,6 +164,7 @@ class Quiz(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(160))
+    source_language: Mapped[str] = mapped_column(String(35), default="fr")
     question_count: Mapped[int] = mapped_column(Integer)
     duration_seconds: Mapped[int] = mapped_column(Integer, default=1800)
     allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
