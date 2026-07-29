@@ -1680,7 +1680,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert recovery_login.json()["status"] == "setup_required"
 
 
-def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
+def test_existing_question_choices_gain_and_backfill_points(tmp_path: Path) -> None:
     database_path = tmp_path / "legacy-question-choices.db"
     with sqlite3.connect(database_path) as database:
         database.execute(
@@ -1694,6 +1694,22 @@ def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
             )
             """
         )
+        database.executemany(
+            """
+            INSERT INTO question_choices (
+                id,
+                question_id,
+                label,
+                is_correct,
+                position
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (1, 1, "Correct answer", True, 0),
+                (2, 1, "Incorrect answer", False, 1),
+            ],
+        )
 
     create_app(settings_for(database_path))
 
@@ -1701,6 +1717,9 @@ def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
         columns = {
             row[1] for row in database.execute("PRAGMA table_info(question_choices)")
         }
+        points = list(
+            database.execute("SELECT points FROM question_choices ORDER BY position")
+        )
     assert {
         "points",
         "image_data",
@@ -1708,6 +1727,7 @@ def test_existing_question_choices_gain_points_column(tmp_path: Path) -> None:
         "code_language",
         "code_content",
     }.issubset(columns)
+    assert points == [(1.0,), (0.0,)]
 
 
 def test_existing_quiz_sessions_gain_class_and_student_links(

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react"
 
 export function useObjectUrl(loadBlob: () => Promise<Blob>): string | null {
-    const [objectUrl, setObjectUrl] = useState<string | null>(null)
+    const [loaded, setLoaded] = useState<{
+        loader: typeof loadBlob
+        objectUrl: string
+    } | null>(null)
 
     useEffect(() => {
         let active = true
@@ -11,13 +14,16 @@ export function useObjectUrl(loadBlob: () => Promise<Blob>): string | null {
             .then((blob) => {
                 currentUrl = URL.createObjectURL(blob)
                 if (active) {
-                    setObjectUrl(currentUrl)
+                    setLoaded({
+                        loader: loadBlob,
+                        objectUrl: currentUrl,
+                    })
                 } else {
                     URL.revokeObjectURL(currentUrl)
                 }
             })
             .catch(() => {
-                if (active) setObjectUrl(null)
+                if (active) setLoaded(null)
             })
 
         return () => {
@@ -26,5 +32,5 @@ export function useObjectUrl(loadBlob: () => Promise<Blob>): string | null {
         }
     }, [loadBlob])
 
-    return objectUrl
+    return loaded?.loader === loadBlob ? loaded.objectUrl : null
 }

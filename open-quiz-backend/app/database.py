@@ -118,6 +118,9 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "ADD COLUMN points FLOAT NOT NULL DEFAULT 0"
                 )
             )
+            connection.execute(
+                text("UPDATE question_choices SET points = 1 WHERE is_correct = TRUE")
+            )
         for column_name, column_type in (
             ("image_data", LargeBinary()),
             ("image_content_type", String(80)),
