@@ -10,9 +10,11 @@ from typing import Any
 import pyotp
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.config import Settings
 from app.routers.auth import REFRESH_COOKIE
+from app.schemas import StudentQuizAnswer
 from main import create_app
 from scripts.reset_two_factor import reset
 
@@ -267,9 +269,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["grade_level"] == "5e"
         assert student_class["students"] == []
         assert student_class["completed_quiz_count"] == 0
-        grade_levels = client.get(
-            "/api/grade-levels", headers=teacher_headers
-        ).json()
+        grade_levels = client.get("/api/grade-levels", headers=teacher_headers).json()
         assert [level["name"] for level in grade_levels] == ["5e"]
         assert (
             client.delete(
@@ -716,11 +716,14 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert all("correction_mode" not in item for item in example_batch["questions"])
         assert any(item["image"] for item in example_batch["questions"])
         assert any(item["code_content"] for item in example_batch["questions"])
-        assert next(
-            item
-            for item in example_batch["questions"]
-            if item["answer_mode"] == "written"
-        )["response_language"] == "python"
+        assert (
+            next(
+                item
+                for item in example_batch["questions"]
+                if item["answer_mode"] == "written"
+            )["response_language"]
+            == "python"
+        )
         assert any(
             choice["image"]
             for item in example_batch["questions"]
@@ -752,11 +755,14 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert {
             question["answer_mode"] for question in imported_example.json()["questions"]
         } == {"single", "multiple", "written"}
-        assert next(
-            question
-            for question in imported_example.json()["questions"]
-            if question["answer_mode"] == "written"
-        )["response_language"] == "python"
+        assert (
+            next(
+                question
+                for question in imported_example.json()["questions"]
+                if question["answer_mode"] == "written"
+            )["response_language"]
+            == "python"
+        )
 
         invalid_quiz_distribution = client.post(
             "/api/quizzes",
@@ -1992,11 +1998,41 @@ def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> No
     with pytest.raises(ValueError, match="JWT_SECRET"):
         settings_for(tmp_path / "weak.db", jwt_secret="short")
 
+    with pytest.raises(ValueError, match="must be distinct"):
+        settings_for(
+            tmp_path / "reused-secret.db",
+            totp_encryption_key=JWT_SECRET,
+        )
+
     with pytest.raises(ValueError, match="HTTPS"):
         settings_for(
             tmp_path / "production.db",
             environment="production",
         )
+
+    with pytest.raises(ValueError, match="credentials"):
+        settings_for(
+            tmp_path / "credential-origin.db",
+            frontend_origin="https://user:password@example.com",
+        )
+
+    with pytest.raises(ValueError, match="trailing slash"):
+        settings_for(
+            tmp_path / "trailing-slash-origin.db",
+            frontend_origin="https://example.com/",
+        )
+
+    with pytest.raises(ValueError, match="invalid port"):
+        settings_for(
+            tmp_path / "invalid-port-origin.db",
+            frontend_origin="https://example.com:not-a-port",
+        )
+
+
+def test_written_answers_have_an_application_level_size_limit() -> None:
+    assert StudentQuizAnswer(written_answer="a" * 20000).written_answer
+    with pytest.raises(ValidationError):
+        StudentQuizAnswer(written_answer="a" * 20001)
 
 
 @pytest.mark.parametrize(

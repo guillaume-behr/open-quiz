@@ -41,6 +41,8 @@ class Settings:
             raise ValueError("TOTP_ENCRYPTION_KEY must contain at least 32 characters")
         if self.totp_encryption_key.startswith("replace-with-"):
             raise ValueError("TOTP_ENCRYPTION_KEY is still set to its example value")
+        if self.jwt_secret == self.totp_encryption_key:
+            raise ValueError("JWT_SECRET and TOTP_ENCRYPTION_KEY must be distinct")
         if len(self.admin_password) < 16:
             raise ValueError("ADMIN_PASSWORD must contain at least 16 characters")
         if self.admin_password.startswith("replace-with-"):
@@ -69,9 +71,16 @@ class Settings:
         origin = urlparse(self.frontend_origin)
         if origin.scheme not in {"http", "https"} or not origin.netloc:
             raise ValueError("FRONTEND_ORIGIN must be an HTTP(S) origin")
-        if origin.path not in {"", "/"} or origin.query or origin.fragment:
+        if origin.username or origin.password:
+            raise ValueError("FRONTEND_ORIGIN must not contain credentials")
+        try:
+            _ = origin.port
+        except ValueError as error:
+            raise ValueError("FRONTEND_ORIGIN contains an invalid port") from error
+        if origin.path or origin.params or origin.query or origin.fragment:
             raise ValueError(
-                "FRONTEND_ORIGIN must not contain a path, query, or fragment"
+                "FRONTEND_ORIGIN must not contain a trailing slash, path, "
+                "parameters, query, or fragment"
             )
         if self.environment not in {"development", "test", "production"}:
             raise ValueError("APP_ENV must be development, test, or production")

@@ -31,6 +31,7 @@ La documentation interactive est disponible sur `http://localhost:8000/docs`.
 
 ```shell
 uv run ruff check .
+uv run ruff format --check app tests main.py scripts
 uv run pytest -q
 ```
 
@@ -100,7 +101,8 @@ participants, les réponses et les alertes associées.
 
 SQLite est configuré en mode WAL avec vérification des clés étrangères, attente
 sur verrou et contrôle de disponibilité. Le volume `/data` doit rester
-persistant et sauvegardé avec les scripts situés à la racine du dépôt.
+persistant et être sauvegardé avec un outil compatible SQLite WAL ou pendant un
+arrêt contrôlé.
 
 Les images de questions sont décodées, limitées en dimensions puis réencodées
 avant stockage. Les métadonnées et les trames d'animation ne sont pas

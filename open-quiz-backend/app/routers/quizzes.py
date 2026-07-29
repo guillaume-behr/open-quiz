@@ -216,14 +216,14 @@ def available_difficulty_counts(
     bank_ids: list[int],
     session: DbSession,
 ) -> dict[str, int]:
-    return {
-        difficulty: count
-        for difficulty, count in session.execute(
-            select(Question.difficulty, func.count(Question.id))
-            .where(Question.question_bank_id.in_(bank_ids))
-            .group_by(Question.difficulty)
-        )
-    }
+    counts: dict[str, int] = {}
+    for difficulty, count in session.execute(
+        select(Question.difficulty, func.count(Question.id))
+        .where(Question.question_bank_id.in_(bank_ids))
+        .group_by(Question.difficulty)
+    ):
+        counts[difficulty] = count
+    return counts
 
 
 def difficulty_counts_for_banks(

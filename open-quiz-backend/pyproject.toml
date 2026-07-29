@@ -1,9 +1,14 @@
 [project]
 name = "open-quiz-backend"
 version = "0.1.0"
-description = ""
+description = "FastAPI backend for the Open Quiz classroom quiz platform"
 readme = "README.md"
 requires-python = ">=3.14"
+license = "MIT"
+authors = [
+    { name = "Guillaume BEHR" },
+    { name = "Théo WILLEM" },
+]
 dependencies = [
     "argon2-cffi>=25.1.0",
     "cryptography>=49.0.0",
@@ -26,7 +31,11 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
+[tool.ruff]
+target-version = "py314"
+
 [tool.ruff.lint]
+select = ["B", "C4", "E4", "E7", "E9", "F", "I", "PIE", "SIM", "UP"]
 ignore = [
     # FastAPI dependency declarations intentionally call parameter helpers.
     "B008",

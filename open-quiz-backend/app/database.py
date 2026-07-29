@@ -70,10 +70,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
         }
         if "response_language" not in question_columns:
             connection.execute(
-                text(
-                    "ALTER TABLE questions "
-                    "ADD COLUMN response_language VARCHAR(30)"
-                )
+                text("ALTER TABLE questions ADD COLUMN response_language VARCHAR(30)")
             )
         quiz_columns = {
             column["name"] for column in inspect(connection).get_columns("quizzes")
