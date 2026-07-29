@@ -49,6 +49,10 @@ async function refreshAccessToken(): Promise<boolean> {
     return refreshPromise
 }
 
+export function restoreAccessToken(): Promise<boolean> {
+    return refreshAccessToken()
+}
+
 export function setAccessToken(token: string | null) {
     accessToken = token
 }

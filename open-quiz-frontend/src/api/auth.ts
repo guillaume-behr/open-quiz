@@ -1,4 +1,4 @@
-import { request, setAccessToken } from "./client"
+import { request, restoreAccessToken, setAccessToken } from "./client"
 import type { TwoFactorChallenge, User } from "./types"
 
 type TokenResponse = {
@@ -40,7 +40,10 @@ export async function verifyTwoFactor(
     return currentUser()
 }
 
-export function restoreSession(): Promise<User> {
+export async function restoreSession(): Promise<User> {
+    if (!(await restoreAccessToken())) {
+        throw new Error("No active session")
+    }
     return currentUser()
 }
 

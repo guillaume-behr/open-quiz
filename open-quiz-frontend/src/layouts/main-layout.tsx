@@ -1,30 +1,16 @@
-import { restoreSession } from "@/api/auth"
-import type { User } from "@/api/types"
 import { LanguageSelector } from "@/components/language/language-selector"
 import { PageTransition } from "@/components/navigation/page-transition"
 import { ThemeSelector } from "@/components/theme/theme-selector"
-import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, Outlet, useLocation } from "react-router"
 
 export function MainLayout() {
     const { t } = useTranslation()
     const location = useLocation()
-    const [currentUser, setCurrentUser] = useState<User | null>(null)
-
-    useEffect(() => {
-        if (location.pathname !== "/") return
-
-        restoreSession()
-            .then(setCurrentUser)
-            .catch(() => setCurrentUser(null))
-    }, [location.pathname])
 
     const link =
         location.pathname === "/"
-            ? currentUser?.is_admin
-                ? { text: "administration", url: "/admin/dashboard" }
-                : { text: "professor-space", url: "/dashboard" }
+            ? { text: "professor-space", url: "/dashboard" }
             : { text: "homepage", url: "/" }
 
     return (
