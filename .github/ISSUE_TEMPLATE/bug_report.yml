@@ -1,0 +1,46 @@
+name: Rapport de bug
+description: Signaler un comportement reproductible d’Open Quiz
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de ne publier ici aucun secret, aucune donnée d’élève et aucune vulnérabilité. Consultez SECURITY.md pour un signalement privé.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Décrivez le comportement observé et celui attendu.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes de reproduction
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version ou commit
+      placeholder: 0.1.0 ou identifiant du commit
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environnement
+      description: Navigateur, système, mode local ou Docker et configuration pertinente sans secret.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journaux ou captures nettoyés
+      description: Supprimez les secrets, jetons et données personnelles.

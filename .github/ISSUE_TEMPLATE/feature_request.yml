@@ -1,0 +1,29 @@
+name: Proposition d’évolution
+description: Proposer une amélioration ou un nouveau besoin
+title: "[Évolution] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème à résoudre
+      description: Quel besoin utilisateur ou contributeur n’est pas satisfait ?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solution proposée
+      description: Décrivez le comportement souhaité sans imposer une implémentation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées
+  - type: textarea
+    id: impact
+    attributes:
+      label: Compatibilité et impact
+      description: Signalez les effets possibles sur les données, l’API, l’accessibilité, la sécurité ou les traductions.
