@@ -42,23 +42,20 @@ createRoot(document.getElementById("root")!).render(
                                 element={<AdminDashboard />}
                             />
                             <Route
-                                path="mentions-legales"
+                                path="legal-notice"
                                 element={<LegalNoticesPage />}
                             />
+                            <Route path="privacy" element={<PrivacyPage />} />
                             <Route
-                                path="donnees-personnelles"
-                                element={<PrivacyPage />}
-                            />
-                            <Route
-                                path="accessibilite"
+                                path="accessibility"
                                 element={<AccessibilityPage />}
                             />
                             <Route
-                                path="gestion-des-cookies"
+                                path="cookie-settings"
                                 element={<CookiesPage />}
                             />
                             <Route
-                                path="signaler-un-probleme"
+                                path="report-a-problem"
                                 element={<ReportProblemPage />}
                             />
                         </Route>

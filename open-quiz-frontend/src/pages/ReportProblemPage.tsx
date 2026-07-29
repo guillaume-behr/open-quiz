@@ -31,7 +31,9 @@ export function ReportProblemPage() {
 
     useEffect(() => {
         const previousTitle = document.title
-        document.title = `${t("signal")} — Open Quiz`
+        document.title = t("legal-page-browser-title", {
+            title: t("signal"),
+        })
         return () => {
             document.title = previousTitle
         }

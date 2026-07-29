@@ -19,7 +19,7 @@ export function MainLayout() {
                 href="#contenu"
                 className="fixed top-2 left-2 z-[100] -translate-y-20 rounded-md bg-background px-4 py-2 font-bold text-foreground shadow-lg transition-transform focus:translate-y-0 focus:ring-3 focus:ring-ring/50 focus:outline-none"
             >
-                Aller au contenu
+                {t("skip-to-content")}
             </a>
             <header className="flex w-full shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
                 <Link
@@ -48,32 +48,28 @@ export function MainLayout() {
 
             <footer className="flex w-full shrink-0 flex-wrap items-center justify-center gap-x-5 gap-y-3 bg-sidebar-primary px-4 py-3 sm:justify-between sm:px-10">
                 <div className="flex shrink-0 items-center gap-3">
-                    <p className="text-sm whitespace-nowrap">v 2026.01</p>
+                    <p className="text-sm whitespace-nowrap">
+                        {t("app-version", { version: "2026.01" })}
+                    </p>
                     <LanguageSelector />
                     <ThemeSelector />
                 </div>
                 <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-                    <Link className="text-sm underline" to="/mentions-legales">
+                    <Link className="text-sm underline" to="/legal-notice">
                         {t("legal")}
                     </Link>
-                    <Link
-                        className="text-sm underline"
-                        to="/donnees-personnelles"
-                    >
+                    <Link className="text-sm underline" to="/privacy">
                         {t("privacy")}
                     </Link>
-                    <Link className="text-sm underline" to="/accessibilite">
-                        Accessibilité : non conforme
+                    <Link className="text-sm underline" to="/accessibility">
+                        {t("accessibility-status")}
                     </Link>
-                    <Link
-                        className="text-sm underline"
-                        to="/gestion-des-cookies"
-                    >
+                    <Link className="text-sm underline" to="/cookie-settings">
                         {t("cookies")}
                     </Link>
                     <Link
                         className="text-sm underline"
-                        to="/signaler-un-probleme"
+                        to="/report-a-problem"
                         state={{ from: location.pathname }}
                     >
                         {t("signal")}
