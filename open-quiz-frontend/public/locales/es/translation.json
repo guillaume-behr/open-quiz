@@ -335,5 +335,14 @@
     "no-answer": "Sin respuesta",
     "manual-score": "Puntuación asignada",
     "grade-answer": "Validar corrección",
-    "update-grade": "Modificar puntuación"
+    "update-grade": "Modificar puntuación",
+    "delete-grade-level": "Eliminar el nivel {{level}}",
+    "delete-grade-level-confirmation": "¿Eliminar el nivel «{{level}}»? Esta acción no se puede deshacer.",
+    "grade-level-create-error": "No se puede añadir este nivel.",
+    "grade-level-delete-error": "No se puede eliminar este nivel.",
+    "grade-level-in-use-error": "Una clase o un banco de preguntas todavía utiliza este nivel.",
+    "written-response-format": "Formato de la respuesta escrita",
+    "plain-text": "Texto sin formato",
+    "plain-text-response": "Escribe tu respuesta como texto sin formato.",
+    "write-code-in-language": "Escribe tu respuesta en {{language}}."
 }

@@ -359,5 +359,14 @@
     "no-answer": "Немає відповіді",
     "manual-score": "Виставлений бал",
     "grade-answer": "Підтвердити оцінку",
-    "update-grade": "Змінити бал"
+    "update-grade": "Змінити бал",
+    "delete-grade-level": "Видалити рівень {{level}}",
+    "delete-grade-level-confirmation": "Видалити рівень «{{level}}»? Цю дію неможливо скасувати.",
+    "grade-level-create-error": "Не вдалося додати цей рівень.",
+    "grade-level-delete-error": "Не вдалося видалити цей рівень.",
+    "grade-level-in-use-error": "Цей рівень ще використовується класом або банком запитань.",
+    "written-response-format": "Формат письмової відповіді",
+    "plain-text": "Звичайний текст",
+    "plain-text-response": "Напишіть відповідь звичайним текстом.",
+    "write-code-in-language": "Напишіть відповідь мовою {{language}}."
 }

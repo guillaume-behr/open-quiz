@@ -335,5 +335,14 @@
     "no-answer": "Keine Antwort",
     "manual-score": "Vergebene Punkte",
     "grade-answer": "Bewertung bestätigen",
-    "update-grade": "Punkte ändern"
+    "update-grade": "Punkte ändern",
+    "delete-grade-level": "Klassenstufe {{level}} löschen",
+    "delete-grade-level-confirmation": "Klassenstufe „{{level}}“ löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "grade-level-create-error": "Diese Klassenstufe konnte nicht hinzugefügt werden.",
+    "grade-level-delete-error": "Diese Klassenstufe konnte nicht gelöscht werden.",
+    "grade-level-in-use-error": "Diese Klassenstufe wird noch von einer Klasse oder Fragensammlung verwendet.",
+    "written-response-format": "Format der schriftlichen Antwort",
+    "plain-text": "Nur Text",
+    "plain-text-response": "Schreiben Sie Ihre Antwort als einfachen Text.",
+    "write-code-in-language": "Schreiben Sie Ihre Antwort in {{language}}."
 }

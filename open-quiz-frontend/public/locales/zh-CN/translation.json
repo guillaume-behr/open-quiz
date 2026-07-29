@@ -335,5 +335,14 @@
     "no-answer": "未作答",
     "manual-score": "给定分数",
     "grade-answer": "确认批改",
-    "update-grade": "修改分数"
+    "update-grade": "修改分数",
+    "delete-grade-level": "删除年级 {{level}}",
+    "delete-grade-level-confirmation": "删除年级“{{level}}”？此操作无法撤销。",
+    "grade-level-create-error": "无法添加该年级。",
+    "grade-level-delete-error": "无法删除该年级。",
+    "grade-level-in-use-error": "某个班级或题库仍在使用该年级。",
+    "written-response-format": "书面回答格式",
+    "plain-text": "纯文本",
+    "plain-text-response": "请使用纯文本作答。",
+    "write-code-in-language": "请使用 {{language}} 作答。"
 }

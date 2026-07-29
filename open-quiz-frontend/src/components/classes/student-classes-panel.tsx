@@ -383,7 +383,10 @@ export function StudentClassesPanel({
                                         {t("all-grade-levels")}
                                     </option>
                                     {gradeLevels.map((level) => (
-                                        <option key={level.id} value={level.name}>
+                                        <option
+                                            key={level.id}
+                                            value={level.name}
+                                        >
                                             {level.name}
                                         </option>
                                     ))}
@@ -431,7 +434,10 @@ export function StudentClassesPanel({
                                         {t("all-grade-levels")}
                                     </option>
                                     {gradeLevels.map((level) => (
-                                        <option key={level.id} value={level.name}>
+                                        <option
+                                            key={level.id}
+                                            value={level.name}
+                                        >
                                             {level.name}
                                         </option>
                                     ))}
@@ -786,8 +792,12 @@ export function StudentClassesPanel({
                                             setClassError(
                                                 error instanceof ApiError &&
                                                     error.status === 409
-                                                    ? t("grade-level-in-use-error")
-                                                    : t("grade-level-delete-error")
+                                                    ? t(
+                                                          "grade-level-in-use-error"
+                                                      )
+                                                    : t(
+                                                          "grade-level-delete-error"
+                                                      )
                                             )
                                             throw error
                                         }

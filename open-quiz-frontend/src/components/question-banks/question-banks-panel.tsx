@@ -608,8 +608,12 @@ export function QuestionBanksPanel({
                                             setCreateError(
                                                 error instanceof ApiError &&
                                                     error.status === 409
-                                                    ? t("grade-level-in-use-error")
-                                                    : t("grade-level-delete-error")
+                                                    ? t(
+                                                          "grade-level-in-use-error"
+                                                      )
+                                                    : t(
+                                                          "grade-level-delete-error"
+                                                      )
                                             )
                                             throw error
                                         }

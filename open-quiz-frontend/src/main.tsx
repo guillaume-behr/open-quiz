@@ -10,11 +10,7 @@ import "./lib/i18n.ts"
 import { MainLayout } from "./layouts/main-layout.tsx"
 
 import { LanguageDirection } from "@/components/language/language-direction"
-import {
-    AdminDashboard,
-    Dashboard,
-    HomePage,
-} from "./pages/lazy-pages.ts"
+import { AdminDashboard, Dashboard, HomePage } from "./pages/lazy-pages.ts"
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>

@@ -1,15 +1,17 @@
 {
     "name": "open-quiz-frontend",
     "private": true,
-    "version": "0.0.1",
+    "version": "0.1.0",
     "type": "module",
     "packageManager": "pnpm@11.15.1",
     "scripts": {
         "dev": "vite",
         "build": "tsc -b && vite build",
         "lint": "eslint .",
-        "format": "prettier --write \"**/*.{ts,tsx}\"",
-        "typecheck": "tsc --noEmit",
+        "format": "prettier --write \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"public/locales/*/translation.json\" \"*.{js,json,ts}\" \"index.html\"",
+        "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"public/locales/*/translation.json\" \"*.{js,json,ts}\" \"index.html\"",
+        "test": "node scripts/check-locales.mjs",
+        "typecheck": "tsc -b --pretty false",
         "preview": "vite preview"
     },
     "dependencies": {

@@ -19,11 +19,19 @@ transmet `/api` au backend.
 
 ```shell
 pnpm lint
+pnpm format:check
+pnpm test
 pnpm typecheck
 pnpm build
 ```
 
 La compilation de production est écrite dans `dist`.
+`pnpm test` vérifie que les huit catalogues de traduction possèdent les mêmes
+clés et variables d’interpolation.
+
+`VITE_API_URL` peut définir une origine d’API absolue lorsque le proxy Vite
+n’est pas utilisé. Laissez-la vide pour le développement et le déploiement
+Caddy fournis.
 
 ## Architecture
 

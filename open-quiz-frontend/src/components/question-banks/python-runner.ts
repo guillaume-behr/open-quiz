@@ -60,7 +60,9 @@ export function runPython(source: string): Promise<string> {
     const id = nextExecutionId++
     return new Promise((resolve, reject) => {
         const timeout = window.setTimeout(() => {
-            stopWorker(new Error("The Python runtime could not be initialized."))
+            stopWorker(
+                new Error("The Python runtime could not be initialized.")
+            )
         }, INITIALIZATION_TIMEOUT_MS)
         pendingExecutions.set(id, { resolve, reject, timeout })
         getWorker().postMessage({ id, source })

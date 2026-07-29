@@ -383,5 +383,14 @@
     "no-answer": "لا توجد إجابة",
     "manual-score": "الدرجة الممنوحة",
     "grade-answer": "تأكيد التصحيح",
-    "update-grade": "تعديل الدرجة"
+    "update-grade": "تعديل الدرجة",
+    "delete-grade-level": "حذف المستوى الدراسي {{level}}",
+    "delete-grade-level-confirmation": "هل تريد حذف المستوى الدراسي «{{level}}»؟ لا يمكن التراجع عن هذا الإجراء.",
+    "grade-level-create-error": "تعذرت إضافة هذا المستوى الدراسي.",
+    "grade-level-delete-error": "تعذر حذف هذا المستوى الدراسي.",
+    "grade-level-in-use-error": "لا يزال هذا المستوى الدراسي مستخدمًا في صف أو بنك أسئلة.",
+    "written-response-format": "تنسيق الإجابة الكتابية",
+    "plain-text": "نص عادي",
+    "plain-text-response": "اكتب إجابتك كنص عادي.",
+    "write-code-in-language": "اكتب إجابتك بلغة {{language}}."
 }

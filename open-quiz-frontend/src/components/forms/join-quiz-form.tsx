@@ -170,10 +170,7 @@ export function JoinQuizForm() {
                 | "page_hidden"
         ) => {
             if (isLeavingQuiz.current) return
-            if (
-                eventType !== "fullscreen_exit" &&
-                !document.fullscreenElement
-            )
+            if (eventType !== "fullscreen_exit" && !document.fullscreenElement)
                 return
             const now = Date.now()
             const armedAt = monitoringArmedAt.current
@@ -383,10 +380,14 @@ export function JoinQuizForm() {
                             void document.documentElement
                                 .requestFullscreen()
                                 .then(() => setIsFullscreen(true))
+                                .catch(() =>
+                                    setError(t("student-session-error"))
+                                )
                         }
                     >
                         {t("enter-fullscreen")}
                     </Button>
+                    {error && <FieldError>{error}</FieldError>}
                 </div>
             )
         }
@@ -552,6 +553,7 @@ export function JoinQuizForm() {
                                         onChange={(event) =>
                                             setWrittenAnswer(event.target.value)
                                         }
+                                        maxLength={20000}
                                         required
                                     />
                                 )}

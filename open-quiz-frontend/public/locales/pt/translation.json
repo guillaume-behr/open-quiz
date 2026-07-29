@@ -335,5 +335,14 @@
     "no-answer": "Sem resposta",
     "manual-score": "Pontuação atribuída",
     "grade-answer": "Validar correção",
-    "update-grade": "Alterar pontuação"
+    "update-grade": "Alterar pontuação",
+    "delete-grade-level": "Eliminar o nível {{level}}",
+    "delete-grade-level-confirmation": "Eliminar o nível «{{level}}»? Esta ação não pode ser anulada.",
+    "grade-level-create-error": "Não foi possível adicionar este nível.",
+    "grade-level-delete-error": "Não foi possível eliminar este nível.",
+    "grade-level-in-use-error": "Este nível ainda é utilizado por uma turma ou banco de perguntas.",
+    "written-response-format": "Formato da resposta escrita",
+    "plain-text": "Texto simples",
+    "plain-text-response": "Escreva a sua resposta em texto simples.",
+    "write-code-in-language": "Escreva a sua resposta em {{language}}."
 }
