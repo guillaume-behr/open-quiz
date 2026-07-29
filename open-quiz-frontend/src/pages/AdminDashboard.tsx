@@ -5,7 +5,14 @@ import {
     updateUserStatus,
 } from "@/api/admin"
 import { login, logout, restoreSession, verifyTwoFactor } from "@/api/auth"
-import type { NewUser, TwoFactorChallenge, User } from "@/api/types"
+import { getProblemReports } from "@/api/problem-reports"
+import type {
+    NewUser,
+    ProblemReport,
+    TwoFactorChallenge,
+    User,
+} from "@/api/types"
+import { ProblemReportsPanel } from "@/components/admin/problem-reports-panel"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { Button } from "@/components/ui/button"
@@ -17,6 +24,7 @@ import {
     LoaderCircle,
     KeyRound,
     LogOut,
+    MessageSquareWarning,
     ShieldCheck,
     UserPlus,
     UserCheck,
@@ -38,6 +46,10 @@ export function AdminDashboard() {
     const [currentUser, setCurrentUser] = useState<User | null>(null)
     const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null)
     const [users, setUsers] = useState<User[]>([])
+    const [reports, setReports] = useState<ProblemReport[]>([])
+    const [activeSection, setActiveSection] = useState<"users" | "reports">(
+        "users"
+    )
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState("")
     const [success, setSuccess] = useState("")
@@ -49,9 +61,13 @@ export function AdminDashboard() {
         restoreSession()
             .then(async (user) => {
                 await requireAdmin(user, t("admin-only"))
-                const loadedUsers = await getUsers()
+                const [loadedUsers, loadedReports] = await Promise.all([
+                    getUsers(),
+                    getProblemReports(),
+                ])
                 setCurrentUser(user)
                 setUsers(loadedUsers)
+                setReports(loadedReports)
             })
             .catch(() => {
                 setCurrentUser(null)
@@ -68,7 +84,12 @@ export function AdminDashboard() {
         const user = await verifyTwoFactor(challenge.challenge_token, code)
         await requireAdmin(user, t("admin-only"))
         setCurrentUser(user)
-        setUsers(await getUsers())
+        const [loadedUsers, loadedReports] = await Promise.all([
+            getUsers(),
+            getProblemReports(),
+        ])
+        setUsers(loadedUsers)
+        setReports(loadedReports)
         setChallenge(null)
     }
 
@@ -152,6 +173,7 @@ export function AdminDashboard() {
         void logout().finally(() => {
             setCurrentUser(null)
             setUsers([])
+            setReports([])
         })
     }
 
@@ -191,7 +213,11 @@ export function AdminDashboard() {
                         {t("administration")}
                     </p>
                     <h1 className="text-3xl font-extrabold">
-                        {t("user-management")}
+                        {t(
+                            activeSection === "users"
+                                ? "user-management"
+                                : "problem-reports"
+                        )}
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
                         {t("signed-in-as", { name: currentUser.display_name })}
@@ -203,235 +229,296 @@ export function AdminDashboard() {
                 </Button>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(300px,0.8fr)_minmax(420px,1.2fr)]">
-                <form
-                    onSubmit={handleCreateUser}
-                    className="h-fit rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
+            <nav
+                className="flex flex-wrap gap-2 border-b pb-3"
+                aria-label={t("admin-sections")}
+            >
+                <Button
+                    variant={activeSection === "users" ? "default" : "outline"}
+                    aria-current={
+                        activeSection === "users" ? "page" : undefined
+                    }
+                    onClick={() => setActiveSection("users")}
                 >
-                    <div className="mb-5 flex items-center gap-3">
-                        <div className="rounded-xl bg-primary/10 p-2 text-primary">
-                            <UserPlus />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold">
-                                {t("create-user")}
-                            </h2>
-                            <p className="text-sm text-muted-foreground">
-                                {t("create-user-help")}
-                            </p>
-                        </div>
-                    </div>
+                    <Users aria-hidden="true" />
+                    {t("users")}
+                </Button>
+                <Button
+                    variant={
+                        activeSection === "reports" ? "default" : "outline"
+                    }
+                    aria-current={
+                        activeSection === "reports" ? "page" : undefined
+                    }
+                    onClick={() => setActiveSection("reports")}
+                >
+                    <MessageSquareWarning aria-hidden="true" />
+                    {t("problem-reports")}
+                    {reports.length > 0 && (
+                        <span className="rounded-full bg-background/20 px-1.5 py-0.5 text-xs">
+                            {reports.length}
+                        </span>
+                    )}
+                </Button>
+            </nav>
 
-                    <FieldGroup className="gap-4">
-                        <Field>
-                            <FieldLabel htmlFor="displayName">
-                                {t("display-name")}
-                            </FieldLabel>
-                            <Input
-                                id="displayName"
-                                name="displayName"
-                                required
-                                maxLength={120}
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="username">
-                                {t("login-id")}
-                            </FieldLabel>
-                            <Input
-                                id="username"
-                                name="username"
-                                required
-                                minLength={3}
-                                maxLength={80}
-                                pattern="[a-zA-Z0-9._-]+"
-                                autoComplete="off"
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="new-password">
-                                {t("login-password")}
-                            </FieldLabel>
-                            <Input
-                                id="new-password"
-                                name="password"
-                                type="password"
-                                required
-                                minLength={12}
-                                maxLength={256}
-                                autoComplete="new-password"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {t("password-help")}
-                            </p>
-                        </Field>
-                        {error && (
-                            <p
-                                className="text-sm text-destructive"
-                                role="alert"
-                            >
-                                {error}
-                            </p>
-                        )}
-                        {success && (
-                            <p
-                                className="text-sm text-green-700 dark:text-green-400"
-                                role="status"
-                            >
-                                {success}
-                            </p>
-                        )}
-
-                        <Button type="submit" disabled={isCreating}>
-                            {isCreating ? (
-                                <LoaderCircle className="animate-spin" />
-                            ) : (
-                                <UserPlus />
-                            )}
-                            {isCreating ? t("creating-user") : t("create-user")}
-                        </Button>
-                    </FieldGroup>
-                </form>
-
-                <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
-                    <div className="mb-5 flex items-center gap-3">
-                        <div className="rounded-xl bg-primary/10 p-2 text-primary">
-                            <Users />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold">{t("users")}</h2>
-                            <p className="text-sm text-muted-foreground">
-                                {t("user-count", { count: users.length })}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="divide-y">
-                        {users.map((user) => (
-                            <div
-                                key={user.id}
-                                className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
-                            >
-                                <div className="min-w-0">
-                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                        <p className="min-w-0 truncate font-semibold">
-                                            {user.display_name}
-                                        </p>
-                                        {user.is_admin && (
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                                                <ShieldCheck className="size-3" />
-                                                {t("admin")}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="truncate text-sm text-muted-foreground">
-                                        @{user.username}
+            {activeSection === "users" ? (
+                <>
+                    <div className="grid gap-4 lg:grid-cols-[minmax(300px,0.8fr)_minmax(420px,1.2fr)]">
+                        <form
+                            onSubmit={handleCreateUser}
+                            className="h-fit rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
+                        >
+                            <div className="mb-5 flex items-center gap-3">
+                                <div className="rounded-xl bg-primary/10 p-2 text-primary">
+                                    <UserPlus />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold">
+                                        {t("create-user")}
+                                    </h2>
+                                    <p className="text-sm text-muted-foreground">
+                                        {t("create-user-help")}
                                     </p>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span
-                                        className={
-                                            user.is_active
-                                                ? "rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 dark:bg-green-950 dark:text-green-300"
-                                                : "rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
-                                        }
+                            </div>
+
+                            <FieldGroup className="gap-4">
+                                <Field>
+                                    <FieldLabel htmlFor="displayName">
+                                        {t("display-name")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="displayName"
+                                        name="displayName"
+                                        required
+                                        maxLength={120}
+                                    />
+                                </Field>
+                                <Field>
+                                    <FieldLabel htmlFor="username">
+                                        {t("login-id")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="username"
+                                        name="username"
+                                        required
+                                        minLength={3}
+                                        maxLength={80}
+                                        pattern="[a-zA-Z0-9._-]+"
+                                        autoComplete="off"
+                                    />
+                                </Field>
+                                <Field>
+                                    <FieldLabel htmlFor="new-password">
+                                        {t("login-password")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="new-password"
+                                        name="password"
+                                        type="password"
+                                        required
+                                        minLength={12}
+                                        maxLength={256}
+                                        autoComplete="new-password"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("password-help")}
+                                    </p>
+                                </Field>
+                                {error && (
+                                    <p
+                                        className="text-sm text-destructive"
+                                        role="alert"
                                     >
-                                        {t(
-                                            user.is_active
-                                                ? "active"
-                                                : "inactive"
-                                        )}
-                                    </span>
-                                    {!user.is_admin && (
-                                        <>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() =>
-                                                    setRecoveryUser(user)
-                                                }
-                                                disabled={isUpdatingUser}
-                                            >
-                                                <KeyRound />
-                                                {t("account-recovery")}
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() =>
-                                                    void handleStatusChange(
-                                                        user
-                                                    )
-                                                }
-                                                disabled={isUpdatingUser}
-                                            >
-                                                {user.is_active ? (
-                                                    <UserX />
-                                                ) : (
-                                                    <UserCheck />
-                                                )}
-                                                {t(
-                                                    user.is_active
-                                                        ? "disable"
-                                                        : "enable"
-                                                )}
-                                            </Button>
-                                        </>
+                                        {error}
+                                    </p>
+                                )}
+                                {success && (
+                                    <p
+                                        className="text-sm text-green-700 dark:text-green-400"
+                                        role="status"
+                                    >
+                                        {success}
+                                    </p>
+                                )}
+
+                                <Button type="submit" disabled={isCreating}>
+                                    {isCreating ? (
+                                        <LoaderCircle className="animate-spin" />
+                                    ) : (
+                                        <UserPlus />
                                     )}
+                                    {isCreating
+                                        ? t("creating-user")
+                                        : t("create-user")}
+                                </Button>
+                            </FieldGroup>
+                        </form>
+
+                        <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
+                            <div className="mb-5 flex items-center gap-3">
+                                <div className="rounded-xl bg-primary/10 p-2 text-primary">
+                                    <Users />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold">
+                                        {t("users")}
+                                    </h2>
+                                    <p className="text-sm text-muted-foreground">
+                                        {t("user-count", {
+                                            count: users.length,
+                                        })}
+                                    </p>
                                 </div>
                             </div>
-                        ))}
+
+                            <div className="divide-y">
+                                {users.map((user) => (
+                                    <div
+                                        key={user.id}
+                                        className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                <p className="min-w-0 truncate font-semibold">
+                                                    {user.display_name}
+                                                </p>
+                                                {user.is_admin && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                                        <ShieldCheck className="size-3" />
+                                                        {t("admin")}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="truncate text-sm text-muted-foreground">
+                                                @{user.username}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span
+                                                className={
+                                                    user.is_active
+                                                        ? "rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 dark:bg-green-950 dark:text-green-300"
+                                                        : "rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                                                }
+                                            >
+                                                {t(
+                                                    user.is_active
+                                                        ? "active"
+                                                        : "inactive"
+                                                )}
+                                            </span>
+                                            {!user.is_admin && (
+                                                <>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() =>
+                                                            setRecoveryUser(
+                                                                user
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            isUpdatingUser
+                                                        }
+                                                    >
+                                                        <KeyRound />
+                                                        {t("account-recovery")}
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() =>
+                                                            void handleStatusChange(
+                                                                user
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            isUpdatingUser
+                                                        }
+                                                    >
+                                                        {user.is_active ? (
+                                                            <UserX />
+                                                        ) : (
+                                                            <UserCheck />
+                                                        )}
+                                                        {t(
+                                                            user.is_active
+                                                                ? "disable"
+                                                                : "enable"
+                                                        )}
+                                                    </Button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
                     </div>
-                </section>
-            </div>
-            <Dialog
-                open={recoveryUser !== null}
-                onOpenChange={(open) => {
-                    if (!open && !isUpdatingUser) setRecoveryUser(null)
-                }}
-                title={t("account-recovery")}
-                description={t("account-recovery-help", {
-                    username: recoveryUser?.username,
-                })}
-            >
-                <form className="space-y-4" onSubmit={handleCredentialReset}>
-                    <Field>
-                        <FieldLabel htmlFor="recovery-password">
-                            {t("new-password")}
-                        </FieldLabel>
-                        <Input
-                            id="recovery-password"
-                            name="password"
-                            type="password"
-                            required
-                            minLength={12}
-                            maxLength={256}
-                            autoComplete="new-password"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            {t("account-recovery-security-help")}
-                        </p>
-                    </Field>
-                    <div className="flex justify-end gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setRecoveryUser(null)}
-                            disabled={isUpdatingUser}
+                    <Dialog
+                        open={recoveryUser !== null}
+                        onOpenChange={(open) => {
+                            if (!open && !isUpdatingUser) setRecoveryUser(null)
+                        }}
+                        title={t("account-recovery")}
+                        description={t("account-recovery-help", {
+                            username: recoveryUser?.username,
+                        })}
+                    >
+                        <form
+                            className="space-y-4"
+                            onSubmit={handleCredentialReset}
                         >
-                            {t("cancel")}
-                        </Button>
-                        <Button type="submit" disabled={isUpdatingUser}>
-                            {isUpdatingUser ? (
-                                <LoaderCircle className="animate-spin" />
-                            ) : (
-                                <KeyRound />
-                            )}
-                            {t("reset-access")}
-                        </Button>
-                    </div>
-                </form>
-            </Dialog>
+                            <Field>
+                                <FieldLabel htmlFor="recovery-password">
+                                    {t("new-password")}
+                                </FieldLabel>
+                                <Input
+                                    id="recovery-password"
+                                    name="password"
+                                    type="password"
+                                    required
+                                    minLength={12}
+                                    maxLength={256}
+                                    autoComplete="new-password"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {t("account-recovery-security-help")}
+                                </p>
+                            </Field>
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setRecoveryUser(null)}
+                                    disabled={isUpdatingUser}
+                                >
+                                    {t("cancel")}
+                                </Button>
+                                <Button type="submit" disabled={isUpdatingUser}>
+                                    {isUpdatingUser ? (
+                                        <LoaderCircle className="animate-spin" />
+                                    ) : (
+                                        <KeyRound />
+                                    )}
+                                    {t("reset-access")}
+                                </Button>
+                            </div>
+                        </form>
+                    </Dialog>
+                </>
+            ) : (
+                <ProblemReportsPanel
+                    reports={reports}
+                    onDeleted={(reportId) =>
+                        setReports((existing) =>
+                            existing.filter((report) => report.id !== reportId)
+                        )
+                    }
+                />
+            )}
         </div>
     )
 }

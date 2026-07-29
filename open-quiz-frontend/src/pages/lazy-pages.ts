@@ -17,3 +17,33 @@ export const AdminDashboard = lazy(() =>
         default: AdminDashboard,
     }))
 )
+
+export const LegalNoticesPage = lazy(() =>
+    import("./LegalPages.tsx").then(({ LegalNoticesPage }) => ({
+        default: LegalNoticesPage,
+    }))
+)
+
+export const PrivacyPage = lazy(() =>
+    import("./LegalPages.tsx").then(({ PrivacyPage }) => ({
+        default: PrivacyPage,
+    }))
+)
+
+export const AccessibilityPage = lazy(() =>
+    import("./LegalPages.tsx").then(({ AccessibilityPage }) => ({
+        default: AccessibilityPage,
+    }))
+)
+
+export const CookiesPage = lazy(() =>
+    import("./LegalPages.tsx").then(({ CookiesPage }) => ({
+        default: CookiesPage,
+    }))
+)
+
+export const ReportProblemPage = lazy(() =>
+    import("./ReportProblemPage.tsx").then(({ ReportProblemPage }) => ({
+        default: ReportProblemPage,
+    }))
+)

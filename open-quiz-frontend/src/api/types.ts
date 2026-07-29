@@ -13,6 +13,13 @@ export type NewUser = {
     password: string
 }
 
+export type ProblemReport = {
+    id: number
+    message: string
+    page_path: string
+    created_at: string
+}
+
 export type Student = {
     id: number
     class_id: number

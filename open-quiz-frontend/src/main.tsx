@@ -10,7 +10,16 @@ import "./lib/i18n.ts"
 import { MainLayout } from "./layouts/main-layout.tsx"
 
 import { LanguageDirection } from "@/components/language/language-direction"
-import { AdminDashboard, Dashboard, HomePage } from "./pages/lazy-pages.ts"
+import {
+    AccessibilityPage,
+    AdminDashboard,
+    CookiesPage,
+    Dashboard,
+    HomePage,
+    LegalNoticesPage,
+    PrivacyPage,
+    ReportProblemPage,
+} from "./pages/lazy-pages.ts"
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
@@ -31,6 +40,26 @@ createRoot(document.getElementById("root")!).render(
                             <Route
                                 path="admin/dashboard"
                                 element={<AdminDashboard />}
+                            />
+                            <Route
+                                path="mentions-legales"
+                                element={<LegalNoticesPage />}
+                            />
+                            <Route
+                                path="donnees-personnelles"
+                                element={<PrivacyPage />}
+                            />
+                            <Route
+                                path="accessibilite"
+                                element={<AccessibilityPage />}
+                            />
+                            <Route
+                                path="gestion-des-cookies"
+                                element={<CookiesPage />}
+                            />
+                            <Route
+                                path="signaler-un-probleme"
+                                element={<ReportProblemPage />}
                             />
                         </Route>
                     </Routes>

@@ -15,6 +15,12 @@ export function MainLayout() {
 
     return (
         <div className="flex min-h-dvh flex-col items-center">
+            <a
+                href="#contenu"
+                className="fixed top-2 left-2 z-[100] -translate-y-20 rounded-md bg-background px-4 py-2 font-bold text-foreground shadow-lg transition-transform focus:translate-y-0 focus:ring-3 focus:ring-ring/50 focus:outline-none"
+            >
+                Aller au contenu
+            </a>
             <header className="flex w-full shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
                 <Link
                     to="/"
@@ -30,7 +36,11 @@ export function MainLayout() {
                 </Link>
             </header>
 
-            <main className="flex min-h-0 w-full flex-1">
+            <main
+                id="contenu"
+                tabIndex={-1}
+                className="flex min-h-0 w-full flex-1"
+            >
                 <PageTransition>
                     <Outlet />
                 </PageTransition>
@@ -43,19 +53,29 @@ export function MainLayout() {
                     <ThemeSelector />
                 </div>
                 <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-                    <Link className="cursor-pointer text-sm underline" to="">
+                    <Link className="text-sm underline" to="/mentions-legales">
                         {t("legal")}
                     </Link>
-                    <Link className="cursor-pointer text-sm underline" to="">
+                    <Link
+                        className="text-sm underline"
+                        to="/donnees-personnelles"
+                    >
                         {t("privacy")}
                     </Link>
-                    <Link className="cursor-pointer text-sm underline" to="">
-                        {t("accessibility")}
+                    <Link className="text-sm underline" to="/accessibilite">
+                        Accessibilité : non conforme
                     </Link>
-                    <Link className="cursor-pointer text-sm underline" to="">
+                    <Link
+                        className="text-sm underline"
+                        to="/gestion-des-cookies"
+                    >
                         {t("cookies")}
                     </Link>
-                    <Link className="cursor-pointer text-sm underline" to="">
+                    <Link
+                        className="text-sm underline"
+                        to="/signaler-un-probleme"
+                        state={{ from: location.pathname }}
+                    >
                         {t("signal")}
                     </Link>
                 </nav>

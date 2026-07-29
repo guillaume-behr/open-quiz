@@ -29,6 +29,11 @@ i18n
         fallbackLng: "fr",
         supportedLngs: availableLanguages.map(({ code }) => code),
         debug: false,
+        detection: {
+            order: ["localStorage", "navigator", "htmlTag"],
+            caches: ["localStorage"],
+            lookupLocalStorage: "i18nextLng",
+        },
     })
 
 export default i18n
