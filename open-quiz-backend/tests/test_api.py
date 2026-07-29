@@ -59,6 +59,99 @@ def test_health_checks_database_readiness(tmp_path: Path) -> None:
     assert response.headers["cache-control"] == "no-store"
 
 
+def test_public_information_describes_instance_settings(tmp_path: Path) -> None:
+    settings = settings_for(
+        tmp_path / "public-information.db",
+        legal_host_name="Test host",
+        legal_host_address="Test host address",
+        privacy_controller_name="Test controller",
+        accessibility_contact="Accessibility contact",
+        refresh_token_days=9,
+        quiz_result_retention_days=120,
+    )
+    with make_client(settings) as client:
+        response = client.get("/api/public-information")
+
+    assert response.status_code == 200
+    assert "publisher" not in response.json()
+    assert response.json()["host"] == {
+        "name": "Test host",
+        "address": "Test host address",
+    }
+    assert response.json()["privacy"]["controller_name"] == "Test controller"
+    assert response.json()["privacy"]["quiz_result_retention_days"] == 120
+    assert response.json()["cookies"]["authentication_max_age_days"] == 9
+    assert response.json()["accessibility"]["contact"] == "Accessibility contact"
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_problem_reports_are_anonymous_and_admin_only(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "problem-reports.db")) as client:
+        created = client.post(
+            "/api/problem-reports",
+            json={
+                "message": "  Le bouton de validation ne répond pas.  ",
+                "page_path": "/dashboard",
+            },
+        )
+        assert created.status_code == 201
+        assert created.json()["message"] == ("Le bouton de validation ne répond pas.")
+        assert set(created.json()) == {
+            "id",
+            "message",
+            "page_path",
+            "created_at",
+        }
+        assert client.get("/api/problem-reports").status_code == 401
+
+        headers = login_admin(client)
+        reports = client.get("/api/problem-reports", headers=headers)
+        assert reports.status_code == 200
+        assert [report["id"] for report in reports.json()] == [created.json()["id"]]
+
+        deleted = client.delete(
+            f"/api/problem-reports/{created.json()['id']}",
+            headers=headers,
+        )
+        assert deleted.status_code == 204
+        assert client.get("/api/problem-reports", headers=headers).json() == []
+
+
+def test_problem_reports_are_rate_limited(tmp_path: Path) -> None:
+    settings = settings_for(
+        tmp_path / "problem-report-rate-limit.db",
+        problem_report_attempts=2,
+    )
+    with make_client(settings) as client:
+        for index in range(2):
+            response = client.post(
+                "/api/problem-reports",
+                json={
+                    "message": f"Problème numéro {index}",
+                    "page_path": "/",
+                },
+            )
+            assert response.status_code == 201
+
+        limited = client.post(
+            "/api/problem-reports",
+            json={"message": "Un autre problème", "page_path": "/"},
+        )
+        assert limited.status_code == 429
+        assert int(limited.headers["retry-after"]) > 0
+
+
+def test_production_allows_missing_public_information(tmp_path: Path) -> None:
+    settings = settings_for(
+        tmp_path / "missing-public-information.db",
+        frontend_origin="https://quiz.example.test",
+        environment="production",
+    )
+
+    assert settings.legal_host_name == ""
+    assert settings.privacy_controller_name == ""
+
+
 def test_public_quiz_join_is_rate_limited(tmp_path: Path) -> None:
     settings = settings_for(
         tmp_path / "quiz-rate-limit.db",

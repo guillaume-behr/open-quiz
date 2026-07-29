@@ -332,6 +332,17 @@ class LoginRateLimit(Base):
     attempts: Mapped[int] = mapped_column(Integer)
 
 
+class ProblemReport(Base):
+    __tablename__ = "problem_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message: Mapped[str] = mapped_column(Text)
+    page_path: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+
+
 class SecurityState(Base):
     __tablename__ = "security_state"
 

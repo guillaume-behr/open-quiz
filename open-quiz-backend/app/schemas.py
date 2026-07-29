@@ -53,6 +53,28 @@ class UserCredentialReset(BaseModel):
     reset_two_factor: bool = True
 
 
+class ProblemReportCreate(BaseModel):
+    message: str = Field(min_length=5, max_length=2000)
+    page_path: str = Field(min_length=1, max_length=500, pattern=r"^/")
+
+    @field_validator("message")
+    @classmethod
+    def normalize_message(cls, value: str) -> str:
+        normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
+        if len(normalized) < 5:
+            raise ValueError("Le message doit contenir au moins 5 caractères")
+        return normalized
+
+
+class ProblemReportResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    message: str
+    page_path: str
+    created_at: datetime
+
+
 class GradeLevelCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 

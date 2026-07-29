@@ -100,6 +100,9 @@ Git. Les modèles fournis ne contiennent aucune vraie donnée sensible.
 | `QUIZ_VIOLATION_ATTEMPTS` | Alertes de surveillance par fenêtre | `20` |
 | `QUIZ_RATE_WINDOW_SECONDS` | Fenêtre des limites publiques | `60` |
 | `QUIZ_RESULT_RETENTION_DAYS` | Conservation des résultats terminés | `365` |
+| `PROBLEM_REPORT_ATTEMPTS` | Signalements publics admis par fenêtre et par adresse IP hachée | `5` |
+| `PROBLEM_REPORT_WINDOW_SECONDS` | Fenêtre de limitation des signalements | `900` |
+| `PROBLEM_REPORT_RETENTION_DAYS` | Conservation maximale des signalements | `90` |
 | `MAX_REQUEST_BODY_BYTES` | Taille des requêtes ordinaires | `65536` |
 | `APP_ENV` | `development`, `test` ou `production` | `development` |
 
@@ -107,6 +110,52 @@ Le frontend reconnaît aussi `VITE_API_URL`. Laissez cette valeur vide pour le
 proxy Vite et le déploiement Caddy fourni. Une origine absolue est utile
 uniquement lorsque l’API est servie séparément et que CORS est configuré avec
 la même origine frontend.
+
+### Informations publiques de l’instance
+
+Les pages `/mentions-legales`, `/donnees-personnelles`, `/accessibilite` et
+`/gestion-des-cookies` décrivent le fonctionnement réel du logiciel et chargent
+les informations propres à l’instance depuis l’API. Ces variables sont
+facultatives au démarrage afin de ne pas bloquer le déploiement. Les pages
+publiques affichent un avertissement lorsqu’une information manque ; elle doit
+être complétée avec des faits validés pour l’instance.
+
+| Variable | Information à faire valider pour l’instance |
+| --- | --- |
+| `LEGAL_HOST_NAME` | Nom ou raison sociale de l’hébergeur |
+| `LEGAL_HOST_ADDRESS` | Adresse de l’hébergeur |
+| `PRIVACY_CONTROLLER_NAME` | Responsable du traitement déterminé selon le contexte de déploiement |
+| `PRIVACY_CONTROLLER_CONTACT` | Contact pour l’exercice des droits |
+| `PRIVACY_DPO_CONTACT` | Contact du délégué à la protection des données compétent |
+| `PRIVACY_LEGAL_BASIS` | Base légale précise, validée par le responsable et son DPO |
+| `PRIVACY_RECIPIENTS` | Destinataires et éventuels sous-traitants autorisés |
+| `PRIVACY_TEACHER_DATA_RETENTION` | Durée ou critère de conservation des comptes enseignants |
+| `PRIVACY_STUDENT_DATA_RETENTION` | Durée ou critère de conservation des classes et données élèves |
+| `PRIVACY_SECURITY_LOG_RETENTION` | Durée ou critère de conservation des journaux de sécurité |
+| `ACCESSIBILITY_CONTACT` | Contact pour demander une alternative accessible |
+| `ACCESSIBILITY_SCHEME_URL` | URL du schéma pluriannuel d’accessibilité de l’entité |
+| `ACCESSIBILITY_ACTION_PLAN_URL` | URL du plan d’action annuel en cours |
+
+Le modèle fourni applique le régime de l’édition non professionnelle anonyme :
+le nom, l’adresse et les coordonnées personnelles du professeur ne sont ni
+demandés par l’application ni publiés. L’éditeur doit toutefois avoir transmis
+ses éléments d’identification réels à l’hébergeur. Les contacts RGPD et
+accessibilité doivent être des coordonnées institutionnelles ou fonctionnelles,
+jamais l’adresse personnelle du professeur.
+
+Le statut affiché reste « Accessibilité : non conforme » tant qu’aucun audit
+RGAA complet et valide n’est intégré. Ne changez pas cette mention sur la seule
+base de tests automatisés.
+
+Pour un déploiement dans l’Éducation nationale, l’interfaçage ou l’hébergement
+ne vaut pas homologation. Le responsable doit notamment consulter le DPO
+compétent, inscrire le traitement au registre, documenter sa base légale,
+évaluer la nécessité de la surveillance, encadrer ses sous-traitants et
+informer les élèves et représentants légaux. Références officielles :
+[responsabilité des traitements éducatifs](https://eduscol.education.fr/4920/interfaces-entre-les-applications-nationales-et-les-solutions-numeriques-tierces-pour-l-education),
+[DPO de l’Éducation nationale](https://eduscol.education.fr/4935/delegues-la-protection-des-donnees-dpd),
+[RGAA 4.1.2](https://accessibilite.numerique.gouv.fr/),
+[cookies et traceurs](https://www.cnil.fr/fr/cookies-et-autres-traceurs/que-dit-la-loi).
 
 ## Parcours principal
 

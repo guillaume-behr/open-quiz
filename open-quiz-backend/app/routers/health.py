@@ -17,3 +17,35 @@ def health(request: Request) -> dict[str, str]:
             detail="Database unavailable",
         ) from error
     return {"status": "ok"}
+
+
+@router.get("/public-information")
+def public_information(request: Request) -> dict[str, object]:
+    """Expose only the instance information required on public legal pages."""
+    settings = request.app.state.settings
+    return {
+        "host": {
+            "name": settings.legal_host_name,
+            "address": settings.legal_host_address,
+        },
+        "privacy": {
+            "controller_name": settings.privacy_controller_name,
+            "controller_contact": settings.privacy_controller_contact,
+            "dpo_contact": settings.privacy_dpo_contact,
+            "legal_basis": settings.privacy_legal_basis,
+            "recipients": settings.privacy_recipients,
+            "teacher_data_retention": (settings.privacy_teacher_data_retention),
+            "student_data_retention": (settings.privacy_student_data_retention),
+            "security_log_retention": (settings.privacy_security_log_retention),
+            "quiz_result_retention_days": (settings.quiz_result_retention_days),
+            "problem_report_retention_days": (settings.problem_report_retention_days),
+        },
+        "cookies": {
+            "authentication_max_age_days": settings.refresh_token_days,
+        },
+        "accessibility": {
+            "contact": settings.accessibility_contact,
+            "scheme_url": settings.accessibility_scheme_url,
+            "action_plan_url": settings.accessibility_action_plan_url,
+        },
+    }

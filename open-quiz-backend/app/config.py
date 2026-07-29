@@ -25,8 +25,24 @@ class Settings:
     quiz_violation_attempts: int = 20
     quiz_rate_window_seconds: int = 60
     quiz_result_retention_days: int = 365
+    problem_report_attempts: int = 5
+    problem_report_window_seconds: int = 900
+    problem_report_retention_days: int = 90
     max_request_body_bytes: int = 65536
     environment: str = "development"
+    legal_host_name: str = ""
+    legal_host_address: str = ""
+    privacy_controller_name: str = ""
+    privacy_controller_contact: str = ""
+    privacy_dpo_contact: str = ""
+    privacy_legal_basis: str = ""
+    privacy_recipients: str = ""
+    privacy_teacher_data_retention: str = ""
+    privacy_student_data_retention: str = ""
+    privacy_security_log_retention: str = ""
+    accessibility_contact: str = ""
+    accessibility_scheme_url: str = ""
+    accessibility_action_plan_url: str = ""
 
     @property
     def cookie_secure(self) -> bool:
@@ -65,6 +81,14 @@ class Settings:
             raise ValueError("QUIZ_RATE_WINDOW_SECONDS must be between 10 and 3600")
         if not 1 <= self.quiz_result_retention_days <= 3650:
             raise ValueError("QUIZ_RESULT_RETENTION_DAYS must be between 1 and 3650")
+        if not 1 <= self.problem_report_attempts <= 20:
+            raise ValueError("PROBLEM_REPORT_ATTEMPTS must be between 1 and 20")
+        if not 60 <= self.problem_report_window_seconds <= 86400:
+            raise ValueError(
+                "PROBLEM_REPORT_WINDOW_SECONDS must be between 60 and 86400"
+            )
+        if not 1 <= self.problem_report_retention_days <= 365:
+            raise ValueError("PROBLEM_REPORT_RETENTION_DAYS must be between 1 and 365")
         if not 1024 <= self.max_request_body_bytes <= 1048576:
             raise ValueError("MAX_REQUEST_BODY_BYTES must be between 1024 and 1048576")
 
@@ -115,6 +139,26 @@ def get_settings() -> Settings:
         quiz_violation_attempts=int(os.getenv("QUIZ_VIOLATION_ATTEMPTS", "20")),
         quiz_rate_window_seconds=int(os.getenv("QUIZ_RATE_WINDOW_SECONDS", "60")),
         quiz_result_retention_days=int(os.getenv("QUIZ_RESULT_RETENTION_DAYS", "365")),
+        problem_report_attempts=int(os.getenv("PROBLEM_REPORT_ATTEMPTS", "5")),
+        problem_report_window_seconds=int(
+            os.getenv("PROBLEM_REPORT_WINDOW_SECONDS", "900")
+        ),
+        problem_report_retention_days=int(
+            os.getenv("PROBLEM_REPORT_RETENTION_DAYS", "90")
+        ),
         max_request_body_bytes=int(os.getenv("MAX_REQUEST_BODY_BYTES", "65536")),
         environment=required_environment("APP_ENV"),
+        legal_host_name=os.getenv("LEGAL_HOST_NAME", ""),
+        legal_host_address=os.getenv("LEGAL_HOST_ADDRESS", ""),
+        privacy_controller_name=os.getenv("PRIVACY_CONTROLLER_NAME", ""),
+        privacy_controller_contact=os.getenv("PRIVACY_CONTROLLER_CONTACT", ""),
+        privacy_dpo_contact=os.getenv("PRIVACY_DPO_CONTACT", ""),
+        privacy_legal_basis=os.getenv("PRIVACY_LEGAL_BASIS", ""),
+        privacy_recipients=os.getenv("PRIVACY_RECIPIENTS", ""),
+        privacy_teacher_data_retention=os.getenv("PRIVACY_TEACHER_DATA_RETENTION", ""),
+        privacy_student_data_retention=os.getenv("PRIVACY_STUDENT_DATA_RETENTION", ""),
+        privacy_security_log_retention=os.getenv("PRIVACY_SECURITY_LOG_RETENTION", ""),
+        accessibility_contact=os.getenv("ACCESSIBILITY_CONTACT", ""),
+        accessibility_scheme_url=os.getenv("ACCESSIBILITY_SCHEME_URL", ""),
+        accessibility_action_plan_url=os.getenv("ACCESSIBILITY_ACTION_PLAN_URL", ""),
     )

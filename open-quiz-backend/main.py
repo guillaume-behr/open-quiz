@@ -20,6 +20,7 @@ from app.routers import (
     classes,
     grade_levels,
     health,
+    problem_reports,
     question_banks,
     quizzes,
     users,
@@ -202,6 +203,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.quiz_rate_window_seconds,
         "quiz-violation",
     )
+    app.state.problem_report_rate_limiter = FixedWindowRateLimiter(
+        settings.problem_report_attempts,
+        settings.problem_report_window_seconds,
+        "problem-report",
+    )
     if production:
         app.add_middleware(HTTPSRedirectMiddleware)
     app.add_middleware(
@@ -279,6 +285,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     app.include_router(health.router)
+    app.include_router(problem_reports.router)
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(admin.router)
