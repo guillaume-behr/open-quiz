@@ -22,7 +22,7 @@ class LoginRateLimiter:
     def reserve(
         self,
         session: Session,
-        username: str,
+        subject: str,
     ) -> int:
         """Atomically reserve an authentication attempt.
 
@@ -35,7 +35,7 @@ class LoginRateLimiter:
         statement = (
             insert(LoginRateLimit)
             .values(
-                limiter_key=self._account_key(username),
+                limiter_key=self._account_key(subject),
                 window_started_at=now,
                 attempts=1,
             )
@@ -62,40 +62,40 @@ class LoginRateLimiter:
 
         if attempts <= self.account_limit:
             return 0
-        self.release(session, username)
+        self.release(session, subject)
         return max(1, self.window_seconds - (now - window_started_at))
 
     def release(
         self,
         session: Session,
-        username: str,
+        subject: str,
     ) -> None:
         """Release the reservation for a successful authentication step."""
         session.execute(
             update(LoginRateLimit)
             .where(
-                LoginRateLimit.limiter_key == self._account_key(username),
+                LoginRateLimit.limiter_key == self._account_key(subject),
                 LoginRateLimit.attempts > 0,
             )
             .values(attempts=LoginRateLimit.attempts - 1)
         )
         session.commit()
 
-    def clear_account(
+    def clear_subject(
         self,
         session: Session,
-        username: str,
+        subject: str,
     ) -> None:
         session.execute(
             delete(LoginRateLimit).where(
-                LoginRateLimit.limiter_key == self._account_key(username)
+                LoginRateLimit.limiter_key == self._account_key(subject)
             )
         )
         session.commit()
 
     @staticmethod
-    def _account_key(username: str) -> str:
-        digest = sha256(username.casefold().encode()).hexdigest()
+    def _account_key(subject: str) -> str:
+        digest = sha256(subject.encode()).hexdigest()
         return f"account:{digest}"
 
 
@@ -106,16 +106,6 @@ class FixedWindowRateLimiter:
         self.limit = limit
         self.window_seconds = window_seconds
         self.namespace = namespace
-
-    def check(self, session: Session, subject: str) -> int:
-        now = int(time())
-        limiter = session.get(LoginRateLimit, self._key(subject))
-        if limiter is None:
-            return 0
-        elapsed = now - limiter.window_started_at
-        if elapsed >= self.window_seconds or limiter.attempts < self.limit:
-            return 0
-        return max(1, self.window_seconds - elapsed)
 
     def reserve(self, session: Session, subject: str) -> int:
         now = int(time())

@@ -82,22 +82,6 @@ def quiz_join_rejected() -> HTTPException:
     )
 
 
-def enforce_existing_public_rate_limit(
-    request: Request,
-    session: DbSession,
-    limiter_name: str,
-    subject: str,
-) -> None:
-    limiter = getattr(request.app.state, limiter_name)
-    retry_after = limiter.check(session, subject)
-    if retry_after:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Trop de requêtes pour ce quiz",
-            headers={"Retry-After": str(retry_after)},
-        )
-
-
 def reject_quiz_join(
     request: Request,
     session: DbSession,
@@ -608,10 +592,20 @@ def participant_token_hash(token: str) -> str:
     return sha256(token.encode()).hexdigest()
 
 
-def participant_auth_subject(join_code: str, token: str | None) -> str:
+def public_session_subject(
+    join_code: str,
+    purpose: str,
+    session: DbSession,
+) -> str:
     normalized_join_code = join_code.strip().upper()
-    token_fingerprint = participant_token_hash(token) if token else "missing"
-    return f"participant-auth:{normalized_join_code}:{token_fingerprint}"
+    session_id = session.scalar(
+        select(QuizSession.id).where(QuizSession.join_code == normalized_join_code)
+    )
+    return (
+        f"{purpose}:session:{session_id}"
+        if session_id is not None
+        else f"{purpose}:unknown"
+    )
 
 
 def authenticated_participant(
@@ -625,7 +619,7 @@ def authenticated_participant(
             request,
             session,
             "quiz_join_rate_limiter",
-            participant_auth_subject(join_code, token),
+            public_session_subject(join_code, "participant-auth", session),
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -648,7 +642,7 @@ def authenticated_participant(
             request,
             session,
             "quiz_join_rate_limiter",
-            participant_auth_subject(join_code, token),
+            public_session_subject(join_code, "participant-auth", session),
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1305,21 +1299,15 @@ def join_quiz(
     request: Request,
     session: DbSession,
 ) -> StudentQuizJoinResponse:
-    join_subject = f"join:{payload.join_code}:{payload.student_identifier}"
-    enforce_existing_public_rate_limit(
-        request,
-        session,
-        "quiz_join_rate_limiter",
-        join_subject,
-    )
     row = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(QuizSession.join_code == payload.join_code)
     ).first()
     if row is None:
-        reject_quiz_join(request, session, join_subject)
+        reject_quiz_join(request, session, "join:unknown")
     quiz_session, quiz = row
+    join_subject = f"join:session:{quiz_session.id}"
     if quiz_session.status != "waiting":
         reject_quiz_join(request, session, join_subject)
     if quiz_session.class_id is None:
@@ -1378,7 +1366,7 @@ def get_student_quiz_state(
         request,
         session,
         "quiz_participant_rate_limiter",
-        participant_token_hash(quiz_token),
+        f"participant:{participant.id}",
     )
     return student_state_response(quiz_session, quiz, participant, session)
 
@@ -1401,7 +1389,7 @@ def submit_student_answer(
         request,
         session,
         "quiz_participant_rate_limiter",
-        participant_token_hash(quiz_token),
+        f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status != "in_progress":
@@ -1526,7 +1514,7 @@ def navigate_student_quiz(
         request,
         session,
         "quiz_participant_rate_limiter",
-        participant_token_hash(quiz_token),
+        f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
     target_position = payload.question_number - 1
@@ -1564,7 +1552,7 @@ def report_student_violation(
         request,
         session,
         "quiz_violation_rate_limiter",
-        participant_token_hash(quiz_token),
+        f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status != "in_progress":
@@ -1601,7 +1589,7 @@ def get_student_question_image(
         request,
         session,
         "quiz_participant_rate_limiter",
-        participant_token_hash(quiz_token),
+        f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status != "in_progress":
@@ -1645,7 +1633,7 @@ def get_student_choice_image(
         request,
         session,
         "quiz_participant_rate_limiter",
-        participant_token_hash(quiz_token),
+        f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status != "in_progress":

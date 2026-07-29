@@ -25,6 +25,18 @@ Les mainteneurs accuseront réception dès que possible, vérifieront le rapport
 prépareront un correctif et coordonneront la divulgation. Évitez toute
 exploitation au-delà de ce qui est strictement nécessaire à la démonstration.
 
+## Frontières de confiance
+
+Les alertes de surveillance d’un quiz proviennent du navigateur de l’élève.
+Elles sont informatives, non exhaustives et non résistantes à la falsification.
+Elles ne constituent pas une preuve d’intégrité et ne doivent pas déclencher
+seules une sanction ou une décision automatique.
+
+Les extraits Python s’exécutent localement dans un Worker sans API réseau après
+le chargement du runtime. Les sessions authentifiées exigent également une
+preuve de renouvellement conservée dans la fenêtre principale et inaccessible
+au Worker.
+
 ## Secrets compromis
 
 Si un secret de production est exposé, retirez-le immédiatement de son système

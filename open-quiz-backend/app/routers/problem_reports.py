@@ -6,7 +6,6 @@ from sqlalchemy import delete, select
 from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
 from app.models import ProblemReport
-from app.requests import client_ip
 from app.schemas import ProblemReportCreate, ProblemReportResponse
 
 router = APIRouter(prefix="/api/problem-reports", tags=["problem reports"])
@@ -30,7 +29,7 @@ def create_problem_report(
     session: DbSession,
 ) -> ProblemReport:
     retry_after = request.app.state.problem_report_rate_limiter.reserve(
-        session, client_ip(request)
+        session, "instance-wide"
     )
     if retry_after:
         raise HTTPException(

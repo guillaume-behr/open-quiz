@@ -1,3 +1,4 @@
+from hmac import compare_digest
 from time import time
 from urllib.parse import urlparse
 
@@ -35,12 +36,14 @@ from app.security import (
     generate_totp_secret,
     hash_refresh_token,
     provisioning_uri,
+    refresh_request_proof,
     verify_password,
     verify_totp_code,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 REFRESH_COOKIE = "open_quiz_refresh"
+REFRESH_PROOF_HEADER = "X-Refresh-Proof"
 
 
 def validate_origin(request: Request) -> None:
@@ -88,6 +91,22 @@ def set_refresh_cookie(
         samesite="strict",
         path="/api/auth",
     )
+
+
+def authentication_rate_subject(user: User | None, stage: str) -> str:
+    identity = f"user:{user.id}" if user is not None else "unknown-user"
+    return f"{stage}:{identity}"
+
+
+def validate_refresh_proof(request: Request, raw_token: str | None) -> bool:
+    supplied_proof = request.headers.get(REFRESH_PROOF_HEADER)
+    if raw_token is None or supplied_proof is None:
+        return False
+    expected_proof = refresh_request_proof(
+        raw_token,
+        request.app.state.settings.jwt_secret,
+    )
+    return compare_digest(supplied_proof, expected_proof)
 
 
 def issue_session(
@@ -157,7 +176,8 @@ def issue_session(
             settings.access_token_minutes,
             access_token_version(user.password_hash, settings.jwt_secret),
             session_expires_at=session_expires_at,
-        )
+        ),
+        refresh_proof=refresh_request_proof(refresh_token, settings.jwt_secret),
     )
 
 
@@ -228,25 +248,43 @@ def login(
     validate_origin(request)
     ip_address = client_ip(request)
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.reserve(session, payload.username)
-    if retry_after:
-        audit_event("auth.login_rate_limited", ip=ip_address)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Trop de tentatives de connexion",
-            headers={"Retry-After": str(retry_after)},
-        )
-
     user = session.scalar(select(User).where(User.username == payload.username))
+    if user is None:
+        retry_after = limiter.reserve(
+            session,
+            authentication_rate_subject(None, "password"),
+        )
+        if retry_after:
+            audit_event("auth.login_rate_limited", ip=ip_address)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Trop de tentatives de connexion",
+                headers={"Retry-After": str(retry_after)},
+            )
     encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_valid = verify_password(payload.password, encoded_password)
     if user is None or not user.is_active or not password_valid:
+        retry_after = (
+            0
+            if user is None
+            else limiter.reserve(
+                session,
+                authentication_rate_subject(user, "password"),
+            )
+        )
+        if retry_after:
+            audit_event("auth.login_rate_limited", ip=ip_address)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Trop de tentatives de connexion",
+                headers={"Retry-After": str(retry_after)},
+            )
         audit_event("auth.login_failed", ip=ip_address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiant ou mot de passe incorrect",
         )
-    limiter.release(session, payload.username)
+    limiter.clear_subject(session, authentication_rate_subject(user, "password"))
     if payload.audience == "professor" and user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
@@ -363,7 +401,8 @@ def verify_two_factor(
         )
 
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.reserve(session, user.username)
+    rate_subject = authentication_rate_subject(user, "two-factor")
+    retry_after = limiter.reserve(session, rate_subject)
     if retry_after:
         audit_event("auth.two_factor_rate_limited", ip=ip_address, user_id=user.id)
         raise HTTPException(
@@ -429,8 +468,8 @@ def verify_two_factor(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Demande de double authentification invalide ou déjà utilisée",
         )
-    limiter.release(session, user.username)
-    limiter.clear_account(session, user.username)
+    limiter.release(session, rate_subject)
+    limiter.clear_subject(session, rate_subject)
     audit_event("auth.two_factor_succeeded", ip=ip_address, user_id=user.id)
     return issue_session(user, request, response, session)
 
@@ -444,14 +483,21 @@ def refresh(
     """Rotate a valid refresh session and return a new access token."""
     validate_origin(request)
     raw_token = request.cookies.get(REFRESH_COOKIE)
-    stored_session = (
-        session.scalar(
-            select(RefreshSession).where(
-                RefreshSession.token_hash == hash_refresh_token(raw_token)
-            )
+    if raw_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session de connexion invalide",
         )
-        if raw_token
-        else None
+    if not validate_refresh_proof(request, raw_token):
+        audit_event("auth.refresh_proof_rejected", ip=client_ip(request))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Preuve de session invalide",
+        )
+    stored_session = session.scalar(
+        select(RefreshSession).where(
+            RefreshSession.token_hash == hash_refresh_token(raw_token)
+        )
     )
     now = int(time())
     if stored_session is None or stored_session.expires_at <= now:
@@ -547,6 +593,12 @@ def logout(
     validate_origin(request)
     raw_token = request.cookies.get(REFRESH_COOKIE)
     if raw_token:
+        if not validate_refresh_proof(request, raw_token):
+            audit_event("auth.logout_proof_rejected", ip=client_ip(request))
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Preuve de session invalide",
+            )
         session.execute(
             update(RefreshSession)
             .where(

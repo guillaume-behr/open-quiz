@@ -144,3 +144,12 @@ def create_refresh_token() -> str:
 
 def hash_refresh_token(token: str) -> str:
     return sha256(token.encode()).hexdigest()
+
+
+def refresh_request_proof(token: str, secret: str) -> str:
+    """Bind refresh-cookie use to a value unavailable to same-origin workers."""
+    return hmac_new(
+        secret.encode(),
+        f"refresh-proof:{token}".encode(),
+        sha256,
+    ).hexdigest()

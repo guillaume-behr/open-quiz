@@ -586,6 +586,12 @@ export function CookiesPage() {
                                 purpose={t("cookies-student-purpose")}
                                 duration={t("cookies-session-duration")}
                             />
+                            <StorageRow
+                                name="open-quiz-refresh-proof"
+                                type={t("cookies-session-storage")}
+                                purpose={t("cookies-auth-purpose")}
+                                duration={t("cookies-session-duration")}
+                            />
                         </tbody>
                     </table>
                 </div>

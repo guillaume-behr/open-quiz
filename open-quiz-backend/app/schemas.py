@@ -12,6 +12,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_proof: str
     token_type: str = "bearer"
 
 

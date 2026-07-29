@@ -1,8 +1,15 @@
-import { request, restoreAccessToken, setAccessToken } from "./client"
+import {
+    clearSessionTokens,
+    refreshProofHeaders,
+    request,
+    restoreAccessToken,
+    setSessionTokens,
+} from "./client"
 import type { TwoFactorChallenge, User } from "./types"
 
 type TokenResponse = {
     access_token: string
+    refresh_proof: string
 }
 
 export async function login(
@@ -10,7 +17,7 @@ export async function login(
     password: string,
     audience: "professor" | "admin"
 ): Promise<TwoFactorChallenge> {
-    setAccessToken(null)
+    clearSessionTokens()
     return request<TwoFactorChallenge>(
         "/api/auth/login",
         {
@@ -36,7 +43,7 @@ export async function verifyTwoFactor(
         },
         false
     )
-    setAccessToken(result.access_token)
+    setSessionTokens(result.access_token, result.refresh_proof)
     return currentUser()
 }
 
@@ -49,9 +56,16 @@ export async function restoreSession(): Promise<User> {
 
 export async function logout(): Promise<void> {
     try {
-        await request<void>("/api/auth/logout", { method: "POST" }, false)
+        await request<void>(
+            "/api/auth/logout",
+            {
+                method: "POST",
+                headers: refreshProofHeaders(),
+            },
+            false
+        )
     } finally {
-        setAccessToken(null)
+        clearSessionTokens()
     }
 }
 

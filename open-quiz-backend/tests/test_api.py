@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sqlite3
 from base64 import b64decode, b64encode
@@ -13,8 +14,10 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.routers.auth import REFRESH_COOKIE
+from app.middleware import RequestBodyLimitMiddleware
+from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.schemas import StudentQuizAnswer
+from app.security import refresh_request_proof
 from main import create_app
 from scripts.reset_two_factor import reset
 
@@ -48,6 +51,14 @@ def make_client(settings: Settings) -> TestClient:
         create_app(settings),
         headers={"Origin": FRONTEND_ORIGIN},
     )
+
+
+def refresh_headers(client: TestClient, secret: str = JWT_SECRET) -> dict[str, str]:
+    refresh_token = client.cookies.get(REFRESH_COOKIE)
+    assert refresh_token
+    return {
+        REFRESH_PROOF_HEADER: refresh_request_proof(refresh_token, secret),
+    }
 
 
 def test_health_checks_database_readiness(tmp_path: Path) -> None:
@@ -152,7 +163,7 @@ def test_production_allows_missing_public_information(tmp_path: Path) -> None:
     assert settings.privacy_controller_name == ""
 
 
-def test_public_quiz_join_is_rate_limited(tmp_path: Path) -> None:
+def test_unknown_quiz_joins_share_a_bounded_rate_limit(tmp_path: Path) -> None:
     settings = settings_for(
         tmp_path / "quiz-rate-limit.db",
         quiz_join_attempts=5,
@@ -178,10 +189,18 @@ def test_public_quiz_join_is_rate_limited(tmp_path: Path) -> None:
                 "student_identifier": "another-student",
             },
         )
-        assert different_student.status_code == 403
+        assert different_student.status_code == 429
+        different_code = client.post(
+            "/api/quizzes/join",
+            json={
+                "join_code": "XYZ789",
+                "student_identifier": "another-student",
+            },
+        )
+        assert different_code.status_code == 429
 
 
-def test_invalid_participant_tokens_are_rate_limited_independently(
+def test_invalid_participant_tokens_share_a_bounded_session_rate_limit(
     tmp_path: Path,
 ) -> None:
     settings = settings_for(
@@ -208,7 +227,7 @@ def test_invalid_participant_tokens_are_rate_limited_independently(
             endpoint,
             headers={"X-Quiz-Token": "another-invalid-token"},
         )
-        assert different_token.status_code == 401
+        assert different_token.status_code == 429
 
 
 def test_expired_public_quiz_rate_limits_are_removed(tmp_path: Path) -> None:
@@ -279,6 +298,12 @@ def complete_first_login(
     cookie = verified.headers["set-cookie"]
     assert "HttpOnly" in cookie
     assert "SameSite=strict" in cookie
+    refresh_token = client.cookies.get(REFRESH_COOKIE)
+    assert refresh_token
+    assert verified.json()["refresh_proof"] == refresh_request_proof(
+        refresh_token,
+        JWT_SECRET,
+    )
     return (
         {"Authorization": f"Bearer {verified.json()['access_token']}"},
         secret,
@@ -1787,21 +1812,60 @@ def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
         assert created_at is not None
         assert first_expires_at is not None
 
-        refreshed = client.post("/api/auth/refresh")
+        refreshed = client.post(
+            "/api/auth/refresh",
+            headers=refresh_headers(client),
+        )
         assert refreshed.status_code == 200
         second_refresh = client.cookies.get(REFRESH_COOKIE)
         assert second_refresh and second_refresh != first_refresh
+        assert refreshed.json()["refresh_proof"] == refresh_request_proof(
+            second_refresh,
+            JWT_SECRET,
+        )
         with sqlite3.connect(database_path) as database:
             second_expires_at = database.execute(
                 "SELECT expires_at FROM refresh_sessions ORDER BY id DESC LIMIT 1"
             ).fetchone()[0]
         assert second_expires_at == first_expires_at
 
-        client.cookies.set(REFRESH_COOKIE, first_refresh, path="/api/auth")
-        assert client.post("/api/auth/refresh").status_code == 401
+        client.cookies.set(
+            REFRESH_COOKIE,
+            first_refresh,
+            domain="testserver.local",
+            path="/api/auth",
+        )
+        assert (
+            client.post(
+                "/api/auth/refresh",
+                headers={
+                    REFRESH_PROOF_HEADER: refresh_request_proof(
+                        first_refresh,
+                        JWT_SECRET,
+                    )
+                },
+            ).status_code
+            == 401
+        )
 
-        client.cookies.set(REFRESH_COOKIE, second_refresh, path="/api/auth")
-        assert client.post("/api/auth/refresh").status_code == 401
+        client.cookies.set(
+            REFRESH_COOKIE,
+            second_refresh,
+            domain="testserver.local",
+            path="/api/auth",
+        )
+        assert (
+            client.post(
+                "/api/auth/refresh",
+                headers={
+                    REFRESH_PROOF_HEADER: refresh_request_proof(
+                        second_refresh,
+                        JWT_SECRET,
+                    )
+                },
+            ).status_code
+            == 401
+        )
 
         challenge = client.post(
             "/api/auth/login",
@@ -1818,14 +1882,46 @@ def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
             ).status_code
             == 200
         )
-        assert client.post("/api/auth/logout").status_code == 204
+        assert (
+            client.post(
+                "/api/auth/logout",
+                headers=refresh_headers(client),
+            ).status_code
+            == 204
+        )
         assert client.post("/api/auth/refresh").status_code == 401
+
+
+def test_refresh_and_logout_require_the_session_proof(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "refresh-proof.db")) as client:
+        complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        assert client.post("/api/auth/refresh").status_code == 403
+        assert (
+            client.post(
+                "/api/auth/refresh",
+                headers={REFRESH_PROOF_HEADER: "invalid-proof"},
+            ).status_code
+            == 403
+        )
+        assert client.post("/api/auth/logout").status_code == 403
+
+        refreshed = client.post(
+            "/api/auth/refresh",
+            headers=refresh_headers(client),
+        )
+        assert refreshed.status_code == 200
 
 
 def test_later_login_requires_two_factor_code(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "test.db")) as client:
         _, secret = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
-        assert client.post("/api/auth/logout").status_code == 204
+        assert (
+            client.post(
+                "/api/auth/logout",
+                headers=refresh_headers(client),
+            ).status_code
+            == 204
+        )
 
         login_response = client.post(
             "/api/auth/login",
@@ -1862,7 +1958,13 @@ def test_new_device_requires_two_factor_while_known_device_is_restored(
     app_settings = settings_for(tmp_path / "test.db")
     with make_client(app_settings) as known_device:
         complete_first_login(known_device, "root-admin", ADMIN_PASSWORD)
-        assert known_device.post("/api/auth/refresh").status_code == 200
+        assert (
+            known_device.post(
+                "/api/auth/refresh",
+                headers=refresh_headers(known_device),
+            ).status_code
+            == 200
+        )
 
     with make_client(app_settings) as new_device:
         login_response = new_device.post(
@@ -1910,6 +2012,18 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
         )
         assert other_account.status_code == 200
+
+        for _ in range(3):
+            known_account_failure = client.post(
+                "/api/auth/login",
+                json={"username": "root-admin", "password": "incorrect-password"},
+            )
+            assert known_account_failure.status_code == 401
+        correct_credentials = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        assert correct_credentials.status_code == 200
 
     with make_client(app_settings) as client:
         still_limited = client.post(
@@ -1993,6 +2107,49 @@ def test_login_rate_limit_reserves_concurrent_attempts_atomically(
     assert statuses.count(429) >= 5
 
 
+def test_correct_password_does_not_reset_two_factor_throttling(
+    tmp_path: Path,
+) -> None:
+    app_settings = settings_for(tmp_path / "two-factor-limit.db", login_attempts=3)
+    with make_client(app_settings) as client:
+        _, secret = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        assert (
+            client.post(
+                "/api/auth/logout",
+                headers=refresh_headers(client),
+            ).status_code
+            == 204
+        )
+        challenge = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        ).json()
+        valid_code = pyotp.TOTP(secret).at(time() + 30)
+        invalid_code = "000000" if valid_code != "000000" else "111111"
+        for _ in range(3):
+            failed = client.post(
+                "/api/auth/2fa/verify",
+                json={
+                    "challenge_token": challenge["challenge_token"],
+                    "code": invalid_code,
+                },
+            )
+            assert failed.status_code == 401
+
+        replacement_challenge = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        ).json()
+        limited = client.post(
+            "/api/auth/2fa/verify",
+            json={
+                "challenge_token": replacement_challenge["challenge_token"],
+                "code": valid_code,
+            },
+        )
+        assert limited.status_code == 429
+
+
 def test_admin_routes_require_authentication(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "test.db")) as client:
         assert client.get("/api/admin/users").status_code == 401
@@ -2007,6 +2164,7 @@ def test_environment_password_rotation_updates_existing_admin(tmp_path: Path) ->
             ADMIN_PASSWORD,
         )
         previous_refresh = client.cookies.get(REFRESH_COOKIE)
+        assert previous_refresh
 
     rotated = settings_for(
         database,
@@ -2014,8 +2172,24 @@ def test_environment_password_rotation_updates_existing_admin(tmp_path: Path) ->
     )
     with make_client(rotated) as client:
         assert client.get("/api/users/me", headers=access_headers).status_code == 401
-        client.cookies.set(REFRESH_COOKIE, previous_refresh, path="/api/auth")
-        assert client.post("/api/auth/refresh").status_code == 401
+        client.cookies.set(
+            REFRESH_COOKIE,
+            previous_refresh,
+            domain="testserver.local",
+            path="/api/auth",
+        )
+        assert (
+            client.post(
+                "/api/auth/refresh",
+                headers={
+                    REFRESH_PROOF_HEADER: refresh_request_proof(
+                        previous_refresh,
+                        JWT_SECRET,
+                    )
+                },
+            ).status_code
+            == 401
+        )
         old_login = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -2073,7 +2247,13 @@ def test_two_factor_code_and_challenge_are_consumed_atomically(
 ) -> None:
     with make_client(settings_for(tmp_path / "test.db")) as client:
         _, secret = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
-        assert client.post("/api/auth/logout").status_code == 204
+        assert (
+            client.post(
+                "/api/auth/logout",
+                headers=refresh_headers(client),
+            ).status_code
+            == 204
+        )
         challenge = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -2105,18 +2285,92 @@ def test_request_size_and_authenticated_cache_controls(tmp_path: Path) -> None:
         assert oversized.status_code == 413
         assert oversized.headers["cache-control"] == "no-store"
 
-        chunked = client.post(
-            "/api/auth/login",
-            content=(b"x" * 600 for _ in range(2)),
+        gated_upload = client.post(
+            "/api/question-banks/import",
+            content=b"x" * 2048,
             headers={"Content-Type": "application/json"},
         )
-        assert chunked.status_code == 413
-        assert chunked.headers["cache-control"] == "no-store"
+        assert gated_upload.status_code == 401
+        assert gated_upload.headers["cache-control"] == "no-store"
+        assert gated_upload.headers["access-control-allow-origin"] == FRONTEND_ORIGIN
 
         headers = login_admin(client)
+        admin_upload = client.post(
+            "/api/question-banks/import",
+            headers=headers,
+            content=b"x" * 2048,
+        )
+        assert admin_upload.status_code == 403
         users = client.get("/api/admin/users", headers=headers)
         assert users.status_code == 200
         assert users.headers["cache-control"] == "no-store"
+
+
+def test_streamed_request_body_is_limited_without_buffering() -> None:
+    incoming = iter(
+        [
+            {"type": "http.request", "body": b"x" * 600, "more_body": True},
+            {"type": "http.request", "body": b"x" * 600, "more_body": False},
+        ]
+    )
+    sent: list[dict[str, Any]] = []
+
+    async def receive() -> dict[str, Any]:
+        return next(incoming)
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    async def downstream(scope, receive, send) -> None:
+        while True:
+            message = await receive()
+            if not message.get("more_body", False):
+                return
+
+    middleware = RequestBodyLimitMiddleware(
+        downstream,
+        default_limit=1024,
+        session_factory=None,
+    )
+    asyncio.run(
+        middleware(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/auth/login",
+                "headers": [],
+            },
+            receive,
+            send,
+        )
+    )
+
+    response_start = next(
+        message for message in sent if message["type"] == "http.response.start"
+    )
+    assert response_start["status"] == 413
+
+
+def test_production_redirects_to_https_before_body_authentication(
+    tmp_path: Path,
+) -> None:
+    app_settings = settings_for(
+        tmp_path / "https-first.db",
+        environment="production",
+        frontend_origin="https://quiz.example.test",
+    )
+    with TestClient(
+        create_app(app_settings),
+        follow_redirects=False,
+    ) as client:
+        response = client.post(
+            "/api/question-banks/import",
+            content=b"x" * 2048,
+        )
+
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("https://")
+    assert "max-age=31536000" in response.headers["strict-transport-security"]
 
 
 def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> None:
@@ -2127,6 +2381,18 @@ def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> No
         settings_for(
             tmp_path / "reused-secret.db",
             totp_encryption_key=JWT_SECRET,
+        )
+
+    with pytest.raises(ValueError, match="character variety"):
+        settings_for(
+            tmp_path / "predictable-secret.db",
+            jwt_secret="a" * 64,
+        )
+
+    with pytest.raises(ValueError, match="repeated pattern"):
+        settings_for(
+            tmp_path / "repeated-secret.db",
+            jwt_secret="0123456789abcdef" * 4,
         )
 
     with pytest.raises(ValueError, match="HTTPS"):

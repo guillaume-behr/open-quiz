@@ -22,25 +22,17 @@ DbSession = Annotated[Session, Depends(get_db)]
 BearerCredentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]
 
 
-def get_current_user(
+def authenticated_user_from_token(
     request: Request,
-    credentials: BearerCredentials,
-    session: DbSession,
-) -> User:
-    unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Jeton d’authentification invalide ou expiré",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    if credentials is None:
-        raise unauthorized
-
+    token: str,
+    session: Session,
+) -> User | None:
     try:
         user_id, token_version = decode_access_token(
-            credentials.credentials, request.app.state.settings.jwt_secret
+            token, request.app.state.settings.jwt_secret
         )
     except jwt.PyJWTError, ValueError, KeyError:
-        raise unauthorized from None
+        return None
 
     user = session.get(User, user_id)
     two_factor = session.get(TwoFactorCredential, user_id)
@@ -57,6 +49,25 @@ def get_current_user(
             ),
         )
     ):
+        return None
+    return user
+
+
+def get_current_user(
+    request: Request,
+    credentials: BearerCredentials,
+    session: DbSession,
+) -> User:
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Jeton d’authentification invalide ou expiré",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if credentials is None:
+        raise unauthorized
+
+    user = authenticated_user_from_token(request, credentials.credentials, session)
+    if user is None:
         raise unauthorized
     return user
 

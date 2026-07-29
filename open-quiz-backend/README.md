@@ -123,6 +123,15 @@ horodatage UTC. En production, envoyez-les vers un collecteur central en
 de rétention. Alertez notamment sur `auth.refresh_reuse_detected`,
 `auth.login_rate_limited` et les événements `security.*`.
 
+Les limitations de débit utilisent uniquement des sujets bornés connus du
+serveur (compte, session, participant ou quota global). Une adresse IP peut
+figurer dans un événement d’audit, mais elle n’est jamais une clé de limitation.
+
+Les alertes de surveillance d’un quiz sont des déclarations du navigateur de
+l’élève. Elles aident un enseignant à interpréter une session, mais elles ne
+sont ni exhaustives ni résistantes à la falsification et ne doivent jamais
+servir seules à une sanction ou à une décision automatique.
+
 Le fichier `docker-compose.yml` situé à la racine du dépôt démarre le backend
 sur un réseau interne, conserve SQLite dans un volume dédié et fait passer
 `/api` par Caddy. L'origine publique configurée dans `FRONTEND_ORIGIN` doit

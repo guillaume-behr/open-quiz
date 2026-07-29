@@ -8,6 +8,21 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def reject_predictable_secret(
+    name: str,
+    value: str,
+    *,
+    minimum_unique_characters: int,
+) -> None:
+    if len(set(value)) < minimum_unique_characters:
+        raise ValueError(f"{name} must contain more character variety")
+    for pattern_length in range(1, min(64, len(value) // 2) + 1):
+        pattern = value[:pattern_length]
+        repeats, remainder = divmod(len(value), pattern_length)
+        if remainder == 0 and pattern * repeats == value:
+            raise ValueError(f"{name} must not be a repeated pattern")
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -53,16 +68,31 @@ class Settings:
             raise ValueError("JWT_SECRET must contain at least 32 characters")
         if self.jwt_secret.startswith("replace-with-"):
             raise ValueError("JWT_SECRET is still set to its example value")
+        reject_predictable_secret(
+            "JWT_SECRET",
+            self.jwt_secret,
+            minimum_unique_characters=10,
+        )
         if len(self.totp_encryption_key) < 32:
             raise ValueError("TOTP_ENCRYPTION_KEY must contain at least 32 characters")
         if self.totp_encryption_key.startswith("replace-with-"):
             raise ValueError("TOTP_ENCRYPTION_KEY is still set to its example value")
+        reject_predictable_secret(
+            "TOTP_ENCRYPTION_KEY",
+            self.totp_encryption_key,
+            minimum_unique_characters=10,
+        )
         if self.jwt_secret == self.totp_encryption_key:
             raise ValueError("JWT_SECRET and TOTP_ENCRYPTION_KEY must be distinct")
         if len(self.admin_password) < 16:
             raise ValueError("ADMIN_PASSWORD must contain at least 16 characters")
         if self.admin_password.startswith("replace-with-"):
             raise ValueError("ADMIN_PASSWORD is still set to its example value")
+        reject_predictable_secret(
+            "ADMIN_PASSWORD",
+            self.admin_password,
+            minimum_unique_characters=6,
+        )
         if not 1 <= self.access_token_minutes <= 30:
             raise ValueError("ACCESS_TOKEN_MINUTES must be between 1 and 30")
         if not 1 <= self.refresh_token_days <= 30:

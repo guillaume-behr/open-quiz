@@ -45,7 +45,11 @@ Caddy fournis.
 
 Les pages sont chargées à la demande. Les extraits Python s’exécutent dans un
 Web Worker isolé et sont interrompus après dix secondes afin qu’un programme
-bloqué ne fige pas l’interface.
+bloqué ne fige pas l’interface. Le runtime est chargé depuis les ressources
+vendoriées avant que le Worker perde ses API réseau et sa capacité à créer
+d’autres Workers. Le renouvellement des sessions enseignantes et
+administratrices exige en plus une preuve conservée uniquement par la fenêtre
+principale.
 
 ## Traduction des quiz
 

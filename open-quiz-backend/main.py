@@ -6,12 +6,12 @@ from time import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from fastapi.responses import JSONResponse
 from sqlalchemy import select, update
 
 from app.audit import audit_event
 from app.config import Settings, get_settings
 from app.database import build_session_factory
+from app.middleware import RequestBodyLimitMiddleware
 from app.models import RefreshSession, RefreshSessionFamily, SecurityState, User
 from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
 from app.routers import (
@@ -208,8 +208,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.problem_report_window_seconds,
         "problem-report",
     )
-    if production:
-        app.add_middleware(HTTPSRedirectMiddleware)
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        default_limit=settings.max_request_body_bytes,
+        session_factory=session_factory,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin],
@@ -220,57 +223,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         allow_credentials=True,
         allow_methods=["GET", "POST", "DELETE"],
-        allow_headers=["Authorization", "Content-Type", "X-Quiz-Token"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Quiz-Token",
+            "X-Refresh-Proof",
+        ],
     )
+    if production:
+        app.add_middleware(HTTPSRedirectMiddleware)
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
-        if request.method not in {"GET", "HEAD", "OPTIONS"}:
-            response = None
-            request_size_limit = settings.max_request_body_bytes
-            if (
-                request.method == "POST"
-                and request.url.path.startswith("/api/question-banks")
-                and (
-                    request.url.path.endswith("/questions")
-                    or request.url.path.endswith("/import")
-                    or request.url.path.endswith("/update")
-                )
-            ):
-                request_size_limit = max(request_size_limit, 64 * 1024 * 1024)
-            content_length = request.headers.get("content-length")
-            try:
-                declared_length = int(content_length) if content_length else None
-            except ValueError:
-                response = JSONResponse(
-                    status_code=400,
-                    content={"detail": "Invalid Content-Length header"},
-                )
-                declared_length = None
-            if response is None and (
-                declared_length is not None and declared_length > request_size_limit
-            ):
-                response = JSONResponse(
-                    status_code=413,
-                    content={"detail": "Request body is too large"},
-                )
-            elif response is None:
-                chunks: list[bytes] = []
-                received_bytes = 0
-                async for chunk in request.stream():
-                    received_bytes += len(chunk)
-                    if received_bytes > request_size_limit:
-                        response = JSONResponse(
-                            status_code=413,
-                            content={"detail": "Request body is too large"},
-                        )
-                        break
-                    chunks.append(chunk)
-                if response is None:
-                    request._body = b"".join(chunks)
-                    response = await call_next(request)
-        else:
-            response = await call_next(request)
+        response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Permissions-Policy"] = (
