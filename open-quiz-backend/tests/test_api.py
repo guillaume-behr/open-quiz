@@ -1364,13 +1364,11 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
         ).json()
         assert graded_results[0]["participants"][0]["pending_manual_grading_count"] == 0
-        previous_score = graded_results[0]["participants"][0]["score"]
         regraded_question = next(
             question
             for question in preview.json()
             if question["answer_mode"] != "written"
         )
-        original_choice_ids = [choice["id"] for choice in regraded_question["choices"]]
         regraded_payload = {
             "prompt": regraded_question["prompt"],
             "difficulty": regraded_question["difficulty"],
@@ -1395,15 +1393,15 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
             data={"payload": json.dumps(regraded_payload)},
         )
-        assert regraded.status_code == 200
-        assert [choice["id"] for choice in regraded.json()["choices"]] == (
-            original_choice_ids
+        assert regraded.status_code == 409
+        assert regraded.json()["detail"] == (
+            "Cette question est utilisée par un quiz déjà lancé"
         )
         refreshed_results = client.get(
             "/api/quizzes/sessions/results",
             headers=teacher_headers,
         ).json()
-        assert refreshed_results[0]["participants"][0]["score"] > previous_score
+        assert refreshed_results == graded_results
 
         cancelled_launch = client.post(
             f"/api/quizzes/{quiz['id']}/launch",

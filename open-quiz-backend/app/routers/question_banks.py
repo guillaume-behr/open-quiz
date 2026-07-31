@@ -20,7 +20,6 @@ from sqlalchemy.orm import defer
 
 from app.dependencies import DbSession, ProfessorUser
 from app.grade_levels import ensure_grade_level
-from app.grading import recompute_finished_scores_for_question
 from app.images import (
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
@@ -33,7 +32,6 @@ from app.models import (
     QuestionChoice,
     QuestionCode,
     QuizQuestionBank,
-    QuizSession,
     QuizSessionQuestion,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
@@ -755,21 +753,15 @@ async def update_question(
     question = owned_question(question_id, professor, session)
     if (
         session.scalar(
-            select(QuizSessionQuestion.session_id)
-            .join(
-                QuizSession,
-                QuizSession.id == QuizSessionQuestion.session_id,
-            )
-            .where(
-                QuizSessionQuestion.question_id == question_id,
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            select(QuizSessionQuestion.session_id).where(
+                QuizSessionQuestion.question_id == question_id
             )
         )
         is not None
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cette question est utilisée par un quiz actif",
+            detail="Cette question est utilisée par un quiz déjà lancé",
         )
     try:
         question_payload = QuestionUpdate.model_validate(json.loads(payload))
@@ -900,7 +892,6 @@ async def update_question(
         )
         session.add(code)
     session.flush()
-    recompute_finished_scores_for_question(question.id, session)
     session.commit()
     session.refresh(question)
     return question_response(question, choices, code)

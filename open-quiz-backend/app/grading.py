@@ -4,13 +4,7 @@ from collections import defaultdict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import (
-    Question,
-    QuestionChoice,
-    QuizAnswer,
-    QuizSession,
-    QuizSessionQuestion,
-)
+from app.models import Question, QuestionChoice, QuizAnswer, QuizSession
 
 
 def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
@@ -50,24 +44,3 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
                 if choice_id in choices_by_id
             )
             answer.is_graded = True
-
-
-def recompute_finished_scores_for_question(
-    question_id: int,
-    session: Session,
-) -> None:
-    quiz_sessions = list(
-        session.scalars(
-            select(QuizSession)
-            .join(
-                QuizSessionQuestion,
-                QuizSessionQuestion.session_id == QuizSession.id,
-            )
-            .where(
-                QuizSessionQuestion.question_id == question_id,
-                QuizSession.status == "finished",
-            )
-        )
-    )
-    for quiz_session in quiz_sessions:
-        compute_final_scores(quiz_session, session)
