@@ -96,6 +96,51 @@ test("student can leave a quiz before entering full screen", async ({
         .toBeNull()
 })
 
+test("student can join and leave when session storage is unavailable", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperties(window.sessionStorage, {
+            setItem: {
+                configurable: true,
+                value: () => {
+                    throw new DOMException("Storage disabled", "SecurityError")
+                },
+            },
+            removeItem: {
+                configurable: true,
+                value: () => {
+                    throw new DOMException("Storage disabled", "SecurityError")
+                },
+            },
+        })
+    })
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+                ...baseSession,
+                status: "waiting",
+                participant_token: "participant-token",
+            }),
+        })
+    })
+    await page.goto("/")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Quiz code").fill("ABCD")
+    await page.getByRole("button", { name: "Join the quiz" }).click()
+
+    await expect(page.getByText("Full-screen mode is required")).toBeVisible()
+    await expect(
+        page.getByText(/Leaving it during the quiz may be reported/)
+    ).toBeVisible()
+    await page.getByRole("button", { name: "Leave quiz" }).click()
+    await expect(
+        page.getByRole("heading", { name: "Join a quiz" })
+    ).toBeVisible()
+})
+
 test("an expired stored quiz session is discarded", async ({ page }) => {
     await page.addInitScript(() => {
         sessionStorage.setItem(

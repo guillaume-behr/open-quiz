@@ -50,17 +50,6 @@ export function StudentClassesList({
         )
     }
 
-    if (loadError) {
-        return (
-            <p
-                role="alert"
-                className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-            >
-                {loadError}
-            </p>
-        )
-    }
-
     return (
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
             <ClassFilters
@@ -70,7 +59,14 @@ export function StudentClassesList({
                 onClassFilterChange={onClassFilterChange}
                 onGradeLevelFilterChange={onGradeLevelFilterChange}
             />
-            {classes.length === 0 ? (
+            {loadError ? (
+                <p
+                    role="alert"
+                    className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+                >
+                    {loadError}
+                </p>
+            ) : classes.length === 0 ? (
                 <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                     <UsersRound className="mb-2 size-8" />
                     <p className="font-medium">{t("no-class")}</p>

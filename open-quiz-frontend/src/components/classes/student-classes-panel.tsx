@@ -158,6 +158,7 @@ export function StudentClassesPanel({
                 if (!isActive) return
                 setClasses(result.items)
                 setTotalPages(result.totalPages)
+                setLoadError(null)
                 if (result.page > result.totalPages) setPage(result.totalPages)
             })
             .catch(() => {

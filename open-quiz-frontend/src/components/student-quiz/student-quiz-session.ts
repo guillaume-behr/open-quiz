@@ -23,15 +23,25 @@ export function readStoredQuizSession(): StoredQuizSession | null {
               }
             : null
     } catch {
-        clearStoredQuizSession()
         return null
     }
 }
 
 export function storeQuizSession(session: StoredQuizSession): void {
-    sessionStorage.setItem(QUIZ_SESSION_STORAGE_KEY, JSON.stringify(session))
+    try {
+        sessionStorage.setItem(
+            QUIZ_SESSION_STORAGE_KEY,
+            JSON.stringify(session)
+        )
+    } catch {
+        // The current quiz remains usable when browser storage is unavailable.
+    }
 }
 
 export function clearStoredQuizSession(): void {
-    sessionStorage.removeItem(QUIZ_SESSION_STORAGE_KEY)
+    try {
+        sessionStorage.removeItem(QUIZ_SESSION_STORAGE_KEY)
+    } catch {
+        // Clearing the in-memory session must not depend on browser storage.
+    }
 }

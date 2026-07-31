@@ -244,6 +244,31 @@ test("teacher can create a class", async ({ page }) => {
     })
 })
 
+test("class list recovers after a temporary load failure", async ({ page }) => {
+    await mockTeacherApi(page)
+    let classRequests = 0
+    await page.route(
+        /^http:\/\/127\.0\.0\.1:4173\/api\/classes\?/,
+        async (route) => {
+            classRequests += 1
+            // React StrictMode performs the initial effect twice in development.
+            if (classRequests === 3) {
+                await route.fulfill({ status: 503, body: "{}" })
+                return
+            }
+            await route.fallback()
+        }
+    )
+    await page.goto("/dashboard")
+    await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
+
+    await page.getByLabel("Search").fill("first request")
+    await expect(page.getByRole("alert")).toHaveText("Failed to load classes.")
+    await page.getByLabel("Search").fill("Class")
+    await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
+    await expect(page.getByRole("alert")).toHaveCount(0)
+})
+
 test("teacher can sign out and return to the login form", async ({ page }) => {
     const requests = await mockTeacherApi(page)
     await page.goto("/dashboard")

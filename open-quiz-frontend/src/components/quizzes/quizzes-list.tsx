@@ -85,12 +85,21 @@ export function QuizzesList({
                     <LoaderCircle className="size-7 animate-spin text-primary" />
                 </div>
             ) : loadError ? (
-                <p
-                    role="alert"
-                    className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-                >
-                    {loadError}
-                </p>
+                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                    <QuizFilters
+                        gradeLevels={gradeLevels}
+                        quizFilter={quizFilter}
+                        gradeLevelFilter={gradeLevelFilter}
+                        onQuizFilterChange={onQuizFilterChange}
+                        onGradeLevelFilterChange={onGradeLevelFilterChange}
+                    />
+                    <p
+                        role="alert"
+                        className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+                    >
+                        {loadError}
+                    </p>
+                </div>
             ) : (
                 <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
                     <QuizFilters

@@ -116,7 +116,11 @@ export function ReportProblemPage() {
                     )}
 
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <Button variant="outline" render={<Link to="/" />}>
+                        <Button
+                            variant="outline"
+                            nativeButton={false}
+                            render={<Link to="/" />}
+                        >
                             {t("back-home")}
                         </Button>
                         <Button type="submit" disabled={isSending}>

@@ -108,7 +108,8 @@ export function QuizzesPanel({
     const [banks, setBanks] = useState<QuestionBank[]>([])
     const [classes, setClasses] = useState<StudentClass[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [loadError, setLoadError] = useState<string | null>(null)
+    const [supportLoadFailed, setSupportLoadFailed] = useState(false)
+    const [quizListLoadFailed, setQuizListLoadFailed] = useState(false)
     const [title, setTitle] = useState("")
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
     const [questionCount, setQuestionCount] = useState(10)
@@ -158,9 +159,10 @@ export function QuizzesPanel({
                 setBanks(loadedBanks)
                 setSessions(loadedSessions)
                 setClasses(loadedClasses)
+                setSupportLoadFailed(false)
             })
             .catch(() => {
-                if (isActive) setLoadError(t("quizzes-load-error"))
+                if (isActive) setSupportLoadFailed(true)
             })
             .finally(() => {
                 if (isActive) setIsLoading(false)
@@ -177,10 +179,11 @@ export function QuizzesPanel({
                 if (!isActive) return
                 setQuizzes(result.items)
                 setTotalPages(result.totalPages)
+                setQuizListLoadFailed(false)
                 if (result.page > result.totalPages) setPage(result.totalPages)
             })
             .catch(() => {
-                if (isActive) setLoadError(t("quizzes-load-error"))
+                if (isActive) setQuizListLoadFailed(true)
             })
             .finally(() => {
                 if (isActive) setIsLoading(false)
@@ -255,6 +258,8 @@ export function QuizzesPanel({
         new Set(banks.map((bank) => bank.grade_level))
     ).sort((first, second) => first.localeCompare(second, "fr"))
     const filteredQuizzes = quizzes
+    const loadError =
+        supportLoadFailed || quizListLoadFailed ? t("quizzes-load-error") : null
 
     function resetCreationForm(): void {
         setTitle("")
