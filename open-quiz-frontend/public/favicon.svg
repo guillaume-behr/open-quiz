@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <title>Open Quiz</title>
+    <circle
+        cx="32"
+        cy="32"
+        r="21"
+        fill="none"
+        stroke="rgb(138, 79, 255)"
+        stroke-width="11"
+    />
+</svg>
