@@ -1,12 +1,14 @@
 import json
 from base64 import b64decode, b64encode
 from binascii import Error as Base64Error
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
     File,
     Form,
     HTTPException,
+    Query,
     Response,
     UploadFile,
     status,
@@ -34,6 +36,7 @@ from app.models import (
     QuizSession,
     QuizSessionQuestion,
 )
+from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import (
     QuestionBankCreate,
     QuestionBankResponse,
@@ -63,8 +66,23 @@ def downloadable_json(content: object, filename: str) -> Response:
 def list_question_banks(
     professor: ProfessorUser,
     session: DbSession,
+    response: Response,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    search: Annotated[str, Query(max_length=160)] = "",
+    grade_level: Annotated[str, Query(max_length=80)] = "",
 ) -> list[QuestionBankResponse]:
-    """Return question banks owned by the authenticated professor."""
+    """Return one filtered page of question banks owned by the professor."""
+    filters = [QuestionBank.owner_id == professor.id]
+    if search:
+        filters.append(QuestionBank.chapter.ilike(f"%{search}%"))
+    if grade_level:
+        filters.append(QuestionBank.grade_level == grade_level)
+    total = (
+        session.scalar(select(func.count()).select_from(QuestionBank).where(*filters))
+        or 0
+    )
+    set_pagination_headers(response, page=page, page_size=page_size, total=total)
     rows = session.execute(
         select(
             QuestionBank,
@@ -77,9 +95,11 @@ def list_question_banks(
             Question,
             Question.question_bank_id == QuestionBank.id,
         )
-        .where(QuestionBank.owner_id == professor.id)
+        .where(*filters)
         .group_by(QuestionBank.id)
         .order_by(QuestionBank.grade_level, QuestionBank.chapter)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     return [
         QuestionBankResponse.model_validate(question_bank).model_copy(

@@ -229,6 +229,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "X-Quiz-Token",
             "X-Refresh-Proof",
         ],
+        expose_headers=["X-Page", "X-Page-Size", "X-Total-Count"],
     )
     if production:
         app.add_middleware(HTTPSRedirectMiddleware)

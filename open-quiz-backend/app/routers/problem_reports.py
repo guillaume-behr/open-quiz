@@ -1,11 +1,13 @@
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
-from sqlalchemy import delete, select
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from sqlalchemy import delete, func, select
 
 from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
 from app.models import ProblemReport
+from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import ProblemReportCreate, ProblemReportResponse
 
 router = APIRouter(prefix="/api/problem-reports", tags=["problem reports"])
@@ -54,11 +56,21 @@ def list_problem_reports(
     request: Request,
     _: AdminUser,
     session: DbSession,
+    response: Response,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
 ) -> list[ProblemReport]:
     purge_expired_reports(request, session)
     session.commit()
+    total = session.scalar(select(func.count()).select_from(ProblemReport)) or 0
+    set_pagination_headers(response, page=page, page_size=page_size, total=total)
     return list(
-        session.scalars(select(ProblemReport).order_by(ProblemReport.created_at.desc()))
+        session.scalars(
+            select(ProblemReport)
+            .order_by(ProblemReport.created_at.desc(), ProblemReport.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
     )
 
 

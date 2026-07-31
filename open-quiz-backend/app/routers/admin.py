@@ -1,7 +1,8 @@
 from time import time
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, status
-from sqlalchemy import delete, select, update
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
@@ -12,6 +13,7 @@ from app.models import (
     TwoFactorCredential,
     User,
 )
+from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import (
     UserCreate,
     UserCredentialReset,
@@ -50,9 +52,24 @@ def revoke_user_sessions(user_id: int, session: DbSession) -> None:
 
 
 @router.get("/users", response_model=list[UserResponse])
-def list_users(_: AdminUser, session: DbSession) -> list[User]:
-    """Return all users to an authenticated administrator."""
-    return list(session.scalars(select(User).order_by(User.created_at.desc())))
+def list_users(
+    _: AdminUser,
+    session: DbSession,
+    response: Response,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+) -> list[User]:
+    """Return one page of users to an authenticated administrator."""
+    total = session.scalar(select(func.count()).select_from(User)) or 0
+    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    return list(
+        session.scalars(
+            select(User)
+            .order_by(User.created_at.desc(), User.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    )
 
 
 @router.post(

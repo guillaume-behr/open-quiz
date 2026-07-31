@@ -8,7 +8,7 @@ from secrets import token_urlsafe
 from string import ascii_uppercase, digits
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
@@ -30,6 +30,7 @@ from app.models import (
     Student,
     StudentClass,
 )
+from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.requests import client_ip
 from app.routers.question_banks import question_response
 from app.schemas import (
@@ -786,12 +787,35 @@ def generate_join_code(session: DbSession) -> str:
 def list_quizzes(
     professor: ProfessorUser,
     session: DbSession,
+    response: Response,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    search: Annotated[str, Query(max_length=160)] = "",
+    grade_level: Annotated[str, Query(max_length=80)] = "",
 ) -> list[QuizResponse]:
+    filters = [Quiz.owner_id == professor.id]
+    if search:
+        filters.append(Quiz.title.ilike(f"%{search}%"))
+    if grade_level:
+        filters.append(
+            Quiz.id.in_(
+                select(QuizQuestionBank.quiz_id)
+                .join(
+                    QuestionBank,
+                    QuestionBank.id == QuizQuestionBank.question_bank_id,
+                )
+                .where(QuestionBank.grade_level == grade_level)
+            )
+        )
+    total = session.scalar(select(func.count()).select_from(Quiz).where(*filters)) or 0
+    set_pagination_headers(response, page=page, page_size=page_size, total=total)
     quizzes = list(
         session.scalars(
             select(Quiz)
-            .where(Quiz.owner_id == professor.id)
+            .where(*filters)
             .order_by(Quiz.created_at.desc(), Quiz.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
     )
     return [quiz_response(quiz, session) for quiz in quizzes]
@@ -856,21 +880,37 @@ def list_quiz_results(
     request: Request,
     professor: ProfessorUser,
     session: DbSession,
+    response: Response,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
 ) -> list[QuizSessionResponse]:
     expire_owned_quiz_sessions(professor, session)
     purge_expired_quiz_results(professor, request, session)
+    filters = [
+        Quiz.owner_id == professor.id,
+        QuizSession.status == "finished",
+    ]
+    total = (
+        session.scalar(
+            select(func.count())
+            .select_from(QuizSession)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(*filters)
+        )
+        or 0
+    )
+    set_pagination_headers(response, page=page, page_size=page_size, total=total)
     rows = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(
-            Quiz.owner_id == professor.id,
-            QuizSession.status == "finished",
-        )
+        .where(*filters)
         .order_by(
             QuizSession.started_at.desc(),
             QuizSession.created_at.desc(),
             QuizSession.id.desc(),
         )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     return [
         session_response(quiz_session, quiz, session) for quiz_session, quiz in rows

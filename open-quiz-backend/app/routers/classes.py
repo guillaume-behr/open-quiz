@@ -1,8 +1,9 @@
 import json
 import re
 import unicodedata
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -14,6 +15,7 @@ from app.models import (
     Student,
     StudentClass,
 )
+from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import (
     StudentClassCreate,
     StudentClassResponse,
@@ -140,16 +142,33 @@ def class_response(
 def list_classes(
     professor: ProfessorUser,
     session: DbSession,
+    response: Response,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    search: Annotated[str, Query(max_length=120)] = "",
+    grade_level: Annotated[str, Query(max_length=80)] = "",
 ) -> list[StudentClassResponse]:
+    filters = [StudentClass.owner_id == professor.id]
+    if search:
+        filters.append(StudentClass.name.ilike(f"%{search}%"))
+    if grade_level:
+        filters.append(StudentClass.grade_level == grade_level)
+    total = (
+        session.scalar(select(func.count()).select_from(StudentClass).where(*filters))
+        or 0
+    )
+    set_pagination_headers(response, page=page, page_size=page_size, total=total)
     classes = list(
         session.scalars(
             select(StudentClass)
-            .where(StudentClass.owner_id == professor.id)
+            .where(*filters)
             .order_by(
                 StudentClass.grade_level,
                 StudentClass.name,
                 StudentClass.id,
             )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
     )
     return [class_response(student_class, session) for student_class in classes]
