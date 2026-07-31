@@ -21,6 +21,7 @@ transmet `/api` au backend.
 pnpm lint
 pnpm format:check
 pnpm test
+pnpm test:e2e
 pnpm typecheck
 pnpm build
 ```
@@ -28,6 +29,8 @@ pnpm build
 La compilation de production est écrite dans `dist`.
 `pnpm test` vérifie que les huit catalogues de traduction possèdent les mêmes
 clés et variables d’interpolation.
+`pnpm test:e2e` lance les tests navigateur Playwright. Installez Chromium une
+première fois avec `pnpm exec playwright install chromium` si nécessaire.
 
 `VITE_API_URL` peut définir une origine d’API absolue lorsque le proxy Vite
 n’est pas utilisé. Laissez-la vide pour le développement et le déploiement

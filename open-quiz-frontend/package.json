@@ -11,6 +11,8 @@
         "format": "prettier --write \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"public/locales/*/translation.json\" \"*.{js,json,ts}\" \"index.html\"",
         "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"public/locales/*/translation.json\" \"*.{js,json,ts}\" \"index.html\"",
         "test": "node scripts/check-locales.mjs",
+        "test:e2e": "playwright test",
+        "test:e2e:ui": "playwright test --ui",
         "typecheck": "tsc -b --pretty false",
         "preview": "vite preview"
     },
@@ -38,6 +40,7 @@
     },
     "devDependencies": {
         "@eslint/js": "^10",
+        "@playwright/test": "^1.62.1",
         "@types/node": "^24",
         "@types/react": "^19",
         "@types/react-dom": "^19",
