@@ -883,6 +883,8 @@ def list_quiz_results(
     response: Response,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    quiz_search: Annotated[str, Query(max_length=160)] = "",
+    class_search: Annotated[str, Query(max_length=120)] = "",
 ) -> list[QuizSessionResponse]:
     expire_owned_quiz_sessions(professor, session)
     purge_expired_quiz_results(professor, request, session)
@@ -890,6 +892,10 @@ def list_quiz_results(
         Quiz.owner_id == professor.id,
         QuizSession.status == "finished",
     ]
+    if quiz_search:
+        filters.append(Quiz.title.ilike(f"%{quiz_search}%"))
+    if class_search:
+        filters.append(QuizSession.class_name.ilike(f"%{class_search}%"))
     total = (
         session.scalar(
             select(func.count())

@@ -12,6 +12,8 @@ import type {
 import { ParticipantAnswersDialog } from "@/components/results/participant-answers-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
 import {
     CalendarDays,
@@ -39,6 +41,8 @@ export function ResultsPanel() {
     const [page, setPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [reloadKey, setReloadKey] = useState(0)
+    const [quizFilter, setQuizFilter] = useState("")
+    const [classFilter, setClassFilter] = useState("")
     const [selectedResult, setSelectedResult] = useState<QuizSession | null>(
         null
     )
@@ -58,11 +62,12 @@ export function ResultsPanel() {
     const [gradingAnswerId, setGradingAnswerId] = useState<number | null>(null)
     useEffect(() => {
         let isActive = true
-        getQuizResults(page)
+        getQuizResults(page, quizFilter.trim(), classFilter.trim())
             .then((result) => {
                 if (!isActive) return
                 setResults(result.items)
                 setTotalPages(result.totalPages)
+                setLoadError(false)
                 if (result.page > result.totalPages) setPage(result.totalPages)
             })
             .catch(() => {
@@ -74,7 +79,7 @@ export function ResultsPanel() {
         return () => {
             isActive = false
         }
-    }, [page, reloadKey])
+    }, [classFilter, page, quizFilter, reloadKey])
 
     const dateFormatter = useMemo(
         () =>
@@ -206,79 +211,127 @@ export function ResultsPanel() {
 
     return (
         <>
-            {results.length === 0 ? (
-                <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center">
-                    <ChartColumn className="size-12 text-muted-foreground/60" />
-                    <h3 className="mt-4 text-lg font-semibold">
-                        {t("results-empty")}
-                    </h3>
-                    <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                        {t("results-empty-help")}
-                    </p>
-                </div>
-            ) : (
-                <div className="mt-6">
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {results.map((result) => (
-                            <article
-                                key={result.id}
-                                className="flex flex-col rounded-2xl border bg-background p-5 shadow-sm transition-shadow hover:shadow-md"
+            <div className="mt-6 grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                <aside className="h-fit rounded-xl border bg-background p-4">
+                    <h3 className="font-semibold">{t("filters")}</h3>
+                    <FieldGroup className="mt-4 gap-4">
+                        <Field>
+                            <FieldLabel htmlFor="result-quiz-filter">
+                                {t("quiz-title")}
+                            </FieldLabel>
+                            <Input
+                                id="result-quiz-filter"
+                                value={quizFilter}
+                                placeholder={t("search-quiz")}
+                                onChange={(event) => {
+                                    setQuizFilter(event.target.value)
+                                    setPage(1)
+                                }}
+                            />
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="result-class-filter">
+                                {t("class-name")}
+                            </FieldLabel>
+                            <Input
+                                id="result-class-filter"
+                                value={classFilter}
+                                placeholder={t("search-class")}
+                                onChange={(event) => {
+                                    setClassFilter(event.target.value)
+                                    setPage(1)
+                                }}
+                            />
+                        </Field>
+                        {(quizFilter || classFilter) && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setQuizFilter("")
+                                    setClassFilter("")
+                                    setPage(1)
+                                }}
                             >
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                                        <CheckCircle2 className="size-5" />
-                                    </div>
-                                    <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                                        {t("result-students", {
-                                            count: result.participant_count,
-                                        })}
-                                    </span>
-                                </div>
-                                <h3 className="mt-4 text-lg font-bold">
-                                    {result.quiz_title}
-                                </h3>
-                                <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                                    <p className="flex items-center gap-2">
-                                        <CalendarDays className="size-4 shrink-0" />
-                                        {resultDate(result)}
-                                    </p>
-                                    <p className="flex items-center gap-2">
-                                        <School className="size-4 shrink-0" />
-                                        {result.class_name}
-                                    </p>
-                                </div>
-                                <div className="mt-5 flex gap-2">
-                                    <Button
-                                        className="flex-1"
-                                        variant="outline"
-                                        onClick={() =>
-                                            setSelectedResult(result)
-                                        }
-                                    >
-                                        <Eye />
-                                        {t("view-results")}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        aria-label={t("delete-result")}
-                                        onClick={() => {
-                                            setDeleteError(false)
-                                            setResultToDelete(result)
-                                        }}
-                                    >
-                                        <Trash2 />
-                                    </Button>
-                                </div>
-                            </article>
-                        ))}
+                                {t("clear-filters")}
+                            </Button>
+                        )}
+                    </FieldGroup>
+                </aside>
+                {results.length === 0 ? (
+                    <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center">
+                        <ChartColumn className="size-12 text-muted-foreground/60" />
+                        <h3 className="mt-4 text-lg font-semibold">
+                            {t("results-empty")}
+                        </h3>
+                        <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                            {t("results-empty-help")}
+                        </p>
                     </div>
-                    <Pagination
-                        currentPage={page}
-                        totalPages={totalPages}
-                        onPageChange={setPage}
-                    />
-                </div>
-            )}
+                ) : (
+                    <div>
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {results.map((result) => (
+                                <article
+                                    key={result.id}
+                                    className="flex flex-col rounded-2xl border bg-background p-5 shadow-sm transition-shadow hover:shadow-md"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="rounded-xl bg-primary/10 p-3 text-primary">
+                                            <CheckCircle2 className="size-5" />
+                                        </div>
+                                        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                                            {t("result-students", {
+                                                count: result.participant_count,
+                                            })}
+                                        </span>
+                                    </div>
+                                    <h3 className="mt-4 text-lg font-bold">
+                                        {result.quiz_title}
+                                    </h3>
+                                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                                        <p className="flex items-center gap-2">
+                                            <CalendarDays className="size-4 shrink-0" />
+                                            {resultDate(result)}
+                                        </p>
+                                        <p className="flex items-center gap-2">
+                                            <School className="size-4 shrink-0" />
+                                            {result.class_name}
+                                        </p>
+                                    </div>
+                                    <div className="mt-5 flex gap-2">
+                                        <Button
+                                            className="flex-1"
+                                            variant="outline"
+                                            onClick={() =>
+                                                setSelectedResult(result)
+                                            }
+                                        >
+                                            <Eye />
+                                            {t("view-results")}
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            aria-label={t("delete-result")}
+                                            onClick={() => {
+                                                setDeleteError(false)
+                                                setResultToDelete(result)
+                                            }}
+                                        >
+                                            <Trash2 />
+                                        </Button>
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+                        <Pagination
+                            currentPage={page}
+                            totalPages={totalPages}
+                            onPageChange={setPage}
+                        />
+                    </div>
+                )}
+            </div>
 
             <Dialog
                 open={selectedResult !== null}

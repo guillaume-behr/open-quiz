@@ -62,10 +62,15 @@ export function getActiveQuizSessions(): Promise<QuizSession[]> {
     return request<QuizSession[]>("/api/quizzes/sessions/active")
 }
 
-export function getQuizResults(page = 1): Promise<Page<QuizSession>> {
-    return requestPage<QuizSession>(
-        `/api/quizzes/sessions/results?page=${page}&page_size=8`
-    )
+export function getQuizResults(
+    page = 1,
+    quizSearch = "",
+    classSearch = ""
+): Promise<Page<QuizSession>> {
+    const params = new URLSearchParams({ page: String(page), page_size: "8" })
+    if (quizSearch) params.set("quiz_search", quizSearch)
+    if (classSearch) params.set("class_search", classSearch)
+    return requestPage<QuizSession>(`/api/quizzes/sessions/results?${params}`)
 }
 
 export function getParticipantAnswers(
