@@ -33,7 +33,7 @@
     "automatic-translation-unavailable": "Automatic translation is unavailable in this browser or for this language pair.",
     "skip-to-content": "Skip to content",
     "app-version": "v {{version}}",
-    "legal-page-browser-title": "{{title}} — Open Quiz",
+    "legal-page-browser-title": "Open Quiz | {{title}}",
     "legal-page-instance-information": "Instance information",
     "legal-page-updated-at": "Last updated: {{date}}",
     "legal-page-load-error": "Information specific to this instance is unavailable. Contact its operator before providing personal data.",

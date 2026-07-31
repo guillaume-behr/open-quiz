@@ -97,7 +97,7 @@ export function Dashboard() {
 
     useEffect(() => {
         const previousTitle = document.title
-        document.title = t("professor-space")
+        document.title = `Open Quiz | ${t("professor-space")}`
 
         return () => {
             document.title = previousTitle

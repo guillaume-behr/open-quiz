@@ -33,7 +33,7 @@
     "automatic-translation-unavailable": "Автоматичний переклад недоступний у цьому браузері або для цієї пари мов.",
     "skip-to-content": "Перейти до вмісту",
     "app-version": "v {{version}}",
-    "legal-page-browser-title": "{{title}} — Open Quiz",
+    "legal-page-browser-title": "Open Quiz | {{title}}",
     "legal-page-instance-information": "Інформація про екземпляр",
     "legal-page-updated-at": "Останнє оновлення: {{date}}",
     "legal-page-load-error": "Інформація про цей екземпляр недоступна. Зверніться до оператора, перш ніж надавати персональні дані.",

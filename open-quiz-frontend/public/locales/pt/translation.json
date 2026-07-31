@@ -33,7 +33,7 @@
     "automatic-translation-unavailable": "A tradução automática não está disponível neste navegador ou para este par de idiomas.",
     "skip-to-content": "Ir para o conteúdo",
     "app-version": "v {{version}}",
-    "legal-page-browser-title": "{{title}} — Open Quiz",
+    "legal-page-browser-title": "Open Quiz | {{title}}",
     "legal-page-instance-information": "Informações da instância",
     "legal-page-updated-at": "Última atualização: {{date}}",
     "legal-page-load-error": "As informações desta instância não estão disponíveis. Contacte o operador antes de fornecer dados pessoais.",

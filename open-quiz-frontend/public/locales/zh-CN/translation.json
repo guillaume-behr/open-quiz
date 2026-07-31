@@ -33,7 +33,7 @@
     "automatic-translation-unavailable": "此浏览器或此语言组合不支持自动翻译。",
     "skip-to-content": "跳转到内容",
     "app-version": "版本 {{version}}",
-    "legal-page-browser-title": "{{title}} — Open Quiz",
+    "legal-page-browser-title": "Open Quiz | {{title}}",
     "legal-page-instance-information": "实例信息",
     "legal-page-updated-at": "最后更新：{{date}}",
     "legal-page-load-error": "无法获取此实例的信息。提交个人数据前，请联系运营方。",
