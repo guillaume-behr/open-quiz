@@ -1,6 +1,10 @@
 {
     "app-name": "Open Quiz",
     "page-loading": "Loading page",
+    "pagination": "Pagination",
+    "previous-page": "Previous page",
+    "next-page": "Next page",
+    "pagination-status": "Page {{current}} of {{total}}",
     "professor-space": "Teacher area",
     "homepage": "Home",
     "problem-report-description": "Describe the problem you encountered. The message will be sent to this instance’s administrator.",

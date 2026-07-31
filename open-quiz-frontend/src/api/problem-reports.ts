@@ -1,5 +1,5 @@
-import { request } from "./client"
-import type { ProblemReport } from "./types"
+import { request, requestPage } from "./client"
+import type { Page, ProblemReport } from "./types"
 
 export function createProblemReport(
     message: string,
@@ -18,8 +18,10 @@ export function createProblemReport(
     )
 }
 
-export function getProblemReports(): Promise<ProblemReport[]> {
-    return request<ProblemReport[]>("/api/problem-reports")
+export function getProblemReports(page = 1): Promise<Page<ProblemReport>> {
+    return requestPage<ProblemReport>(
+        `/api/problem-reports?page=${page}&page_size=8`
+    )
 }
 
 export function deleteProblemReport(reportId: number): Promise<void> {

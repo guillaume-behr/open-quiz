@@ -69,6 +69,9 @@ export function QuestionBanksPanel({
 }: QuestionBanksPanelProps) {
     const { t } = useTranslation()
     const [questionBanks, setQuestionBanks] = useState<QuestionBank[]>([])
+    const [page, setPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [reloadKey, setReloadKey] = useState(0)
     const [gradeLevel, setGradeLevel] = useState("")
     const [title, setTitle] = useState("")
     const [titleFilter, setTitleFilter] = useState("")
@@ -109,10 +112,12 @@ export function QuestionBanksPanel({
     useEffect(() => {
         let isActive = true
 
-        getQuestionBanks()
-            .then((banks) => {
+        getQuestionBanks(page, titleFilter.trim(), gradeLevelFilter)
+            .then((result) => {
                 if (!isActive) return
-                setQuestionBanks(banks)
+                setQuestionBanks(result.items)
+                setTotalPages(result.totalPages)
+                if (result.page > result.totalPages) setPage(result.totalPages)
             })
             .catch(() => {
                 if (isActive) setLoadError(t("question-banks-load-error"))
@@ -124,7 +129,7 @@ export function QuestionBanksPanel({
         return () => {
             isActive = false
         }
-    }, [t])
+    }, [gradeLevelFilter, page, reloadKey, t, titleFilter])
 
     useEffect(() => {
         if (!isQuestionsDialogOpen || selectedBankId === null) return
@@ -161,6 +166,8 @@ export function QuestionBanksPanel({
             )
             setGradeLevel("")
             setTitle("")
+            setPage(1)
+            setReloadKey((current) => current + 1)
             onCreateDialogOpenChange(false)
         } catch (caughtError) {
             setCreateError(
@@ -190,14 +197,7 @@ export function QuestionBanksPanel({
     const selectedBank = questionBanks.find(
         (bank) => bank.id === selectedBankId
     )
-    const filteredQuestionBanks = questionBanks.filter((bank) => {
-        const matchesGradeLevel =
-            !gradeLevelFilter || bank.grade_level === gradeLevelFilter
-        const matchesTitle = bank.chapter
-            .toLocaleLowerCase("fr")
-            .includes(titleFilter.trim().toLocaleLowerCase("fr"))
-        return matchesGradeLevel && matchesTitle
-    })
+    const filteredQuestionBanks = questionBanks
 
     function openQuestions(bankId: number): void {
         setAreQuestionsLoading(true)
@@ -250,6 +250,7 @@ export function QuestionBanksPanel({
                 setIsQuestionsDialogOpen(false)
             }
             setBankToDelete(null)
+            setReloadKey((current) => current + 1)
         } catch (caughtError) {
             setDeleteBankError(
                 caughtError instanceof ApiError && caughtError.status === 409
@@ -316,6 +317,8 @@ export function QuestionBanksPanel({
             )
             setIsImportDialogOpen(false)
             setImportFile(null)
+            setPage(1)
+            setReloadKey((current) => current + 1)
         } catch (caughtError) {
             setImportError(
                 caughtError instanceof ApiError && caughtError.status === 409
@@ -356,8 +359,17 @@ export function QuestionBanksPanel({
                 isBatchBusy={isBatchBusy}
                 batchError={batchError}
                 batchMessage={batchMessage}
-                onTitleFilterChange={setTitleFilter}
-                onGradeLevelFilterChange={setGradeLevelFilter}
+                onTitleFilterChange={(value) => {
+                    setTitleFilter(value)
+                    setPage(1)
+                }}
+                onGradeLevelFilterChange={(value) => {
+                    setGradeLevelFilter(value)
+                    setPage(1)
+                }}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
                 onImport={openImportDialog}
                 onDownloadExample={() => void handleDownloadExample()}
                 onOpen={openQuestions}

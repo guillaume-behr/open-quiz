@@ -60,6 +60,9 @@ export function StudentClassesPanel({
 }: StudentClassesPanelProps) {
     const { t } = useTranslation()
     const [classes, setClasses] = useState<StudentClass[]>([])
+    const [page, setPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [reloadKey, setReloadKey] = useState(0)
     const [isLoading, setIsLoading] = useState(true)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [className, setClassName] = useState("")
@@ -98,14 +101,7 @@ export function StudentClassesPanel({
     const managedClass =
         classes.find((studentClass) => studentClass.id === managedClassId) ??
         null
-    const filteredClasses = classes.filter(
-        (studentClass) =>
-            (!classFilter ||
-                studentClass.name
-                    .toLocaleLowerCase("fr")
-                    .includes(classFilter.toLocaleLowerCase("fr"))) &&
-            (!gradeLevelFilter || studentClass.grade_level === gradeLevelFilter)
-    )
+    const filteredClasses = classes
 
     async function handleExportStudents(
         studentClass: StudentClass
@@ -157,10 +153,12 @@ export function StudentClassesPanel({
 
     useEffect(() => {
         let isActive = true
-        getStudentClasses()
-            .then((loadedClasses) => {
+        getStudentClasses(page, classFilter.trim(), gradeLevelFilter)
+            .then((result) => {
                 if (!isActive) return
-                setClasses(loadedClasses)
+                setClasses(result.items)
+                setTotalPages(result.totalPages)
+                if (result.page > result.totalPages) setPage(result.totalPages)
             })
             .catch(() => {
                 if (isActive) setLoadError(t("classes-load-error"))
@@ -171,7 +169,7 @@ export function StudentClassesPanel({
         return () => {
             isActive = false
         }
-    }, [t])
+    }, [classFilter, gradeLevelFilter, page, reloadKey, t])
 
     async function handleCreateClass(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -206,6 +204,8 @@ export function StudentClassesPanel({
             setIsAddingGradeLevel(false)
             setEditingClass(null)
             onCreateDialogOpenChange(false)
+            setPage(1)
+            setReloadKey((current) => current + 1)
         } catch (error) {
             setClassError(
                 error instanceof ApiError && error.status === 409
@@ -292,6 +292,7 @@ export function StudentClassesPanel({
                     )
                 )
                 setClassToDelete(null)
+                setReloadKey((current) => current + 1)
             } else if (studentToDelete) {
                 await deleteStudent(studentToDelete.id)
                 setClasses((current) =>
@@ -330,9 +331,18 @@ export function StudentClassesPanel({
                 loadError={loadError}
                 classFilter={classFilter}
                 gradeLevelFilter={gradeLevelFilter}
-                onClassFilterChange={setClassFilter}
-                onGradeLevelFilterChange={setGradeLevelFilter}
+                onClassFilterChange={(value) => {
+                    setClassFilter(value)
+                    setPage(1)
+                }}
+                onGradeLevelFilterChange={(value) => {
+                    setGradeLevelFilter(value)
+                    setPage(1)
+                }}
                 onManageClass={setManagedClassId}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
             />
 
             <ManagedClassDialog

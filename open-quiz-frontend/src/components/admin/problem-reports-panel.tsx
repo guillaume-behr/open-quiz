@@ -1,6 +1,7 @@
 import { deleteProblemReport } from "@/api/problem-reports"
 import type { ProblemReport } from "@/api/types"
 import { Button } from "@/components/ui/button"
+import { Pagination } from "@/components/ui/pagination"
 import { errorMessage } from "@/lib/errors"
 import { Inbox, LoaderCircle, Trash2 } from "lucide-react"
 import { useState } from "react"
@@ -9,9 +10,17 @@ import { useTranslation } from "react-i18next"
 export function ProblemReportsPanel({
     reports,
     onDeleted,
+    page,
+    totalPages,
+    total,
+    onPageChange,
 }: {
     reports: ProblemReport[]
     onDeleted: (reportId: number) => void
+    page: number
+    totalPages: number
+    total: number
+    onPageChange: (page: number) => void
 }) {
     const { t, i18n } = useTranslation()
     const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -57,7 +66,7 @@ export function ProblemReportsPanel({
                     {t("problem-reports")}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                    {t("problem-report-count", { count: reports.length })}
+                    {t("problem-report-count", { count: total })}
                 </p>
             </div>
             {error && (
@@ -115,6 +124,11 @@ export function ProblemReportsPanel({
                     </article>
                 ))}
             </div>
+            <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={onPageChange}
+            />
         </section>
     )
 }

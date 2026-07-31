@@ -1,6 +1,7 @@
-import { request, requestBlob } from "./client"
+import { request, requestBlob, requestPage } from "./client"
 import type {
     NewQuiz,
+    Page,
     Question,
     QuizAnswerReview,
     Quiz,
@@ -10,8 +11,19 @@ import type {
     StudentQuizSession,
 } from "./types"
 
-export function getQuizzes(): Promise<Quiz[]> {
-    return request<Quiz[]>("/api/quizzes")
+export function getQuizzes(
+    page = 1,
+    search = "",
+    gradeLevel = "",
+    pageSize = 8
+): Promise<Page<Quiz>> {
+    const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+    })
+    if (search) params.set("search", search)
+    if (gradeLevel) params.set("grade_level", gradeLevel)
+    return requestPage<Quiz>(`/api/quizzes?${params}`)
 }
 
 export function createQuiz(quiz: NewQuiz): Promise<Quiz> {
@@ -50,8 +62,10 @@ export function getActiveQuizSessions(): Promise<QuizSession[]> {
     return request<QuizSession[]>("/api/quizzes/sessions/active")
 }
 
-export function getQuizResults(): Promise<QuizSession[]> {
-    return request<QuizSession[]>("/api/quizzes/sessions/results")
+export function getQuizResults(page = 1): Promise<Page<QuizSession>> {
+    return requestPage<QuizSession>(
+        `/api/quizzes/sessions/results?page=${page}&page_size=8`
+    )
 }
 
 export function getParticipantAnswers(

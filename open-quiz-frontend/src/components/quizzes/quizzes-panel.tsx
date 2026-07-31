@@ -1,5 +1,5 @@
-import { getStudentClasses } from "@/api/classes"
-import { getQuestionBanks } from "@/api/question-banks"
+import { getAllStudentClasses } from "@/api/classes"
+import { getAllQuestionBanks } from "@/api/question-banks"
 import {
     cancelQuizSession,
     createQuiz,
@@ -101,6 +101,9 @@ export function QuizzesPanel({
 }: QuizzesPanelProps) {
     const { t, i18n } = useTranslation()
     const [quizzes, setQuizzes] = useState<Quiz[]>([])
+    const [page, setPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [reloadKey, setReloadKey] = useState(0)
     const [sessions, setSessions] = useState<QuizSession[]>([])
     const [banks, setBanks] = useState<QuestionBank[]>([])
     const [classes, setClasses] = useState<StudentClass[]>([])
@@ -146,25 +149,16 @@ export function QuizzesPanel({
     useEffect(() => {
         let isActive = true
         Promise.all([
-            getQuizzes(),
-            getQuestionBanks(),
+            getAllQuestionBanks(),
             getActiveQuizSessions(),
-            getStudentClasses(),
+            getAllStudentClasses(),
         ])
-            .then(
-                ([
-                    loadedQuizzes,
-                    loadedBanks,
-                    loadedSessions,
-                    loadedClasses,
-                ]) => {
-                    if (!isActive) return
-                    setQuizzes(loadedQuizzes)
-                    setBanks(loadedBanks)
-                    setSessions(loadedSessions)
-                    setClasses(loadedClasses)
-                }
-            )
+            .then(([loadedBanks, loadedSessions, loadedClasses]) => {
+                if (!isActive) return
+                setBanks(loadedBanks)
+                setSessions(loadedSessions)
+                setClasses(loadedClasses)
+            })
             .catch(() => {
                 if (isActive) setLoadError(t("quizzes-load-error"))
             })
@@ -175,6 +169,26 @@ export function QuizzesPanel({
             isActive = false
         }
     }, [t])
+
+    useEffect(() => {
+        let isActive = true
+        getQuizzes(page, quizFilter.trim(), gradeLevelFilter)
+            .then((result) => {
+                if (!isActive) return
+                setQuizzes(result.items)
+                setTotalPages(result.totalPages)
+                if (result.page > result.totalPages) setPage(result.totalPages)
+            })
+            .catch(() => {
+                if (isActive) setLoadError(t("quizzes-load-error"))
+            })
+            .finally(() => {
+                if (isActive) setIsLoading(false)
+            })
+        return () => {
+            isActive = false
+        }
+    }, [gradeLevelFilter, page, quizFilter, reloadKey, t])
 
     useEffect(() => {
         if (
@@ -238,23 +252,9 @@ export function QuizzesPanel({
         0
     )
     const quizGradeLevels = Array.from(
-        new Set(
-            quizzes.flatMap((quiz) =>
-                quiz.question_banks.map((bank) => bank.grade_level)
-            )
-        )
+        new Set(banks.map((bank) => bank.grade_level))
     ).sort((first, second) => first.localeCompare(second, "fr"))
-    const filteredQuizzes = quizzes.filter(
-        (quiz) =>
-            (!quizFilter ||
-                quiz.title
-                    .toLocaleLowerCase("fr")
-                    .includes(quizFilter.toLocaleLowerCase("fr"))) &&
-            (!gradeLevelFilter ||
-                quiz.question_banks.some(
-                    (bank) => bank.grade_level === gradeLevelFilter
-                ))
-    )
+    const filteredQuizzes = quizzes
 
     function resetCreationForm(): void {
         setTitle("")
@@ -312,6 +312,8 @@ export function QuizzesPanel({
             )
             onCreateDialogOpenChange(false)
             resetCreationForm()
+            setPage(1)
+            setReloadKey((current) => current + 1)
         } catch {
             setCreateError(
                 t(editingQuiz ? "quiz-update-error" : "quiz-create-error")
@@ -436,8 +438,17 @@ export function QuizzesPanel({
                 loadError={loadError}
                 quizFilter={quizFilter}
                 gradeLevelFilter={gradeLevelFilter}
-                onQuizFilterChange={setQuizFilter}
-                onGradeLevelFilterChange={setGradeLevelFilter}
+                onQuizFilterChange={(value) => {
+                    setQuizFilter(value)
+                    setPage(1)
+                }}
+                onGradeLevelFilterChange={(value) => {
+                    setGradeLevelFilter(value)
+                    setPage(1)
+                }}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
                 onEdit={openQuizEditor}
                 onPreview={(quiz) => void openPreview(quiz)}
                 onLaunch={(quiz) => {

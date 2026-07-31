@@ -136,6 +136,40 @@ export async function request<T>(
     return response.json() as Promise<T>
 }
 
+export async function requestPage<T>(
+    path: string,
+    options: RequestInit = {},
+    allowRefresh = true
+): Promise<import("./types").Page<T>> {
+    const response = await fetch(`${API_URL}${path}`, {
+        ...options,
+        credentials: "include",
+        headers: requestHeaders(options),
+    })
+    if (
+        response.status === 401 &&
+        allowRefresh &&
+        (await refreshAccessToken())
+    ) {
+        return requestPage<T>(path, options, false)
+    }
+    if (!response.ok) throw await errorFrom(response)
+
+    const items = (await response.json()) as T[]
+    const page = Number(response.headers.get("X-Page") ?? 1)
+    const pageSize = Number(
+        response.headers.get("X-Page-Size") ?? Math.max(items.length, 1)
+    )
+    const total = Number(response.headers.get("X-Total-Count") ?? items.length)
+    return {
+        items,
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    }
+}
+
 export async function requestBlob(
     path: string,
     options: RequestInit = {},

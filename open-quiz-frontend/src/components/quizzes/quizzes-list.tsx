@@ -2,6 +2,7 @@ import type { Quiz, QuizSession } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Pagination } from "@/components/ui/pagination"
 import {
     BookOpenText,
     Eye,
@@ -31,6 +32,9 @@ type QuizzesListProps = {
     onPreview: (quiz: Quiz) => void
     onLaunch: (quiz: Quiz) => void
     onOpenSession: (session: QuizSession) => void
+    page: number
+    totalPages: number
+    onPageChange: (page: number) => void
 }
 
 export function QuizzesList({
@@ -48,6 +52,9 @@ export function QuizzesList({
     onPreview,
     onLaunch,
     onOpenSession,
+    page,
+    totalPages,
+    onPageChange,
 }: QuizzesListProps) {
     const { t } = useTranslation()
 
@@ -104,17 +111,24 @@ export function QuizzesList({
                             {t("no-quiz-filtered")}
                         </p>
                     ) : (
-                        <ul className="grid gap-4 lg:grid-cols-2">
-                            {filteredQuizzes.map((quiz) => (
-                                <QuizCard
-                                    key={quiz.id}
-                                    quiz={quiz}
-                                    onEdit={() => onEdit(quiz)}
-                                    onPreview={() => onPreview(quiz)}
-                                    onLaunch={() => onLaunch(quiz)}
-                                />
-                            ))}
-                        </ul>
+                        <div>
+                            <ul className="grid gap-4 lg:grid-cols-2">
+                                {filteredQuizzes.map((quiz) => (
+                                    <QuizCard
+                                        key={quiz.id}
+                                        quiz={quiz}
+                                        onEdit={() => onEdit(quiz)}
+                                        onPreview={() => onPreview(quiz)}
+                                        onLaunch={() => onLaunch(quiz)}
+                                    />
+                                ))}
+                            </ul>
+                            <Pagination
+                                currentPage={page}
+                                totalPages={totalPages}
+                                onPageChange={onPageChange}
+                            />
+                        </div>
                     )}
                 </div>
             )}

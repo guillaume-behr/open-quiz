@@ -1,8 +1,29 @@
-import { request, requestBlob } from "./client"
-import type { Student, StudentClass } from "./types"
+import { request, requestBlob, requestPage } from "./client"
+import type { Page, Student, StudentClass } from "./types"
 
-export function getStudentClasses(): Promise<StudentClass[]> {
-    return request<StudentClass[]>("/api/classes")
+export function getStudentClasses(
+    page = 1,
+    search = "",
+    gradeLevel = "",
+    pageSize = 8
+): Promise<Page<StudentClass>> {
+    const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+    })
+    if (search) params.set("search", search)
+    if (gradeLevel) params.set("grade_level", gradeLevel)
+    return requestPage<StudentClass>(`/api/classes?${params}`)
+}
+
+export async function getAllStudentClasses(): Promise<StudentClass[]> {
+    const first = await getStudentClasses(1, "", "", 100)
+    const remaining = await Promise.all(
+        Array.from({ length: first.totalPages - 1 }, (_, index) =>
+            getStudentClasses(index + 2, "", "", 100)
+        )
+    )
+    return [first, ...remaining].flatMap((result) => result.items)
 }
 
 export function createStudentClass(

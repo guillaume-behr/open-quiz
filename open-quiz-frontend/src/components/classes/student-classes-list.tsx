@@ -2,6 +2,7 @@ import type { GradeLevel, StudentClass } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Pagination } from "@/components/ui/pagination"
 import { Eye, LoaderCircle, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -19,6 +20,9 @@ type StudentClassesListProps = {
     onClassFilterChange: (value: string) => void
     onGradeLevelFilterChange: (value: string) => void
     onManageClass: (classId: number) => void
+    page: number
+    totalPages: number
+    onPageChange: (page: number) => void
 }
 
 export function StudentClassesList({
@@ -32,6 +36,9 @@ export function StudentClassesList({
     onClassFilterChange,
     onGradeLevelFilterChange,
     onManageClass,
+    page,
+    totalPages,
+    onPageChange,
 }: StudentClassesListProps) {
     const { t } = useTranslation()
 
@@ -74,14 +81,21 @@ export function StudentClassesList({
                     {t("no-class-filtered")}
                 </p>
             ) : (
-                <div className="grid gap-4 lg:grid-cols-2">
-                    {filteredClasses.map((studentClass) => (
-                        <ClassCard
-                            key={studentClass.id}
-                            studentClass={studentClass}
-                            onManage={() => onManageClass(studentClass.id)}
-                        />
-                    ))}
+                <div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        {filteredClasses.map((studentClass) => (
+                            <ClassCard
+                                key={studentClass.id}
+                                studentClass={studentClass}
+                                onManage={() => onManageClass(studentClass.id)}
+                            />
+                        ))}
+                    </div>
+                    <Pagination
+                        currentPage={page}
+                        totalPages={totalPages}
+                        onPageChange={onPageChange}
+                    />
                 </div>
             )}
         </div>

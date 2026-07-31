@@ -1,4 +1,4 @@
-import { request, requestBlob } from "./client"
+import { request, requestBlob, requestPage } from "./client"
 import type {
     NewQuestion,
     NewQuestionBank,
@@ -6,10 +6,32 @@ import type {
     QuestionBank,
     QuestionBankImportResult,
     QuestionUpdate,
+    Page,
 } from "./types"
 
-export function getQuestionBanks(): Promise<QuestionBank[]> {
-    return request<QuestionBank[]>("/api/question-banks")
+export function getQuestionBanks(
+    page = 1,
+    search = "",
+    gradeLevel = "",
+    pageSize = 8
+): Promise<Page<QuestionBank>> {
+    const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+    })
+    if (search) params.set("search", search)
+    if (gradeLevel) params.set("grade_level", gradeLevel)
+    return requestPage<QuestionBank>(`/api/question-banks?${params}`)
+}
+
+export async function getAllQuestionBanks(): Promise<QuestionBank[]> {
+    const first = await getQuestionBanks(1, "", "", 100)
+    const remaining = await Promise.all(
+        Array.from({ length: first.totalPages - 1 }, (_, index) =>
+            getQuestionBanks(index + 2, "", "", 100)
+        )
+    )
+    return [first, ...remaining].flatMap((result) => result.items)
 }
 
 export function createQuestionBank(

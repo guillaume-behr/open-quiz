@@ -7,6 +7,14 @@ export type User = {
     created_at: string
 }
 
+export type Page<T> = {
+    items: T[]
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+}
+
 export type NewUser = {
     username: string
     display_name: string

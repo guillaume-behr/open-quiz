@@ -1,6 +1,10 @@
 {
     "app-name": "Open Quiz",
     "page-loading": "Завантаження сторінки",
+    "pagination": "Навігація сторінками",
+    "previous-page": "Попередня сторінка",
+    "next-page": "Наступна сторінка",
+    "pagination-status": "Сторінка {{current}} з {{total}}",
     "professor-space": "Зона вчителя",
     "homepage": "Додому",
     "problem-report-description": "Опишіть проблему. Повідомлення буде надіслано адміністратору цього сервісу.",

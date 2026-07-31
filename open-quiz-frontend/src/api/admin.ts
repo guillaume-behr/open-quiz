@@ -1,8 +1,8 @@
-import { request } from "./client"
-import type { NewUser, User } from "./types"
+import { request, requestPage } from "./client"
+import type { NewUser, Page, User } from "./types"
 
-export function getUsers(): Promise<User[]> {
-    return request<User[]>("/api/admin/users")
+export function getUsers(page = 1): Promise<Page<User>> {
+    return requestPage<User>(`/api/admin/users?page=${page}&page_size=8`)
 }
 
 export function createUser(user: NewUser): Promise<User> {

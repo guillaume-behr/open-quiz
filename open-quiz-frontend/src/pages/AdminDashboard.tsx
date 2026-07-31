@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Pagination } from "@/components/ui/pagination"
 import { errorMessage } from "@/lib/errors"
 import {
     LoaderCircle,
@@ -47,6 +48,12 @@ export function AdminDashboard() {
     const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null)
     const [users, setUsers] = useState<User[]>([])
     const [reports, setReports] = useState<ProblemReport[]>([])
+    const [usersPage, setUsersPage] = useState(1)
+    const [usersTotalPages, setUsersTotalPages] = useState(1)
+    const [usersTotal, setUsersTotal] = useState(0)
+    const [reportsPage, setReportsPage] = useState(1)
+    const [reportsTotalPages, setReportsTotalPages] = useState(1)
+    const [reportsTotal, setReportsTotal] = useState(0)
     const [activeSection, setActiveSection] = useState<"users" | "reports">(
         "users"
     )
@@ -57,6 +64,30 @@ export function AdminDashboard() {
     const [recoveryUser, setRecoveryUser] = useState<User | null>(null)
     const [isUpdatingUser, setIsUpdatingUser] = useState(false)
 
+    async function loadUsers(page: number) {
+        const result = await getUsers(page)
+        if (result.page > result.totalPages) {
+            await loadUsers(result.totalPages)
+            return
+        }
+        setUsers(result.items)
+        setUsersPage(result.page)
+        setUsersTotalPages(result.totalPages)
+        setUsersTotal(result.total)
+    }
+
+    async function loadReports(page: number) {
+        const result = await getProblemReports(page)
+        if (result.page > result.totalPages) {
+            await loadReports(result.totalPages)
+            return
+        }
+        setReports(result.items)
+        setReportsPage(result.page)
+        setReportsTotalPages(result.totalPages)
+        setReportsTotal(result.total)
+    }
+
     useEffect(() => {
         restoreSession()
             .then(async (user) => {
@@ -66,8 +97,12 @@ export function AdminDashboard() {
                     getProblemReports(),
                 ])
                 setCurrentUser(user)
-                setUsers(loadedUsers)
-                setReports(loadedReports)
+                setUsers(loadedUsers.items)
+                setUsersTotalPages(loadedUsers.totalPages)
+                setUsersTotal(loadedUsers.total)
+                setReports(loadedReports.items)
+                setReportsTotalPages(loadedReports.totalPages)
+                setReportsTotal(loadedReports.total)
             })
             .catch(() => {
                 setCurrentUser(null)
@@ -88,8 +123,12 @@ export function AdminDashboard() {
             getUsers(),
             getProblemReports(),
         ])
-        setUsers(loadedUsers)
-        setReports(loadedReports)
+        setUsers(loadedUsers.items)
+        setUsersTotalPages(loadedUsers.totalPages)
+        setUsersTotal(loadedUsers.total)
+        setReports(loadedReports.items)
+        setReportsTotalPages(loadedReports.totalPages)
+        setReportsTotal(loadedReports.total)
         setChallenge(null)
     }
 
@@ -107,7 +146,7 @@ export function AdminDashboard() {
         }
         try {
             const created = await createUser(newUser)
-            setUsers((existing) => [created, ...existing])
+            await loadUsers(1)
             setSuccess(t("user-created", { username: created.username }))
             formElement.reset()
         } catch (caught) {
@@ -254,9 +293,9 @@ export function AdminDashboard() {
                 >
                     <MessageSquareWarning aria-hidden="true" />
                     {t("problem-reports")}
-                    {reports.length > 0 && (
+                    {reportsTotal > 0 && (
                         <span className="rounded-full bg-background/20 px-1.5 py-0.5 text-xs">
-                            {reports.length}
+                            {reportsTotal}
                         </span>
                     )}
                 </Button>
@@ -367,7 +406,7 @@ export function AdminDashboard() {
                                     </h2>
                                     <p className="text-sm text-muted-foreground">
                                         {t("user-count", {
-                                            count: users.length,
+                                            count: usersTotal,
                                         })}
                                     </p>
                                 </div>
@@ -455,6 +494,11 @@ export function AdminDashboard() {
                                     </div>
                                 ))}
                             </div>
+                            <Pagination
+                                currentPage={usersPage}
+                                totalPages={usersTotalPages}
+                                onPageChange={(page) => void loadUsers(page)}
+                            />
                         </section>
                     </div>
                     <Dialog
@@ -512,11 +556,11 @@ export function AdminDashboard() {
             ) : (
                 <ProblemReportsPanel
                     reports={reports}
-                    onDeleted={(reportId) =>
-                        setReports((existing) =>
-                            existing.filter((report) => report.id !== reportId)
-                        )
-                    }
+                    page={reportsPage}
+                    totalPages={reportsTotalPages}
+                    total={reportsTotal}
+                    onPageChange={(page) => void loadReports(page)}
+                    onDeleted={() => void loadReports(reportsPage)}
                 />
             )}
         </div>
