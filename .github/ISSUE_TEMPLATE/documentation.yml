@@ -1,0 +1,26 @@
+name: Problème de documentation
+description: Signaler une documentation incorrecte, incomplète ou difficile à suivre
+title: "[Documentation] "
+labels:
+  - documentation
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Emplacement
+      description: Indiquez la page, le fichier ou la section concernée.
+      placeholder: README.md — Installation locale
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème constaté
+      description: Expliquez ce qui est incorrect, manquant ou ambigu.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Correction suggérée
+      description: Proposez une formulation ou les informations attendues, si possible.

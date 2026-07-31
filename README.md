@@ -102,7 +102,7 @@ Git. Les modèles fournis ne contiennent aucune vraie donnée sensible.
 | `QUIZ_VIOLATION_ATTEMPTS` | Alertes de surveillance par fenêtre | `20` |
 | `QUIZ_RATE_WINDOW_SECONDS` | Fenêtre des limites publiques | `60` |
 | `QUIZ_RESULT_RETENTION_DAYS` | Conservation des résultats terminés | `365` |
-| `PROBLEM_REPORT_ATTEMPTS` | Signalements publics admis par fenêtre et par adresse IP hachée | `5` |
+| `PROBLEM_REPORT_ATTEMPTS` | Signalements publics admis par fenêtre pour l’instance | `5` |
 | `PROBLEM_REPORT_WINDOW_SECONDS` | Fenêtre de limitation des signalements | `900` |
 | `PROBLEM_REPORT_RETENTION_DAYS` | Conservation maximale des signalements | `90` |
 | `MAX_REQUEST_BODY_BYTES` | Taille des requêtes ordinaires | `65536` |
