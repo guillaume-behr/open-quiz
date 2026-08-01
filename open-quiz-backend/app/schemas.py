@@ -140,6 +140,10 @@ class StudentCreate(BaseModel):
         return normalized
 
 
+class StudentUpdate(StudentCreate):
+    class_id: int | None = Field(default=None, ge=1)
+
+
 class StudentResponse(BaseModel):
     id: int
     class_id: int

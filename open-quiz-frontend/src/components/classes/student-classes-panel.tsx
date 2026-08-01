@@ -4,6 +4,7 @@ import {
     deleteStudent,
     deleteStudentClass,
     downloadStudents,
+    getAllStudentClasses,
     getStudentClasses,
     importStudents,
     updateStudent,
@@ -80,6 +81,12 @@ export function StudentClassesPanel({
     const [isCreatingStudent, setIsCreatingStudent] = useState(false)
     const [studentError, setStudentError] = useState<string | null>(null)
     const [editingStudent, setEditingStudent] = useState<Student | null>(null)
+    const [studentClassOptions, setStudentClassOptions] = useState<
+        StudentClass[]
+    >([])
+    const [destinationClassId, setDestinationClassId] = useState<number | null>(
+        null
+    )
     const [classToDelete, setClassToDelete] = useState<StudentClass | null>(
         null
     )
@@ -240,41 +247,65 @@ export function StudentClassesPanel({
         try {
             const displayName =
                 `${studentFirstName.trim()} ${studentLastName.trim()}`.trim()
+            const sourceClassId = classForStudent.id
             const student = editingStudent
-                ? await updateStudent(editingStudent.id, displayName)
+                ? await updateStudent(
+                      editingStudent.id,
+                      displayName,
+                      destinationClassId ?? sourceClassId
+                  )
                 : await createStudent(classForStudent.id, displayName)
             setClasses((current) =>
-                current.map((studentClass) =>
-                    studentClass.id === classForStudent.id
-                        ? {
-                              ...studentClass,
-                              students: (editingStudent
-                                  ? studentClass.students.map((item) =>
-                                        item.id === student.id ? student : item
-                                    )
-                                  : [...studentClass.students, student]
-                              ).sort((first, second) =>
-                                  first.display_name.localeCompare(
-                                      second.display_name,
-                                      "fr"
-                                  )
-                              ),
-                              student_count: editingStudent
-                                  ? studentClass.student_count
-                                  : studentClass.student_count + 1,
-                          }
-                        : studentClass
-                )
+                current.map((studentClass) => {
+                    const wasTransferred =
+                        editingStudent && sourceClassId !== student.class_id
+                    if (wasTransferred && studentClass.id === sourceClassId) {
+                        return {
+                            ...studentClass,
+                            students: studentClass.students.filter(
+                                (item) => item.id !== student.id
+                            ),
+                            student_count: Math.max(
+                                0,
+                                studentClass.student_count - 1
+                            ),
+                        }
+                    }
+                    if (studentClass.id !== student.class_id)
+                        return studentClass
+                    return {
+                        ...studentClass,
+                        students: (editingStudent && !wasTransferred
+                            ? studentClass.students.map((item) =>
+                                  item.id === student.id ? student : item
+                              )
+                            : [...studentClass.students, student]
+                        ).sort((first, second) =>
+                            first.display_name.localeCompare(
+                                second.display_name,
+                                "fr"
+                            )
+                        ),
+                        student_count:
+                            editingStudent && !wasTransferred
+                                ? studentClass.student_count
+                                : studentClass.student_count + 1,
+                    }
+                })
             )
             setStudentFirstName("")
             setStudentLastName("")
             setEditingStudent(null)
+            setDestinationClassId(null)
+            setStudentClassOptions([])
             setClassForStudent(null)
         } catch (error) {
             setStudentError(
-                error instanceof ApiError && error.status === 409
-                    ? t("student-duplicate-error")
-                    : t("student-create-error")
+                editingStudent
+                    ? t("student-update-error")
+                    : error instanceof ApiError && error.status === 409
+                      ? t("student-duplicate-error")
+                      : t("student-create-error")
             )
         } finally {
             setIsCreatingStudent(false)
@@ -379,6 +410,11 @@ export function StudentClassesPanel({
                     setStudentFirstName(firstName)
                     setStudentLastName(lastName.join(" "))
                     setStudentError(null)
+                    setDestinationClassId(studentClass.id)
+                    setStudentClassOptions(classes)
+                    void getAllStudentClasses()
+                        .then(setStudentClassOptions)
+                        .catch(() => setStudentError(t("classes-load-error")))
                 }}
                 onDeleteStudent={setStudentToDelete}
             />
@@ -441,16 +477,21 @@ export function StudentClassesPanel({
 
             <StudentFormDialog
                 studentClass={classForStudent}
+                availableClasses={studentClassOptions}
                 editingStudent={editingStudent}
+                destinationClassId={destinationClassId}
                 firstName={studentFirstName}
                 lastName={studentLastName}
                 isBusy={isCreatingStudent}
                 error={studentError}
                 onFirstNameChange={setStudentFirstName}
                 onLastNameChange={setStudentLastName}
+                onDestinationClassChange={setDestinationClassId}
                 onClose={() => {
                     setClassForStudent(null)
                     setEditingStudent(null)
+                    setDestinationClassId(null)
+                    setStudentClassOptions([])
                     setStudentFirstName("")
                     setStudentLastName("")
                     setStudentError(null)

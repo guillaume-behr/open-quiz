@@ -23,6 +23,7 @@ from app.schemas import (
     StudentCreate,
     StudentImportBatch,
     StudentResponse,
+    StudentUpdate,
 )
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
@@ -144,12 +145,8 @@ def class_response(
         grade_level=student_class.grade_level,
         student_count=len(students),
         completed_quiz_count=completed_quiz_count or 0,
-        latest_quiz_title=(latest_quiz[0] or latest_quiz[1])
-        if latest_quiz
-        else None,
-        latest_quiz_at=(latest_quiz[2] or latest_quiz[3])
-        if latest_quiz
-        else None,
+        latest_quiz_title=(latest_quiz[0] or latest_quiz[1]) if latest_quiz else None,
+        latest_quiz_at=(latest_quiz[2] or latest_quiz[3]) if latest_quiz else None,
         students=[
             StudentResponse(
                 id=student.id,
@@ -412,17 +409,36 @@ def create_student(
 )
 def update_student(
     student_id: int,
-    payload: StudentCreate,
+    payload: StudentUpdate,
     professor: ProfessorUser,
     session: DbSession,
 ) -> Student:
     student = owned_student(student_id, professor, session)
+    destination_class_id = payload.class_id or student.class_id
+    if destination_class_id != student.class_id:
+        owned_class(destination_class_id, professor, session)
+        active_class_id = session.scalar(
+            select(QuizSession.class_id)
+            .where(
+                QuizSession.class_id.in_([student.class_id, destination_class_id]),
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            )
+            .limit(1)
+        )
+        if active_class_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Un élève ne peut pas être transféré pendant une session active",
+            )
     student.identifier = payload.identifier or generated_student_identifier(
-        student.class_id,
+        destination_class_id,
         payload.display_name,
         session,
-        excluded_student_id=student.id,
+        excluded_student_id=(
+            student.id if destination_class_id == student.class_id else None
+        ),
     )
+    student.class_id = destination_class_id
     student.display_name = payload.display_name
     try:
         session.commit()

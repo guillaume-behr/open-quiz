@@ -510,6 +510,41 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert updated_student_record.status_code == 200
         student = updated_student_record.json()
+        transfer_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "Transfer class", "grade_level": "Cinquième"},
+        ).json()
+        transferred_student = client.post(
+            f"/api/classes/students/{student['id']}/update",
+            headers=teacher_headers,
+            json={
+                "identifier": student["identifier"],
+                "display_name": student["display_name"],
+                "class_id": transfer_class["id"],
+            },
+        )
+        assert transferred_student.status_code == 200
+        assert transferred_student.json()["class_id"] == transfer_class["id"]
+        moved_back_student = client.post(
+            f"/api/classes/students/{student['id']}/update",
+            headers=teacher_headers,
+            json={
+                "identifier": student["identifier"],
+                "display_name": student["display_name"],
+                "class_id": student_class["id"],
+            },
+        )
+        assert moved_back_student.status_code == 200
+        assert moved_back_student.json()["class_id"] == student_class["id"]
+        student = moved_back_student.json()
+        assert (
+            client.delete(
+                f"/api/classes/{transfer_class['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
         assert (
             client.post(
                 f"/api/classes/{student_class['id']}/students",

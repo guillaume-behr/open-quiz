@@ -14,26 +14,32 @@ import { useTranslation } from "react-i18next"
 
 type StudentFormDialogProps = {
     studentClass: StudentClass | null
+    availableClasses: StudentClass[]
     editingStudent: Student | null
+    destinationClassId: number | null
     firstName: string
     lastName: string
     isBusy: boolean
     error: string | null
     onFirstNameChange: (value: string) => void
     onLastNameChange: (value: string) => void
+    onDestinationClassChange: (classId: number) => void
     onClose: () => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
 
 export function StudentFormDialog({
     studentClass,
+    availableClasses,
     editingStudent,
+    destinationClassId,
     firstName,
     lastName,
     isBusy,
     error,
     onFirstNameChange,
     onLastNameChange,
+    onDestinationClassChange,
     onClose,
     onSubmit,
 }: StudentFormDialogProps) {
@@ -65,6 +71,36 @@ export function StudentFormDialog({
                             required
                         />
                     </Field>
+                    {editingStudent && destinationClassId !== null && (
+                        <Field>
+                            <FieldLabel htmlFor="student-class">
+                                {t("student-class")}
+                            </FieldLabel>
+                            <select
+                                id="student-class"
+                                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                                value={destinationClassId}
+                                onChange={(event) =>
+                                    onDestinationClassChange(
+                                        Number(event.target.value)
+                                    )
+                                }
+                            >
+                                {availableClasses.map((availableClass) => (
+                                    <option
+                                        key={availableClass.id}
+                                        value={availableClass.id}
+                                    >
+                                        {availableClass.name} —{" "}
+                                        {availableClass.grade_level}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-muted-foreground">
+                                {t("student-class-help")}
+                            </p>
+                        </Field>
+                    )}
                     <Field>
                         <FieldLabel htmlFor="student-last-name">
                             {t("last-name")}

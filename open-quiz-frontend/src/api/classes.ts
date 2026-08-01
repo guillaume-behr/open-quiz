@@ -69,11 +69,12 @@ export function deleteStudent(studentId: number): Promise<void> {
 
 export function updateStudent(
     studentId: number,
-    displayName: string
+    displayName: string,
+    classId: number
 ): Promise<Student> {
     return request<Student>(`/api/classes/students/${studentId}/update`, {
         method: "POST",
-        body: JSON.stringify({ display_name: displayName }),
+        body: JSON.stringify({ display_name: displayName, class_id: classId }),
     })
 }
 
