@@ -190,6 +190,12 @@ class QuizSession(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), index=True)
+    quiz_title: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_language: Mapped[str | None] = mapped_column(String(35), nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    allow_previous_questions: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
     class_id: Mapped[int | None] = mapped_column(
         ForeignKey("student_classes.id"), nullable=True, index=True
     )

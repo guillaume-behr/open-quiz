@@ -35,6 +35,7 @@ export function StudentQuiz() {
     const [isBusy, setIsBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const isLeavingQuiz = useRef(false)
+    const sessionRequestVersion = useRef(0)
     const { isFullscreen, enterFullscreen } = useQuizMonitoring(
         session,
         participantToken,
@@ -52,15 +53,18 @@ export function StudentQuiz() {
         if (!restoredSession) return
 
         let active = true
+        const requestVersion = sessionRequestVersion.current
         void getStudentQuizSession(
             restoredSession.joinCode,
             restoredSession.participantToken
         )
             .then((restoredState) => {
-                if (active) applySession(restoredState)
+                if (active && requestVersion === sessionRequestVersion.current)
+                    applySession(restoredState)
             })
             .catch((restoreError: unknown) => {
-                if (!active) return
+                if (!active || requestVersion !== sessionRequestVersion.current)
+                    return
                 if (
                     restoreError instanceof ApiError &&
                     [401, 403, 404].includes(restoreError.status)
@@ -79,15 +83,24 @@ export function StudentQuiz() {
         if (
             !session ||
             !participantToken ||
+            isBusy ||
             ["finished", "cancelled"].includes(session.status)
         )
             return
 
         let active = true
+        let refreshInFlight = false
         const refresh = () => {
+            if (refreshInFlight) return
+            refreshInFlight = true
+            const requestVersion = sessionRequestVersion.current
             void getStudentQuizSession(session.join_code, participantToken)
                 .then((updated) => {
-                    if (!active) return
+                    if (
+                        !active ||
+                        requestVersion !== sessionRequestVersion.current
+                    )
+                        return
                     if (
                         updated.question &&
                         updated.question.id !== session.question?.id &&
@@ -105,7 +118,14 @@ export function StudentQuiz() {
                     })
                 })
                 .catch(() => {
-                    if (active) setError(t("student-session-error"))
+                    if (
+                        active &&
+                        requestVersion === sessionRequestVersion.current
+                    )
+                        setError(t("student-session-error"))
+                })
+                .finally(() => {
+                    refreshInFlight = false
                 })
         }
         const interval = window.setInterval(refresh, 1500)
@@ -113,12 +133,13 @@ export function StudentQuiz() {
             active = false
             window.clearInterval(interval)
         }
-    }, [participantToken, session, t])
+    }, [isBusy, participantToken, session, t])
 
     async function handleJoin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
         setError(null)
         setIsBusy(true)
+        sessionRequestVersion.current += 1
         try {
             const joined = await joinQuiz(
                 joinCode.trim(),
@@ -141,6 +162,7 @@ export function StudentQuiz() {
 
     function leaveQuiz() {
         isLeavingQuiz.current = true
+        sessionRequestVersion.current += 1
         clearStoredQuizSession()
         setSession(null)
         setParticipantToken(null)
@@ -173,6 +195,7 @@ export function StudentQuiz() {
             return
 
         setIsBusy(true)
+        sessionRequestVersion.current += 1
         try {
             const updated = await navigateStudentQuiz(
                 session.join_code,
@@ -193,6 +216,7 @@ export function StudentQuiz() {
 
         setError(null)
         setIsBusy(true)
+        sessionRequestVersion.current += 1
         try {
             const updated = await submitStudentQuizAnswer(
                 session.join_code,

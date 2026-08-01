@@ -426,7 +426,7 @@ def session_response(
     return QuizSessionResponse(
         id=quiz_session.id,
         quiz_id=quiz.id,
-        quiz_title=quiz.title,
+        quiz_title=quiz_session.quiz_title or quiz.title,
         class_id=quiz_session.class_id,
         class_name=quiz_session.class_name,
         join_code=quiz_session.join_code,
@@ -474,8 +474,8 @@ def student_session_response(
     participant: QuizParticipant,
 ) -> StudentQuizSessionResponse:
     return StudentQuizSessionResponse(
-        quiz_title=quiz.title,
-        source_language=quiz.source_language,
+        quiz_title=quiz_session.quiz_title or quiz.title,
+        source_language=quiz_session.source_language or quiz.source_language,
         class_name=quiz_session.class_name,
         student_name=(
             participant.student_display_name or participant.student_identifier
@@ -498,7 +498,10 @@ def quiz_ends_at(quiz_session: QuizSession, quiz: Quiz) -> datetime | None:
         if paused_at.tzinfo is None:
             paused_at = paused_at.replace(tzinfo=UTC)
         paused_duration += ceil(max(0, (datetime.now(UTC) - paused_at).total_seconds()))
-    return started_at + timedelta(seconds=quiz.duration_seconds + paused_duration)
+    duration_seconds = quiz_session.duration_seconds
+    if duration_seconds is None:
+        duration_seconds = quiz.duration_seconds
+    return started_at + timedelta(seconds=duration_seconds + paused_duration)
 
 
 def expire_quiz_session(
@@ -752,7 +755,11 @@ def student_state_response(
         total_questions=len(question_ids),
         has_answered=has_answered,
         answered_count=answered_count or 0,
-        allow_previous_questions=quiz.allow_previous_questions,
+        allow_previous_questions=(
+            quiz_session.allow_previous_questions
+            if quiz_session.allow_previous_questions is not None
+            else quiz.allow_previous_questions
+        ),
         selected_choice_ids=saved_answer.get("selected_choice_ids"),
         written_answer=saved_answer.get("written_answer"),
         question=(
@@ -1312,6 +1319,10 @@ def launch_quiz(
         )
     quiz_session = QuizSession(
         quiz_id=quiz.id,
+        quiz_title=quiz.title,
+        source_language=quiz.source_language,
+        duration_seconds=quiz.duration_seconds,
+        allow_previous_questions=quiz.allow_previous_questions,
         class_id=student_class.id,
         class_name=student_class.name,
         join_code=generate_join_code(session),
@@ -1561,9 +1572,12 @@ def navigate_student_quiz(
     )
     expire_quiz_session(quiz_session, quiz, session)
     target_position = payload.question_number - 1
+    allow_previous_questions = quiz_session.allow_previous_questions
+    if allow_previous_questions is None:
+        allow_previous_questions = quiz.allow_previous_questions
     if (
         quiz_session.status != "in_progress"
-        or not quiz.allow_previous_questions
+        or not allow_previous_questions
         or participant.current_position is None
         or target_position >= participant.current_position
         or target_position < 0

@@ -22,6 +22,7 @@ export function useQuizTranslation(
     const [errorPair, setErrorPair] = useState<string | null>(null)
     const translatorRef = useRef<BrowserTranslator | null>(null)
     const translatorPairRef = useRef<string | null>(null)
+    const operationVersionRef = useRef(0)
 
     const sourceLanguage = translationLanguage(session?.source_language)
     const targetLanguage = translationLanguage(i18nInstance.resolvedLanguage)
@@ -57,12 +58,16 @@ export function useQuizTranslation(
 
     const toggle = useCallback(async () => {
         if (active) {
+            operationVersionRef.current += 1
             setEnabled(false)
             setErrorPair(null)
+            setIsTranslating(false)
+            setIsDownloading(false)
             return
         }
         if (!session || !offered) return
 
+        const operationVersion = ++operationVersionRef.current
         setErrorPair(null)
         setIsTranslating(true)
         try {
@@ -77,8 +82,15 @@ export function useQuizTranslation(
                 translator = await createBrowserTranslator(
                     sourceLanguage,
                     targetLanguage,
-                    () => setIsDownloading(true)
+                    () => {
+                        if (operationVersion === operationVersionRef.current)
+                            setIsDownloading(true)
+                    }
                 )
+                if (operationVersion !== operationVersionRef.current) {
+                    translator.destroy()
+                    return
+                }
                 translatorRef.current = translator
                 translatorPairRef.current = pair
             }
@@ -89,19 +101,24 @@ export function useQuizTranslation(
                     ? translateQuestion(translator, session.question)
                     : Promise.resolve(null),
             ])
+            if (operationVersion !== operationVersionRef.current) return
             setTranslatedTitle(title)
             setTranslatedQuestion(question)
             setTranslatedPair(pair)
             setEnabled(true)
         } catch {
-            setErrorPair(pair)
+            if (operationVersion === operationVersionRef.current)
+                setErrorPair(pair)
         } finally {
-            setIsTranslating(false)
-            setIsDownloading(false)
+            if (operationVersion === operationVersionRef.current) {
+                setIsTranslating(false)
+                setIsDownloading(false)
+            }
         }
     }, [active, offered, pair, session, sourceLanguage, targetLanguage])
 
     const reset = useCallback(() => {
+        operationVersionRef.current += 1
         translatorRef.current?.destroy()
         translatorRef.current = null
         translatorPairRef.current = null
@@ -110,6 +127,8 @@ export function useQuizTranslation(
         setTranslatedTitle(null)
         setTranslatedQuestion(null)
         setErrorPair(null)
+        setIsTranslating(false)
+        setIsDownloading(false)
     }, [])
 
     const originalQuestion = session?.question ?? null

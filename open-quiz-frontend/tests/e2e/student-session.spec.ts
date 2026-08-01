@@ -254,6 +254,114 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
     await expect(page.getByText("Response recorded")).toBeVisible()
 })
 
+test("a delayed poll cannot restore a question after submission", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+    })
+    const question = {
+        id: 43,
+        prompt: "Which state should remain visible?",
+        difficulty: "easy",
+        answer_mode: "single",
+        answer_mode_disclosed: true,
+        response_language: null,
+        has_image: false,
+        code_language: null,
+        code_content: null,
+        choices: [
+            {
+                id: 103,
+                label: "The completed state",
+                position: 0,
+                has_image: false,
+                code_language: null,
+                code_content: null,
+            },
+            {
+                id: 104,
+                label: "The stale question",
+                position: 1,
+                has_image: false,
+                code_language: null,
+                code_content: null,
+            },
+        ],
+    }
+    let markPollStarted: () => void = () => undefined
+    const pollStarted = new Promise<void>((resolve) => {
+        markPollStarted = resolve
+    })
+    let releasePoll: () => void = () => undefined
+    const pollRelease = new Promise<void>((resolve) => {
+        releasePoll = resolve
+    })
+
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            json: {
+                ...baseSession,
+                status: "in_progress",
+                question_number: 1,
+                question,
+                participant_token: "participant-token",
+            },
+        })
+    })
+    await page.route(
+        /\/api\/quizzes\/student\/sessions\/ABCD$/,
+        async (route) => {
+            markPollStarted()
+            await pollRelease
+            await route.fulfill({
+                json: {
+                    ...baseSession,
+                    status: "in_progress",
+                    question_number: 1,
+                    question,
+                },
+            })
+        }
+    )
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/answer",
+        async (route) => {
+            await route.fulfill({
+                json: {
+                    ...baseSession,
+                    status: "finished",
+                    answered_count: 1,
+                },
+            })
+        }
+    )
+
+    await page.goto("/")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Quiz code").fill("ABCD")
+    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await pollStarted
+    await page.getByLabel("The completed state").check()
+    await page.getByRole("button", { name: "Submit my answer" }).click()
+    await expect(
+        page.getByText("The quiz is over. Thank you for your participation!")
+    ).toBeVisible()
+
+    releasePoll()
+    await expect(
+        page.getByText("The quiz is over. Thank you for your participation!")
+    ).toBeVisible()
+    await expect(
+        page.getByRole("heading", {
+            name: "Which state should remain visible?",
+        })
+    ).toHaveCount(0)
+})
+
 test("student can submit a written answer", async ({ page }) => {
     await page.addInitScript(() => {
         Object.defineProperty(document, "fullscreenElement", {

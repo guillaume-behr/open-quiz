@@ -1392,6 +1392,37 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert results.json()[0]["class_name"] == "5e B"
         assert results.json()[0]["participants"][0]["score"] > 0
         assert results.json()[0]["participants"][0]["pending_manual_grading_count"] == 1
+        original_ends_at = results.json()[0]["ends_at"]
+
+        edited_quiz = client.post(
+            f"/api/quizzes/{quiz['id']}/update",
+            headers=teacher_headers,
+            json={
+                "title": "Nouveau titre pour les prochaines sessions",
+                "source_language": "de",
+                "question_bank_ids": [imported_example.json()["question_bank"]["id"]],
+                "question_count": 3,
+                "duration_seconds": 60,
+                "allow_previous_questions": False,
+                "easy_percentage": 34,
+                "medium_percentage": 33,
+                "hard_percentage": 33,
+            },
+        )
+        assert edited_quiz.status_code == 200
+        historical_result = client.get(
+            "/api/quizzes/sessions/results",
+            headers=teacher_headers,
+        ).json()[0]
+        assert historical_result["quiz_title"] == quiz["title"]
+        assert historical_result["ends_at"] == original_ends_at
+        historical_student_state = client.get(
+            student_state_url,
+            headers=student_headers,
+        ).json()
+        assert historical_student_state["quiz_title"] == quiz["title"]
+        assert historical_student_state["source_language"] == "en"
+        assert historical_student_state["allow_previous_questions"] is True
         assert (
             client.get("/api/quizzes/sessions/results", headers=headers).status_code
             == 403
@@ -1855,7 +1886,14 @@ def test_existing_quiz_sessions_gain_class_and_student_links(
             row[1] for row in database.execute("PRAGMA table_info(quiz_participants)")
         }
     assert "class_id" in session_columns
-    assert {"paused_at", "paused_duration_seconds"}.issubset(session_columns)
+    assert {
+        "paused_at",
+        "paused_duration_seconds",
+        "quiz_title",
+        "source_language",
+        "duration_seconds",
+        "allow_previous_questions",
+    }.issubset(session_columns)
     assert {"student_id", "student_display_name"}.issubset(participant_columns)
 
 

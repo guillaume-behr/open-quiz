@@ -144,6 +144,30 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "paused_duration_seconds INTEGER NOT NULL DEFAULT 0"
                 )
             )
+        for column_name, definition, quiz_column in (
+            ("quiz_title", "VARCHAR(160)", "title"),
+            ("source_language", "VARCHAR(35)", "source_language"),
+            ("duration_seconds", "INTEGER", "duration_seconds"),
+            (
+                "allow_previous_questions",
+                "BOOLEAN",
+                "allow_previous_questions",
+            ),
+        ):
+            if column_name not in quiz_session_columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE quiz_sessions "
+                        f"ADD COLUMN {column_name} {definition}"
+                    )
+                )
+                connection.execute(
+                    text(
+                        f"UPDATE quiz_sessions SET {column_name} = "
+                        f"(SELECT {quiz_column} FROM quizzes "
+                        "WHERE quizzes.id = quiz_sessions.quiz_id)"
+                    )
+                )
         if "points" not in choice_columns:
             connection.execute(
                 text(

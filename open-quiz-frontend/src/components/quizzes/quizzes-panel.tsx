@@ -29,7 +29,7 @@ import {
     SessionActionDialog,
 } from "@/components/quizzes/quiz-secondary-dialogs"
 import { QuizzesList } from "@/components/quizzes/quizzes-list"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 type QuizzesPanelProps = {
@@ -144,8 +144,11 @@ export function QuizzesPanel({
     >(null)
     const [quizFilter, setQuizFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
+    const sessionRequestVersion = useRef(0)
+    const previewRequestVersion = useRef(0)
     const activeSessionId = activeSession?.id
     const activeSessionStatus = activeSession?.status
+    const isSessionMutating = isStarting || sessionAction !== null
 
     useEffect(() => {
         let isActive = true
@@ -196,16 +199,25 @@ export function QuizzesPanel({
     useEffect(() => {
         if (
             !activeSessionId ||
+            isSessionMutating ||
             !["waiting", "in_progress", "paused"].includes(
                 activeSessionStatus ?? ""
             )
         )
             return
         let isActive = true
+        let refreshInFlight = false
         const refresh = () => {
+            if (refreshInFlight) return
+            refreshInFlight = true
+            const requestVersion = sessionRequestVersion.current
             void getQuizSession(activeSessionId)
                 .then((session) => {
-                    if (!isActive) return
+                    if (
+                        !isActive ||
+                        requestVersion !== sessionRequestVersion.current
+                    )
+                        return
                     setActiveSessionError(null)
                     setActiveSession(session)
                     setSessions((current) =>
@@ -215,9 +227,15 @@ export function QuizzesPanel({
                     )
                 })
                 .catch(() => {
-                    if (isActive) {
+                    if (
+                        isActive &&
+                        requestVersion === sessionRequestVersion.current
+                    ) {
                         setActiveSessionError(t("quiz-session-refresh-error"))
                     }
+                })
+                .finally(() => {
+                    refreshInFlight = false
                 })
         }
         const interval = window.setInterval(refresh, 1500)
@@ -225,7 +243,7 @@ export function QuizzesPanel({
             isActive = false
             window.clearInterval(interval)
         }
-    }, [activeSessionId, activeSessionStatus, t])
+    }, [activeSessionId, activeSessionStatus, isSessionMutating, t])
 
     const percentageTotal =
         percentages.easy + percentages.medium + percentages.hard
@@ -329,17 +347,28 @@ export function QuizzesPanel({
     }
 
     async function openPreview(quiz: Quiz): Promise<void> {
+        const requestVersion = ++previewRequestVersion.current
         setPreviewedQuiz(quiz)
         setPreviewQuestions([])
         setPreviewError(null)
         setIsPreviewLoading(true)
         try {
-            setPreviewQuestions(await previewQuiz(quiz.id))
+            const questions = await previewQuiz(quiz.id)
+            if (requestVersion === previewRequestVersion.current)
+                setPreviewQuestions(questions)
         } catch {
-            setPreviewError(t("quiz-preview-error"))
+            if (requestVersion === previewRequestVersion.current)
+                setPreviewError(t("quiz-preview-error"))
         } finally {
-            setIsPreviewLoading(false)
+            if (requestVersion === previewRequestVersion.current)
+                setIsPreviewLoading(false)
         }
+    }
+
+    function closePreview(): void {
+        previewRequestVersion.current += 1
+        setPreviewedQuiz(null)
+        setIsPreviewLoading(false)
     }
 
     async function handleLaunch(event: FormEvent<HTMLFormElement>) {
@@ -356,6 +385,7 @@ export function QuizzesPanel({
             setQuizToLaunch(null)
             setSelectedClassId("")
             setActiveSessionError(null)
+            sessionRequestVersion.current += 1
             setActiveSession(session)
         } catch {
             setLaunchError(t("quiz-launch-error"))
@@ -368,6 +398,7 @@ export function QuizzesPanel({
         if (!activeSession) return
         setActiveSessionError(null)
         setIsStarting(true)
+        sessionRequestVersion.current += 1
         try {
             const started = await startQuizSession(activeSession.id)
             setActiveSession(started)
@@ -398,6 +429,7 @@ export function QuizzesPanel({
         if (!activeSession) return
         setActiveSessionError(null)
         setSessionAction(action)
+        sessionRequestVersion.current += 1
         try {
             const updated =
                 action === "pause"
@@ -418,6 +450,7 @@ export function QuizzesPanel({
         if (!activeSession) return
         setActiveSessionError(null)
         setSessionAction("delete")
+        sessionRequestVersion.current += 1
         try {
             await deleteQuizSession(activeSession.id)
             setSessions((current) =>
@@ -499,7 +532,7 @@ export function QuizzesPanel({
                 questions={previewQuestions}
                 isLoading={isPreviewLoading}
                 error={previewError}
-                onClose={() => setPreviewedQuiz(null)}
+                onClose={closePreview}
                 onRefresh={(quiz) => void openPreview(quiz)}
             />
 
@@ -520,6 +553,7 @@ export function QuizzesPanel({
                 isStarting={isStarting}
                 action={sessionAction}
                 onClose={() => {
+                    sessionRequestVersion.current += 1
                     setActiveSession(null)
                     setActiveSessionError(null)
                 }}
