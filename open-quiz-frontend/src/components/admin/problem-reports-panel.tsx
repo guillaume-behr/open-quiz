@@ -74,7 +74,10 @@ export function ProblemReportsPanel({
                     {error}
                 </p>
             )}
-            <div className="grid gap-4">
+            <div
+                key={reports.map((report) => report.id).join(",")}
+                className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+            >
                 {reports.map((report) => (
                     <article
                         key={report.id}

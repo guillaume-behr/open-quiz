@@ -78,7 +78,12 @@ export function StudentClassesList({
                 </p>
             ) : (
                 <div>
-                    <div className="grid gap-4 lg:grid-cols-2">
+                    <div
+                        key={filteredClasses
+                            .map((studentClass) => studentClass.id)
+                            .join(",")}
+                        className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                    >
                         {filteredClasses.map((studentClass) => (
                             <ClassCard
                                 key={studentClass.id}

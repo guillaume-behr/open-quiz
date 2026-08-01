@@ -270,7 +270,10 @@ export function ResultsPanel() {
                     </div>
                 ) : (
                     <div>
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        <div
+                            key={results.map((result) => result.id).join(",")}
+                            className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none md:grid-cols-2 xl:grid-cols-3"
+                        >
                             {results.map((result) => (
                                 <article
                                     key={result.id}

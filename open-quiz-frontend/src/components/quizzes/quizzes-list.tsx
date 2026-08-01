@@ -121,7 +121,12 @@ export function QuizzesList({
                         </p>
                     ) : (
                         <div>
-                            <ul className="grid gap-4 lg:grid-cols-2">
+                            <ul
+                                key={filteredQuizzes
+                                    .map((quiz) => quiz.id)
+                                    .join(",")}
+                                className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                            >
                                 {filteredQuizzes.map((quiz) => (
                                     <QuizCard
                                         key={quiz.id}

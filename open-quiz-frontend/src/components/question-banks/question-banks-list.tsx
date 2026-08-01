@@ -240,7 +240,10 @@ function BanksContent({
 
     return (
         <>
-            <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+            <ul
+                key={filteredBanks.map((bank) => bank.id).join(",")}
+                className="mt-3 grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:grid-cols-2"
+            >
                 {filteredBanks.map((bank) => (
                     <li
                         key={bank.id}

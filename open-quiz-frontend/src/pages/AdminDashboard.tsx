@@ -412,7 +412,10 @@ export function AdminDashboard() {
                                 </div>
                             </div>
 
-                            <div className="divide-y">
+                            <div
+                                key={usersPage}
+                                className="animate-in divide-y duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+                            >
                                 {users.map((user) => (
                                     <div
                                         key={user.id}
