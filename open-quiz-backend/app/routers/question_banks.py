@@ -1,6 +1,7 @@
 import json
 from base64 import b64decode, b64encode
 from binascii import Error as Base64Error
+from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import (
@@ -9,10 +10,12 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
 )
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -36,6 +39,7 @@ from app.models import (
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import (
+    MAX_QUESTIONS_PER_BANK,
     QuestionBankCreate,
     QuestionBankResponse,
     QuestionBatchImport,
@@ -48,6 +52,7 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
+MAX_IMPORT_IMAGE_BYTES = 64 * 1024 * 1024
 
 
 def downloadable_json(content: object, filename: str) -> Response:
@@ -484,88 +489,97 @@ def download_import_example(_: ProfessorUser) -> Response:
 @router.get("/{question_bank_id}/export")
 def export_questions(
     question_bank_id: int,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> Response:
     """Export every question in a bank as a versioned JSON document."""
     question_bank = owned_question_bank(question_bank_id, professor, session)
-    questions = list(
-        session.scalars(
-            select(Question)
-            .where(Question.question_bank_id == question_bank_id)
-            .order_by(Question.created_at, Question.id)
+    bank_id = question_bank.id
+    grade_level = question_bank.grade_level
+    chapter = question_bank.chapter
+    session_factory = request.app.state.session_factory
+
+    def stream_export() -> Iterator[str]:
+        yield '{\n  "version": 1,\n  "question_bank": '
+        yield json.dumps(
+            {"grade_level": grade_level, "chapter": chapter},
+            ensure_ascii=False,
+            indent=2,
         )
-    )
-    question_ids = [question.id for question in questions]
-    choices_by_question: dict[int, list[QuestionChoice]] = {
-        question_id: [] for question_id in question_ids
-    }
-    codes_by_question: dict[int, QuestionCode] = {}
-    if question_ids:
-        for choice in session.scalars(
-            select(QuestionChoice)
-            .where(QuestionChoice.question_id.in_(question_ids))
-            .order_by(QuestionChoice.question_id, QuestionChoice.position)
-        ):
-            choices_by_question[choice.question_id].append(choice)
-        codes_by_question = {
-            code.question_id: code
-            for code in session.scalars(
-                select(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
+        yield ',\n  "questions": ['
+        first = True
+        with session_factory() as export_session:
+            questions = export_session.scalars(
+                select(Question)
+                .where(Question.question_bank_id == bank_id)
+                .order_by(Question.created_at, Question.id)
             )
-        }
-    exported_questions = []
-    for question in questions:
-        code = codes_by_question.get(question.id)
-        exported_questions.append(
-            {
-                "prompt": question.prompt,
-                "difficulty": question.difficulty,
-                "answer_mode": question.answer_mode,
-                "answer_mode_disclosed": question.answer_mode_disclosed,
-                "response_language": question.response_language,
-                "choices": [
-                    {
-                        "label": choice.label,
-                        "is_correct": choice.is_correct,
-                        "points": choice.points,
-                        "image": (
-                            {
-                                "content_type": choice.image_content_type,
-                                "data_base64": b64encode(choice.image_data).decode(),
-                            }
-                            if choice.image_data is not None
-                            and choice.image_content_type is not None
-                            else None
-                        ),
-                        "code_language": choice.code_language,
-                        "code_content": choice.code_content,
-                    }
-                    for choice in choices_by_question[question.id]
-                ],
-                "code_language": code.language if code else None,
-                "code_content": code.content if code else None,
-                "image": (
-                    {
-                        "content_type": question.image_content_type,
-                        "data_base64": b64encode(question.image_data).decode(),
-                    }
-                    if question.image_data is not None
-                    and question.image_content_type is not None
-                    else None
-                ),
-            }
-        )
-    return downloadable_json(
-        {
-            "version": 1,
-            "question_bank": {
-                "grade_level": question_bank.grade_level,
-                "chapter": question_bank.chapter,
-            },
-            "questions": exported_questions,
+            for question in questions:
+                choices = list(
+                    export_session.scalars(
+                        select(QuestionChoice)
+                        .where(QuestionChoice.question_id == question.id)
+                        .order_by(QuestionChoice.position)
+                    )
+                )
+                code = export_session.scalar(
+                    select(QuestionCode).where(QuestionCode.question_id == question.id)
+                )
+                exported_question = {
+                    "prompt": question.prompt,
+                    "difficulty": question.difficulty,
+                    "answer_mode": question.answer_mode,
+                    "answer_mode_disclosed": question.answer_mode_disclosed,
+                    "response_language": question.response_language,
+                    "choices": [
+                        {
+                            "label": choice.label,
+                            "is_correct": choice.is_correct,
+                            "points": choice.points,
+                            "image": (
+                                {
+                                    "content_type": choice.image_content_type,
+                                    "data_base64": b64encode(
+                                        choice.image_data
+                                    ).decode(),
+                                }
+                                if choice.image_data is not None
+                                and choice.image_content_type is not None
+                                else None
+                            ),
+                            "code_language": choice.code_language,
+                            "code_content": choice.code_content,
+                        }
+                        for choice in choices
+                    ],
+                    "code_language": code.language if code else None,
+                    "code_content": code.content if code else None,
+                    "image": (
+                        {
+                            "content_type": question.image_content_type,
+                            "data_base64": b64encode(question.image_data).decode(),
+                        }
+                        if question.image_data is not None
+                        and question.image_content_type is not None
+                        else None
+                    ),
+                }
+                yield (",\n" if not first else "\n") + json.dumps(
+                    exported_question,
+                    ensure_ascii=False,
+                    indent=4,
+                )
+                first = False
+                export_session.expunge_all()
+        yield "\n  ]\n}\n"
+
+    return StreamingResponse(
+        stream_export(),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="question-bank-{bank_id}.json"'
         },
-        f"question-bank-{question_bank.id}.json",
     )
 
 
@@ -612,11 +626,24 @@ def import_question_bank(
     session: DbSession,
 ) -> QuestionBatchImportResponse:
     """Create a bank from a JSON batch and atomically import its questions."""
-    decoded_images = [decode_import_image(question) for question in payload.questions]
-    decoded_choice_images = [
-        [decode_image_payload(choice.image) for choice in question.choices]
-        for question in payload.questions
-    ]
+    decoded_images: list[tuple[bytes | None, str | None]] = []
+    decoded_choice_images: list[list[tuple[bytes | None, str | None]]] = []
+    total_image_bytes = 0
+    for question in payload.questions:
+        decoded_image = decode_import_image(question)
+        choice_images = [
+            decode_image_payload(choice.image) for choice in question.choices
+        ]
+        total_image_bytes += len(decoded_image[0] or b"") + sum(
+            len(choice_image[0] or b"") for choice_image in choice_images
+        )
+        if total_image_bytes > MAX_IMPORT_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Le volume total des images importées est trop important",
+            )
+        decoded_images.append(decoded_image)
+        decoded_choice_images.append(choice_images)
     question_bank = QuestionBank(
         owner_id=professor.id,
         grade_level=payload.question_bank.grade_level,
@@ -690,6 +717,16 @@ async def create_question(
 ) -> QuestionResponse:
     """Create a choice question, optionally with a private image."""
     owned_question_bank(question_bank_id, professor, session)
+    question_count = session.scalar(
+        select(func.count())
+        .select_from(Question)
+        .where(Question.question_bank_id == question_bank_id)
+    )
+    if (question_count or 0) >= MAX_QUESTIONS_PER_BANK:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cette banque a atteint le nombre maximal de questions",
+        )
     try:
         question_payload = QuestionCreate.model_validate(json.loads(payload))
     except json.JSONDecodeError, ValidationError:
@@ -726,12 +763,25 @@ async def create_question(
                     detail=str(error),
                 ) from None
 
+    choice_images = [
+        decode_image_payload(choice.image) for choice in question_payload.choices
+    ]
+    if (
+        len(image_data or b"")
+        + sum(len(choice_image[0] or b"") for choice_image in choice_images)
+        > MAX_IMPORT_IMAGE_BYTES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Le volume total des images de la question est trop important",
+        )
     question, choices, code = add_question(
         question_bank_id,
         question_payload,
         session,
         image_data=image_data,
         image_content_type=image_content_type,
+        choice_images=choice_images,
     )
     session.commit()
     session.refresh(question)
@@ -847,6 +897,26 @@ async def update_question(
             new_image_data = existing_choice.image_data
             new_image_content_type = existing_choice.image_content_type
         replacement_choice_images.append((new_image_data, new_image_content_type))
+
+    retained_question_image = (
+        image_data
+        if image_data
+        else None
+        if question_payload.remove_image
+        else question.image_data
+    )
+    if (
+        len(retained_question_image or b"")
+        + sum(
+            len(choice_image_data or b"")
+            for choice_image_data, _ in replacement_choice_images
+        )
+        > MAX_IMPORT_IMAGE_BYTES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Le volume total des images de la question est trop important",
+        )
 
     session.execute(delete(QuestionCode).where(QuestionCode.question_id == question.id))
     choices = []

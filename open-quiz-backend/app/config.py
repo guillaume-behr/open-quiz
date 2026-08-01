@@ -6,6 +6,17 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+ENV_FILE = BASE_DIR / ".env"
+
+
+def secure_private_file(path: Path) -> None:
+    """Restrict a local secret file to its owner on POSIX systems."""
+    if os.name != "posix" or not path.exists():
+        return
+    try:
+        path.chmod(0o600)
+    except OSError as error:
+        raise RuntimeError(f"Unable to secure private file {path}") from error
 
 
 def reject_predictable_secret(
@@ -145,12 +156,13 @@ class Settings:
 def required_environment(name: str) -> str:
     value = os.getenv(name)
     if not value:
-        raise RuntimeError(f"{name} must be set in {BASE_DIR / '.env'}")
+        raise RuntimeError(f"{name} must be set in {ENV_FILE}")
     return value
 
 
 def get_settings() -> Settings:
-    load_dotenv(BASE_DIR / ".env")
+    secure_private_file(ENV_FILE)
+    load_dotenv(ENV_FILE)
     return Settings(
         database_url=os.getenv(
             "DATABASE_URL", f"sqlite:///{(BASE_DIR / 'open-quiz.db').as_posix()}"

@@ -1,11 +1,13 @@
 const EXECUTION_TIMEOUT_MS = 10_000
 const INITIALIZATION_TIMEOUT_MS = 60_000
+const MAX_SOURCE_CHARACTERS = 20_000
 
 type RunResponse = {
     id: number
     started?: boolean
     output?: string
     error?: string
+    fatal?: boolean
 }
 
 type PendingExecution = {
@@ -45,7 +47,9 @@ function getWorker(): Worker {
         }
         pendingExecutions.delete(event.data.id)
         if (event.data.error !== undefined) {
-            execution.reject(new Error(event.data.error))
+            const error = new Error(event.data.error)
+            execution.reject(error)
+            if (event.data.fatal) stopWorker(error)
         } else {
             execution.resolve(event.data.output ?? "")
         }
@@ -57,6 +61,11 @@ function getWorker(): Worker {
 }
 
 export function runPython(source: string): Promise<string> {
+    if (source.length > MAX_SOURCE_CHARACTERS) {
+        return Promise.reject(
+            new Error("Python source exceeded 20,000 characters.")
+        )
+    }
     const id = nextExecutionId++
     return new Promise((resolve, reject) => {
         const timeout = window.setTimeout(() => {

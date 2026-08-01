@@ -357,7 +357,7 @@ export function AdminDashboard() {
                                         name="password"
                                         type="password"
                                         required
-                                        minLength={12}
+                                        minLength={16}
                                         maxLength={256}
                                         autoComplete="new-password"
                                     />
@@ -524,7 +524,7 @@ export function AdminDashboard() {
                                     name="password"
                                     type="password"
                                     required
-                                    minLength={12}
+                                    minLength={16}
                                     maxLength={256}
                                     autoComplete="new-password"
                                 />

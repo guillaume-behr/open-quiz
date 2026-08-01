@@ -17,7 +17,6 @@ from app.models import (
     TwoFactorCredential,
     User,
 )
-from app.requests import client_ip
 from app.schemas import (
     LoginRequest,
     LoginResponse,
@@ -67,7 +66,6 @@ def validate_origin(request: Request) -> None:
     if not is_allowed:
         audit_event(
             "auth.origin_rejected",
-            ip=client_ip(request),
             origin=origin or "<missing>",
         )
         raise HTTPException(
@@ -93,9 +91,12 @@ def set_refresh_cookie(
     )
 
 
-def authentication_rate_subject(user: User | None, stage: str) -> str:
-    identity = f"user:{user.id}" if user is not None else "unknown-user"
-    return f"{stage}:{identity}"
+def password_rate_subject(username: str) -> str:
+    return f"password:identity:{username}"
+
+
+def two_factor_rate_subject(user_id: int) -> str:
+    return f"two-factor:user:{user_id}"
 
 
 def validate_refresh_proof(request: Request, raw_token: str | None) -> bool:
@@ -246,49 +247,29 @@ def login(
 ) -> LoginResponse:
     """Verify a password and begin 2FA setup or verification."""
     validate_origin(request)
-    ip_address = client_ip(request)
     limiter = request.app.state.login_rate_limiter
+    rate_subject = password_rate_subject(payload.username)
     user = session.scalar(select(User).where(User.username == payload.username))
-    if user is None:
-        retry_after = limiter.reserve(
-            session,
-            authentication_rate_subject(None, "password"),
+    retry_after = limiter.reserve(session, rate_subject)
+    if retry_after:
+        audit_event("auth.login_rate_limited")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Trop de tentatives de connexion",
+            headers={"Retry-After": str(retry_after)},
         )
-        if retry_after:
-            audit_event("auth.login_rate_limited", ip=ip_address)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Trop de tentatives de connexion",
-                headers={"Retry-After": str(retry_after)},
-            )
     encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_valid = verify_password(payload.password, encoded_password)
     if user is None or not user.is_active or not password_valid:
-        retry_after = (
-            0
-            if user is None
-            else limiter.reserve(
-                session,
-                authentication_rate_subject(user, "password"),
-            )
-        )
-        if retry_after:
-            audit_event("auth.login_rate_limited", ip=ip_address)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Trop de tentatives de connexion",
-                headers={"Retry-After": str(retry_after)},
-            )
-        audit_event("auth.login_failed", ip=ip_address)
+        audit_event("auth.login_failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiant ou mot de passe incorrect",
         )
-    limiter.clear_subject(session, authentication_rate_subject(user, "password"))
+    limiter.clear_subject(session, rate_subject)
     if payload.audience == "professor" and user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
-            ip=ip_address,
             user_id=user.id,
             audience=payload.audience,
         )
@@ -299,7 +280,6 @@ def login(
     if payload.audience == "admin" and not user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
-            ip=ip_address,
             user_id=user.id,
             audience=payload.audience,
         )
@@ -331,7 +311,7 @@ def login(
             session,
         )
         session.commit()
-        audit_event("auth.two_factor_setup_started", ip=ip_address, user_id=user.id)
+        audit_event("auth.two_factor_setup_started", user_id=user.id)
         return LoginResponse(
             status="setup_required",
             challenge_token=challenge_token,
@@ -339,7 +319,7 @@ def login(
             provisioning_uri=provisioning_uri(secret, user.username),
         )
 
-    audit_event("auth.two_factor_challenge_started", ip=ip_address, user_id=user.id)
+    audit_event("auth.two_factor_challenge_started", user_id=user.id)
     challenge_token = issue_two_factor_challenge(
         user.id,
         "two_factor_verification",
@@ -362,7 +342,6 @@ def verify_two_factor(
 ) -> TokenResponse:
     """Complete 2FA setup or verify a login challenge."""
     validate_origin(request)
-    ip_address = client_ip(request)
     settings = request.app.state.settings
     try:
         user_id, purpose, token_id_hash = decode_two_factor_token(
@@ -401,10 +380,10 @@ def verify_two_factor(
         )
 
     limiter = request.app.state.login_rate_limiter
-    rate_subject = authentication_rate_subject(user, "two-factor")
+    rate_subject = two_factor_rate_subject(user.id)
     retry_after = limiter.reserve(session, rate_subject)
     if retry_after:
-        audit_event("auth.two_factor_rate_limited", ip=ip_address, user_id=user.id)
+        audit_event("auth.two_factor_rate_limited", user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Trop de tentatives de vérification",
@@ -429,7 +408,7 @@ def verify_two_factor(
         two_factor.last_counter,
     )
     if matched_counter is None:
-        audit_event("auth.two_factor_failed", ip=ip_address, user_id=user.id)
+        audit_event("auth.two_factor_failed", user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Code d’authentification incorrect",
@@ -470,7 +449,7 @@ def verify_two_factor(
         )
     limiter.release(session, rate_subject)
     limiter.clear_subject(session, rate_subject)
-    audit_event("auth.two_factor_succeeded", ip=ip_address, user_id=user.id)
+    audit_event("auth.two_factor_succeeded", user_id=user.id)
     return issue_session(user, request, response, session)
 
 
@@ -489,7 +468,7 @@ def refresh(
             detail="Session de connexion invalide",
         )
     if not validate_refresh_proof(request, raw_token):
-        audit_event("auth.refresh_proof_rejected", ip=client_ip(request))
+        audit_event("auth.refresh_proof_rejected")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Preuve de session invalide",
@@ -501,7 +480,7 @@ def refresh(
     )
     now = int(time())
     if stored_session is None or stored_session.expires_at <= now:
-        audit_event("auth.refresh_rejected", ip=client_ip(request))
+        audit_event("auth.refresh_rejected")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session de connexion invalide",
@@ -510,7 +489,6 @@ def refresh(
         family_revoked = revoke_refresh_family(session, stored_session.id, now)
         audit_event(
             "auth.refresh_reuse_detected",
-            ip=client_ip(request),
             user_id=stored_session.user_id,
             family_revoked=family_revoked,
         )
@@ -540,7 +518,6 @@ def refresh(
         family_revoked = revoke_refresh_family(session, stored_session.id, now)
         audit_event(
             "auth.refresh_reuse_detected",
-            ip=client_ip(request),
             user_id=stored_session.user_id,
             family_revoked=family_revoked,
         )
@@ -571,7 +548,7 @@ def refresh(
             detail="Session de connexion invalide",
         )
 
-    audit_event("auth.refresh_succeeded", ip=client_ip(request), user_id=user.id)
+    audit_event("auth.refresh_succeeded", user_id=user.id)
     return issue_session(
         user,
         request,
@@ -594,7 +571,7 @@ def logout(
     raw_token = request.cookies.get(REFRESH_COOKIE)
     if raw_token:
         if not validate_refresh_proof(request, raw_token):
-            audit_event("auth.logout_proof_rejected", ip=client_ip(request))
+            audit_event("auth.logout_proof_rejected")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Preuve de session invalide",
@@ -609,4 +586,4 @@ def logout(
         )
         session.commit()
     response.delete_cookie(REFRESH_COOKIE, path="/api/auth")
-    audit_event("auth.logout", ip=client_ip(request))
+    audit_event("auth.logout")

@@ -10,6 +10,7 @@ type RunResponse = {
     started?: boolean
     output?: string
     error?: string
+    fatal?: boolean
 }
 
 type PythonRuntime = {
@@ -23,8 +24,11 @@ type PyodideModule = {
 }
 
 const PYODIDE_MODULE_URL = "/pyodide/pyodide.asm.mjs"
+const MAX_OUTPUT_CHARACTERS = 1_000_000
 let runtimePromise: Promise<PythonRuntime> | undefined
 let networkDisabled = false
+
+class OutputLimitError extends Error {}
 
 function denyNetworkAccess(): never {
     throw new Error("Network access is disabled for Python execution.")
@@ -71,16 +75,28 @@ function runtime(): Promise<PythonRuntime> {
 
 self.onmessage = async (event: MessageEvent<RunRequest>) => {
     const { id, source } = event.data
+    let outputLimitExceeded = false
     try {
         const python = await runtime()
         disableNetworkAccess()
         self.postMessage({ id, started: true } satisfies RunResponse)
         const lines: string[] = []
-        python.setStdout({ batched: (line) => lines.push(line) })
-        python.setStderr({ batched: (line) => lines.push(line) })
+        let outputCharacters = 0
+        const appendOutput = (line: string) => {
+            outputCharacters += line.length + (lines.length ? 1 : 0)
+            if (outputCharacters > MAX_OUTPUT_CHARACTERS) {
+                outputLimitExceeded = true
+                throw new OutputLimitError(
+                    "Python output exceeded 1,000,000 characters."
+                )
+            }
+            lines.push(line)
+        }
+        python.setStdout({ batched: appendOutput })
+        python.setStderr({ batched: appendOutput })
         const value = await python.runPythonAsync(source)
         if (value !== undefined) {
-            lines.push(String(value))
+            appendOutput(String(value))
             if (typeof value === "object" && value !== null) {
                 const disposable = value as { destroy?: unknown }
                 if (typeof disposable.destroy === "function") {
@@ -90,9 +106,12 @@ self.onmessage = async (event: MessageEvent<RunRequest>) => {
         }
         self.postMessage({ id, output: lines.join("\n") } satisfies RunResponse)
     } catch (error) {
+        const fatal = outputLimitExceeded || error instanceof OutputLimitError
         self.postMessage({
             id,
             error: error instanceof Error ? error.message : String(error),
+            fatal,
         } satisfies RunResponse)
+        if (fatal) self.close()
     }
 }

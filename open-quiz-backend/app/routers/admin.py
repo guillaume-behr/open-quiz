@@ -79,7 +79,6 @@ def list_users(
 )
 def create_user(
     payload: UserCreate,
-    request: Request,
     admin_user: AdminUser,
     session: DbSession,
 ) -> User:
@@ -103,7 +102,6 @@ def create_user(
         "admin.user_created",
         actor_id=admin_user.id,
         created_user_id=user.id,
-        ip=request.client.host if request.client else "unknown",
     )
     return user
 
@@ -115,7 +113,6 @@ def create_user(
 def update_user_status(
     user_id: int,
     payload: UserStatusUpdate,
-    request: Request,
     admin_user: AdminUser,
     session: DbSession,
 ) -> User:
@@ -131,7 +128,6 @@ def update_user_status(
         actor_id=admin_user.id,
         user_id=user.id,
         is_active=user.is_active,
-        ip=request.client.host if request.client else "unknown",
     )
     return user
 
@@ -157,7 +153,7 @@ def reset_user_credentials(
         )
     session.commit()
     limiter = request.app.state.login_rate_limiter
-    limiter.clear_subject(session, f"password:user:{user.id}")
+    limiter.clear_subject(session, f"password:identity:{user.username}")
     limiter.clear_subject(session, f"two-factor:user:{user.id}")
     session.refresh(user)
     audit_event(
@@ -165,6 +161,5 @@ def reset_user_credentials(
         actor_id=admin_user.id,
         user_id=user.id,
         reset_two_factor=payload.reset_two_factor,
-        ip=request.client.host if request.client else "unknown",
     )
     return user

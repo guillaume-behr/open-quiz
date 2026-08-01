@@ -11,6 +11,8 @@ from app.models import LoginRateLimit
 class LoginRateLimiter:
     """Database-backed authentication limiter shared by all API workers."""
 
+    BUCKET_HEX_CHARACTERS = 4
+
     def __init__(
         self,
         account_limit: int,
@@ -31,6 +33,12 @@ class LoginRateLimiter:
         """
         now = int(time())
         cutoff = now - self.window_seconds
+        session.execute(
+            delete(LoginRateLimit).where(
+                LoginRateLimit.limiter_key.like("account:%"),
+                LoginRateLimit.window_started_at <= cutoff,
+            )
+        )
         expired = LoginRateLimit.window_started_at <= cutoff
         statement = (
             insert(LoginRateLimit)
@@ -95,7 +103,12 @@ class LoginRateLimiter:
 
     @staticmethod
     def _account_key(subject: str) -> str:
-        digest = sha256(subject.encode()).hexdigest()
+        # Bound attacker-controlled identifiers to a fixed number of buckets.
+        # Existing and unknown accounts use the same identifier mapping, so
+        # throttling does not disclose whether an account exists.
+        digest = sha256(subject.encode()).hexdigest()[
+            : LoginRateLimiter.BUCKET_HEX_CHARACTERS
+        ]
         return f"account:{digest}"
 
 

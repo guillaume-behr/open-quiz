@@ -1,8 +1,10 @@
 import asyncio
 import json
+import os
 import sqlite3
 from base64 import b64decode, b64encode
 from concurrent.futures import ThreadPoolExecutor
+from importlib.util import find_spec
 from pathlib import Path
 from threading import Barrier
 from time import sleep, time
@@ -13,10 +15,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.config import Settings
+from app.config import Settings, secure_private_file
 from app.middleware import RequestBodyLimitMiddleware
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
-from app.schemas import StudentQuizAnswer
+from app.schemas import QuestionBatchImport, StudentQuizAnswer
 from app.security import refresh_request_proof
 from main import create_app
 from scripts.reset_two_factor import reset
@@ -29,6 +31,7 @@ VALID_PNG = b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
     "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
 )
+TEST_CLIENT_BACKEND_OPTIONS = {"use_uvloop": True} if find_spec("uvloop") else {}
 
 
 def settings_for(database: Path, **overrides: Any) -> Settings:
@@ -50,6 +53,7 @@ def make_client(settings: Settings) -> TestClient:
     return TestClient(
         create_app(settings),
         headers={"Origin": FRONTEND_ORIGIN},
+        backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     )
 
 
@@ -62,12 +66,44 @@ def refresh_headers(client: TestClient, secret: str = JWT_SECRET) -> dict[str, s
 
 
 def test_health_checks_database_readiness(tmp_path: Path) -> None:
-    with make_client(settings_for(tmp_path / "health.db")) as client:
+    database = tmp_path / "health.db"
+    with make_client(settings_for(database)) as client:
         response = client.get("/api/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert response.headers["cache-control"] == "no-store"
+    if os.name == "posix":
+        assert database.stat().st_mode & 0o077 == 0
+
+
+def test_private_file_permissions_are_restricted(tmp_path: Path) -> None:
+    private_file = tmp_path / ".env"
+    private_file.write_text("SECRET=value\n", encoding="utf-8")
+    private_file.chmod(0o644)
+
+    secure_private_file(private_file)
+
+    if os.name == "posix":
+        assert private_file.stat().st_mode & 0o077 == 0
+
+
+def test_question_batch_import_has_a_fixed_question_limit() -> None:
+    question = {
+        "prompt": "Question",
+        "difficulty": "easy",
+        "answer_mode": "single",
+        "choices": [{"label": "Answer", "is_correct": True}],
+    }
+
+    with pytest.raises(ValidationError):
+        QuestionBatchImport.model_validate(
+            {
+                "version": 1,
+                "question_bank": {"grade_level": "2de", "chapter": "Limits"},
+                "questions": [question] * 501,
+            }
+        )
 
 
 def test_public_information_describes_instance_settings(tmp_path: Path) -> None:
@@ -333,6 +369,17 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert created.json()["username"] == "teacher.one"
         assert created.json()["is_admin"] is False
         assert "password" not in created.json()
+
+        predictable_password = client.post(
+            "/api/admin/users",
+            headers=headers,
+            json={
+                "username": "teacher.weak",
+                "display_name": "Teacher Weak",
+                "password": "a" * 16,
+            },
+        )
+        assert predictable_password.status_code == 422
 
         duplicate = client.post(
             "/api/admin/users",
@@ -959,6 +1006,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "hard",
         }
 
+        late_student = client.post(
+            f"/api/classes/{student_class['id']}/students",
+            headers=teacher_headers,
+            json={"display_name": "Late Student"},
+        )
+        assert late_student.status_code == 201
+
         launched = client.post(
             f"/api/quizzes/{quiz['id']}/launch",
             headers=teacher_headers,
@@ -1091,6 +1145,15 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert started.json()["status"] == "in_progress"
         assert started.json()["started_at"] is not None
         assert started.json()["ends_at"] is not None
+        late_join = client.post(
+            "/api/quizzes/join",
+            json={
+                "join_code": quiz_session["join_code"],
+                "student_identifier": late_student.json()["identifier"],
+            },
+        )
+        assert late_join.status_code == 403
+        assert late_join.json()["detail"] == "Impossible de rejoindre ce quiz"
         original_ends_at = started.json()["ends_at"]
         paused = client.post(
             f"/api/quizzes/sessions/{quiz_session['id']}/pause",
@@ -2005,6 +2068,11 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
         )
         assert limited.status_code == 429
         assert int(limited.headers["retry-after"]) > 0
+        other_unknown = client.post(
+            "/api/auth/login",
+            json={"username": "another-unknown", "password": "incorrect-password"},
+        )
+        assert other_unknown.status_code == 401
         other_account = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -2021,7 +2089,7 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
         )
-        assert correct_credentials.status_code == 200
+        assert correct_credentials.status_code == 429
 
     with make_client(app_settings) as client:
         still_limited = client.post(
@@ -2030,7 +2098,10 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
         )
         assert still_limited.status_code == 429
 
-    with TestClient(create_app(settings_for(tmp_path / "origin.db"))) as client:
+    with TestClient(
+        create_app(settings_for(tmp_path / "origin.db")),
+        backend_options=TEST_CLIENT_BACKEND_OPTIONS,
+    ) as client:
         missing = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -2054,6 +2125,7 @@ def test_development_accepts_local_vite_origin_on_another_port(
     with TestClient(
         create_app(app_settings),
         headers={"Origin": "http://localhost:5174"},
+        backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     ) as client:
         accepted = client.post(
             "/api/auth/login",
@@ -2064,6 +2136,7 @@ def test_development_accepts_local_vite_origin_on_another_port(
     with TestClient(
         create_app(app_settings),
         headers={"Origin": "http://attacker.example"},
+        backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     ) as client:
         rejected = client.post(
             "/api/auth/login",
@@ -2360,6 +2433,7 @@ def test_production_redirects_to_https_before_body_authentication(
     with TestClient(
         create_app(app_settings),
         follow_redirects=False,
+        backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     ) as client:
         response = client.post(
             "/api/question-banks/import",

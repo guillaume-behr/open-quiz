@@ -31,7 +31,6 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
-from app.requests import client_ip
 from app.routers.question_banks import question_response
 from app.schemas import (
     QuestionResponse,
@@ -1104,7 +1103,6 @@ def get_quiz_session(
 )
 def delete_quiz_session(
     session_id: int,
-    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
@@ -1122,7 +1120,6 @@ def delete_quiz_session(
         "quiz.session_deleted",
         professor_id=professor.id,
         session_id=session_id,
-        ip=client_ip(request),
     )
 
 

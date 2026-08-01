@@ -3,6 +3,24 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.config import reject_predictable_secret
+
+MAX_QUESTIONS_PER_BANK = 500
+
+
+def validate_teacher_password(value: str) -> str:
+    try:
+        reject_predictable_secret(
+            "PASSWORD",
+            value,
+            minimum_unique_characters=6,
+        )
+    except ValueError:
+        raise ValueError(
+            "Le mot de passe doit être difficile à deviner et ne pas répéter un motif"
+        ) from None
+    return value
+
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
@@ -31,7 +49,9 @@ class TwoFactorVerifyRequest(BaseModel):
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
     display_name: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=12, max_length=256)
+    password: str = Field(min_length=16, max_length=256)
+
+    _validate_password = field_validator("password")(validate_teacher_password)
 
 
 class UserResponse(BaseModel):
@@ -50,8 +70,10 @@ class UserStatusUpdate(BaseModel):
 
 
 class UserCredentialReset(BaseModel):
-    password: str = Field(min_length=12, max_length=256)
+    password: str = Field(min_length=16, max_length=256)
     reset_two_factor: bool = True
+
+    _validate_password = field_validator("password")(validate_teacher_password)
 
 
 class ProblemReportCreate(BaseModel):
@@ -369,7 +391,7 @@ class QuestionImportItem(QuestionCreate):
 class QuestionBatchImport(BaseModel):
     version: Literal[1]
     question_bank: QuestionBankCreate
-    questions: list[QuestionImportItem]
+    questions: list[QuestionImportItem] = Field(max_length=MAX_QUESTIONS_PER_BANK)
 
 
 class QuestionBatchImportResponse(BaseModel):

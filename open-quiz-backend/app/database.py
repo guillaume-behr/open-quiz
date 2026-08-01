@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from sqlalchemy import (
     DateTime,
     Integer,
@@ -9,6 +12,7 @@ from sqlalchemy import (
     inspect,
     text,
 )
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -16,8 +20,35 @@ class Base(DeclarativeBase):
     pass
 
 
+def sqlite_database_path(database_url: str) -> Path | None:
+    url = make_url(database_url)
+    if url.get_backend_name() != "sqlite" or url.database in {None, "", ":memory:"}:
+        return None
+    if url.database.startswith("file:"):
+        return None
+    return Path(url.database).resolve()
+
+
+def secure_sqlite_files(database_path: Path) -> None:
+    if os.name != "posix":
+        return
+    for path in (
+        database_path,
+        Path(f"{database_path}-wal"),
+        Path(f"{database_path}-shm"),
+    ):
+        if path.exists():
+            path.chmod(0o600)
+
+
 def build_session_factory(database_url: str) -> sessionmaker[Session]:
     sqlite = database_url.startswith("sqlite")
+    database_path = sqlite_database_path(database_url)
+    if database_path is not None:
+        if os.name == "posix":
+            os.umask(0o077)
+        database_path.touch(mode=0o600, exist_ok=True)
+        secure_sqlite_files(database_path)
     connect_args = {"check_same_thread": False, "timeout": 30} if sqlite else {}
     engine = create_engine(
         database_url,
@@ -34,6 +65,8 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA synchronous=NORMAL")
             cursor.close()
+            if database_path is not None:
+                secure_sqlite_files(database_path)
 
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
@@ -201,4 +234,6 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                         f"ADD COLUMN {column_name} {compiled_type}{suffix}"
                     )
                 )
+    if database_path is not None:
+        secure_sqlite_files(database_path)
     return sessionmaker(bind=engine, expire_on_commit=False)

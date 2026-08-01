@@ -4,7 +4,7 @@ from time import time
 
 from sqlalchemy import update
 
-from app.config import get_settings
+from app.config import get_settings, secure_private_file
 from app.database import build_session_factory
 from app.models import RefreshSession
 
@@ -33,6 +33,7 @@ def rotate() -> None:
             output.append(f"{name}={value}")
 
     ENV_FILE.write_text("\n".join(output) + "\n", encoding="utf-8")
+    secure_private_file(ENV_FILE)
     settings = get_settings()
     session_factory = build_session_factory(settings.database_url)
     with session_factory() as session:

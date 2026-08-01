@@ -20,6 +20,10 @@ créé au premier démarrage. Son identifiant interne est ensuite enregistré co
 créer un second administrateur. Ses droits, son état et son mot de passe restent
 synchronisés avec `.env`.
 
+Sous Linux et macOS, protégez le fichier avant le premier démarrage avec
+`chmod 600 .env`. L'application réapplique cette permission à `.env` ainsi
+qu'aux fichiers SQLite locaux à chaque démarrage.
+
 ```shell
 uv sync
 uv run fastapi dev main.py

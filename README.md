@@ -60,6 +60,7 @@ les trois valeurs `replace-with-...`.
 
 ```shell
 cd open-quiz-backend
+chmod 600 .env
 uv sync
 uv run fastapi dev main.py
 ```
