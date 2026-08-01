@@ -34,9 +34,11 @@ export function ThemeProvider({
     useEffect(() => {
         const root = window.document.documentElement
         root.classList.remove("light", "dark")
+        root.style.removeProperty("background-color")
 
         if (theme !== "system") {
             root.classList.add(theme)
+            root.style.colorScheme = theme
             return undefined
         }
 
@@ -44,6 +46,7 @@ export function ThemeProvider({
         const applySystemTheme = () => {
             root.classList.toggle("dark", media.matches)
             root.classList.toggle("light", !media.matches)
+            root.style.colorScheme = media.matches ? "dark" : "light"
         }
         applySystemTheme()
         media.addEventListener("change", applySystemTheme)

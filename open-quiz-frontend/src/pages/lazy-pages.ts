@@ -47,3 +47,9 @@ export const ReportProblemPage = lazy(() =>
         default: ReportProblemPage,
     }))
 )
+
+export const NotFoundPage = lazy(() =>
+    import("./NotFoundPage.tsx").then(({ NotFoundPage }) => ({
+        default: NotFoundPage,
+    }))
+)
