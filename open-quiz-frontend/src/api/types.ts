@@ -42,6 +42,8 @@ export type StudentClass = {
     grade_level: string
     student_count: number
     completed_quiz_count: number
+    latest_quiz_title: string | null
+    latest_quiz_at: string | null
     students: Student[]
     created_at: string
 }

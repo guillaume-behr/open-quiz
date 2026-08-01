@@ -341,6 +341,13 @@ export function StudentClassesPanel({
                     setPage(1)
                 }}
                 onManageClass={setManagedClassId}
+                onEditClass={(studentClass) => {
+                    setEditingClass(studentClass)
+                    setClassName(studentClass.name)
+                    setGradeLevel(studentClass.grade_level)
+                    setClassError(null)
+                }}
+                onDeleteClass={setClassToDelete}
                 page={page}
                 totalPages={totalPages}
                 onPageChange={setPage}
@@ -352,13 +359,6 @@ export function StudentClassesPanel({
                 batchError={studentBatchError}
                 isImportOpen={classForImport !== null}
                 onClose={() => setManagedClassId(null)}
-                onEditClass={(studentClass) => {
-                    setEditingClass(studentClass)
-                    setClassName(studentClass.name)
-                    setGradeLevel(studentClass.grade_level)
-                    setClassError(null)
-                    setManagedClassId(null)
-                }}
                 onAddStudent={(studentClass) => {
                     setStudentError(null)
                     setClassForStudent(studentClass)
@@ -371,7 +371,6 @@ export function StudentClassesPanel({
                 onExport={(studentClass) =>
                     void handleExportStudents(studentClass)
                 }
-                onDeleteClass={setClassToDelete}
                 onEditStudent={(studentClass, student) => {
                     setClassForStudent(studentClass)
                     setEditingStudent(student)

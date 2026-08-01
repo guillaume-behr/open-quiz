@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
-import { Eye, LoaderCircle, UsersRound } from "lucide-react"
+import { Eye, LoaderCircle, Pencil, Trash2, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 const selectClassName =
@@ -20,6 +20,8 @@ type StudentClassesListProps = {
     onClassFilterChange: (value: string) => void
     onGradeLevelFilterChange: (value: string) => void
     onManageClass: (classId: number) => void
+    onEditClass: (studentClass: StudentClass) => void
+    onDeleteClass: (studentClass: StudentClass) => void
     page: number
     totalPages: number
     onPageChange: (page: number) => void
@@ -36,6 +38,8 @@ export function StudentClassesList({
     onClassFilterChange,
     onGradeLevelFilterChange,
     onManageClass,
+    onEditClass,
+    onDeleteClass,
     page,
     totalPages,
     onPageChange,
@@ -89,6 +93,8 @@ export function StudentClassesList({
                                 key={studentClass.id}
                                 studentClass={studentClass}
                                 onManage={() => onManageClass(studentClass.id)}
+                                onEdit={() => onEditClass(studentClass)}
+                                onDelete={() => onDeleteClass(studentClass)}
                             />
                         ))}
                     </div>
@@ -175,26 +181,63 @@ function ClassFilters({
 function ClassCard({
     studentClass,
     onManage,
+    onEdit,
+    onDelete,
 }: {
     studentClass: StudentClass
     onManage: () => void
+    onEdit: () => void
+    onDelete: () => void
 }) {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
+    const latestQuizDate = studentClass.latest_quiz_at
+        ? new Intl.DateTimeFormat(i18n.language, {
+              dateStyle: "medium",
+          }).format(new Date(studentClass.latest_quiz_at))
+        : "—"
 
     return (
         <article className="flex h-full flex-col rounded-xl border bg-background p-4">
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {studentClass.grade_level}
-            </p>
-            <h3 className="mt-1 text-lg font-semibold">{studentClass.name}</h3>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                        {studentClass.grade_level}
+                    </p>
+                    <h3 className="mt-1 truncate text-lg font-semibold">
+                        {studentClass.name}
+                    </h3>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                    <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={t("edit-class")}
+                        onClick={onEdit}
+                    >
+                        <Pencil />
+                    </Button>
+                    <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={t("delete-class")}
+                        className="text-destructive hover:text-destructive"
+                        onClick={onDelete}
+                    >
+                        <Trash2 />
+                    </Button>
+                </div>
+            </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
                 <ClassMetric
                     value={studentClass.student_count}
                     label={t("students")}
                 />
                 <ClassMetric
-                    value={studentClass.completed_quiz_count}
-                    label={t("completed-quizzes")}
+                    value={latestQuizDate}
+                    label={t("latest-quiz")}
+                    title={studentClass.latest_quiz_title ?? undefined}
                 />
             </div>
             <Button
@@ -204,16 +247,24 @@ function ClassCard({
                 onClick={onManage}
             >
                 <Eye />
-                {t("view-class")}
+                {t("manage-students")}
             </Button>
         </article>
     )
 }
 
-function ClassMetric({ value, label }: { value: number; label: string }) {
+function ClassMetric({
+    value,
+    label,
+    title,
+}: {
+    value: number | string
+    label: string
+    title?: string
+}) {
     return (
-        <div className="rounded-lg bg-primary/5 p-3">
-            <p className="text-2xl font-bold text-primary">{value}</p>
+        <div className="rounded-lg bg-primary/5 p-3" title={title}>
+            <p className="text-xl font-bold text-primary">{value}</p>
             <p className="text-sm text-muted-foreground">{label}</p>
         </div>
     )

@@ -10,11 +10,9 @@ type ManagedClassDialogProps = {
     batchError: string | null
     isImportOpen: boolean
     onClose: () => void
-    onEditClass: (studentClass: StudentClass) => void
     onAddStudent: (studentClass: StudentClass) => void
     onImport: (studentClass: StudentClass) => void
     onExport: (studentClass: StudentClass) => void
-    onDeleteClass: (studentClass: StudentClass) => void
     onEditStudent: (studentClass: StudentClass, student: Student) => void
     onDeleteStudent: (student: Student) => void
 }
@@ -25,11 +23,9 @@ export function ManagedClassDialog({
     batchError,
     isImportOpen,
     onClose,
-    onEditClass,
     onAddStudent,
     onImport,
     onExport,
-    onDeleteClass,
     onEditStudent,
     onDeleteStudent,
 }: ManagedClassDialogProps) {
@@ -56,14 +52,6 @@ export function ManagedClassDialog({
                     <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
                         <Button
                             type="button"
-                            variant="outline"
-                            onClick={() => onEditClass(studentClass)}
-                        >
-                            <Pencil />
-                            {t("edit-class")}
-                        </Button>
-                        <Button
-                            type="button"
                             onClick={() => onAddStudent(studentClass)}
                         >
                             <UserPlus />
@@ -86,14 +74,6 @@ export function ManagedClassDialog({
                         >
                             <Download />
                             {t("export-students")}
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            onClick={() => onDeleteClass(studentClass)}
-                        >
-                            <Trash2 />
-                            {t("delete-class")}
                         </Button>
                     </div>
                     {batchError && !isImportOpen && (
