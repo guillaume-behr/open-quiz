@@ -200,6 +200,8 @@ class StudentClassResponse(BaseModel):
     grade_level: str
     student_count: int
     completed_quiz_count: int
+    latest_quiz_title: str | None
+    latest_quiz_at: datetime | None
     students: list[StudentResponse]
     created_at: datetime
 

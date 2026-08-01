@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.dependencies import DbSession, ProfessorUser
 from app.grade_levels import ensure_grade_level
 from app.models import (
+    Quiz,
     QuizParticipant,
     QuizSession,
     Student,
@@ -118,12 +119,37 @@ def class_response(
             QuizSession.status == "finished",
         )
     )
+    latest_quiz = session.execute(
+        select(
+            QuizSession.quiz_title,
+            Quiz.title,
+            QuizSession.started_at,
+            QuizSession.created_at,
+        )
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(
+            QuizSession.class_id == student_class.id,
+            QuizSession.status == "finished",
+        )
+        .order_by(
+            QuizSession.started_at.desc(),
+            QuizSession.created_at.desc(),
+            QuizSession.id.desc(),
+        )
+        .limit(1)
+    ).first()
     return StudentClassResponse(
         id=student_class.id,
         name=student_class.name,
         grade_level=student_class.grade_level,
         student_count=len(students),
         completed_quiz_count=completed_quiz_count or 0,
+        latest_quiz_title=(latest_quiz[0] or latest_quiz[1])
+        if latest_quiz
+        else None,
+        latest_quiz_at=(latest_quiz[2] or latest_quiz[3])
+        if latest_quiz
+        else None,
         students=[
             StudentResponse(
                 id=student.id,

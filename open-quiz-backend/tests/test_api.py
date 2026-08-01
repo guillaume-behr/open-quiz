@@ -434,6 +434,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["grade_level"] == "5e"
         assert student_class["students"] == []
         assert student_class["completed_quiz_count"] == 0
+        assert student_class["latest_quiz_title"] is None
+        assert student_class["latest_quiz_at"] is None
         grade_levels = client.get("/api/grade-levels", headers=teacher_headers).json()
         assert [level["name"] for level in grade_levels] == ["5e"]
         assert (
@@ -1599,6 +1601,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         completed_class = client.get("/api/classes", headers=teacher_headers).json()[0]
         assert completed_class["completed_quiz_count"] == 1
+        assert completed_class["latest_quiz_title"] == quiz["title"]
+        assert completed_class["latest_quiz_at"] == teacher_state["started_at"]
         assert (
             client.get(student_state_url, headers=student_headers).json()["status"]
             == "finished"
