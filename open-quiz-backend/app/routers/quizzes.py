@@ -899,7 +899,9 @@ def list_quiz_results(
         QuizSession.status == "finished",
     ]
     if quiz_search:
-        filters.append(Quiz.title.ilike(f"%{quiz_search}%"))
+        filters.append(
+            func.coalesce(QuizSession.quiz_title, Quiz.title).ilike(f"%{quiz_search}%")
+        )
     if class_search:
         filters.append(QuizSession.class_name.ilike(f"%{class_search}%"))
     total = (

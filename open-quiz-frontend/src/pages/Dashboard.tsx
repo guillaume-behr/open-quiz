@@ -89,7 +89,9 @@ export function Dashboard() {
                     return
                 }
                 setCurrentUser(user)
-                void getGradeLevels().then(setGradeLevels)
+                void getGradeLevels()
+                    .then(setGradeLevels)
+                    .catch(() => setGradeLevels([]))
             })
             .catch(() => setCurrentUser(null))
             .finally(() => setIsLoading(false))

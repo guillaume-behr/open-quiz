@@ -75,6 +75,8 @@ class Settings:
         return self.environment == "production"
 
     def __post_init__(self) -> None:
+        if not 1 <= len(self.admin_username) <= 80:
+            raise ValueError("ADMIN_USERNAME must contain between 1 and 80 characters")
         if len(self.jwt_secret) < 32:
             raise ValueError("JWT_SECRET must contain at least 32 characters")
         if self.jwt_secret.startswith("replace-with-"):
@@ -97,6 +99,8 @@ class Settings:
             raise ValueError("JWT_SECRET and TOTP_ENCRYPTION_KEY must be distinct")
         if len(self.admin_password) < 16:
             raise ValueError("ADMIN_PASSWORD must contain at least 16 characters")
+        if len(self.admin_password) > 256:
+            raise ValueError("ADMIN_PASSWORD must contain at most 256 characters")
         if self.admin_password.startswith("replace-with-"):
             raise ValueError("ADMIN_PASSWORD is still set to its example value")
         reject_predictable_secret(

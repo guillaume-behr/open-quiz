@@ -91,8 +91,8 @@ Git. Les modèles fournis ne contiennent aucune vraie donnée sensible.
 | `DATABASE_URL` | URL SQLAlchemy de la base | `sqlite:///./open-quiz.db` |
 | `JWT_SECRET` | Signature des jetons ; 32 caractères minimum | obligatoire |
 | `TOTP_ENCRYPTION_KEY` | Chiffrement TOTP ; distinct du secret JWT, 32 caractères minimum | obligatoire |
-| `ADMIN_USERNAME` | Identifiant du compte administrateur géré | `admin` |
-| `ADMIN_PASSWORD` | Mot de passe administrateur ; 16 caractères minimum | obligatoire |
+| `ADMIN_USERNAME` | Identifiant du compte administrateur géré ; 80 caractères maximum | `admin` |
+| `ADMIN_PASSWORD` | Mot de passe administrateur ; 16 à 256 caractères | obligatoire |
 | `FRONTEND_ORIGIN` | Origine HTTP(S) exacte, sans `/` final | `http://localhost:5173` |
 | `ACCESS_TOKEN_MINUTES` | Durée d’un jeton d’accès, de 1 à 30 min | `15` |
 | `REFRESH_TOKEN_DAYS` | Durée maximale d’une session, de 1 à 30 jours | `7` |

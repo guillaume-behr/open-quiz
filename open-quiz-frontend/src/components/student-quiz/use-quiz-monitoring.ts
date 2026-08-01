@@ -57,7 +57,9 @@ export function useQuizMonitoring(
                 monitoredJoinCode,
                 participantToken,
                 eventType
-            )
+            ).catch(() => {
+                // Monitoring is best effort and must not interrupt the quiz.
+            })
         }
 
         if (isFullscreen && !wasMonitoredFullscreen.current) {

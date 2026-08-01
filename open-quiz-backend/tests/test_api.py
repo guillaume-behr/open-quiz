@@ -1453,6 +1453,20 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         ).json()[0]
         assert historical_result["quiz_title"] == quiz["title"]
         assert historical_result["ends_at"] == original_ends_at
+        historical_search = client.get(
+            "/api/quizzes/sessions/results",
+            headers=teacher_headers,
+            params={"quiz_search": quiz["title"]},
+        )
+        assert [result["id"] for result in historical_search.json()] == [
+            quiz_session["id"]
+        ]
+        renamed_search = client.get(
+            "/api/quizzes/sessions/results",
+            headers=teacher_headers,
+            params={"quiz_search": edited_quiz.json()["title"]},
+        )
+        assert renamed_search.json() == []
         historical_student_state = client.get(
             student_state_url,
             headers=student_headers,
@@ -2523,6 +2537,12 @@ def test_production_redirects_to_https_before_body_authentication(
 
 
 def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="ADMIN_USERNAME"):
+        settings_for(tmp_path / "long-admin-username.db", admin_username="a" * 81)
+
+    with pytest.raises(ValueError, match="ADMIN_PASSWORD"):
+        settings_for(tmp_path / "long-admin-password.db", admin_password="aB1-" * 65)
+
     with pytest.raises(ValueError, match="JWT_SECRET"):
         settings_for(tmp_path / "weak.db", jwt_secret="short")
 

@@ -64,6 +64,8 @@ export async function logout(): Promise<void> {
             },
             false
         )
+    } catch {
+        // Local credentials must still be discarded when the API is offline.
     } finally {
         clearSessionTokens()
     }

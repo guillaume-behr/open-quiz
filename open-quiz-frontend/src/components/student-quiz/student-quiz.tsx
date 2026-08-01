@@ -173,7 +173,9 @@ export function StudentQuiz() {
         translation.reset()
 
         if (document.fullscreenElement) {
-            void document.exitFullscreen().finally(releaseLeavingState)
+            void document
+                .exitFullscreen()
+                .then(releaseLeavingState, releaseLeavingState)
         } else {
             releaseLeavingState()
         }
