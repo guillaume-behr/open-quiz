@@ -26,7 +26,14 @@ jobs:
       - run: uv sync --frozen --dev
       - run: uv run --frozen ruff check app tests main.py scripts
       - run: uv run --frozen ruff format --check app tests main.py scripts
-      - run: uv run --frozen pytest -q
+      - name: Run backend tests
+        env:
+          APP_ENV: test
+          JWT_SECRET: ci-test-jwt-secret-with-enough-variety-2026
+          TOTP_ENCRYPTION_KEY: ci-test-totp-key-with-different-variety-2026
+          ADMIN_USERNAME: ci-admin
+          ADMIN_PASSWORD: ci-test-admin-password-2026
+        run: uv run --frozen pytest -q
       - run: uv run --frozen pip-audit
 
   frontend:
