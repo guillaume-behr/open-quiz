@@ -107,13 +107,22 @@ export function TwoFactorForm({
                     </p>
                 )}
 
-                <Button type="submit" disabled={isSubmitting}>
+                <Button
+                    className="text-md py-7 shadow"
+                    type="submit"
+                    disabled={isSubmitting}
+                >
                     {isSubmitting && <LoaderCircle className="animate-spin" />}
                     {isSubmitting
                         ? t("two-factor-verifying")
                         : t("two-factor-continue")}
                 </Button>
-                <Button type="button" variant="ghost" onClick={onCancel}>
+                <Button
+                    className="text-md py-7 shadow"
+                    type="button"
+                    variant="ghost"
+                    onClick={onCancel}
+                >
                     {t("back-to-login")}
                 </Button>
             </FieldGroup>
