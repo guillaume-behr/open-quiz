@@ -70,7 +70,10 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
     for answer in answers:
         question = questions.get(answer.question_id)
         choices = choices_by_question.get(answer.question_id, [])
-        submitted = json.loads(answer.answer_data)
+        try:
+            submitted = json.loads(answer.answer_data)
+        except TypeError, ValueError:
+            submitted = {}
         participant = participants.get(answer.participant_id)
         question_points = common_points.get(answer.question_id)
         if participant is not None:
@@ -91,6 +94,10 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
                 answer.score = 0
         else:
             correct_ids = {choice.id for choice in choices if choice.is_correct}
-            selected_ids = set(submitted.get("selected_choice_ids", []))
+            selected_ids = set(
+                submitted.get("selected_choice_ids", [])
+                if isinstance(submitted, dict)
+                else []
+            )
             answer.score = question_points if selected_ids == correct_ids else 0
             answer.is_graded = True

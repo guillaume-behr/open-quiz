@@ -32,7 +32,7 @@ import {
     Trash2,
     UserRound,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 function formatScore(score: number, locale: string) {
@@ -55,6 +55,7 @@ export function ResultsPanel({
     onExportDialogOpenChange,
 }: ResultsPanelProps) {
     const { t, i18n } = useTranslation()
+    const answersRequestVersion = useRef(0)
     const [results, setResults] = useState<QuizSession[]>([])
     const [page, setPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
@@ -195,6 +196,7 @@ export function ResultsPanel({
         participant: QuizParticipant
     ): Promise<void> {
         if (!selectedResult) return
+        const requestVersion = ++answersRequestVersion.current
         setSelectedParticipant(participant)
         setAreAnswersLoading(true)
         setAnswersError(false)
@@ -203,6 +205,7 @@ export function ResultsPanel({
                 selectedResult.id,
                 participant.id
             )
+            if (requestVersion !== answersRequestVersion.current) return
             setAnswers(loadedAnswers)
             setScoreDrafts(
                 Object.fromEntries(
@@ -213,9 +216,13 @@ export function ResultsPanel({
                 )
             )
         } catch {
-            setAnswersError(true)
+            if (requestVersion === answersRequestVersion.current) {
+                setAnswersError(true)
+            }
         } finally {
-            setAreAnswersLoading(false)
+            if (requestVersion === answersRequestVersion.current) {
+                setAreAnswersLoading(false)
+            }
         }
     }
 

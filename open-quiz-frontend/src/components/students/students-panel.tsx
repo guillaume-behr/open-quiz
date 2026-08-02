@@ -81,6 +81,9 @@ export function StudentsPanel({
                 setStudents(result.items)
                 setTotalPages(result.totalPages)
                 setLoadError(null)
+                if (result.page > result.totalPages) {
+                    setPage(result.totalPages)
+                }
             })
             .catch(() => active && setLoadError(t("students-load-error")))
             .finally(() => active && setIsLoading(false))

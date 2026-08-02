@@ -1060,9 +1060,15 @@ def student_state_response(
         if question_id is not None
         else None
     )
-    saved_answer = (
-        json.loads(existing_answer.answer_data) if existing_answer is not None else {}
-    )
+    if existing_answer is not None:
+        try:
+            saved_answer = json.loads(existing_answer.answer_data)
+        except TypeError, ValueError:
+            saved_answer = {}
+        if not isinstance(saved_answer, dict):
+            saved_answer = {}
+    else:
+        saved_answer = {}
     answered_count = session.scalar(
         select(func.count(QuizAnswer.id)).where(
             QuizAnswer.session_id == quiz_session.id,
@@ -1363,7 +1369,12 @@ def answer_review(
     choices: list[QuestionChoice],
     max_score: float,
 ) -> QuizAnswerReview:
-    submitted = json.loads(answer.answer_data)
+    try:
+        submitted = json.loads(answer.answer_data)
+    except TypeError, ValueError:
+        submitted = {}
+    if not isinstance(submitted, dict):
+        submitted = {}
     choices_by_id = {choice.id: choice for choice in choices}
     if question.answer_mode == "written":
         submitted_answers = [str(submitted.get("written_answer", ""))]
@@ -1433,7 +1444,7 @@ def list_participant_answers(
         )
     }
     question_points = session_question_points(quiz_session, session, participant)
-    rows.sort(key=lambda row: question_order[row[1].id])
+    rows.sort(key=lambda row: question_order.get(row[1].id, len(question_order)))
     question_ids = [question.id for _, question in rows]
     choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
     if question_ids:
@@ -1447,7 +1458,7 @@ def list_participant_answers(
         answer_review(
             answer,
             question,
-            question_order[question.id],
+            question_order.get(question.id, 0),
             choices_by_question[question.id],
             question_points.get(question.id, 0),
         )

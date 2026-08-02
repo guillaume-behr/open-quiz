@@ -82,6 +82,9 @@ export function ClassesPanel({
                         : null
                 )
                 setError(null)
+                if (result.page > result.totalPages) {
+                    setPage(result.totalPages)
+                }
             })
             .catch(() => active && setError(t("classes-load-error")))
             .finally(() => active && setIsLoading(false))
