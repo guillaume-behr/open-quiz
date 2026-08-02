@@ -1,4 +1,6 @@
-from contextlib import asynccontextmanager
+from asyncio import CancelledError, create_task, sleep, to_thread
+from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from hmac import new as hmac_new
 from time import time
@@ -6,13 +8,22 @@ from time import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from app.audit import audit_event
 from app.config import Settings, get_settings
 from app.database import build_session_factory
 from app.middleware import RequestBodyLimitMiddleware
-from app.models import RefreshSession, RefreshSessionFamily, SecurityState, User
+from app.models import (
+    AuthenticationChallenge,
+    LoginRateLimit,
+    ProblemReport,
+    QuizSession,
+    RefreshSession,
+    RefreshSessionFamily,
+    SecurityState,
+    User,
+)
 from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
 from app.routers import (
     admin,
@@ -31,6 +42,7 @@ from app.security import hash_password, verify_password
 
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
 MANAGED_ADMIN_KEY = "managed_admin_user_id"
+RETENTION_MAINTENANCE_INTERVAL_SECONDS = 3600
 
 
 def synchronize_security_state(
@@ -166,6 +178,74 @@ def synchronize_security_state(
         session.commit()
 
 
+def enforce_data_retention(session_factory, settings: Settings) -> None:
+    now = int(time())
+    quiz_cutoff = datetime.now(UTC) - timedelta(
+        days=settings.quiz_result_retention_days
+    )
+    report_cutoff = datetime.now(UTC) - timedelta(
+        days=settings.problem_report_retention_days
+    )
+    limiter_cutoff = now - max(
+        settings.login_window_seconds,
+        settings.quiz_rate_window_seconds,
+        settings.problem_report_window_seconds,
+    )
+    with session_factory() as session:
+        expired_quiz_session_ids = list(
+            session.scalars(
+                select(QuizSession.id).where(
+                    QuizSession.status == "finished",
+                    QuizSession.started_at.is_not(None),
+                    QuizSession.started_at <= quiz_cutoff,
+                )
+            )
+        )
+        quizzes.delete_quiz_session_records(expired_quiz_session_ids, session)
+
+        expired_refresh_session_ids = select(RefreshSession.id).where(
+            RefreshSession.expires_at <= now
+        )
+        session.execute(
+            delete(RefreshSessionFamily).where(
+                RefreshSessionFamily.session_id.in_(expired_refresh_session_ids)
+            )
+        )
+        expired_refresh_count = session.execute(
+            delete(RefreshSession).where(RefreshSession.expires_at <= now)
+        ).rowcount
+        expired_challenge_count = session.execute(
+            delete(AuthenticationChallenge).where(
+                AuthenticationChallenge.expires_at <= now
+            )
+        ).rowcount
+        expired_report_count = session.execute(
+            delete(ProblemReport).where(ProblemReport.created_at <= report_cutoff)
+        ).rowcount
+        session.execute(
+            delete(LoginRateLimit).where(
+                LoginRateLimit.window_started_at <= limiter_cutoff
+            )
+        )
+        session.commit()
+
+    if any(
+        (
+            expired_quiz_session_ids,
+            expired_refresh_count,
+            expired_challenge_count,
+            expired_report_count,
+        )
+    ):
+        audit_event(
+            "security.data_retention_enforced",
+            quiz_sessions=len(expired_quiz_session_ids),
+            refresh_sessions=expired_refresh_count,
+            authentication_challenges=expired_challenge_count,
+            problem_reports=expired_report_count,
+        )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     session_factory = build_session_factory(settings.database_url)
@@ -173,7 +253,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         synchronize_security_state(session_factory, settings)
-        yield
+        enforce_data_retention(session_factory, settings)
+
+        async def maintain_data_retention() -> None:
+            while True:
+                await sleep(RETENTION_MAINTENANCE_INTERVAL_SECONDS)
+                await to_thread(enforce_data_retention, session_factory, settings)
+
+        maintenance_task = create_task(maintain_data_retention())
+        try:
+            yield
+        finally:
+            maintenance_task.cancel()
+            with suppress(CancelledError):
+                await maintenance_task
 
     production = settings.environment == "production"
     app = FastAPI(
@@ -189,6 +282,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.login_rate_limiter = LoginRateLimiter(
         settings.login_attempts,
         settings.login_window_seconds,
+        settings.jwt_secret,
     )
     app.state.quiz_join_rate_limiter = FixedWindowRateLimiter(
         settings.quiz_join_attempts,

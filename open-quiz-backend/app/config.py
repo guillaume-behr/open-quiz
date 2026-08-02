@@ -34,6 +34,24 @@ def reject_predictable_secret(
             raise ValueError(f"{name} must not be a repeated pattern")
 
 
+def validate_optional_public_url(name: str, value: str, environment: str) -> None:
+    if not value:
+        return
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError(f"{name} must not contain control characters")
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"{name} must be an absolute HTTP(S) URL")
+    if parsed.username or parsed.password:
+        raise ValueError(f"{name} must not contain credentials")
+    try:
+        _ = parsed.port
+    except ValueError as error:
+        raise ValueError(f"{name} contains an invalid port") from error
+    if environment == "production" and parsed.scheme != "https":
+        raise ValueError(f"Production {name} must use HTTPS")
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -155,6 +173,16 @@ class Settings:
             raise ValueError("APP_ENV must be development, test, or production")
         if self.environment == "production" and origin.scheme != "https":
             raise ValueError("Production FRONTEND_ORIGIN must use HTTPS")
+        validate_optional_public_url(
+            "ACCESSIBILITY_SCHEME_URL",
+            self.accessibility_scheme_url,
+            self.environment,
+        )
+        validate_optional_public_url(
+            "ACCESSIBILITY_ACTION_PLAN_URL",
+            self.accessibility_action_plan_url,
+            self.environment,
+        )
 
 
 def required_environment(name: str) -> str:

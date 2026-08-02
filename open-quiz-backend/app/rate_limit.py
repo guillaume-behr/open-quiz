@@ -1,4 +1,5 @@
 from hashlib import sha256
+from hmac import new as hmac_new
 from time import time
 
 from sqlalchemy import case, delete, update
@@ -17,9 +18,11 @@ class LoginRateLimiter:
         self,
         account_limit: int,
         window_seconds: int,
+        secret: str,
     ) -> None:
         self.account_limit = account_limit
         self.window_seconds = window_seconds
+        self.secret = secret.encode()
 
     def reserve(
         self,
@@ -101,12 +104,11 @@ class LoginRateLimiter:
         )
         session.commit()
 
-    @staticmethod
-    def _account_key(subject: str) -> str:
+    def _account_key(self, subject: str) -> str:
         # Bound attacker-controlled identifiers to a fixed number of buckets.
-        # Existing and unknown accounts use the same identifier mapping, so
-        # throttling does not disclose whether an account exists.
-        digest = sha256(subject.encode()).hexdigest()[
+        # Key the mapping so an attacker cannot deliberately construct an
+        # identifier that shares a victim's small, bounded bucket.
+        digest = hmac_new(self.secret, subject.encode(), sha256).hexdigest()[
             : LoginRateLimiter.BUCKET_HEX_CHARACTERS
         ]
         return f"account:{digest}"

@@ -21,7 +21,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import StreamingResponse
-from sqlalchemy import case, delete, func, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
@@ -73,6 +73,16 @@ router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 randomizer = SystemRandom()
 JOIN_CODE_ALPHABET = ascii_uppercase + digits
 VIOLATION_DEDUPLICATION_SECONDS = 2
+SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def safe_spreadsheet_cell(value: str) -> str:
+    trimmed = value.lstrip()
+    if value.startswith(("\t", "\r", "\n")) or trimmed.startswith(
+        SPREADSHEET_FORMULA_PREFIXES
+    ):
+        return f"'{value}"
+    return value
 
 
 def enforce_public_rate_limit(
@@ -682,6 +692,32 @@ def discard_finished_training_session(
     session.commit()
 
 
+def discard_previous_training_sessions(
+    student: StudentAccount,
+    membership: Student,
+    session: DbSession,
+) -> None:
+    session_ids = list(
+        session.scalars(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .join(
+                QuizParticipant,
+                QuizParticipant.session_id == QuizSession.id,
+            )
+            .where(
+                Quiz.owner_id == student.owner_id,
+                Quiz.mode == "training",
+                or_(
+                    QuizParticipant.student_id == membership.id,
+                    QuizParticipant.student_identifier == student.identifier,
+                ),
+            )
+        )
+    )
+    delete_quiz_session_records(session_ids, session)
+
+
 def purge_expired_quiz_results(
     professor: ProfessorUser,
     request: Request,
@@ -1128,11 +1164,11 @@ def export_quiz_results(
         for participant in result.participants:
             writer.writerow(
                 [
-                    result.class_name,
-                    result.quiz_title,
+                    safe_spreadsheet_cell(result.class_name),
+                    safe_spreadsheet_cell(result.quiz_title),
                     result_date.isoformat(),
-                    participant.student_identifier,
-                    participant.student_display_name or "",
+                    safe_spreadsheet_cell(participant.student_identifier),
+                    safe_spreadsheet_cell(participant.student_display_name or ""),
                     participant.answered_count,
                     result.total_questions,
                     participant.score,
@@ -1515,6 +1551,7 @@ def start_training_quiz(
             detail="L’élève doit être affecté à une classe",
         )
     class_student, student_class = membership
+    discard_previous_training_sessions(student, class_student, session)
     question_ids = draw_question_ids(quiz, session)
     now = datetime.now(UTC)
     quiz_session = QuizSession(

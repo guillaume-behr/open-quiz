@@ -4,6 +4,9 @@ import os
 import sqlite3
 from base64 import b64decode, b64encode
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+from hmac import new as hmac_new
 from importlib.util import find_spec
 from pathlib import Path
 from threading import Barrier
@@ -14,11 +17,24 @@ import pyotp
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from app.config import Settings, secure_private_file
 from app.database import legacy_difficulty_counts
 from app.middleware import RequestBodyLimitMiddleware
+from app.models import (
+    AuthenticationChallenge,
+    ProblemReport,
+    Quiz,
+    QuizParticipant,
+    QuizSession,
+    RefreshSession,
+    RefreshSessionFamily,
+    User,
+)
+from app.rate_limit import LoginRateLimiter
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
+from app.routers.quizzes import safe_spreadsheet_cell
 from app.schemas import QuestionBatchImport, StudentQuizAnswer
 from app.security import refresh_request_proof
 from main import create_app
@@ -89,6 +105,94 @@ def test_private_file_permissions_are_restricted(tmp_path: Path) -> None:
         assert private_file.stat().st_mode & 0o077 == 0
 
 
+def test_startup_enforces_security_data_retention(tmp_path: Path) -> None:
+    settings = settings_for(
+        tmp_path / "retention.db",
+        quiz_result_retention_days=1,
+        problem_report_retention_days=1,
+    )
+    app = create_app(settings)
+    with TestClient(
+        app,
+        headers={"Origin": FRONTEND_ORIGIN},
+        backend_options=TEST_CLIENT_BACKEND_OPTIONS,
+    ):
+        pass
+
+    expired_at = datetime.now(UTC) - timedelta(days=2)
+    with app.state.session_factory() as session:
+        admin = session.scalar(select(User).where(User.is_admin.is_(True)))
+        assert admin is not None
+        quiz = Quiz(
+            owner_id=admin.id,
+            title="Expired quiz",
+            question_count=1,
+            easy_question_count=1,
+            medium_question_count=0,
+            hard_question_count=0,
+        )
+        session.add(quiz)
+        session.flush()
+        quiz_session = QuizSession(
+            quiz_id=quiz.id,
+            class_name="Expired class",
+            join_code="OLD123",
+            status="finished",
+            started_at=expired_at,
+        )
+        session.add(quiz_session)
+        session.flush()
+        session.add(
+            QuizParticipant(
+                session_id=quiz_session.id,
+                student_identifier="expired.student",
+            )
+        )
+        session.add(
+            ProblemReport(
+                message="Expired report",
+                page_path="/",
+                created_at=expired_at,
+            )
+        )
+        refresh_session = RefreshSession(
+            token_hash="a" * 64,
+            user_id=admin.id,
+            expires_at=int(time()) - 1,
+        )
+        session.add(refresh_session)
+        session.flush()
+        session.add(
+            RefreshSessionFamily(
+                session_id=refresh_session.id,
+                family_id="b" * 64,
+            )
+        )
+        session.add(
+            AuthenticationChallenge(
+                token_id_hash="c" * 64,
+                user_id=admin.id,
+                purpose="two_factor_verification",
+                expires_at=int(time()) - 1,
+            )
+        )
+        session.commit()
+
+    with make_client(settings):
+        pass
+
+    with sqlite3.connect(tmp_path / "retention.db") as database:
+        for table in (
+            "quiz_sessions",
+            "quiz_participants",
+            "problem_reports",
+            "refresh_sessions",
+            "refresh_session_families",
+            "authentication_challenges",
+        ):
+            assert database.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+
+
 def test_question_batch_import_has_a_fixed_question_limit() -> None:
     question = {
         "prompt": "Question",
@@ -105,6 +209,40 @@ def test_question_batch_import_has_a_fixed_question_limit() -> None:
                 "questions": [question] * 501,
             }
         )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        '=HYPERLINK("https://attacker.example")',
+        "+SUM(1, 1)",
+        "-1+2",
+        "@SUM(1, 1)",
+        "\t=1+1",
+        "\r=1+1",
+        "  =1+1",
+    ],
+)
+def test_csv_cells_neutralize_spreadsheet_formulas(value: str) -> None:
+    assert safe_spreadsheet_cell(value) == f"'{value}"
+
+
+def test_login_rate_limit_buckets_use_a_secret_key() -> None:
+    subject = "password:identity:known-user"
+    secret = "private-rate-limit-key"
+    limiter = LoginRateLimiter(5, 900, secret)
+    expected_digest = hmac_new(
+        secret.encode(),
+        subject.encode(),
+        sha256,
+    ).hexdigest()[: LoginRateLimiter.BUCKET_HEX_CHARACTERS]
+
+    assert limiter._account_key(subject) == f"account:{expected_digest}"
+    assert limiter._account_key(subject) != LoginRateLimiter(
+        5,
+        900,
+        "different-private-key",
+    )._account_key(subject)
 
 
 def test_public_information_describes_instance_settings(tmp_path: Path) -> None:
@@ -521,21 +659,14 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                 database.execute(
                     "SELECT COUNT(DISTINCT session_id) FROM quiz_session_questions"
                 ).fetchone()[0]
-                == 2
+                == 1
             )
-        answered = client.post(
+        replaced_attempt = client.post(
             f"/api/quizzes/student/sessions/{started.json()['join_code']}/answer",
             headers={"X-Quiz-Token": started.json()["participant_token"]},
             json={"selected_choice_ids": [correct_choice_id]},
         )
-        assert answered.status_code == 200
-        assert answered.json()["status"] == "finished"
-        assert answered.json()["training_feedback"] == {
-            "question_id": question["id"],
-            "is_correct": True,
-            "correct_choice_ids": [correct_choice_id],
-            "expected_answer": None,
-        }
+        assert replaced_attempt.status_code == 401
         updated_question = client.post(
             f"/api/question-banks/questions/{question['id']}/update",
             headers=teacher_headers,
@@ -566,6 +697,12 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         )
         assert redrawn_answered.status_code == 200
         assert redrawn_answered.json()["status"] == "finished"
+        assert redrawn_answered.json()["training_feedback"] == {
+            "question_id": question["id"],
+            "is_correct": True,
+            "correct_choice_ids": [correct_choice_id],
+            "expected_answer": None,
+        }
         assert (
             client.get("/api/quizzes/sessions/results", headers=teacher_headers).json()
             == []
@@ -2979,6 +3116,20 @@ def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> No
         settings_for(
             tmp_path / "invalid-port-origin.db",
             frontend_origin="https://example.com:not-a-port",
+        )
+
+    with pytest.raises(ValueError, match="ACCESSIBILITY_SCHEME_URL"):
+        settings_for(
+            tmp_path / "unsafe-accessibility-url.db",
+            accessibility_scheme_url="javascript:alert(document.cookie)",
+        )
+
+    with pytest.raises(ValueError, match="HTTPS"):
+        settings_for(
+            tmp_path / "insecure-accessibility-url.db",
+            environment="production",
+            frontend_origin="https://quiz.example.test",
+            accessibility_action_plan_url="http://example.test/action-plan",
         )
 
 
