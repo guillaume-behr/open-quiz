@@ -68,8 +68,8 @@ requêtes `/api` au backend.
 3. Il prépare des banques de questions et compose un quiz.
 4. Il ouvre une salle d’attente et partage son code avec la classe.
 5. Les élèves rejoignent la session avec le code et leur identifiant.
-6. L’enseignant démarre le quiz, consulte les résultats et corrige les réponses
-   rédactionnelles.
+6. L’enseignant démarre le quiz, consulte les résultats, corrige les réponses
+   rédactionnelles et peut exporter les notes au format CSV.
 
 Si la langue d’un élève diffère de celle du quiz, il peut demander une
 traduction automatique ou conserver le texte original.
@@ -83,7 +83,14 @@ traduction automatique ou conserver le texte original.
 - images privées, extraits de code et réponses attendues dans un langage donné ;
 - composition aléatoire par niveau de difficulté ;
 - sessions chronométrées avec pause, reprise et retour optionnel aux questions ;
-- notation automatique et correction manuelle des réponses rédactionnelles.
+- notation automatique et correction manuelle des réponses rédactionnelles ;
+- export CSV des résultats d’une classe, pour un quiz précis ou pour tous ses
+  quiz terminés.
+
+L’export des résultats contient une ligne par participation : classe, quiz,
+date, identifiant et nom de l’élève, progression, score, corrections manuelles
+en attente et nombre d’incidents. Les fichiers UTF-8 sont directement
+exploitables dans un tableur.
 
 ### Pour les élèves
 
