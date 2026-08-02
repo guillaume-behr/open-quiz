@@ -72,6 +72,48 @@ test("footer links open each public information page", async ({ page }) => {
     }
 })
 
+test("unsafe configured external URLs are not rendered as links", async ({
+    page,
+}) => {
+    await page.route("**/api/public-information", async (route) => {
+        await route.fulfill({
+            json: {
+                host: { name: "Example host", address: "Paris" },
+                privacy: {
+                    controller_name: "Example school",
+                    controller_contact: "privacy@example.test",
+                    dpo_contact: "dpo@example.test",
+                    legal_basis: "Public-interest task",
+                    recipients: "Authorized school staff",
+                    teacher_data_retention: "Until account deletion",
+                    student_data_retention: "Until class deletion",
+                    security_log_retention: "One year",
+                    quiz_result_retention_days: 365,
+                    problem_report_retention_days: 90,
+                },
+                cookies: { authentication_max_age_days: 30 },
+                accessibility: {
+                    contact: "accessibility@example.test",
+                    scheme_url: "javascript:alert(document.cookie)",
+                    action_plan_url: "https://example.test/action-plan",
+                },
+            },
+        })
+    })
+
+    await page.goto("/accessibility")
+
+    await expect(
+        page.getByRole("link", { name: "View the multi-year scheme" })
+    ).toHaveCount(0)
+    await expect(
+        page.getByText("View the multi-year scheme", { exact: true })
+    ).toBeVisible()
+    await expect(
+        page.getByRole("link", { name: "View the action plan" })
+    ).toHaveAttribute("href", "https://example.test/action-plan")
+})
+
 test("problem report preserves its source page and sends the form", async ({
     page,
 }) => {

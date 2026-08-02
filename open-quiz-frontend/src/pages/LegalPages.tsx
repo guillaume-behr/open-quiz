@@ -144,8 +144,19 @@ function OfficialLink({
     href: string
     children: ReactNode
 }) {
+    let safeHref: string | null = null
+    try {
+        const parsed = new URL(href)
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+            safeHref = parsed.toString()
+        }
+    } catch {
+        // Invalid or relative external links are rendered as plain text.
+    }
+    if (!safeHref) return <span>{children}</span>
+
     return (
-        <a href={href} target="_blank" rel="noreferrer">
+        <a href={safeHref} target="_blank" rel="noreferrer">
             {children}
             <ExternalLink className="ms-1 inline size-3.5" aria-hidden="true" />
         </a>
