@@ -164,7 +164,9 @@ def points_for_drawn_questions(
     )
 
 
-POINT_TARGET_SHORTFALL_TOLERANCE = 0.0
+# A small shortfall keeps a quiz launchable when the configured target cannot
+# be represented exactly by the available per-question point values.
+POINT_TARGET_SHORTFALL_TOLERANCE = 0.75
 MAX_QUIZ_BONUS_POINTS = 2.0
 
 
@@ -1716,9 +1718,7 @@ def delete_quiz(
             status_code=status.HTTP_409_CONFLICT,
             detail="Un quiz avec une session active ne peut pas être supprimé",
         )
-    session.execute(
-        delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz_id)
-    )
+    session.execute(delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz_id))
     session.execute(
         delete(TrainingQuizProfile).where(TrainingQuizProfile.quiz_id == quiz_id)
     )

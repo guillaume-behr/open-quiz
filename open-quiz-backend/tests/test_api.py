@@ -95,6 +95,21 @@ def test_health_checks_database_readiness(tmp_path: Path) -> None:
         assert database.stat().st_mode & 0o077 == 0
 
 
+def test_cors_allows_class_training_update_preflight(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "cors.db")) as client:
+        response = client.options(
+            "/api/quizzes/training/classes/1/question-banks",
+            headers={
+                "Origin": FRONTEND_ORIGIN,
+                "Access-Control-Request-Method": "PUT",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "PUT" in response.headers["access-control-allow-methods"]
+
+
 def test_private_file_permissions_are_restricted(tmp_path: Path) -> None:
     private_file = tmp_path / ".env"
     private_file.write_text("SECRET=value\n", encoding="utf-8")
