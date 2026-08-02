@@ -4,6 +4,7 @@ import {
     deleteQuestion,
     downloadQuestionBank,
     downloadQuestionBatchExample,
+    getAllQuestionBanks,
     getQuestionBanks,
     getQuestions,
     importQuestionBatch,
@@ -29,6 +30,13 @@ function compareQuestionBanks(
         first.grade_level.localeCompare(second.grade_level, "fr") ||
         first.chapter.localeCompare(second.chapter, "fr")
     )
+}
+
+const PAGE_SIZE = 8
+
+function pageContaining(items: QuestionBank[], id: number): number {
+    const index = items.findIndex((item) => item.id === id)
+    return index < 0 ? 1 : Math.floor(index / PAGE_SIZE) + 1
 }
 
 function saveBlob(blob: Blob, filename: string): void {
@@ -167,7 +175,10 @@ export function QuestionBanksPanel({
             )
             setGradeLevel("")
             setTitle("")
-            setPage(1)
+            setTitleFilter("")
+            setGradeLevelFilter("")
+            const allBanks = await getAllQuestionBanks().catch(() => [])
+            setPage(pageContaining(allBanks, created.id))
             setReloadKey((current) => current + 1)
             onCreateDialogOpenChange(false)
         } catch (caughtError) {

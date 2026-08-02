@@ -31,6 +31,13 @@ type StudentClassesPanelProps = {
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
 }
 
+const PAGE_SIZE = 8
+
+function pageContaining<T extends { id: number }>(items: T[], id: number) {
+    const index = items.findIndex((item) => item.id === id)
+    return index < 0 ? 1 : Math.floor(index / PAGE_SIZE) + 1
+}
+
 function saveBlob(blob: Blob, filename: string): void {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -184,7 +191,8 @@ export function StudentClassesPanel({
         setClassError(null)
         setIsCreatingClass(true)
         try {
-            const savedClass = editingClass
+            const isEditing = editingClass !== null
+            const savedClass = isEditing
                 ? await updateStudentClass(
                       editingClass.id,
                       className.trim(),
@@ -212,7 +220,12 @@ export function StudentClassesPanel({
             setIsAddingGradeLevel(false)
             setEditingClass(null)
             onCreateDialogOpenChange(false)
-            setPage(1)
+            if (!isEditing) {
+                setClassFilter("")
+                setGradeLevelFilter("")
+                const allClasses = await getAllStudentClasses().catch(() => [])
+                setPage(pageContaining(allClasses, savedClass.id))
+            }
             setReloadKey((current) => current + 1)
         } catch (error) {
             setClassError(

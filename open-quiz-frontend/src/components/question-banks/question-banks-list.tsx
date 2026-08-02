@@ -249,12 +249,18 @@ function BanksContent({
                         key={bank.id}
                         className="relative rounded-xl border bg-background p-4"
                     >
-                        <span className="absolute top-4 right-4 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                            {t("question-count", {
-                                count: bank.question_count,
-                            })}
-                        </span>
-                        <div className="flex items-start gap-3 pr-16">
+                        <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="destructive"
+                            className="absolute top-4 right-4"
+                            aria-label={t("delete-question-bank")}
+                            title={t("delete-question-bank")}
+                            onClick={() => onDelete(bank)}
+                        >
+                            <Trash2 />
+                        </Button>
+                        <div className="flex items-start gap-3 pr-10">
                             <div className="rounded-lg bg-primary/10 p-2 text-primary">
                                 <BookOpenText className="size-5" />
                             </div>
@@ -262,9 +268,16 @@ function BanksContent({
                                 <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                     {bank.grade_level}
                                 </p>
-                                <p className="mt-1 font-semibold break-words">
-                                    {bank.chapter}
-                                </p>
+                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    <p className="font-semibold break-words">
+                                        {bank.chapter}
+                                    </p>
+                                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-primary">
+                                        {t("question-count", {
+                                            count: bank.question_count,
+                                        })}
+                                    </span>
+                                </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                     <Button
                                         type="button"
@@ -284,17 +297,6 @@ function BanksContent({
                                     >
                                         <Download />
                                         {t("export-json")}
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        size="icon-sm"
-                                        variant="destructive"
-                                        className="ml-auto"
-                                        aria-label={t("delete-question-bank")}
-                                        title={t("delete-question-bank")}
-                                        onClick={() => onDelete(bank)}
-                                    >
-                                        <Trash2 />
                                     </Button>
                                 </div>
                             </div>

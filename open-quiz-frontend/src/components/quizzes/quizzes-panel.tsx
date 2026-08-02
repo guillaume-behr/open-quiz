@@ -4,6 +4,7 @@ import {
     cancelQuizSession,
     createQuiz,
     deleteQuizSession,
+    getAllQuizzes,
     getActiveQuizSessions,
     getQuizSession,
     getQuizzes,
@@ -38,6 +39,13 @@ type QuizzesPanelProps = {
 }
 
 const difficultyKeys = ["easy", "medium", "hard"] as const
+const PAGE_SIZE = 8
+
+function pageContaining(items: Quiz[], id: number): number {
+    const index = items.findIndex((item) => item.id === id)
+    return index < 0 ? 1 : Math.floor(index / PAGE_SIZE) + 1
+}
+
 type Difficulty = (typeof difficultyKeys)[number]
 const easePriority: Record<Difficulty, number> = {
     easy: 2,
@@ -325,7 +333,8 @@ export function QuizzesPanel({
                 medium_percentage: percentages.medium,
                 hard_percentage: percentages.hard,
             }
-            const quiz = editingQuiz
+            const isEditing = editingQuiz !== null
+            const quiz = isEditing
                 ? await updateQuiz(editingQuiz.id, payload)
                 : await createQuiz(payload)
             setQuizzes((current) =>
@@ -335,7 +344,12 @@ export function QuizzesPanel({
             )
             onCreateDialogOpenChange(false)
             resetCreationForm()
-            setPage(1)
+            if (!isEditing) {
+                setQuizFilter("")
+                setGradeLevelFilter("")
+                const allQuizzes = await getAllQuizzes().catch(() => [])
+                setPage(pageContaining(allQuizzes, quiz.id))
+            }
             setReloadKey((current) => current + 1)
         } catch {
             setCreateError(
