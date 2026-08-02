@@ -284,9 +284,7 @@ export function ClassesPanel({
                                         className="absolute top-4 right-12"
                                         onClick={() => {
                                             setEditing(studentClass)
-                                            setClassName(
-                                                studentClass.name
-                                            )
+                                            setClassName(studentClass.name)
                                             setGradeLevel(
                                                 studentClass.grade_level
                                             )

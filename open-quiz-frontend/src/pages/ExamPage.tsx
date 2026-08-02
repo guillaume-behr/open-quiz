@@ -6,8 +6,7 @@ import {
 import type { StudentAccount } from "@/api/types"
 import { StudentQuiz } from "@/components/student-quiz/student-quiz"
 import { readStoredQuizSession } from "@/components/student-quiz/student-quiz-session"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, LoaderCircle } from "lucide-react"
+import { LoaderCircle } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router"
@@ -69,14 +68,6 @@ export function ExamPage() {
     return (
         <div className="flex flex-1 flex-col px-4">
             <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 py-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate("/student/dashboard")}
-                >
-                    <ArrowLeft />
-                    {t("student-dashboard")}
-                </Button>
                 <p className="text-sm text-muted-foreground">
                     {t("signed-in-as", { name: student.display_name })}
                 </p>

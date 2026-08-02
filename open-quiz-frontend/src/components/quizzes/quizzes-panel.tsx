@@ -616,7 +616,9 @@ export function QuizzesPanel({
                     if (!open && !isDeleting) setQuizToDelete(null)
                 }}
                 title={t("delete-quiz")}
-                description={t("delete-quiz-help", { title: quizToDelete?.title ?? "" })}
+                description={t("delete-quiz-help", {
+                    title: quizToDelete?.title ?? "",
+                })}
                 className="max-w-md"
             >
                 {deleteError && (

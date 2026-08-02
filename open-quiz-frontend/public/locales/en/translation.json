@@ -543,7 +543,7 @@
     "student-quiz-cancelled": "This quiz was cancelled by your teacher.",
     "edit-quiz": "Edit quiz",
     "save-quiz": "Save changes",
-        "quiz-update-error": "Unable to update this quiz. Check the selected banks or ensure there is no active session.",
+    "quiz-update-error": "Unable to update this quiz. Check the selected banks or ensure there is no active session.",
     "delete-quiz": "Delete quiz",
     "delete-quiz-help": "Permanently delete “{{title}}” and all its finished sessions? This action is irreversible.",
     "quiz-delete-error": "Unable to delete this quiz. Make sure it has no active session.",

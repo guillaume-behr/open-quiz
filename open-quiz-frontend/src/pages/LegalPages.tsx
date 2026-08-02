@@ -1,4 +1,5 @@
 import { logout } from "@/api/auth"
+import { clearStudentSession } from "@/api/student-auth"
 import {
     getPublicInformation,
     type PublicInformation,
@@ -11,7 +12,6 @@ import { Link } from "react-router"
 
 const UPDATED_AT = new Date("2026-07-29T00:00:00+02:00")
 const LOCAL_STORAGE_KEYS = ["i18nextLng", "vite-ui-theme"]
-const SESSION_STORAGE_KEYS = ["open-quiz-student-session"]
 
 function usePublicInformation() {
     const [information, setInformation] = useState<PublicInformation | null>(
@@ -482,9 +482,7 @@ export function CookiesPage() {
             for (const key of LOCAL_STORAGE_KEYS) {
                 localStorage.removeItem(key)
             }
-            for (const key of SESSION_STORAGE_KEYS) {
-                sessionStorage.removeItem(key)
-            }
+            clearStudentSession()
         } catch {
             // Browser storage can be disabled while the server session is revoked.
         }
