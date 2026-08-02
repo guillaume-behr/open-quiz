@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
 from app.models import (
+    Quiz,
     QuizParticipant,
     QuizSession,
     Student,
@@ -147,8 +148,11 @@ def delete_student_account(
     membership = session.scalar(select(Student).where(Student.account_id == account.id))
     if membership is not None:
         active = session.scalar(
-            select(QuizSession.id).where(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
                 QuizSession.class_id == membership.class_id,
+                Quiz.mode == "exam",
                 QuizSession.status.in_(["waiting", "in_progress", "paused"]),
             )
         )

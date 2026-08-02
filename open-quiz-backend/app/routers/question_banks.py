@@ -34,7 +34,11 @@ from app.models import (
     QuestionBank,
     QuestionChoice,
     QuestionCode,
+    Quiz,
+    QuizAnswer,
+    QuizParticipant,
     QuizQuestionBank,
+    QuizSession,
     QuizSessionQuestion,
     QuizSessionStudentQuestion,
 )
@@ -235,20 +239,74 @@ def owned_question(
 
 def question_is_in_launched_quiz(question_id: int, session: DbSession) -> bool:
     common_assignment = session.scalar(
-        select(QuizSessionQuestion.session_id).where(
-            QuizSessionQuestion.question_id == question_id
+        select(QuizSessionQuestion.session_id)
+        .join(QuizSession, QuizSession.id == QuizSessionQuestion.session_id)
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(
+            QuizSessionQuestion.question_id == question_id,
+            Quiz.mode == "exam",
         )
     )
     if common_assignment is not None:
         return True
     return (
         session.scalar(
-            select(QuizSessionStudentQuestion.session_id).where(
-                QuizSessionStudentQuestion.question_id == question_id
+            select(QuizSessionStudentQuestion.session_id)
+            .join(
+                QuizSession,
+                QuizSession.id == QuizSessionStudentQuestion.session_id,
+            )
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                QuizSessionStudentQuestion.question_id == question_id,
+                Quiz.mode == "exam",
             )
         )
         is not None
     )
+
+
+def discard_training_sessions_using_question(
+    question_id: int,
+    session: DbSession,
+) -> None:
+    common_session_ids = select(QuizSessionQuestion.session_id).where(
+        QuizSessionQuestion.question_id == question_id
+    )
+    personalized_session_ids = select(QuizSessionStudentQuestion.session_id).where(
+        QuizSessionStudentQuestion.question_id == question_id
+    )
+    training_session_ids = list(
+        session.scalars(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                Quiz.mode == "training",
+                QuizSession.id.in_(common_session_ids.union(personalized_session_ids)),
+            )
+        )
+    )
+    if not training_session_ids:
+        return
+    session.execute(
+        delete(QuizAnswer).where(QuizAnswer.session_id.in_(training_session_ids))
+    )
+    session.execute(
+        delete(QuizParticipant).where(
+            QuizParticipant.session_id.in_(training_session_ids)
+        )
+    )
+    session.execute(
+        delete(QuizSessionQuestion).where(
+            QuizSessionQuestion.session_id.in_(training_session_ids)
+        )
+    )
+    session.execute(
+        delete(QuizSessionStudentQuestion).where(
+            QuizSessionStudentQuestion.session_id.in_(training_session_ids)
+        )
+    )
+    session.execute(delete(QuizSession).where(QuizSession.id.in_(training_session_ids)))
 
 
 def question_response(
@@ -987,6 +1045,7 @@ def delete_question(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette question est utilisée par un quiz déjà lancé",
         )
+    discard_training_sessions_using_question(question_id, session)
     session.execute(
         delete(QuestionChoice).where(QuestionChoice.question_id == question_id)
     )

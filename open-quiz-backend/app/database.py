@@ -20,6 +20,52 @@ class Base(DeclarativeBase):
     pass
 
 
+def legacy_difficulty_counts(
+    question_count: int,
+    percentages: dict[str, int],
+    available: dict[str, int],
+) -> dict[str, int]:
+    """Reproduce the pre-0.2 percentage draw before persisting explicit counts."""
+    ease_priority = {"easy": 2, "medium": 1, "hard": 0}
+    exact = {
+        difficulty: question_count * percentage / 100
+        for difficulty, percentage in percentages.items()
+    }
+    counts = {difficulty: int(value) for difficulty, value in exact.items()}
+    remaining = question_count - sum(counts.values())
+    priorities = sorted(
+        percentages,
+        key=lambda difficulty: (
+            exact[difficulty] - counts[difficulty],
+            percentages[difficulty],
+            ease_priority[difficulty],
+        ),
+        reverse=True,
+    )
+    for difficulty in priorities[:remaining]:
+        counts[difficulty] += 1
+    counts = {
+        difficulty: min(count, available.get(difficulty, 0))
+        for difficulty, count in counts.items()
+    }
+    remaining = question_count - sum(counts.values())
+    while remaining:
+        candidates = [
+            difficulty
+            for difficulty in percentages
+            if counts[difficulty] < available.get(difficulty, 0)
+        ]
+        if not candidates:
+            break
+        difficulty = max(
+            candidates,
+            key=lambda item: (percentages[item], ease_priority[item]),
+        )
+        counts[difficulty] += 1
+        remaining -= 1
+    return counts
+
+
 def sqlite_database_path(database_url: str) -> Path | None:
     url = make_url(database_url)
     if url.get_backend_name() != "sqlite" or url.database in {None, "", ":memory:"}:
@@ -176,21 +222,52 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             "medium_percentage",
             "hard_percentage",
         }.issubset(quiz_columns):
-            connection.execute(
-                text(
-                    "UPDATE quizzes SET "
-                    "easy_question_count = CAST("
-                    "question_count * easy_percentage / 100.0 AS INTEGER), "
-                    "medium_question_count = CAST("
-                    "question_count * medium_percentage / 100.0 AS INTEGER)"
-                )
+            legacy_quizzes = list(
+                connection.execute(
+                    text(
+                        "SELECT id, question_count, easy_percentage, "
+                        "medium_percentage, hard_percentage FROM quizzes"
+                    )
+                ).mappings()
             )
-            connection.execute(
-                text(
-                    "UPDATE quizzes SET hard_question_count = "
-                    "question_count - easy_question_count - medium_question_count"
+            for legacy_quiz in legacy_quizzes:
+                available_rows = connection.execute(
+                    text(
+                        "SELECT questions.difficulty, COUNT(questions.id) "
+                        "FROM questions "
+                        "JOIN quiz_question_banks ON "
+                        "quiz_question_banks.question_bank_id = "
+                        "questions.question_bank_id "
+                        "WHERE quiz_question_banks.quiz_id = :quiz_id "
+                        "GROUP BY questions.difficulty"
+                    ),
+                    {"quiz_id": legacy_quiz["id"]},
                 )
-            )
+                available: dict[str, int] = {}
+                for difficulty, count in available_rows:
+                    available[difficulty] = count
+                counts = legacy_difficulty_counts(
+                    legacy_quiz["question_count"],
+                    {
+                        "easy": legacy_quiz["easy_percentage"],
+                        "medium": legacy_quiz["medium_percentage"],
+                        "hard": legacy_quiz["hard_percentage"],
+                    },
+                    available,
+                )
+                connection.execute(
+                    text(
+                        "UPDATE quizzes SET question_count = :question_count, "
+                        "easy_question_count = :easy, "
+                        "medium_question_count = :medium, "
+                        "hard_question_count = :hard WHERE id = :quiz_id"
+                    ),
+                    {
+                        "quiz_id": legacy_quiz["id"],
+                        "question_count": sum(counts.values()),
+                        **counts,
+                    },
+                )
         if "paused_at" not in quiz_session_columns:
             connection.execute(
                 text("ALTER TABLE quiz_sessions ADD COLUMN paused_at DATETIME")

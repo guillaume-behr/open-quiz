@@ -638,8 +638,14 @@ def expire_owned_quiz_sessions(
             )
         )
     )
+    finished_training_ids: list[int] = []
     for quiz_session, quiz in rows:
         expire_quiz_session(quiz_session, quiz, session)
+        if quiz.mode == "training" and quiz_session.status == "finished":
+            finished_training_ids.append(quiz_session.id)
+    if finished_training_ids:
+        delete_quiz_session_records(finished_training_ids, session)
+        session.commit()
 
 
 def delete_quiz_session_records(
@@ -663,6 +669,17 @@ def delete_quiz_session_records(
         )
     )
     session.execute(delete(QuizSession).where(QuizSession.id.in_(session_ids)))
+
+
+def discard_finished_training_session(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    session: DbSession,
+) -> None:
+    if quiz.mode != "training" or quiz_session.status != "finished":
+        return
+    delete_quiz_session_records([quiz_session.id], session)
+    session.commit()
 
 
 def purge_expired_quiz_results(
@@ -1815,7 +1832,9 @@ def get_student_quiz_state(
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
-    return student_state_response(quiz_session, quiz, participant, session)
+    state = student_state_response(quiz_session, quiz, participant, session)
+    discard_finished_training_session(quiz_session, quiz, session)
+    return state
 
 
 @router.post(
@@ -1963,6 +1982,7 @@ def submit_student_answer(
     state = student_state_response(quiz_session, quiz, participant, session)
     if feedback is not None:
         state.training_feedback = feedback
+    discard_finished_training_session(quiz_session, quiz, session)
     return state
 
 

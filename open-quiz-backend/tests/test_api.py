@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.config import Settings, secure_private_file
+from app.database import legacy_difficulty_counts
 from app.middleware import RequestBodyLimitMiddleware
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.schemas import QuestionBatchImport, StudentQuizAnswer
@@ -491,6 +492,30 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         )
         assert redrawn.status_code == 201
         assert redrawn.json()["join_code"] != started.json()["join_code"]
+
+        other_account = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={
+                "identifier": "other.student",
+                "display_name": "Other Student",
+                "password": "student-password",
+            },
+        ).json()
+        assert (
+            client.post(
+                f"/api/classes/{student_class['id']}/accounts/{other_account['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+        assert (
+            client.delete(
+                f"/api/classes/{student_class['id']}/accounts/{other_account['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
         with sqlite3.connect(database_path) as database:
             assert (
                 database.execute(
@@ -511,14 +536,53 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             "correct_choice_ids": [correct_choice_id],
             "expected_answer": None,
         }
+        updated_question = client.post(
+            f"/api/question-banks/questions/{question['id']}/update",
+            headers=teacher_headers,
+            data={
+                "payload": json.dumps(
+                    {
+                        "prompt": "Two plus two, exactly?",
+                        "difficulty": "easy",
+                        "answer_mode": "single",
+                        "answer_mode_disclosed": True,
+                        "choices": [
+                            {
+                                "id": choice["id"],
+                                "label": choice["label"],
+                                "is_correct": choice["is_correct"],
+                            }
+                            for choice in question["choices"]
+                        ],
+                    }
+                )
+            },
+        )
+        assert updated_question.status_code == 200
+        redrawn_answered = client.post(
+            f"/api/quizzes/student/sessions/{redrawn.json()['join_code']}/answer",
+            headers={"X-Quiz-Token": redrawn.json()["participant_token"]},
+            json={"selected_choice_ids": [correct_choice_id]},
+        )
+        assert redrawn_answered.status_code == 200
+        assert redrawn_answered.json()["status"] == "finished"
         assert (
             client.get("/api/quizzes/sessions/results", headers=teacher_headers).json()
             == []
         )
+        class_after_training = client.get(
+            "/api/classes", headers=teacher_headers
+        ).json()[0]
+        assert class_after_training["completed_quiz_count"] == 0
+        assert class_after_training["latest_quiz_title"] is None
         with sqlite3.connect(database_path) as database:
-            assert database.execute(
-                "SELECT score, is_graded FROM quiz_answers"
-            ).fetchall() == [(0.0, 0)]
+            assert (
+                database.execute("SELECT COUNT(*) FROM quiz_answers").fetchone()[0] == 0
+            )
+            assert (
+                database.execute("SELECT COUNT(*) FROM quiz_sessions").fetchone()[0]
+                == 0
+            )
 
         second_question = client.post(
             f"/api/question-banks/{bank['id']}/questions",
@@ -538,6 +602,42 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             },
         )
         assert second_question.status_code == 201
+        disposable_training = client.post(
+            f"/api/quizzes/training/{training.json()['id']}/start",
+            headers=student_headers,
+        )
+        assert disposable_training.status_code == 201
+        drawn_question_id = disposable_training.json()["question"]["id"]
+        assert (
+            client.delete(
+                f"/api/question-banks/questions/{drawn_question_id}",
+                headers=teacher_headers,
+            ).status_code
+            == 204
+        )
+        discarded_state = client.get(
+            f"/api/quizzes/student/sessions/{disposable_training.json()['join_code']}",
+            headers={"X-Quiz-Token": disposable_training.json()["participant_token"]},
+        )
+        assert discarded_state.status_code == 401
+        replacement_question = client.post(
+            f"/api/question-banks/{bank['id']}/questions",
+            headers=teacher_headers,
+            data={
+                "payload": json.dumps(
+                    {
+                        "prompt": "Four plus four?",
+                        "difficulty": "easy",
+                        "answer_mode": "single",
+                        "choices": [
+                            {"label": "Eight", "is_correct": True},
+                            {"label": "Nine", "is_correct": False},
+                        ],
+                    }
+                )
+            },
+        )
+        assert replacement_question.status_code == 201
         exam = client.post(
             "/api/quizzes",
             headers=teacher_headers,
@@ -603,6 +703,73 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         )
         assert student_exam_state.status_code == 200
         assert student_exam_state.json()["question"]["id"] == student_question_ids[0]
+
+
+def test_legacy_quiz_percentages_keep_the_previous_draw_distribution() -> None:
+    assert legacy_difficulty_counts(
+        3,
+        {"easy": 50, "medium": 50, "hard": 0},
+        {"easy": 2, "medium": 1, "hard": 0},
+    ) == {"easy": 2, "medium": 1, "hard": 0}
+
+    assert legacy_difficulty_counts(
+        4,
+        {"easy": 75, "medium": 25, "hard": 0},
+        {"easy": 1, "medium": 2, "hard": 1},
+    ) == {"easy": 1, "medium": 2, "hard": 1}
+
+
+def test_legacy_quiz_migration_persists_available_difficulty_counts(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "legacy-quiz-percentages.db"
+    with make_client(settings_for(database_path)):
+        pass
+    with sqlite3.connect(database_path) as database:
+        owner_id = database.execute("SELECT id FROM users LIMIT 1").fetchone()[0]
+        database.execute(
+            "INSERT INTO question_banks "
+            "(id, owner_id, grade_level, chapter, created_at) "
+            "VALUES (1, ?, '3e', 'Legacy', CURRENT_TIMESTAMP)",
+            (owner_id,),
+        )
+        database.executemany(
+            "INSERT INTO questions "
+            "(id, question_bank_id, prompt, difficulty, answer_mode, "
+            "answer_mode_disclosed, correction_mode, created_at) "
+            "VALUES (?, 1, ?, ?, 'single', 1, 'automatic', CURRENT_TIMESTAMP)",
+            [
+                (1, "Easy one", "easy"),
+                (2, "Easy two", "easy"),
+                (3, "Medium one", "medium"),
+            ],
+        )
+        database.execute("DROP TABLE quizzes")
+        database.execute(
+            "CREATE TABLE quizzes ("
+            "id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL, title TEXT NOT NULL, "
+            "question_count INTEGER NOT NULL, easy_percentage INTEGER NOT NULL, "
+            "medium_percentage INTEGER NOT NULL, hard_percentage INTEGER NOT NULL, "
+            "created_at DATETIME NOT NULL)"
+        )
+        database.execute(
+            "INSERT INTO quizzes VALUES "
+            "(1, ?, 'Legacy quiz', 3, 50, 50, 0, CURRENT_TIMESTAMP)",
+            (owner_id,),
+        )
+        database.execute(
+            "INSERT INTO quiz_question_banks (quiz_id, question_bank_id) VALUES (1, 1)"
+        )
+        database.commit()
+
+    create_app(settings_for(database_path))
+
+    with sqlite3.connect(database_path) as database:
+        migrated = database.execute(
+            "SELECT question_count, easy_question_count, "
+            "medium_question_count, hard_question_count FROM quizzes WHERE id = 1"
+        ).fetchone()
+    assert migrated == (3, 2, 1, 0)
 
 
 def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:

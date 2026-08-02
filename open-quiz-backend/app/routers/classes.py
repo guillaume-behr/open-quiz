@@ -54,9 +54,12 @@ def class_response(
         )
     )
     completed_quiz_count = session.scalar(
-        select(func.count(QuizSession.id)).where(
+        select(func.count(QuizSession.id))
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(
             QuizSession.class_id == student_class.id,
             QuizSession.status == "finished",
+            Quiz.mode == "exam",
         )
     )
     latest_quiz = session.execute(
@@ -70,6 +73,7 @@ def class_response(
         .where(
             QuizSession.class_id == student_class.id,
             QuizSession.status == "finished",
+            Quiz.mode == "exam",
         )
         .order_by(
             QuizSession.started_at.desc(),
@@ -175,8 +179,11 @@ def delete_class(
     owned_class(class_id, professor, session)
     if (
         session.scalar(
-            select(QuizSession.id).where(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
                 QuizSession.class_id == class_id,
+                Quiz.mode == "exam",
                 QuizSession.status.in_(["waiting", "in_progress", "paused"]),
             )
         )
@@ -227,8 +234,10 @@ def assign_student_account(
             return class_response(student_class, session)
         active_class_id = session.scalar(
             select(QuizSession.class_id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSession.class_id.in_([membership.class_id, class_id]),
+                Quiz.mode == "exam",
                 QuizSession.status.in_(["waiting", "in_progress", "paused"]),
             )
             .limit(1)
@@ -285,8 +294,11 @@ def unassign_student_account(
         raise HTTPException(status_code=404, detail="Affectation introuvable")
     if (
         session.scalar(
-            select(QuizSession.id).where(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
                 QuizSession.class_id == class_id,
+                Quiz.mode == "exam",
                 QuizSession.status.in_(["waiting", "in_progress", "paused"]),
             )
         )
