@@ -123,6 +123,20 @@ class QuestionBank(Base):
     )
 
 
+class ClassTrainingQuestionBank(Base):
+    __tablename__ = "class_training_question_banks"
+
+    class_id: Mapped[int] = mapped_column(
+        ForeignKey("student_classes.id"), primary_key=True
+    )
+    question_bank_id: Mapped[int] = mapped_column(
+        ForeignKey("question_banks.id"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
 class Question(Base):
     __tablename__ = "questions"
 
@@ -209,6 +223,15 @@ class QuizQuestionBank(Base):
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), primary_key=True)
     question_bank_id: Mapped[int] = mapped_column(
         ForeignKey("question_banks.id"), primary_key=True
+    )
+
+
+class TrainingQuizProfile(Base):
+    __tablename__ = "training_quiz_profiles"
+
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(
+        ForeignKey("quizzes.id"), unique=True, index=True
     )
 
 

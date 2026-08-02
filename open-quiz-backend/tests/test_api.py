@@ -477,6 +477,27 @@ def test_professor_manages_student_accounts_and_class_assignments(
         account = created.json()
         assert account["class_id"] is None
         assert "password" not in account
+        inactive_account = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={
+                "identifier": "inactive.student",
+                "display_name": "Inactive Student",
+                "password": "student-password",
+            },
+        ).json()
+        assert (
+            client.post(
+                f"/api/students/{inactive_account['id']}/update",
+                headers=teacher_headers,
+                json={
+                    "identifier": inactive_account["identifier"],
+                    "display_name": inactive_account["display_name"],
+                    "is_active": False,
+                },
+            ).status_code
+            == 200
+        )
 
         logged_in = client.post(
             "/api/student-auth/login",
@@ -499,9 +520,44 @@ def test_professor_manages_student_accounts_and_class_assignments(
         )
         assert assigned.status_code == 200
         assert assigned.json()["students"][0]["account_id"] == account["id"]
+        listed_accounts = client.get("/api/students", headers=teacher_headers).json()
         assert (
-            client.get("/api/students", headers=teacher_headers).json()[0]["class_name"]
+            next(item for item in listed_accounts if item["id"] == account["id"])[
+                "class_name"
+            ]
             == "4e A"
+        )
+        assert [
+            item["id"]
+            for item in client.get(
+                "/api/students",
+                headers=teacher_headers,
+                params={"class_id": student_class["id"]},
+            ).json()
+        ] == [account["id"]]
+        assert [
+            item["id"]
+            for item in client.get(
+                "/api/students",
+                headers=teacher_headers,
+                params={"unassigned": True},
+            ).json()
+        ] == [inactive_account["id"]]
+        assert [
+            item["id"]
+            for item in client.get(
+                "/api/students",
+                headers=teacher_headers,
+                params={"is_active": False},
+            ).json()
+        ] == [inactive_account["id"]]
+        assert (
+            client.get(
+                "/api/students",
+                headers=teacher_headers,
+                params={"class_id": student_class["id"], "unassigned": True},
+            ).status_code
+            == 422
         )
 
         unassigned = client.delete(
@@ -509,8 +565,11 @@ def test_professor_manages_student_accounts_and_class_assignments(
             headers=teacher_headers,
         )
         assert unassigned.status_code == 204
+        listed_accounts = client.get("/api/students", headers=teacher_headers).json()
         assert (
-            client.get("/api/students", headers=teacher_headers).json()[0]["class_id"]
+            next(item for item in listed_accounts if item["id"] == account["id"])[
+                "class_id"
+            ]
             is None
         )
 
@@ -583,7 +642,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         correct_choice_id = next(
             choice["id"] for choice in question["choices"] if choice["is_correct"]
         )
-        training = client.post(
+        manual_training = client.post(
             "/api/quizzes",
             headers=teacher_headers,
             json={
@@ -597,14 +656,83 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                 "hard_question_count": 0,
             },
         )
-        assert training.status_code == 201
-        assert training.json()["mode"] == "training"
+        assert manual_training.status_code == 422
+        training_banks = client.put(
+            f"/api/quizzes/training/classes/{student_class['id']}/question-banks",
+            headers=teacher_headers,
+            json={"question_bank_ids": [bank["id"]]},
+        )
+        assert training_banks.status_code == 200
+        assert training_banks.json()[0]["id"] == bank["id"]
+        other_level_bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "4e", "chapter": "Wrong level"},
+        ).json()
+        assert (
+            client.put(
+                f"/api/quizzes/training/classes/{student_class['id']}/question-banks",
+                headers=teacher_headers,
+                json={"question_bank_ids": [other_level_bank["id"]]},
+            ).status_code
+            == 422
+        )
         assert client.get("/api/quizzes", headers=teacher_headers).json() == []
         assert (
-            client.get("/api/quizzes?mode=training", headers=teacher_headers).json()[0][
-                "id"
-            ]
-            == training.json()["id"]
+            client.get(
+                f"/api/quizzes/training/classes/{student_class['id']}/question-banks",
+                headers=teacher_headers,
+            ).json()[0]["id"]
+            == bank["id"]
+        )
+        other_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "3e B", "grade_level": "3e"},
+        ).json()
+        assert (
+            client.get(
+                f"/api/quizzes/training/classes/{other_class['id']}/question-banks",
+                headers=teacher_headers,
+            ).json()
+            == []
+        )
+        other_class_account = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={
+                "identifier": "other.class.student",
+                "display_name": "Other Class Student",
+                "password": "student-password",
+            },
+        ).json()
+        assert (
+            client.post(
+                f"/api/classes/{other_class['id']}/accounts/{other_class_account['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+        other_login = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": "other.class.student",
+                "password": "student-password",
+            },
+        ).json()
+        other_student_headers = {
+            "Authorization": f"Bearer {other_login['access_token']}"
+        }
+        assert (
+            client.get("/api/quizzes/training", headers=other_student_headers).json()
+            == []
+        )
+        assert (
+            client.post(
+                f"/api/quizzes/training/{bank['id']}/start",
+                headers=other_student_headers,
+            ).status_code
+            == 404
         )
 
         login = client.post(
@@ -617,15 +745,16 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         student_headers = {"Authorization": f"Bearer {login['access_token']}"}
         available = client.get("/api/quizzes/training", headers=student_headers)
         assert available.status_code == 200
-        assert available.json()[0]["title"] == "Mental arithmetic"
+        assert available.json()[0]["chapter"] == "Training"
         started = client.post(
-            f"/api/quizzes/training/{training.json()['id']}/start",
+            f"/api/quizzes/training/{bank['id']}/start",
             headers=student_headers,
         )
         assert started.status_code == 201
         assert started.json()["status"] == "in_progress"
+        assert started.json()["quiz_title"] == "Training"
         redrawn = client.post(
-            f"/api/quizzes/training/{training.json()['id']}/start",
+            f"/api/quizzes/training/{bank['id']}/start",
             headers=student_headers,
         )
         assert redrawn.status_code == 201
@@ -740,7 +869,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         )
         assert second_question.status_code == 201
         disposable_training = client.post(
-            f"/api/quizzes/training/{training.json()['id']}/start",
+            f"/api/quizzes/training/{bank['id']}/start",
             headers=student_headers,
         )
         assert disposable_training.status_code == 201

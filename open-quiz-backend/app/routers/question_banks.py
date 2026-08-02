@@ -30,6 +30,7 @@ from app.images import (
     normalize_image,
 )
 from app.models import (
+    ClassTrainingQuestionBank,
     Question,
     QuestionBank,
     QuestionChoice,
@@ -181,8 +182,17 @@ def delete_question_bank(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette banque est utilisée par un quiz",
         )
-    question_ids = select(Question.id).where(
-        Question.question_bank_id == question_bank_id
+    question_ids = list(
+        session.scalars(
+            select(Question.id).where(Question.question_bank_id == question_bank_id)
+        )
+    )
+    for question_id in question_ids:
+        discard_training_sessions_using_question(question_id, session)
+    session.execute(
+        delete(ClassTrainingQuestionBank).where(
+            ClassTrainingQuestionBank.question_bank_id == question_bank_id
+        )
     )
     session.execute(
         delete(QuestionChoice).where(QuestionChoice.question_id.in_(question_ids))

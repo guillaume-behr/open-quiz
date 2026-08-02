@@ -29,6 +29,7 @@ from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
 from app.grading import compute_final_scores
 from app.models import (
+    ClassTrainingQuestionBank,
     Question,
     QuestionBank,
     QuestionChoice,
@@ -43,11 +44,13 @@ from app.models import (
     Student,
     StudentAccount,
     StudentClass,
+    TrainingQuizProfile,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.routers.question_banks import question_response
 from app.routers.student_auth import current_student
 from app.schemas import (
+    QuestionBankResponse,
     QuestionResponse,
     QuizAnswerGrade,
     QuizAnswerReview,
@@ -67,6 +70,7 @@ from app.schemas import (
     StudentQuizStateResponse,
     StudentQuizViolation,
     TrainingFeedback,
+    TrainingQuestionBankSelection,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
@@ -74,6 +78,7 @@ randomizer = SystemRandom()
 JOIN_CODE_ALPHABET = ascii_uppercase + digits
 VIOLATION_DEDUPLICATION_SECONDS = 2
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
+MAX_TRAINING_QUESTIONS = 200
 
 
 def safe_spreadsheet_cell(value: str) -> str:
@@ -348,6 +353,76 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
         ],
         created_at=quiz.created_at,
     )
+
+
+def question_bank_responses(
+    question_bank_ids: list[int],
+    session: DbSession,
+) -> list[QuestionBankResponse]:
+    if not question_bank_ids:
+        return []
+    rows = session.execute(
+        select(
+            QuestionBank,
+            func.count(Question.id),
+            func.sum(case((Question.difficulty == "easy", 1), else_=0)),
+            func.sum(case((Question.difficulty == "medium", 1), else_=0)),
+            func.sum(case((Question.difficulty == "hard", 1), else_=0)),
+        )
+        .outerjoin(Question, Question.question_bank_id == QuestionBank.id)
+        .where(QuestionBank.id.in_(question_bank_ids))
+        .group_by(QuestionBank.id)
+        .order_by(QuestionBank.grade_level, QuestionBank.chapter)
+    )
+    return [
+        QuestionBankResponse.model_validate(bank).model_copy(
+            update={
+                "question_count": question_count,
+                "easy_question_count": easy_count or 0,
+                "medium_question_count": medium_count or 0,
+                "hard_question_count": hard_count or 0,
+            }
+        )
+        for bank, question_count, easy_count, medium_count, hard_count in rows
+    ]
+
+
+def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
+    quiz = session.scalar(
+        select(Quiz)
+        .join(TrainingQuizProfile, TrainingQuizProfile.quiz_id == Quiz.id)
+        .where(TrainingQuizProfile.owner_id == owner_id)
+    )
+    if quiz is not None:
+        return quiz
+    quiz = Quiz(
+        owner_id=owner_id,
+        mode="training",
+        title="Entraînement",
+        source_language="fr",
+        question_count=0,
+        duration_seconds=28800,
+        allow_previous_questions=False,
+        same_questions_for_all=False,
+        easy_question_count=0,
+        medium_question_count=0,
+        hard_question_count=0,
+        easy_points=0,
+        medium_points=0,
+        hard_points=0,
+    )
+    session.add(quiz)
+    session.flush()
+    session.add(TrainingQuizProfile(owner_id=owner_id, quiz_id=quiz.id))
+    return quiz
+
+
+def draw_training_question_ids(bank_id: int, session: DbSession) -> list[int]:
+    question_ids = list(
+        session.scalars(select(Question.id).where(Question.question_bank_id == bank_id))
+    )
+    randomizer.shuffle(question_ids)
+    return question_ids[:MAX_TRAINING_QUESTIONS]
 
 
 def owned_quiz_session(
@@ -956,7 +1031,7 @@ def list_quizzes(
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     search: Annotated[str, Query(max_length=160)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
-    mode: Annotated[str, Query(pattern="^(exam|training)$")] = "exam",
+    mode: Annotated[str, Query(pattern="^exam$")] = "exam",
 ) -> list[QuizResponse]:
     filters = [Quiz.owner_id == professor.id, Quiz.mode == mode]
     if search:
@@ -1005,9 +1080,7 @@ def create_quiz(
         question_count=payload.question_count,
         duration_seconds=payload.duration_seconds,
         allow_previous_questions=payload.allow_previous_questions,
-        same_questions_for_all=(
-            payload.same_questions_for_all if payload.mode == "exam" else False
-        ),
+        same_questions_for_all=payload.same_questions_for_all,
         easy_question_count=payload.easy_question_count,
         medium_question_count=payload.medium_question_count,
         hard_question_count=payload.hard_question_count,
@@ -1505,58 +1578,164 @@ def cancel_quiz_session(
     return session_response(quiz_session, quiz, session)
 
 
-@router.get("/training", response_model=list[QuizResponse])
-def list_student_training_quizzes(
+@router.get(
+    "/training/classes/{class_id}/question-banks",
+    response_model=list[QuestionBankResponse],
+)
+def list_class_training_question_banks(
+    class_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> list[QuestionBankResponse]:
+    student_class = session.scalar(
+        select(StudentClass).where(
+            StudentClass.id == class_id,
+            StudentClass.owner_id == professor.id,
+        )
+    )
+    if student_class is None:
+        raise HTTPException(status_code=404, detail="Classe introuvable")
+    bank_ids = list(
+        session.scalars(
+            select(ClassTrainingQuestionBank.question_bank_id)
+            .join(
+                QuestionBank,
+                QuestionBank.id == ClassTrainingQuestionBank.question_bank_id,
+            )
+            .where(
+                ClassTrainingQuestionBank.class_id == class_id,
+                QuestionBank.grade_level == student_class.grade_level,
+            )
+        )
+    )
+    return question_bank_responses(bank_ids, session)
+
+
+@router.put(
+    "/training/classes/{class_id}/question-banks",
+    response_model=list[QuestionBankResponse],
+)
+def update_class_training_question_banks(
+    class_id: int,
+    payload: TrainingQuestionBankSelection,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> list[QuestionBankResponse]:
+    student_class = session.scalar(
+        select(StudentClass).where(
+            StudentClass.id == class_id,
+            StudentClass.owner_id == professor.id,
+        )
+    )
+    if student_class is None:
+        raise HTTPException(status_code=404, detail="Classe introuvable")
+    banks = list(
+        session.scalars(
+            select(QuestionBank).where(
+                QuestionBank.id.in_(payload.question_bank_ids),
+                QuestionBank.owner_id == professor.id,
+            )
+        )
+    )
+    if len(banks) != len(payload.question_bank_ids):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Une ou plusieurs banques de questions sont invalides",
+        )
+    if any(bank.grade_level != student_class.grade_level for bank in banks):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Les banques d’entraînement doivent correspondre au niveau de la classe"
+            ),
+        )
+    session.execute(
+        delete(ClassTrainingQuestionBank).where(
+            ClassTrainingQuestionBank.class_id == class_id
+        )
+    )
+    session.add_all(
+        ClassTrainingQuestionBank(
+            class_id=class_id,
+            question_bank_id=question_bank_id,
+        )
+        for question_bank_id in payload.question_bank_ids
+    )
+    session.commit()
+    return question_bank_responses(payload.question_bank_ids, session)
+
+
+@router.get("/training", response_model=list[QuestionBankResponse])
+def list_student_training_question_banks(
     session: DbSession,
     student: StudentAccount = Depends(current_student),
-) -> list[QuizResponse]:
-    quizzes = session.scalars(
-        select(Quiz)
-        .where(
-            Quiz.owner_id == student.owner_id,
-            Quiz.mode == "training",
+) -> list[QuestionBankResponse]:
+    bank_ids = list(
+        session.scalars(
+            select(ClassTrainingQuestionBank.question_bank_id)
+            .join(Student, Student.class_id == ClassTrainingQuestionBank.class_id)
+            .join(StudentClass, StudentClass.id == Student.class_id)
+            .join(
+                QuestionBank,
+                QuestionBank.id == ClassTrainingQuestionBank.question_bank_id,
+            )
+            .where(
+                Student.account_id == student.id,
+                QuestionBank.grade_level == StudentClass.grade_level,
+            )
         )
-        .order_by(Quiz.created_at.desc(), Quiz.id.desc())
     )
-    return [quiz_response(quiz, session) for quiz in quizzes]
+    return question_bank_responses(bank_ids, session)
 
 
 @router.post(
-    "/training/{quiz_id}/start",
+    "/training/{question_bank_id}/start",
     response_model=StudentQuizJoinResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def start_training_quiz(
-    quiz_id: int,
+    question_bank_id: int,
     session: DbSession,
     student: StudentAccount = Depends(current_student),
 ) -> StudentQuizJoinResponse:
-    quiz = session.scalar(
-        select(Quiz).where(
-            Quiz.id == quiz_id,
-            Quiz.owner_id == student.owner_id,
-            Quiz.mode == "training",
-        )
-    )
     membership = session.execute(
         select(Student, StudentClass)
         .join(StudentClass, StudentClass.id == Student.class_id)
         .where(Student.account_id == student.id)
     ).first()
-    if quiz is None:
-        raise HTTPException(status_code=404, detail="Entraînement introuvable")
     if membership is None:
         raise HTTPException(
             status_code=409,
             detail="L’élève doit être affecté à une classe",
         )
     class_student, student_class = membership
+    bank = session.scalar(
+        select(QuestionBank)
+        .join(
+            ClassTrainingQuestionBank,
+            ClassTrainingQuestionBank.question_bank_id == QuestionBank.id,
+        )
+        .where(
+            QuestionBank.id == question_bank_id,
+            QuestionBank.owner_id == student.owner_id,
+            QuestionBank.grade_level == student_class.grade_level,
+            ClassTrainingQuestionBank.class_id == student_class.id,
+        )
+    )
+    if bank is None:
+        raise HTTPException(status_code=404, detail="Entraînement introuvable")
+    question_ids = draw_training_question_ids(bank.id, session)
+    if not question_ids:
+        raise HTTPException(
+            status_code=409,
+            detail="Cette banque ne contient encore aucune question",
+        )
+    quiz = training_profile_quiz(student.owner_id, session)
     discard_previous_training_sessions(student, class_student, session)
-    question_ids = draw_question_ids(quiz, session)
     now = datetime.now(UTC)
     quiz_session = QuizSession(
         quiz_id=quiz.id,
-        quiz_title=quiz.title,
+        quiz_title=bank.chapter,
         source_language=quiz.source_language,
         duration_seconds=28800,
         allow_previous_questions=False,
@@ -1603,6 +1782,11 @@ def preview_quiz(
     session: DbSession,
 ) -> list[QuestionResponse]:
     quiz = owned_quiz(quiz_id, professor, session)
+    if quiz.mode != "exam":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quiz introuvable",
+        )
     return load_question_responses(draw_question_ids(quiz, session), session)
 
 
@@ -1617,6 +1801,11 @@ def update_quiz(
     session: DbSession,
 ) -> QuizResponse:
     quiz = owned_quiz(quiz_id, professor, session)
+    if quiz.mode != "exam":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quiz introuvable",
+        )
     active_session_id = session.scalar(
         select(QuizSession.id)
         .where(
@@ -1632,14 +1821,12 @@ def update_quiz(
         )
     validate_bank_selection(payload, professor, session)
     quiz.title = payload.title
-    quiz.mode = payload.mode
+    quiz.mode = "exam"
     quiz.source_language = payload.source_language
     quiz.question_count = payload.question_count
     quiz.duration_seconds = payload.duration_seconds
     quiz.allow_previous_questions = payload.allow_previous_questions
-    quiz.same_questions_for_all = (
-        payload.same_questions_for_all if payload.mode == "exam" else False
-    )
+    quiz.same_questions_for_all = payload.same_questions_for_all
     quiz.easy_question_count = payload.easy_question_count
     quiz.medium_question_count = payload.medium_question_count
     quiz.hard_question_count = payload.hard_question_count

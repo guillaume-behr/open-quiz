@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -63,7 +65,15 @@ def list_student_accounts(
     page: int = Query(1, ge=1),
     page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     search: str = Query("", max_length=120),
+    class_id: Annotated[int | None, Query(ge=1)] = None,
+    unassigned: bool = False,
+    is_active: bool | None = None,
 ) -> list[StudentAccountResponse]:
+    if class_id is not None and unassigned:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Les filtres de classe sont incompatibles",
+        )
     filters = [StudentAccount.owner_id == professor.id]
     if search:
         term = f"%{search}%"
@@ -71,6 +81,23 @@ def list_student_accounts(
             StudentAccount.display_name.ilike(term)
             | StudentAccount.identifier.ilike(term)
         )
+    if class_id is not None:
+        filters.append(
+            StudentAccount.id.in_(
+                select(Student.account_id).where(
+                    Student.class_id == class_id,
+                    Student.account_id.is_not(None),
+                )
+            )
+        )
+    elif unassigned:
+        filters.append(
+            StudentAccount.id.not_in(
+                select(Student.account_id).where(Student.account_id.is_not(None))
+            )
+        )
+    if is_active is not None:
+        filters.append(StudentAccount.is_active.is_(is_active))
     total = (
         session.scalar(select(func.count()).select_from(StudentAccount).where(*filters))
         or 0

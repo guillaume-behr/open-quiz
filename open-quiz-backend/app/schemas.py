@@ -242,6 +242,21 @@ class QuestionBankResponse(BaseModel):
     hard_question_count: int = 0
 
 
+class TrainingQuestionBankSelection(BaseModel):
+    question_bank_ids: list[int] = Field(max_length=100)
+
+    @field_validator("question_bank_ids")
+    @classmethod
+    def validate_unique_question_banks(cls, value: list[int]) -> list[int]:
+        if any(question_bank_id < 1 for question_bank_id in value):
+            raise ValueError("Les banques de questions sélectionnées sont invalides")
+        if len(value) != len(set(value)):
+            raise ValueError(
+                "Chaque banque de questions ne peut être sélectionnée qu’une fois"
+            )
+        return value
+
+
 CodeLanguage = Literal[
     "javascript",
     "typescript",
@@ -401,7 +416,7 @@ class QuestionBatchImportResponse(BaseModel):
 
 
 class QuizCreate(BaseModel):
-    mode: Literal["exam", "training"] = "exam"
+    mode: Literal["exam"] = "exam"
     title: str = Field(min_length=1, max_length=160)
     source_language: str = Field(
         default="fr",
@@ -450,10 +465,6 @@ class QuizCreate(BaseModel):
                 raise ValueError(
                     "Des points ne peuvent être attribués à une difficulté sans question"
                 )
-        if self.mode == "training" and any(
-            (self.easy_points, self.medium_points, self.hard_points)
-        ):
-            raise ValueError("Un entraînement ne peut pas attribuer de points")
         if len(set(self.question_bank_ids)) != len(self.question_bank_ids):
             raise ValueError(
                 "Chaque banque de questions ne peut être sélectionnée qu’une fois"

@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from app.dependencies import DbSession, ProfessorUser
 from app.grade_levels import ensure_grade_level
 from app.models import (
+    ClassTrainingQuestionBank,
     Quiz,
     QuizParticipant,
     QuizSession,
@@ -203,6 +204,11 @@ def delete_class(
         update(QuizSession)
         .where(QuizSession.class_id == class_id)
         .values(class_id=None)
+    )
+    session.execute(
+        delete(ClassTrainingQuestionBank).where(
+            ClassTrainingQuestionBank.class_id == class_id
+        )
     )
     session.execute(delete(Student).where(Student.class_id == class_id))
     session.execute(delete(StudentClass).where(StudentClass.id == class_id))
