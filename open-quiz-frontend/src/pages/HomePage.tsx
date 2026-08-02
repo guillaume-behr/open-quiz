@@ -162,10 +162,11 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
 
     async function joinExam(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
+        if (!token) return
         setIsJoining(true)
         setJoinError(null)
         try {
-            const joined = await joinQuiz(joinCode.trim(), token!)
+            const joined = await joinQuiz(joinCode.trim(), token)
             storeQuizSession({
                 joinCode: joined.join_code,
                 participantToken: joined.participant_token,

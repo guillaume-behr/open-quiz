@@ -194,7 +194,9 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "same_questions_for_all BOOLEAN NOT NULL DEFAULT TRUE"
                 )
             )
-        connection.execute(text("UPDATE quizzes SET same_questions_for_all = FALSE"))
+            connection.execute(
+                text("UPDATE quizzes SET same_questions_for_all = FALSE")
+            )
         if "source_language" not in quiz_columns:
             connection.execute(
                 text(
@@ -324,7 +326,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "ADD COLUMN points FLOAT NOT NULL DEFAULT 0"
                 )
             )
-        connection.execute(text("UPDATE question_choices SET points = 0"))
+            connection.execute(text("UPDATE question_choices SET points = 0"))
         for column_name, column_type in (
             ("image_data", LargeBinary()),
             ("image_content_type", String(80)),

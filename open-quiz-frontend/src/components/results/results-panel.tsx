@@ -41,6 +41,10 @@ function formatScore(score: number, locale: string) {
     }).format(score)
 }
 
+function roundScore(score: number): number {
+    return Math.round((score + Number.EPSILON) * 100) / 100
+}
+
 type ResultsPanelProps = {
     isExportDialogOpen: boolean
     onExportDialogOpenChange: (open: boolean) => void
@@ -238,7 +242,9 @@ export function ResultsPanel({
                     participant.id === selectedParticipant?.id
                         ? {
                               ...participant,
-                              score: participant.score + scoreDifference,
+                              score: roundScore(
+                                  participant.score + scoreDifference
+                              ),
                               pending_manual_grading_count:
                                   participant.pending_manual_grading_count +
                                   pendingDifference,

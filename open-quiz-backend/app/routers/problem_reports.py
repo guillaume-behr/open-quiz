@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, func, select
 
 from app.audit import audit_event
-from app.dependencies import AdminUser, DbSession
+from app.dependencies import AdminUser, DbSession, client_ip
 from app.models import ProblemReport
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import ProblemReportCreate, ProblemReportResponse
@@ -31,7 +31,7 @@ def create_problem_report(
     session: DbSession,
 ) -> ProblemReport:
     retry_after = request.app.state.problem_report_rate_limiter.reserve(
-        session, "instance-wide"
+        session, f"client:{client_ip(request)}"
     )
     if retry_after:
         raise HTTPException(

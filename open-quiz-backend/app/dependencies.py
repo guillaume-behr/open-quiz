@@ -22,6 +22,16 @@ DbSession = Annotated[Session, Depends(get_db)]
 BearerCredentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]
 
 
+def client_ip(request: Request) -> str:
+    """Best-effort client address, honoring the immediate trusted proxy."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    if request.client is not None:
+        return request.client.host
+    return "unknown"
+
+
 def authenticated_user_from_token(
     request: Request,
     token: str,

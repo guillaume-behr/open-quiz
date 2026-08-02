@@ -232,7 +232,6 @@ export function QuizzesPanel({
     const quizGradeLevels = Array.from(
         new Set(banks.map((bank) => bank.grade_level))
     ).sort((first, second) => first.localeCompare(second, "fr"))
-    const filteredQuizzes = quizzes
     const loadError =
         supportLoadFailed || quizListLoadFailed ? t("quizzes-load-error") : null
 
@@ -494,7 +493,7 @@ export function QuizzesPanel({
             <QuizzesList
                 mode={mode}
                 quizzes={quizzes}
-                filteredQuizzes={filteredQuizzes}
+                filteredQuizzes={quizzes}
                 sessions={sessions}
                 gradeLevels={quizGradeLevels}
                 isLoading={isLoading}

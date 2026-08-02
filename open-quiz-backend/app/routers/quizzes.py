@@ -2583,31 +2583,6 @@ def join_quiz(
     )
     if existing is not None:
         reject_quiz_join(request, session, join_subject)
-    if quiz_session.same_questions_for_all is not False:
-        common_questions = list(
-            session.execute(
-                select(
-                    QuizSessionQuestion.question_id,
-                    QuizSessionQuestion.points,
-                )
-                .where(QuizSessionQuestion.session_id == quiz_session.id)
-                .order_by(QuizSessionQuestion.position)
-            ).all()
-        )
-        if not common_questions:
-            reject_quiz_join(request, session, join_subject)
-        randomizer.shuffle(common_questions)
-        session.add_all(
-            QuizSessionStudentQuestion(
-                session_id=quiz_session.id,
-                student_id=student.id,
-                student_identifier=student.identifier,
-                question_id=question_id,
-                position=position,
-                points=points,
-            )
-            for position, (question_id, points) in enumerate(common_questions)
-        )
     participant_token = token_urlsafe(32)
     participant = QuizParticipant(
         session_id=quiz_session.id,

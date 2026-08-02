@@ -72,14 +72,17 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
         choices = choices_by_question.get(answer.question_id, [])
         submitted = json.loads(answer.answer_data)
         participant = participants.get(answer.participant_id)
-        question_points = common_points.get(answer.question_id, 0)
-        if participant is not None and not common_points:
+        question_points = common_points.get(answer.question_id)
+        if participant is not None:
             question_points = personalized_points_by_student.get(
                 (participant.student_id, answer.question_id),
                 personalized_points_by_identifier.get(
-                    (participant.student_identifier, answer.question_id), 0
+                    (participant.student_identifier, answer.question_id),
+                    question_points,
                 ),
             )
+        if question_points is None:
+            question_points = 0.0
         if question is None:
             answer.score = 0
             answer.is_graded = True

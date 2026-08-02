@@ -209,7 +209,6 @@ export function QuestionBanksPanel({
     const selectedBank = questionBanks.find(
         (bank) => bank.id === selectedBankId
     )
-    const filteredQuestionBanks = questionBanks
 
     function openQuestions(bankId: number): void {
         setAreQuestionsLoading(true)
@@ -362,7 +361,7 @@ export function QuestionBanksPanel({
         <div className="mt-6">
             <QuestionBanksList
                 banks={questionBanks}
-                filteredBanks={filteredQuestionBanks}
+                filteredBanks={questionBanks}
                 gradeLevels={gradeLevels}
                 titleFilter={titleFilter}
                 gradeLevelFilter={gradeLevelFilter}
