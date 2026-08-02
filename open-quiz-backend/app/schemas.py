@@ -301,7 +301,7 @@ class QuestionChoiceCreate(BaseModel):
         return normalized if normalized.strip() else None
 
     @model_validator(mode="after")
-    def validate_code(self) -> QuestionChoiceCreate:
+    def validate_code(self) -> "QuestionChoiceCreate":
         if (self.code_language is None) != (self.code_content is None):
             raise ValueError(
                 "Le langage et le contenu du code doivent être renseignés ensemble"
@@ -339,7 +339,7 @@ class QuestionCreate(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_correct_choices(self) -> QuestionCreate:
+    def validate_correct_choices(self) -> "QuestionCreate":
         correct_count = sum(choice.is_correct for choice in self.choices)
         if self.answer_mode in {"single", "written"} and correct_count > 1:
             raise ValueError(
@@ -453,7 +453,7 @@ class QuizCreate(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_question_counts(self) -> QuizCreate:
+    def validate_question_counts(self) -> "QuizCreate":
         self.same_questions_for_all = False
         if self.question_count < 1:
             raise ValueError("Le quiz doit contenir au moins une question")

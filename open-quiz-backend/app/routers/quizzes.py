@@ -1063,7 +1063,7 @@ def student_state_response(
     if existing_answer is not None:
         try:
             saved_answer = json.loads(existing_answer.answer_data)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             saved_answer = {}
         if not isinstance(saved_answer, dict):
             saved_answer = {}
@@ -1371,7 +1371,7 @@ def answer_review(
 ) -> QuizAnswerReview:
     try:
         submitted = json.loads(answer.answer_data)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         submitted = {}
     if not isinstance(submitted, dict):
         submitted = {}
@@ -2173,24 +2173,30 @@ def control_makeup_session(
         )
     now = datetime.now(UTC)
     for child in children:
-        child.status = target
         if action == "start":
+            child.status = "in_progress"
             child.started_at = now
             for participant in session.scalars(
                 select(QuizParticipant).where(QuizParticipant.session_id == child.id)
             ):
                 participant.current_position = 0
         elif action == "pause":
+            child.status = "paused"
             child.paused_at = now
-        elif action == "resume" and child.paused_at is not None:
-            paused_at = child.paused_at
-            if paused_at.tzinfo is None:
-                paused_at = paused_at.replace(tzinfo=UTC)
-            child.paused_duration_seconds += ceil(
-                max(0, (now - paused_at).total_seconds())
-            )
-            child.paused_at = None
+        elif action == "resume":
+            child.status = "in_progress"
+            if child.paused_at is not None:
+                paused_at = child.paused_at
+                if paused_at.tzinfo is None:
+                    paused_at = paused_at.replace(tzinfo=UTC)
+                child.paused_duration_seconds += ceil(
+                    max(0, (now - paused_at).total_seconds())
+                )
+                child.paused_at = None
         elif action == "finish":
+            if child.status != "in_progress":
+                continue
+            child.status = "finished"
             quiz = session.get(Quiz, child.quiz_id)
             if quiz is not None:
                 compute_final_scores(child, session)
@@ -2198,6 +2204,8 @@ def control_makeup_session(
                 select(QuizParticipant).where(QuizParticipant.session_id == child.id)
             ):
                 participant.current_position = None
+        elif action == "cancel":
+            child.status = "cancelled"
     makeup.status = target
     session.commit()
     return makeup_session_response(makeup, session)
@@ -2777,9 +2785,19 @@ def submit_student_answer(
         )
     )
     if unfinished_count == 0:
-        quiz_session.status = "finished"
-        if quiz.mode == "exam":
-            compute_final_scores(quiz_session, session)
+        transition = session.execute(
+            update(QuizSession)
+            .where(
+                QuizSession.id == quiz_session.id,
+                QuizSession.status == "in_progress",
+            )
+            .values(status="finished")
+            .execution_options(synchronize_session=False)
+        )
+        if transition.rowcount == 1:
+            quiz_session.status = "finished"
+            if quiz.mode == "exam":
+                compute_final_scores(quiz_session, session)
     session.commit()
     state = student_state_response(quiz_session, quiz, participant, session)
     if feedback is not None:

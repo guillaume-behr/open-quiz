@@ -34,7 +34,7 @@ def student_from_token(
         student_id, version = decode_student_access_token(
             token, request.app.state.settings.jwt_secret
         )
-    except jwt.PyJWTError, ValueError, KeyError:
+    except (jwt.PyJWTError, ValueError, KeyError):
         return None
     account = session.get(StudentAccount, student_id)
     if (

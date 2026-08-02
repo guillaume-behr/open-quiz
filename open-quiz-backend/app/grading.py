@@ -72,7 +72,7 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
         choices = choices_by_question.get(answer.question_id, [])
         try:
             submitted = json.loads(answer.answer_data)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             submitted = {}
         participant = participants.get(answer.participant_id)
         question_points = common_points.get(answer.question_id)

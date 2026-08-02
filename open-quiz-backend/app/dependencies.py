@@ -41,7 +41,7 @@ def authenticated_user_from_token(
         user_id, token_version = decode_access_token(
             token, request.app.state.settings.jwt_secret
         )
-    except jwt.PyJWTError, ValueError, KeyError:
+    except (jwt.PyJWTError, ValueError, KeyError):
         return None
 
     user = session.get(User, user_id)
