@@ -7,20 +7,23 @@ import {
 import type { GradeLevel, TwoFactorChallenge, User } from "@/api/types"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
-import { StudentClassesPanel } from "@/components/classes/student-classes-panel"
+import { ClassesPanel } from "@/components/classes/classes-panel"
 import { QuestionBanksPanel } from "@/components/question-banks/question-banks-panel"
 import { QuizzesPanel } from "@/components/quizzes/quizzes-panel"
 import { ResultsPanel } from "@/components/results/results-panel"
+import { StudentsPanel } from "@/components/students/students-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
     ChartColumn,
     ClipboardList,
     Download,
+    Dumbbell,
     LibraryBig,
     LoaderCircle,
     LogOut,
     Plus,
+    School,
     UsersRound,
     type LucideIcon,
 } from "lucide-react"
@@ -28,7 +31,13 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 
-type DashboardSection = "students" | "quizzes" | "question-banks" | "results"
+type DashboardSection =
+    | "students"
+    | "classes"
+    | "exam-quizzes"
+    | "training-quizzes"
+    | "question-banks"
+    | "results"
 
 type DashboardEntry = {
     id: DashboardSection
@@ -37,18 +46,19 @@ type DashboardEntry = {
     description: string
 }
 
-export function Dashboard() {
+export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const [currentUser, setCurrentUser] = useState<User | null>(null)
     const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [activeSection, setActiveSection] =
-        useState<DashboardSection>("students")
+        useState<DashboardSection>("classes")
     const [isQuestionBankCreationOpen, setIsQuestionBankCreationOpen] =
         useState(false)
     const [isQuizCreationOpen, setIsQuizCreationOpen] = useState(false)
     const [isClassCreationOpen, setIsClassCreationOpen] = useState(false)
+    const [isStudentCreationOpen, setIsStudentCreationOpen] = useState(false)
     const [isResultsExportOpen, setIsResultsExportOpen] = useState(false)
     const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([])
 
@@ -56,14 +66,26 @@ export function Dashboard() {
         {
             id: "students",
             icon: UsersRound,
-            label: t("students-and-classes"),
-            description: t("students-and-classes-help"),
+            label: t("students"),
+            description: t("students-management-help"),
         },
         {
-            id: "quizzes",
+            id: "classes",
+            icon: School,
+            label: t("classes"),
+            description: t("classes-management-help"),
+        },
+        {
+            id: "exam-quizzes",
             icon: ClipboardList,
-            label: t("quiz-management"),
-            description: t("quiz-management-help"),
+            label: t("exam-quizzes"),
+            description: t("exam-quizzes-help"),
+        },
+        {
+            id: "training-quizzes",
+            icon: Dumbbell,
+            label: t("training-quizzes"),
+            description: t("training-quizzes-help"),
         },
         {
             id: "question-banks",
@@ -91,13 +113,21 @@ export function Dashboard() {
                     return
                 }
                 setCurrentUser(user)
+                if (page === "login") {
+                    navigate("/teacher/dashboard", { replace: true })
+                    return
+                }
                 void getGradeLevels()
                     .then(setGradeLevels)
                     .catch(() => setGradeLevels([]))
             })
-            .catch(() => setCurrentUser(null))
+            .catch(() => {
+                setCurrentUser(null)
+                if (page === "dashboard")
+                    navigate("/teacher/login", { replace: true })
+            })
             .finally(() => setIsLoading(false))
-    }, [navigate])
+    }, [navigate, page])
 
     useEffect(() => {
         const previousTitle = document.title
@@ -122,12 +152,14 @@ export function Dashboard() {
         }
         setCurrentUser(user)
         setGradeLevels(await getGradeLevels())
+        navigate("/teacher/dashboard", { replace: true })
     }
 
     function handleLogout() {
         void logout().finally(() => {
             setCurrentUser(null)
             setGradeLevels([])
+            navigate("/teacher/login", { replace: true })
         })
     }
 
@@ -158,7 +190,7 @@ export function Dashboard() {
         )
     }
 
-    if (!currentUser) {
+    if (page === "login" && !currentUser) {
         return (
             <div className="flex flex-1 items-center justify-center px-4">
                 {challenge ? (
@@ -173,6 +205,8 @@ export function Dashboard() {
             </div>
         )
     }
+
+    if (!currentUser) return null
 
     return (
         <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
@@ -262,19 +296,33 @@ export function Dashboard() {
                         {activeSection === "students" && (
                             <Button
                                 type="button"
+                                onClick={() => setIsStudentCreationOpen(true)}
+                            >
+                                <Plus />
+                                {t("create-student-account")}
+                            </Button>
+                        )}
+                        {activeSection === "classes" && (
+                            <Button
+                                type="button"
                                 onClick={() => setIsClassCreationOpen(true)}
                             >
                                 <Plus />
                                 {t("create-class")}
                             </Button>
                         )}
-                        {activeSection === "quizzes" && (
+                        {(activeSection === "exam-quizzes" ||
+                            activeSection === "training-quizzes") && (
                             <Button
                                 type="button"
                                 onClick={() => setIsQuizCreationOpen(true)}
                             >
                                 <Plus />
-                                {t("create-quiz")}
+                                {t(
+                                    activeSection === "exam-quizzes"
+                                        ? "create-exam-quiz"
+                                        : "create-training-quiz"
+                                )}
                             </Button>
                         )}
                         {activeSection === "results" && (
@@ -299,7 +347,13 @@ export function Dashboard() {
                         />
                     )}
                     {activeSection === "students" && (
-                        <StudentClassesPanel
+                        <StudentsPanel
+                            isCreateDialogOpen={isStudentCreationOpen}
+                            onCreateDialogOpenChange={setIsStudentCreationOpen}
+                        />
+                    )}
+                    {activeSection === "classes" && (
+                        <ClassesPanel
                             gradeLevels={gradeLevels}
                             onCreateGradeLevel={handleCreateGradeLevel}
                             onDeleteGradeLevel={handleDeleteGradeLevel}
@@ -307,8 +361,16 @@ export function Dashboard() {
                             onCreateDialogOpenChange={setIsClassCreationOpen}
                         />
                     )}
-                    {activeSection === "quizzes" && (
+                    {activeSection === "exam-quizzes" && (
                         <QuizzesPanel
+                            mode="exam"
+                            isCreateDialogOpen={isQuizCreationOpen}
+                            onCreateDialogOpenChange={setIsQuizCreationOpen}
+                        />
+                    )}
+                    {activeSection === "training-quizzes" && (
+                        <QuizzesPanel
+                            mode="training"
                             isCreateDialogOpen={isQuizCreationOpen}
                             onCreateDialogOpenChange={setIsQuizCreationOpen}
                         />

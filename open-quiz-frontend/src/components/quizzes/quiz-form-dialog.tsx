@@ -18,6 +18,7 @@ type Difficulty = (typeof difficultyKeys)[number]
 type DifficultyValues = Record<Difficulty, number>
 
 type QuizFormDialogProps = {
+    mode: "exam" | "training"
     open: boolean
     editingQuiz: Quiz | null
     banks: QuestionBank[]
@@ -25,24 +26,25 @@ type QuizFormDialogProps = {
     durationMinutes: number
     selectedBankIds: number[]
     allowPreviousQuestions: boolean
-    questionCount: number
-    percentages: DifficultyValues
-    difficultyPreview: DifficultyValues
+    sameQuestionsForAll: boolean
+    difficultyCounts: DifficultyValues
+    difficultyPoints: DifficultyValues
     availableByDifficulty: DifficultyValues
-    previewQuestionTotal: number
     isBusy: boolean
     error: string | null
     onTitleChange: (value: string) => void
     onDurationChange: (value: number) => void
     onSelectedBankIdsChange: (ids: number[]) => void
     onAllowPreviousQuestionsChange: (value: boolean) => void
-    onQuestionCountChange: (value: number) => void
-    onPercentagesChange: (values: DifficultyValues) => void
+    onSameQuestionsForAllChange: (value: boolean) => void
+    onDifficultyCountsChange: (values: DifficultyValues) => void
+    onDifficultyPointsChange: (values: DifficultyValues) => void
     onClose: () => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
 
 export function QuizFormDialog({
+    mode,
     open,
     editingQuiz,
     banks,
@@ -50,25 +52,27 @@ export function QuizFormDialog({
     durationMinutes,
     selectedBankIds,
     allowPreviousQuestions,
-    questionCount,
-    percentages,
-    difficultyPreview,
+    sameQuestionsForAll,
+    difficultyCounts,
+    difficultyPoints,
     availableByDifficulty,
-    previewQuestionTotal,
     isBusy,
     error,
     onTitleChange,
     onDurationChange,
     onSelectedBankIdsChange,
     onAllowPreviousQuestionsChange,
-    onQuestionCountChange,
-    onPercentagesChange,
+    onSameQuestionsForAllChange,
+    onDifficultyCountsChange,
+    onDifficultyPointsChange,
     onClose,
     onSubmit,
 }: QuizFormDialogProps) {
     const { t } = useTranslation()
-    const percentageTotal =
-        percentages.easy + percentages.medium + percentages.hard
+    const questionCount = Object.values(difficultyCounts).reduce(
+        (total, count) => total + count,
+        0
+    )
 
     return (
         <Dialog
@@ -76,8 +80,20 @@ export function QuizFormDialog({
             onOpenChange={(nextOpen) => {
                 if (!nextOpen && !isBusy) onClose()
             }}
-            title={t(editingQuiz ? "edit-quiz" : "create-quiz")}
-            description={t("create-quiz-help")}
+            title={t(
+                editingQuiz
+                    ? mode === "exam"
+                        ? "edit-exam-quiz"
+                        : "edit-training-quiz"
+                    : mode === "exam"
+                      ? "create-exam-quiz"
+                      : "create-training-quiz"
+            )}
+            description={t(
+                mode === "exam"
+                    ? "create-exam-quiz-help"
+                    : "create-training-quiz-help"
+            )}
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup className="gap-5">
@@ -95,78 +111,90 @@ export function QuizFormDialog({
                             required
                         />
                     </Field>
-                    <Field>
-                        <FieldLabel htmlFor="quiz-duration">
-                            {t("quiz-duration")}
-                        </FieldLabel>
-                        <Input
-                            id="quiz-duration"
-                            type="number"
-                            min={1}
-                            max={480}
-                            value={durationMinutes}
-                            onChange={(event) =>
-                                onDurationChange(
-                                    Math.min(
-                                        480,
-                                        Math.max(1, Number(event.target.value))
+                    {mode === "exam" && (
+                        <Field>
+                            <FieldLabel htmlFor="quiz-duration">
+                                {t("quiz-duration")}
+                            </FieldLabel>
+                            <Input
+                                id="quiz-duration"
+                                type="number"
+                                min={1}
+                                max={480}
+                                value={durationMinutes}
+                                onChange={(event) =>
+                                    onDurationChange(
+                                        Math.min(
+                                            480,
+                                            Math.max(
+                                                1,
+                                                Number(event.target.value)
+                                            )
+                                        )
                                     )
-                                )
-                            }
-                            required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            {t("quiz-duration-help")}
-                        </p>
-                    </Field>
+                                }
+                                required
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                {t("quiz-duration-help")}
+                            </p>
+                        </Field>
+                    )}
+                    {mode === "exam" && (
+                        <Field>
+                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
+                                <span>
+                                    <span className="block font-medium">
+                                        {t("same-questions-for-all")}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {t("same-questions-for-all-help")}
+                                    </span>
+                                </span>
+                                <Switch
+                                    checked={sameQuestionsForAll}
+                                    onCheckedChange={
+                                        onSameQuestionsForAllChange
+                                    }
+                                    aria-label={t("same-questions-for-all")}
+                                />
+                            </label>
+                        </Field>
+                    )}
                     <QuestionBankPicker
                         banks={banks}
                         selectedIds={selectedBankIds}
                         onSelectedIdsChange={onSelectedBankIdsChange}
                     />
-                    <Field>
-                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
-                            <span>
-                                <span className="block font-medium">
-                                    {t("allow-previous-questions")}
+                    {mode === "exam" && (
+                        <Field>
+                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
+                                <span>
+                                    <span className="block font-medium">
+                                        {t("allow-previous-questions")}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {t("allow-previous-questions-help")}
+                                    </span>
                                 </span>
-                                <span className="text-xs text-muted-foreground">
-                                    {t("allow-previous-questions-help")}
-                                </span>
-                            </span>
-                            <Switch
-                                checked={allowPreviousQuestions}
-                                onCheckedChange={onAllowPreviousQuestionsChange}
-                                aria-label={t("allow-previous-questions")}
-                            />
-                        </label>
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="quiz-question-count">
-                            {t("quiz-question-count")}
-                        </FieldLabel>
-                        <Input
-                            id="quiz-question-count"
-                            type="number"
-                            min={1}
-                            max={200}
-                            value={questionCount}
-                            onChange={(event) =>
-                                onQuestionCountChange(
-                                    Math.max(1, Number(event.target.value))
-                                )
-                            }
-                            required
-                        />
-                    </Field>
-                    <DifficultyDistribution
-                        percentages={percentages}
-                        preview={difficultyPreview}
+                                <Switch
+                                    checked={allowPreviousQuestions}
+                                    onCheckedChange={
+                                        onAllowPreviousQuestionsChange
+                                    }
+                                    aria-label={t("allow-previous-questions")}
+                                />
+                            </label>
+                        </Field>
+                    )}
+                    <DifficultyQuestionCounts
+                        mode={mode}
+                        counts={difficultyCounts}
+                        points={difficultyPoints}
                         available={availableByDifficulty}
-                        previewTotal={previewQuestionTotal}
-                        questionCount={questionCount}
                         hasSelectedBanks={selectedBankIds.length > 0}
-                        onChange={onPercentagesChange}
+                        onChange={onDifficultyCountsChange}
+                        onPointsChange={onDifficultyPointsChange}
                     />
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2 border-t pt-4">
@@ -182,9 +210,8 @@ export function QuizFormDialog({
                             type="submit"
                             disabled={
                                 isBusy ||
-                                percentageTotal !== 100 ||
                                 selectedBankIds.length === 0 ||
-                                previewQuestionTotal < questionCount
+                                questionCount === 0
                             }
                         >
                             {isBusy ? (
@@ -266,38 +293,35 @@ function QuestionBankPicker({
     )
 }
 
-function DifficultyDistribution({
-    percentages,
-    preview,
+function DifficultyQuestionCounts({
+    mode,
+    counts,
+    points,
     available,
-    previewTotal,
-    questionCount,
     hasSelectedBanks,
     onChange,
+    onPointsChange,
 }: {
-    percentages: DifficultyValues
-    preview: DifficultyValues
+    mode: "exam" | "training"
+    counts: DifficultyValues
+    points: DifficultyValues
     available: DifficultyValues
-    previewTotal: number
-    questionCount: number
     hasSelectedBanks: boolean
     onChange: (values: DifficultyValues) => void
+    onPointsChange: (values: DifficultyValues) => void
 }) {
     const { t } = useTranslation()
-    const total = percentages.easy + percentages.medium + percentages.hard
+    const total = counts.easy + counts.medium + counts.hard
+    const totalPoints = points.easy + points.medium + points.hard
+    const maximumFor = (difficulty: Difficulty) =>
+        Math.min(available[difficulty], 200 - total + counts[difficulty])
 
     return (
         <Field>
-            <div className="flex items-center justify-between gap-3">
-                <FieldLabel>{t("difficulty-distribution")}</FieldLabel>
-                <span
-                    className={`text-sm font-semibold ${
-                        total === 100 ? "text-primary" : "text-destructive"
-                    }`}
-                >
-                    {total} %
-                </span>
-            </div>
+            <FieldLabel>{t("quiz-difficulty-counts")}</FieldLabel>
+            <p className="text-xs text-muted-foreground">
+                {t("quiz-difficulty-count-help")}
+            </p>
             <div className="mt-2 grid gap-3 sm:grid-cols-3">
                 {difficultyKeys.map((difficulty) => (
                     <div key={difficulty}>
@@ -308,57 +332,83 @@ function DifficultyDistribution({
                             id={`quiz-${difficulty}`}
                             type="number"
                             min={0}
-                            max={100}
-                            value={percentages[difficulty]}
+                            max={maximumFor(difficulty)}
+                            value={counts[difficulty]}
+                            disabled={!hasSelectedBanks}
                             onChange={(event) =>
                                 onChange({
-                                    ...percentages,
+                                    ...counts,
                                     [difficulty]: Math.min(
-                                        100,
+                                        maximumFor(difficulty),
                                         Math.max(0, Number(event.target.value))
                                     ),
                                 })
                             }
                             required
                         />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {t("difficulty-available", {
+                                count: available[difficulty],
+                            })}
+                        </p>
+                        {mode === "exam" && (
+                            <div className="mt-3">
+                                <FieldLabel
+                                    htmlFor={`quiz-${difficulty}-points`}
+                                >
+                                    {t("quiz-difficulty-points", {
+                                        difficulty: t(
+                                            `difficulty-${difficulty}`
+                                        ),
+                                    })}
+                                </FieldLabel>
+                                <Input
+                                    id={`quiz-${difficulty}-points`}
+                                    type="number"
+                                    min={0}
+                                    max={10000}
+                                    step="0.25"
+                                    value={points[difficulty]}
+                                    disabled={counts[difficulty] === 0}
+                                    onChange={(event) =>
+                                        onPointsChange({
+                                            ...points,
+                                            [difficulty]: Math.min(
+                                                10000,
+                                                Math.max(
+                                                    0,
+                                                    Number(event.target.value)
+                                                )
+                                            ),
+                                        })
+                                    }
+                                    required
+                                />
+                                {counts[difficulty] > 0 && (
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        {t("quiz-points-per-question", {
+                                            count: Number(
+                                                (
+                                                    points[difficulty] /
+                                                    counts[difficulty]
+                                                ).toFixed(2)
+                                            ),
+                                        })}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
-            {total !== 100 && (
-                <FieldError>{t("difficulty-total-error")}</FieldError>
-            )}
-            {hasSelectedBanks && total === 100 && (
-                <div className="mt-4 rounded-lg border bg-muted/30 p-3">
-                    <p className="text-sm font-medium">
-                        {t("difficulty-preview")}
-                    </p>
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                        {difficultyKeys.map((difficulty) => (
-                            <div
-                                key={difficulty}
-                                className="rounded-md bg-background p-2 text-center"
-                            >
-                                <p className="text-lg font-bold text-primary">
-                                    {preview[difficulty]}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    {t(`difficulty-${difficulty}`)} ·{" "}
-                                    {t("difficulty-available", {
-                                        count: available[difficulty],
-                                    })}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                    {previewTotal < questionCount && (
-                        <FieldError className="mt-2">
-                            {t("quiz-insufficient-total-questions", {
-                                available: previewTotal,
-                                requested: questionCount,
-                            })}
-                        </FieldError>
-                    )}
-                </div>
+            <p className="mt-3 text-sm font-semibold text-primary">
+                {t("quiz-total-questions", { count: total })}
+                {mode === "exam" && (
+                    <> · {t("quiz-total-points", { count: totalPoints })}</>
+                )}
+            </p>
+            {hasSelectedBanks && total === 0 && (
+                <FieldError>{t("quiz-needs-question")}</FieldError>
             )}
         </Field>
     )

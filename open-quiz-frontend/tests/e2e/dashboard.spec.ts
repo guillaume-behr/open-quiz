@@ -18,7 +18,7 @@ test("teacher sees a login error returned by the API", async ({ page }) => {
             body: JSON.stringify({ detail: "Invalid credentials" }),
         })
     })
-    await page.goto("/dashboard")
+    await page.goto("/teacher/login")
 
     await page.getByLabel("Username").fill("teacher")
     await page.getByLabel("Password").fill("incorrect")
@@ -45,7 +45,7 @@ test("successful credentials advance to two-factor authentication", async ({
             }),
         })
     })
-    await page.goto("/dashboard")
+    await page.goto("/teacher/login")
 
     await page.getByLabel("Username").fill("teacher")
     await page.getByLabel("Password").fill("secret-password")
@@ -81,7 +81,7 @@ test("invalid two-factor code returns to an actionable verification form", async
         })
         await route.fulfill({ status: 401, body: "{}" })
     })
-    await page.goto("/dashboard")
+    await page.goto("/teacher/login")
     await page.getByLabel("Username").fill("teacher")
     await page.getByLabel("Password").fill("secret-password")
     await page.getByRole("button", { name: "Sign in" }).click()

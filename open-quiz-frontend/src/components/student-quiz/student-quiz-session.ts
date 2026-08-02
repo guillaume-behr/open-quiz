@@ -2,7 +2,6 @@ const QUIZ_SESSION_STORAGE_KEY = "open-quiz-student-session"
 
 export type StoredQuizSession = {
     joinCode: string
-    studentIdentifier: string
     participantToken: string
 }
 
@@ -14,11 +13,9 @@ export function readStoredQuizSession(): StoredQuizSession | null {
 
         return value &&
             typeof value.joinCode === "string" &&
-            typeof value.studentIdentifier === "string" &&
             typeof value.participantToken === "string"
             ? {
                   joinCode: value.joinCode,
-                  studentIdentifier: value.studentIdentifier,
                   participantToken: value.participantToken,
               }
             : null

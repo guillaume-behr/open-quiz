@@ -15,24 +15,50 @@ export function getQuizzes(
     page = 1,
     search = "",
     gradeLevel = "",
-    pageSize = 8
+    pageSize = 8,
+    mode: "exam" | "training" = "exam"
 ): Promise<Page<Quiz>> {
     const params = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
+        mode,
     })
     if (search) params.set("search", search)
     if (gradeLevel) params.set("grade_level", gradeLevel)
     return requestPage<Quiz>(`/api/quizzes?${params}`)
 }
 
-export async function getAllQuizzes(): Promise<Quiz[]> {
-    const firstPage = await getQuizzes(1, "", "", 100)
+export async function getAllQuizzes(
+    mode: "exam" | "training" = "exam"
+): Promise<Quiz[]> {
+    const firstPage = await getQuizzes(1, "", "", 100, mode)
     const quizzes = [...firstPage.items]
     for (let page = 2; page <= firstPage.totalPages; page += 1) {
-        quizzes.push(...(await getQuizzes(page, "", "", 100)).items)
+        quizzes.push(...(await getQuizzes(page, "", "", 100, mode)).items)
     }
     return quizzes
+}
+
+export function getTrainingQuizzes(studentToken: string): Promise<Quiz[]> {
+    return request<Quiz[]>(
+        "/api/quizzes/training",
+        { headers: { Authorization: `Bearer ${studentToken}` } },
+        false
+    )
+}
+
+export function startTrainingQuiz(
+    quizId: number,
+    studentToken: string
+): Promise<StudentQuizJoin> {
+    return request<StudentQuizJoin>(
+        `/api/quizzes/training/${quizId}/start`,
+        {
+            method: "POST",
+            headers: { Authorization: `Bearer ${studentToken}` },
+        },
+        false
+    )
 }
 
 export function createQuiz(quiz: NewQuiz): Promise<Quiz> {
@@ -146,16 +172,14 @@ export function cancelQuizSession(sessionId: number): Promise<QuizSession> {
 
 export function joinQuiz(
     joinCode: string,
-    studentIdentifier: string
+    studentToken: string
 ): Promise<StudentQuizJoin> {
     return request<StudentQuizJoin>(
         "/api/quizzes/join",
         {
             method: "POST",
-            body: JSON.stringify({
-                join_code: joinCode,
-                student_identifier: studentIdentifier,
-            }),
+            headers: { Authorization: `Bearer ${studentToken}` },
+            body: JSON.stringify({ join_code: joinCode }),
         },
         false
     )

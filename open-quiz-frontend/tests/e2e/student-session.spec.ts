@@ -20,6 +20,23 @@ const baseSession = {
 test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
         localStorage.setItem("i18nextLng", "en")
+        sessionStorage.setItem(
+            "open-quiz-student-access-token",
+            "student-access-token"
+        )
+    })
+    await page.route("**/api/student-auth/me", async (route) => {
+        await route.fulfill({
+            json: {
+                id: 7,
+                identifier: "alex-8b",
+                display_name: "Alex Example",
+                is_active: true,
+                class_id: 2,
+                class_name: "Class 8B",
+                created_at: "2026-01-01T00:00:00Z",
+            },
+        })
     })
 })
 
@@ -29,8 +46,10 @@ test("joining an active quiz stores the session and requests full screen", async
     await page.route("**/api/quizzes/join", async (route) => {
         expect(route.request().postDataJSON()).toEqual({
             join_code: "ABCD",
-            student_identifier: "alex-8b",
         })
+        expect(route.request().headers().authorization).toBe(
+            "Bearer student-access-token"
+        )
         await route.fulfill({
             status: 200,
             contentType: "application/json",
@@ -41,12 +60,11 @@ test("joining an active quiz stores the session and requests full screen", async
             }),
         })
     })
-    await page.goto("/")
-    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.goto("/student/exam")
     await page.getByLabel("Quiz code").fill("abcd")
     await page.getByRole("button", { name: "Join the quiz" }).click()
 
-    await expect(page.getByText("Alex Example")).toBeVisible()
+    await expect(page.getByText("Alex Example", { exact: true })).toBeVisible()
     await expect(page.getByText("Full-screen mode is required")).toBeVisible()
     await expect
         .poll(() =>
@@ -59,7 +77,6 @@ test("joining an active quiz stores the session and requests full screen", async
         )
         .toEqual({
             joinCode: "ABCD",
-            studentIdentifier: "alex-8b",
             participantToken: "participant-token",
         })
 })
@@ -78,8 +95,7 @@ test("student can leave a quiz before entering full screen", async ({
             }),
         })
     })
-    await page.goto("/")
-    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.goto("/student/exam")
     await page.getByLabel("Quiz code").fill("ABCD")
     await page.getByRole("button", { name: "Join the quiz" }).click()
     await page.getByRole("button", { name: "Leave quiz" }).click()
@@ -126,8 +142,7 @@ test("student can join and leave when session storage is unavailable", async ({
             }),
         })
     })
-    await page.goto("/")
-    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.goto("/student/exam")
     await page.getByLabel("Quiz code").fill("ABCD")
     await page.getByRole("button", { name: "Join the quiz" }).click()
 
@@ -147,7 +162,6 @@ test("an expired stored quiz session is discarded", async ({ page }) => {
             "open-quiz-student-session",
             JSON.stringify({
                 joinCode: "OLD1",
-                studentIdentifier: "alex-8b",
                 participantToken: "expired-token",
             })
         )
@@ -155,7 +169,7 @@ test("an expired stored quiz session is discarded", async ({ page }) => {
     await page.route("**/api/quizzes/student/sessions/OLD1", async (route) => {
         await route.fulfill({ status: 403, body: "{}" })
     })
-    await page.goto("/")
+    await page.goto("/student/exam")
 
     await expect(page.getByRole("alert")).toHaveText(
         "The previous session is no longer available. Ask your teacher for help."
@@ -236,8 +250,7 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
             })
         }
     )
-    await page.goto("/")
-    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.goto("/student/exam")
     await page.getByLabel("Quiz code").fill("ABCD")
     await page.getByRole("button", { name: "Join the quiz" }).click()
 
@@ -340,8 +353,7 @@ test("a delayed poll cannot restore a question after submission", async ({
         }
     )
 
-    await page.goto("/")
-    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.goto("/student/exam")
     await page.getByLabel("Quiz code").fill("ABCD")
     await page.getByRole("button", { name: "Join the quiz" }).click()
     await pollStarted
@@ -408,8 +420,7 @@ test("student can submit a written answer", async ({ page }) => {
             })
         }
     )
-    await page.goto("/")
-    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.goto("/student/exam")
     await page.getByLabel("Quiz code").fill("ABCD")
     await page.getByRole("button", { name: "Join the quiz" }).click()
     await page

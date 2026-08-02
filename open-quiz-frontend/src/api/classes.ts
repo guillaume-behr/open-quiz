@@ -1,5 +1,5 @@
-import { request, requestBlob, requestPage } from "./client"
-import type { Page, Student, StudentClass } from "./types"
+import { request, requestPage } from "./client"
+import type { Page, StudentClass } from "./types"
 
 export function getStudentClasses(
     page = 1,
@@ -51,44 +51,21 @@ export function updateStudentClass(
     })
 }
 
-export function createStudent(
+export function assignStudentAccount(
     classId: number,
-    displayName: string
-): Promise<Student> {
-    return request<Student>(`/api/classes/${classId}/students`, {
-        method: "POST",
-        body: JSON.stringify({ display_name: displayName }),
-    })
-}
-
-export function deleteStudent(studentId: number): Promise<void> {
-    return request<void>(`/api/classes/students/${studentId}`, {
-        method: "DELETE",
-    })
-}
-
-export function updateStudent(
-    studentId: number,
-    displayName: string,
-    classId: number
-): Promise<Student> {
-    return request<Student>(`/api/classes/students/${studentId}/update`, {
-        method: "POST",
-        body: JSON.stringify({ display_name: displayName, class_id: classId }),
-    })
-}
-
-export function downloadStudents(classId: number): Promise<Blob> {
-    return requestBlob(`/api/classes/${classId}/students/export`)
-}
-
-export async function importStudents(
-    classId: number,
-    file: File
+    accountId: number
 ): Promise<StudentClass> {
-    const payload: unknown = JSON.parse(await file.text())
-    return request<StudentClass>(`/api/classes/${classId}/students/import`, {
-        method: "POST",
-        body: JSON.stringify(payload),
+    return request<StudentClass>(
+        `/api/classes/${classId}/accounts/${accountId}`,
+        { method: "POST" }
+    )
+}
+
+export function unassignStudentAccount(
+    classId: number,
+    accountId: number
+): Promise<void> {
+    return request<void>(`/api/classes/${classId}/accounts/${accountId}`, {
+        method: "DELETE",
     })
 }

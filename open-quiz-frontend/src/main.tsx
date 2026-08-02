@@ -1,6 +1,6 @@
 import { StrictMode, Suspense } from "react"
 import { createRoot } from "react-dom/client"
-import { BrowserRouter, Route, Routes } from "react-router"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router"
 
 import "./index.css"
 import { ThemeProvider } from "@/components/theme/theme-provider.tsx"
@@ -16,11 +16,13 @@ import {
     AdminDashboard,
     CookiesPage,
     Dashboard,
+    ExamPage,
     HomePage,
     LegalNoticesPage,
     NotFoundPage,
     PrivacyPage,
     ReportProblemPage,
+    TrainingPage,
 } from "./pages/lazy-pages.ts"
 
 createRoot(document.getElementById("root")!).render(
@@ -38,10 +40,35 @@ createRoot(document.getElementById("root")!).render(
                     >
                         <Routes>
                             <Route path="/" element={<MainLayout />}>
-                                <Route index element={<HomePage />} />
                                 <Route
-                                    path="dashboard"
-                                    element={<Dashboard />}
+                                    index
+                                    element={
+                                        <Navigate to="/student/login" replace />
+                                    }
+                                />
+                                <Route
+                                    path="student/login"
+                                    element={<HomePage page="login" />}
+                                />
+                                <Route
+                                    path="student/dashboard"
+                                    element={<HomePage page="dashboard" />}
+                                />
+                                <Route
+                                    path="student/exam"
+                                    element={<ExamPage />}
+                                />
+                                <Route
+                                    path="student/training"
+                                    element={<TrainingPage />}
+                                />
+                                <Route
+                                    path="teacher/login"
+                                    element={<Dashboard page="login" />}
+                                />
+                                <Route
+                                    path="teacher/dashboard"
+                                    element={<Dashboard page="dashboard" />}
                                 />
                                 <Route
                                     path="admin/dashboard"

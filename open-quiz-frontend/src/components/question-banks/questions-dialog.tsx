@@ -177,13 +177,6 @@ function QuestionCard({
                                 )}
                                 {choice.label}
                             </span>
-                            {question.answer_mode !== "written" && (
-                                <span className="shrink-0 rounded-full bg-background px-2 py-0.5 text-xs font-semibold">
-                                    {t("points-value", {
-                                        count: choice.points,
-                                    })}
-                                </span>
-                            )}
                         </div>
                         {choice.has_image && (
                             <ChoiceImage

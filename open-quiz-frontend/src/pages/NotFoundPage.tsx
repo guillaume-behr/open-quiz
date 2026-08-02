@@ -33,7 +33,10 @@ export function NotFoundPage() {
                     {location.pathname}
                 </p>
                 <div className="mt-7 flex flex-wrap justify-center gap-3">
-                    <Button nativeButton={false} render={<Link to="/" />}>
+                    <Button
+                        nativeButton={false}
+                        render={<Link to="/student/login" />}
+                    >
                         {t("back-home")}
                     </Button>
                     <Button

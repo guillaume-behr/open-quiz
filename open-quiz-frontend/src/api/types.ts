@@ -31,8 +31,19 @@ export type ProblemReport = {
 export type Student = {
     id: number
     class_id: number
+    account_id: number | null
     identifier: string
     display_name: string
+    created_at: string
+}
+
+export type StudentAccount = {
+    id: number
+    identifier: string
+    display_name: string
+    is_active: boolean
+    class_id: number | null
+    class_name: string | null
     created_at: string
 }
 
@@ -93,7 +104,6 @@ export type QuestionChoice = {
     id: number
     label: string
     is_correct: boolean
-    points: number
     position: number
     has_image: boolean
     code_language: CodeLanguage | null
@@ -132,7 +142,6 @@ export type NewQuestion = {
         id?: number
         label: string
         is_correct: boolean
-        points: number
         image?: EncodedImage | null
         remove_image?: boolean
         code_language: CodeLanguage | null
@@ -146,14 +155,19 @@ export type QuestionUpdate = NewQuestion & {
 
 export type Quiz = {
     id: number
+    mode: "exam" | "training"
     title: string
     source_language: string
     question_count: number
     duration_seconds: number
     allow_previous_questions: boolean
-    easy_percentage: number
-    medium_percentage: number
-    hard_percentage: number
+    same_questions_for_all: boolean
+    easy_question_count: number
+    medium_question_count: number
+    hard_question_count: number
+    easy_points: number
+    medium_points: number
+    hard_points: number
     question_banks: Array<{
         id: number
         grade_level: string
@@ -167,15 +181,19 @@ export type Quiz = {
 }
 
 export type NewQuiz = {
+    mode: "exam" | "training"
     title: string
     source_language: string
     question_bank_ids: number[]
-    question_count: number
     duration_seconds: number
     allow_previous_questions: boolean
-    easy_percentage: number
-    medium_percentage: number
-    hard_percentage: number
+    same_questions_for_all: boolean
+    easy_question_count: number
+    medium_question_count: number
+    hard_question_count: number
+    easy_points: number
+    medium_points: number
+    hard_points: number
 }
 
 export type QuizParticipant = {
@@ -261,6 +279,14 @@ export type StudentQuizSession = {
     selected_choice_ids: number[] | null
     written_answer: string | null
     question: StudentQuizQuestion | null
+    training_feedback: TrainingFeedback | null
+}
+
+export type TrainingFeedback = {
+    question_id: number
+    is_correct: boolean
+    correct_choice_ids: number[]
+    expected_answer: string | null
 }
 
 export type StudentQuizJoin = StudentQuizSession & {

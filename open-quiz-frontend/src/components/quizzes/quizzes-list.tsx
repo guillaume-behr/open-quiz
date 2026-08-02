@@ -18,6 +18,7 @@ const selectClassName =
     "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 type QuizzesListProps = {
+    mode: "exam" | "training"
     quizzes: Quiz[]
     filteredQuizzes: Quiz[]
     sessions: QuizSession[]
@@ -38,6 +39,7 @@ type QuizzesListProps = {
 }
 
 export function QuizzesList({
+    mode,
     quizzes,
     filteredQuizzes,
     sessions,
@@ -60,7 +62,7 @@ export function QuizzesList({
 
     return (
         <>
-            {sessions.length > 0 && (
+            {mode === "exam" && sessions.length > 0 && (
                 <div className="mb-5 rounded-xl border bg-primary/5 p-4">
                     <h3 className="font-semibold">{t("recent-sessions")}</h3>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -134,6 +136,7 @@ export function QuizzesList({
                                         onEdit={() => onEdit(quiz)}
                                         onPreview={() => onPreview(quiz)}
                                         onLaunch={() => onLaunch(quiz)}
+                                        mode={mode}
                                     />
                                 ))}
                             </ul>
@@ -217,11 +220,13 @@ function QuizFilters({
 }
 
 function QuizCard({
+    mode,
     quiz,
     onEdit,
     onPreview,
     onLaunch,
 }: {
+    mode: "exam" | "training"
     quiz: Quiz
     onEdit: () => void
     onPreview: () => void
@@ -256,7 +261,11 @@ function QuizCard({
                                   : "bg-rose-500"
                         }
                         style={{
-                            width: `${quiz[`${difficulty}_percentage`]}%`,
+                            width: `${
+                                (quiz[`${difficulty}_question_count`] /
+                                    quiz.question_count) *
+                                100
+                            }%`,
                         }}
                     />
                 ))}
@@ -265,9 +274,19 @@ function QuizCard({
                 {difficulties.map((difficulty) => (
                     <span key={difficulty}>
                         {t(`difficulty-${difficulty}`)}{" "}
-                        {quiz[`${difficulty}_percentage`]} %
+                        {quiz[`${difficulty}_question_count`]}
                     </span>
                 ))}
+                {mode === "exam" && (
+                    <span className="font-semibold text-foreground">
+                        {t("quiz-total-points", {
+                            count:
+                                quiz.easy_points +
+                                quiz.medium_points +
+                                quiz.hard_points,
+                        })}
+                    </span>
+                )}
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
                 {quiz.question_banks
@@ -293,10 +312,12 @@ function QuizCard({
                     <Eye />
                     {t("preview-quiz")}
                 </Button>
-                <Button type="button" size="sm" onClick={onLaunch}>
-                    <Play />
-                    {t("launch-quiz")}
-                </Button>
+                {mode === "exam" && (
+                    <Button type="button" size="sm" onClick={onLaunch}>
+                        <Play />
+                        {t("launch-quiz")}
+                    </Button>
+                )}
             </div>
         </li>
     )

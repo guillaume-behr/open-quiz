@@ -6,21 +6,17 @@ import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 
 type JoinQuizFormProps = {
-    studentIdentifier: string
     joinCode: string
     isBusy: boolean
     error: string | null
-    onStudentIdentifierChange: (value: string) => void
     onJoinCodeChange: (value: string) => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
 
 export function JoinQuizForm({
-    studentIdentifier,
     joinCode,
     isBusy,
     error,
-    onStudentIdentifierChange,
     onJoinCodeChange,
     onSubmit,
 }: JoinQuizFormProps) {
@@ -40,24 +36,6 @@ export function JoinQuizForm({
                 </p>
             </div>
             <FieldGroup className="gap-4">
-                <Field>
-                    <FieldLabel htmlFor="student-id">
-                        {t("student-id")}
-                    </FieldLabel>
-                    <Input
-                        className="py-6"
-                        id="student-id"
-                        name="student-id"
-                        autoComplete="username"
-                        spellCheck={false}
-                        value={studentIdentifier}
-                        onChange={(event) =>
-                            onStudentIdentifierChange(event.target.value)
-                        }
-                        aria-invalid={Boolean(error)}
-                        required
-                    />
-                </Field>
                 <Field>
                     <FieldLabel htmlFor="quiz-id">{t("quiz-id")}</FieldLabel>
                     <Input

@@ -119,7 +119,7 @@ export function ReportProblemPage() {
                         <Button
                             variant="outline"
                             nativeButton={false}
-                            render={<Link to="/" />}
+                            render={<Link to="/student/login" />}
                         >
                             {t("back-home")}
                         </Button>

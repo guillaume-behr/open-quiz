@@ -35,14 +35,19 @@ async function mockTeacherApi(page: Page) {
     let quizzes = [
         {
             id: 31,
+            mode: "exam",
             title: "Science checkpoint",
             source_language: "en",
             question_count: 10,
             duration_seconds: 1800,
             allow_previous_questions: false,
-            easy_percentage: 30,
-            medium_percentage: 40,
-            hard_percentage: 30,
+            same_questions_for_all: true,
+            easy_question_count: 3,
+            medium_question_count: 4,
+            hard_question_count: 3,
+            easy_points: 6,
+            medium_points: 10,
+            hard_points: 12,
             question_banks: [bank],
             created_at: "2026-01-04T00:00:00Z",
         },
@@ -159,15 +164,13 @@ test("restores a teacher session and displays their classes", async ({
     page,
 }) => {
     const requests = await mockTeacherApi(page)
-    await page.goto("/dashboard")
+    await page.goto("/teacher/dashboard")
 
     await expect(
         page.getByRole("heading", { name: "Welcome, Ada Lovelace" })
     ).toBeVisible()
     await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
-    await expect(
-        page.getByText("Grade 8", { exact: true }).last()
-    ).toBeVisible()
+    await expect(page.getByText(/Grade 8/).last()).toBeVisible()
     await expect
         .poll(
             () =>
@@ -182,12 +185,17 @@ test("restores a teacher session and displays their classes", async ({
 
 test("teacher can switch between all dashboard sections", async ({ page }) => {
     await mockTeacherApi(page)
-    await page.goto("/dashboard")
+    await page.goto("/teacher/dashboard")
     await expect(
         page.getByRole("heading", { name: "Welcome, Ada Lovelace" })
     ).toBeVisible()
 
-    for (const section of ["Quiz", "Question banks", "Results"] as const) {
+    for (const section of [
+        "Exam quizzes",
+        "Training quizzes",
+        "Question banks",
+        "Results",
+    ] as const) {
         await page.getByRole("button", { name: section, exact: true }).click()
         await expect(
             page.getByRole("heading", { name: section, exact: true })
@@ -202,7 +210,7 @@ test("teacher can open class and question-bank creation dialogs", async ({
     page,
 }) => {
     await mockTeacherApi(page)
-    await page.goto("/dashboard")
+    await page.goto("/teacher/dashboard")
     await expect(page.getByRole("button", { name: "New class" })).toBeVisible()
 
     await page.getByRole("button", { name: "New class" }).click()
@@ -225,7 +233,7 @@ test("teacher can open class and question-bank creation dialogs", async ({
 
 test("teacher can create a class", async ({ page }) => {
     const requests = await mockTeacherApi(page)
-    await page.goto("/dashboard")
+    await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "New class" }).click()
     const dialog = page.getByRole("dialog", { name: "New class" })
     await dialog.getByRole("combobox", { name: "Class" }).fill("Class 9A")
@@ -259,21 +267,22 @@ test("class list recovers after a temporary load failure", async ({ page }) => {
             await route.fallback()
         }
     )
-    await page.goto("/dashboard")
+    await page.goto("/teacher/dashboard")
     await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
 
-    await page.getByLabel("Search").fill("first request")
+    await page.getByLabel("Search for a class").fill("first request")
     await expect(page.getByRole("alert")).toHaveText("Failed to load classes.")
-    await page.getByLabel("Search").fill("Class")
+    await page.getByLabel("Search for a class").fill("Class")
     await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
     await expect(page.getByRole("alert")).toHaveCount(0)
 })
 
 test("teacher can sign out and return to the login form", async ({ page }) => {
     const requests = await mockTeacherApi(page)
-    await page.goto("/dashboard")
+    await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Log out" }).click()
 
+    await expect(page).toHaveURL(/\/teacher\/login$/)
     await expect(page.getByLabel("Username")).toBeVisible()
     expect(
         requests.some(
@@ -293,8 +302,10 @@ test("teacher can sign out and return to the login form", async ({ page }) => {
 
 test("teacher can review configured quizzes", async ({ page }) => {
     await mockTeacherApi(page)
-    await page.goto("/dashboard")
-    await page.getByRole("button", { name: "Quiz", exact: true }).click()
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Exam quizzes", exact: true })
+        .click()
 
     await expect(
         page.getByRole("heading", { name: "Science checkpoint" })
@@ -306,14 +317,20 @@ test("teacher can review configured quizzes", async ({ page }) => {
 
 test("teacher can create a quiz from a question bank", async ({ page }) => {
     const requests = await mockTeacherApi(page)
-    await page.goto("/dashboard")
-    await page.getByRole("button", { name: "Quiz", exact: true }).click()
-    await page.getByRole("button", { name: "New quiz" }).click()
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Exam quizzes", exact: true })
+        .click()
+    await page.getByRole("button", { name: "New exam quiz" }).click()
 
-    const dialog = page.getByRole("dialog", { name: "New quiz" })
+    const dialog = page.getByRole("dialog", { name: "New exam quiz" })
     await dialog.getByLabel("Quiz title").fill("Energy assessment")
+    await dialog
+        .getByRole("switch", { name: "Same questions for every student" })
+        .click()
     await dialog.getByText("Matter and energy", { exact: true }).click()
-    await dialog.getByLabel("Number of questions").fill("10")
+    await dialog.getByLabel("Easy").fill("10")
+    await dialog.getByLabel("Points for Easy questions").fill("15")
     await dialog.getByRole("button", { name: "New quiz", exact: true }).click()
 
     await expect(
@@ -326,12 +343,16 @@ test("teacher can create a quiz from a question bank", async ({ page }) => {
     )
     expect(createRequest?.postDataJSON()).toMatchObject({
         title: "Energy assessment",
+        mode: "exam",
+        same_questions_for_all: false,
         source_language: "en",
         question_bank_ids: [21],
-        question_count: 10,
         duration_seconds: 1800,
-        easy_percentage: 30,
-        medium_percentage: 40,
-        hard_percentage: 30,
+        easy_question_count: 10,
+        medium_question_count: 0,
+        hard_question_count: 0,
+        easy_points: 15,
+        medium_points: 0,
+        hard_points: 0,
     })
 })

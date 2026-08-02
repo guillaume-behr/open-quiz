@@ -6,6 +6,18 @@ export const HomePage = lazy(() =>
     }))
 )
 
+export const ExamPage = lazy(() =>
+    import("./ExamPage.tsx").then(({ ExamPage }) => ({
+        default: ExamPage,
+    }))
+)
+
+export const TrainingPage = lazy(() =>
+    import("./TrainingPage.tsx").then(({ TrainingPage }) => ({
+        default: TrainingPage,
+    }))
+)
+
 export const Dashboard = lazy(() =>
     import("./Dashboard.tsx").then(({ Dashboard }) => ({
         default: Dashboard,

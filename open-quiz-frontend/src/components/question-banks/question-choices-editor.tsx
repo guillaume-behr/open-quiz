@@ -39,7 +39,6 @@ export function QuestionChoicesEditor({
             {
                 label: "",
                 is_correct: false,
-                points: 0,
                 has_image: false,
                 remove_image: false,
                 hasCode: false,

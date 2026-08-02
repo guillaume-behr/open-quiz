@@ -58,36 +58,6 @@ export function QuestionChoiceEditor({
                 />
                 {answerMode !== "written" && (
                     <>
-                        <div className="flex shrink-0 items-center gap-1">
-                            <Input
-                                type="number"
-                                className="w-20"
-                                value={choice.points}
-                                min={choice.is_correct ? 0 : -1000}
-                                max={1000}
-                                step="0.25"
-                                onChange={(event) =>
-                                    onUpdate({
-                                        points: choice.is_correct
-                                            ? Math.max(
-                                                  0,
-                                                  Number(event.target.value)
-                                              )
-                                            : Math.min(
-                                                  0,
-                                                  Number(event.target.value)
-                                              ),
-                                    })
-                                }
-                                aria-label={t("answer-points-number", {
-                                    number: index + 1,
-                                })}
-                                required
-                            />
-                            <span className="text-xs text-muted-foreground">
-                                {t("points-short")}
-                            </span>
-                        </div>
                         <Button
                             type="button"
                             size="icon"

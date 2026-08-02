@@ -8,10 +8,11 @@ export function MainLayout() {
     const { t } = useTranslation()
     const location = useLocation()
 
-    const link =
-        location.pathname === "/"
-            ? { text: "professor-space", url: "/dashboard" }
-            : { text: "homepage", url: "/" }
+    const link = location.pathname.startsWith("/teacher")
+        ? { text: "homepage", url: "/student/login" }
+        : location.pathname.startsWith("/student")
+          ? { text: "professor-space", url: "/teacher/login" }
+          : { text: "homepage", url: "/student/login" }
 
     return (
         <div className="flex min-h-dvh flex-col items-center">
@@ -23,7 +24,7 @@ export function MainLayout() {
             </a>
             <header className="flex w-full shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
                 <Link
-                    to="/"
+                    to="/student/login"
                     className="shrink-0 text-2xl font-extrabold text-primary transition-opacity hover:opacity-80 focus-visible:rounded focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:text-3xl"
                 >
                     {t("app-name")}

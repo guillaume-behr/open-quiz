@@ -56,7 +56,7 @@ test("legal notice reports unavailable instance information", async ({
 })
 
 test("footer links open each public information page", async ({ page }) => {
-    await page.goto("/")
+    await page.goto("/student/login")
 
     const destinations = [
         ["Personal data", "/privacy"],
@@ -65,7 +65,7 @@ test("footer links open each public information page", async ({ page }) => {
     ] as const
 
     for (const [heading, path] of destinations) {
-        await page.goto("/")
+        await page.goto("/student/login")
         await page.locator(`footer a[href="${path}"]`).click()
         await expect(page).toHaveURL(new RegExp(`${path}$`))
         await expect(page.getByRole("heading", { name: heading })).toBeVisible()

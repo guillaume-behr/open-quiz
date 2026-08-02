@@ -105,9 +105,13 @@ export function ResultsPanel({
     useEffect(() => {
         if (!isExportDialogOpen || exportClasses.length > 0) return
         let isActive = true
-        setExportError(false)
-        setIsExportLoading(true)
-        Promise.all([getAllStudentClasses(), getAllQuizzes()])
+        Promise.resolve()
+            .then(() => {
+                if (!isActive) return Promise.reject(new Error("cancelled"))
+                setExportError(false)
+                setIsExportLoading(true)
+                return Promise.all([getAllStudentClasses(), getAllQuizzes()])
+            })
             .then(([classes, quizzes]) => {
                 if (!isActive) return
                 setExportClasses(classes)

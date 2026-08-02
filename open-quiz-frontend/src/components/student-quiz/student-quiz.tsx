@@ -19,12 +19,9 @@ import { StudentQuizPage } from "./student-quiz-page"
 import { useQuizMonitoring } from "./use-quiz-monitoring"
 import { useQuizTranslation } from "./use-quiz-translation"
 
-export function StudentQuiz() {
+export function StudentQuiz({ studentToken }: { studentToken: string }) {
     const { t, i18n } = useTranslation()
     const [restoredSession] = useState(readStoredQuizSession)
-    const [studentIdentifier, setStudentIdentifier] = useState(
-        restoredSession?.studentIdentifier ?? ""
-    )
     const [joinCode, setJoinCode] = useState(restoredSession?.joinCode ?? "")
     const [participantToken, setParticipantToken] = useState<string | null>(
         restoredSession?.participantToken ?? null
@@ -141,14 +138,10 @@ export function StudentQuiz() {
         setIsBusy(true)
         sessionRequestVersion.current += 1
         try {
-            const joined = await joinQuiz(
-                joinCode.trim(),
-                studentIdentifier.trim()
-            )
+            const joined = await joinQuiz(joinCode.trim(), studentToken)
             const { participant_token, ...state } = joined
             storeQuizSession({
                 joinCode: state.join_code,
-                studentIdentifier: studentIdentifier.trim(),
                 participantToken: participant_token,
             })
             setParticipantToken(participant_token)
@@ -244,11 +237,6 @@ export function StudentQuiz() {
         }
     }
 
-    function updateStudentIdentifier(value: string) {
-        setStudentIdentifier(value)
-        setError(null)
-    }
-
     function updateJoinCode(value: string) {
         setJoinCode(value)
         setError(null)
@@ -257,11 +245,9 @@ export function StudentQuiz() {
     if (!session || !participantToken) {
         return (
             <JoinQuizForm
-                studentIdentifier={studentIdentifier}
                 joinCode={joinCode}
                 isBusy={isBusy}
                 error={error}
-                onStudentIdentifierChange={updateStudentIdentifier}
                 onJoinCodeChange={updateJoinCode}
                 onSubmit={handleJoin}
             />

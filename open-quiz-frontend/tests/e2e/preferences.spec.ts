@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
         localStorage.setItem("i18nextLng", "en")
         localStorage.setItem("vite-ui-theme", "light")
     })
-    await page.goto("/")
+    await page.goto("/student/login")
 })
 
 test("theme selection is applied and persisted", async ({ page }) => {
@@ -25,7 +25,7 @@ test("language selection updates the interface and document direction", async ({
     await page.getByRole("menuitem", { name: "العربية" }).click()
 
     await expect(
-        page.getByRole("heading", { name: "انضم إلى الاختبار" })
+        page.getByRole("heading", { name: "Student space" })
     ).toBeVisible()
     await expect(page.locator("html")).toHaveAttribute("dir", "rtl")
     await expect

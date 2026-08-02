@@ -51,7 +51,6 @@ function initialChoices(question?: Question): EditableChoice[] {
             id: choice.id,
             label: choice.label,
             is_correct: choice.is_correct,
-            points: choice.points,
             has_image: choice.has_image,
             remove_image: false,
             hasCode: Boolean(choice.code_content),
@@ -65,7 +64,6 @@ function createEmptyChoice(isCorrect: boolean): EditableChoice {
     return {
         label: "",
         is_correct: isCorrect,
-        points: isCorrect ? 1 : 0,
         has_image: false,
         remove_image: false,
         hasCode: false,
@@ -110,24 +108,18 @@ export function QuestionForm({
 
     function selectCorrectChoice(index: number, checked: boolean): void {
         setChoices((current) => {
-            const previousPoints =
-                current.find((choice) => choice.is_correct)?.points ?? 1
             return current.map((choice, choiceIndex) => {
                 if (answerMode === "single") {
                     const isSelected = choiceIndex === index
                     return {
                         ...choice,
                         is_correct: isSelected,
-                        points: isSelected
-                            ? Math.max(0, choice.points || previousPoints || 1)
-                            : 0,
                     }
                 }
                 if (choiceIndex !== index) return choice
                 return {
                     ...choice,
                     is_correct: checked,
-                    points: checked ? Math.max(0, choice.points || 1) : 0,
                 }
             })
         })
@@ -147,7 +139,6 @@ export function QuestionForm({
                 {
                     ...current[0],
                     is_correct: true,
-                    points: 1,
                     image: undefined,
                     has_image: false,
                     remove_image: true,
@@ -173,8 +164,6 @@ export function QuestionForm({
                     ? restoredChoices.map((choice, index) => ({
                           ...choice,
                           is_correct: index === 0,
-                          points:
-                              index === 0 ? Math.max(0, choice.points || 1) : 0,
                       }))
                     : restoredChoices
             )
@@ -189,10 +178,6 @@ export function QuestionForm({
                 current.map((choice, index) => ({
                     ...choice,
                     is_correct: index === Math.max(0, firstCorrectIndex),
-                    points:
-                        index === Math.max(0, firstCorrectIndex)
-                            ? Math.max(0, choice.points || 1)
-                            : 0,
                 }))
             )
         }
@@ -207,8 +192,6 @@ export function QuestionForm({
                 return remaining.map((choice, choiceIndex) => ({
                     ...choice,
                     is_correct: choiceIndex === 0,
-                    points:
-                        choiceIndex === 0 ? Math.max(0, choice.points || 1) : 0,
                 }))
             }
             return remaining
@@ -226,7 +209,6 @@ export function QuestionForm({
                     id: choice.id,
                     label: choice.label.trim(),
                     is_correct: choice.is_correct,
-                    points: choice.points,
                     image: choice.image
                         ? await encodeImage(choice.image)
                         : null,

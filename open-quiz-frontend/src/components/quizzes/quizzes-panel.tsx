@@ -34,6 +34,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 type QuizzesPanelProps = {
+    mode: "exam" | "training"
     isCreateDialogOpen: boolean
     onCreateDialogOpenChange: (open: boolean) => void
 }
@@ -47,63 +48,9 @@ function pageContaining(items: Quiz[], id: number): number {
 }
 
 type Difficulty = (typeof difficultyKeys)[number]
-const easePriority: Record<Difficulty, number> = {
-    easy: 2,
-    medium: 1,
-    hard: 0,
-}
-function calculateDifficultyCounts(
-    questionCount: number,
-    percentages: Record<Difficulty, number>,
-    available: Record<Difficulty, number>
-): Record<Difficulty, number> {
-    const exact = Object.fromEntries(
-        difficultyKeys.map((difficulty) => [
-            difficulty,
-            (questionCount * percentages[difficulty]) / 100,
-        ])
-    ) as Record<Difficulty, number>
-    let counts = Object.fromEntries(
-        difficultyKeys.map((difficulty) => [
-            difficulty,
-            Math.floor(exact[difficulty]),
-        ])
-    ) as Record<Difficulty, number>
-    let remaining =
-        questionCount - Object.values(counts).reduce((a, b) => a + b)
-    const roundingOrder = [...difficultyKeys].sort(
-        (first, second) =>
-            exact[second] - counts[second] - (exact[first] - counts[first]) ||
-            percentages[second] - percentages[first] ||
-            easePriority[second] - easePriority[first]
-    )
-    for (const difficulty of roundingOrder.slice(0, remaining)) {
-        counts[difficulty] += 1
-    }
-    counts = Object.fromEntries(
-        difficultyKeys.map((difficulty) => [
-            difficulty,
-            Math.min(counts[difficulty], available[difficulty]),
-        ])
-    ) as Record<Difficulty, number>
-    remaining = questionCount - Object.values(counts).reduce((a, b) => a + b)
-    while (remaining > 0) {
-        const candidates = difficultyKeys.filter(
-            (difficulty) => counts[difficulty] < available[difficulty]
-        )
-        if (candidates.length === 0) break
-        const difficulty = candidates.sort(
-            (first, second) =>
-                percentages[second] - percentages[first] ||
-                easePriority[second] - easePriority[first]
-        )[0]
-        counts[difficulty] += 1
-        remaining -= 1
-    }
-    return counts
-}
 
 export function QuizzesPanel({
+    mode,
     isCreateDialogOpen,
     onCreateDialogOpenChange,
 }: QuizzesPanelProps) {
@@ -120,13 +67,18 @@ export function QuizzesPanel({
     const [quizListLoadFailed, setQuizListLoadFailed] = useState(false)
     const [title, setTitle] = useState("")
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
-    const [questionCount, setQuestionCount] = useState(10)
     const [durationMinutes, setDurationMinutes] = useState(30)
     const [allowPreviousQuestions, setAllowPreviousQuestions] = useState(false)
-    const [percentages, setPercentages] = useState({
-        easy: 30,
-        medium: 40,
-        hard: 30,
+    const [sameQuestionsForAll, setSameQuestionsForAll] = useState(true)
+    const [difficultyCounts, setDifficultyCounts] = useState({
+        easy: 0,
+        medium: 0,
+        hard: 0,
+    })
+    const [difficultyPoints, setDifficultyPoints] = useState({
+        easy: 0,
+        medium: 0,
+        hard: 0,
     })
     const [isCreating, setIsCreating] = useState(false)
     const [createError, setCreateError] = useState<string | null>(null)
@@ -162,7 +114,7 @@ export function QuizzesPanel({
         let isActive = true
         Promise.all([
             getAllQuestionBanks(),
-            getActiveQuizSessions(),
+            mode === "exam" ? getActiveQuizSessions() : Promise.resolve([]),
             getAllStudentClasses(),
         ])
             .then(([loadedBanks, loadedSessions, loadedClasses]) => {
@@ -181,11 +133,11 @@ export function QuizzesPanel({
         return () => {
             isActive = false
         }
-    }, [t])
+    }, [mode, t])
 
     useEffect(() => {
         let isActive = true
-        getQuizzes(page, quizFilter.trim(), gradeLevelFilter)
+        getQuizzes(page, quizFilter.trim(), gradeLevelFilter, 8, mode)
             .then((result) => {
                 if (!isActive) return
                 setQuizzes(result.items)
@@ -202,7 +154,7 @@ export function QuizzesPanel({
         return () => {
             isActive = false
         }
-    }, [gradeLevelFilter, page, quizFilter, reloadKey, t])
+    }, [gradeLevelFilter, mode, page, quizFilter, reloadKey, t])
 
     useEffect(() => {
         if (
@@ -253,8 +205,6 @@ export function QuizzesPanel({
         }
     }, [activeSessionId, activeSessionStatus, isSessionMutating, t])
 
-    const percentageTotal =
-        percentages.easy + percentages.medium + percentages.hard
     const availableByDifficulty = difficultyKeys.reduce(
         (result, difficulty) => {
             result[difficulty] = banks
@@ -268,15 +218,7 @@ export function QuizzesPanel({
         },
         { easy: 0, medium: 0, hard: 0 } as Record<Difficulty, number>
     )
-    const difficultyPreview =
-        percentageTotal === 100
-            ? calculateDifficultyCounts(
-                  questionCount,
-                  percentages,
-                  availableByDifficulty
-              )
-            : { easy: 0, medium: 0, hard: 0 }
-    const previewQuestionTotal = Object.values(difficultyPreview).reduce(
+    const questionCount = Object.values(difficultyCounts).reduce(
         (total, count) => total + count,
         0
     )
@@ -287,13 +229,52 @@ export function QuizzesPanel({
     const loadError =
         supportLoadFailed || quizListLoadFailed ? t("quizzes-load-error") : null
 
+    function handleSelectedBankIdsChange(ids: number[]): void {
+        setSelectedBankIds(ids)
+        const available = difficultyKeys.reduce(
+            (result, difficulty) => {
+                result[difficulty] = banks
+                    .filter((bank) => ids.includes(bank.id))
+                    .reduce(
+                        (total, bank) =>
+                            total + bank[`${difficulty}_question_count`],
+                        0
+                    )
+                return result
+            },
+            { easy: 0, medium: 0, hard: 0 } as Record<Difficulty, number>
+        )
+        setDifficultyCounts((current) => ({
+            easy: Math.min(current.easy, available.easy),
+            medium: Math.min(current.medium, available.medium),
+            hard: Math.min(current.hard, available.hard),
+        }))
+        setDifficultyPoints((current) => ({
+            easy: available.easy > 0 ? current.easy : 0,
+            medium: available.medium > 0 ? current.medium : 0,
+            hard: available.hard > 0 ? current.hard : 0,
+        }))
+    }
+
+    function handleDifficultyCountsChange(
+        values: Record<Difficulty, number>
+    ): void {
+        setDifficultyCounts(values)
+        setDifficultyPoints((current) => ({
+            easy: values.easy > 0 ? current.easy : 0,
+            medium: values.medium > 0 ? current.medium : 0,
+            hard: values.hard > 0 ? current.hard : 0,
+        }))
+    }
+
     function resetCreationForm(): void {
         setTitle("")
         setSelectedBankIds([])
-        setQuestionCount(10)
         setDurationMinutes(30)
         setAllowPreviousQuestions(false)
-        setPercentages({ easy: 30, medium: 40, hard: 30 })
+        setSameQuestionsForAll(true)
+        setDifficultyCounts({ easy: 0, medium: 0, hard: 0 })
+        setDifficultyPoints({ easy: 0, medium: 0, hard: 0 })
         setCreateError(null)
         setEditingQuiz(null)
     }
@@ -302,36 +283,46 @@ export function QuizzesPanel({
         setEditingQuiz(quiz)
         setTitle(quiz.title)
         setSelectedBankIds(quiz.question_banks.map((bank) => bank.id))
-        setQuestionCount(quiz.question_count)
         setDurationMinutes(quiz.duration_seconds / 60)
         setAllowPreviousQuestions(quiz.allow_previous_questions)
-        setPercentages({
-            easy: quiz.easy_percentage,
-            medium: quiz.medium_percentage,
-            hard: quiz.hard_percentage,
+        setSameQuestionsForAll(quiz.same_questions_for_all)
+        setDifficultyCounts({
+            easy: quiz.easy_question_count,
+            medium: quiz.medium_question_count,
+            hard: quiz.hard_question_count,
+        })
+        setDifficultyPoints({
+            easy: quiz.easy_points,
+            medium: quiz.medium_points,
+            hard: quiz.hard_points,
         })
         setCreateError(null)
     }
 
     async function handleCreate(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
-        if (percentageTotal !== 100 || selectedBankIds.length === 0) return
+        if (questionCount === 0 || selectedBankIds.length === 0) return
         setCreateError(null)
         setIsCreating(true)
         try {
             const payload = {
+                mode,
                 title: title.trim(),
                 source_language:
                     editingQuiz?.source_language ??
                     i18n.resolvedLanguage ??
                     "fr",
                 question_bank_ids: selectedBankIds,
-                question_count: questionCount,
                 duration_seconds: durationMinutes * 60,
                 allow_previous_questions: allowPreviousQuestions,
-                easy_percentage: percentages.easy,
-                medium_percentage: percentages.medium,
-                hard_percentage: percentages.hard,
+                same_questions_for_all:
+                    mode === "exam" ? sameQuestionsForAll : false,
+                easy_question_count: difficultyCounts.easy,
+                medium_question_count: difficultyCounts.medium,
+                hard_question_count: difficultyCounts.hard,
+                easy_points: mode === "exam" ? difficultyPoints.easy : 0,
+                medium_points: mode === "exam" ? difficultyPoints.medium : 0,
+                hard_points: mode === "exam" ? difficultyPoints.hard : 0,
             }
             const isEditing = editingQuiz !== null
             const quiz = isEditing
@@ -347,7 +338,7 @@ export function QuizzesPanel({
             if (!isEditing) {
                 setQuizFilter("")
                 setGradeLevelFilter("")
-                const allQuizzes = await getAllQuizzes().catch(() => [])
+                const allQuizzes = await getAllQuizzes(mode).catch(() => [])
                 setPage(pageContaining(allQuizzes, quiz.id))
             }
             setReloadKey((current) => current + 1)
@@ -482,6 +473,7 @@ export function QuizzesPanel({
     return (
         <div className="mt-6">
             <QuizzesList
+                mode={mode}
                 quizzes={quizzes}
                 filteredQuizzes={filteredQuizzes}
                 sessions={sessions}
@@ -514,6 +506,7 @@ export function QuizzesPanel({
             />
 
             <QuizFormDialog
+                mode={mode}
                 open={isCreateDialogOpen || editingQuiz !== null}
                 editingQuiz={editingQuiz}
                 banks={banks}
@@ -521,19 +514,19 @@ export function QuizzesPanel({
                 durationMinutes={durationMinutes}
                 selectedBankIds={selectedBankIds}
                 allowPreviousQuestions={allowPreviousQuestions}
-                questionCount={questionCount}
-                percentages={percentages}
-                difficultyPreview={difficultyPreview}
+                sameQuestionsForAll={sameQuestionsForAll}
+                difficultyCounts={difficultyCounts}
+                difficultyPoints={difficultyPoints}
                 availableByDifficulty={availableByDifficulty}
-                previewQuestionTotal={previewQuestionTotal}
                 isBusy={isCreating}
                 error={createError}
                 onTitleChange={setTitle}
                 onDurationChange={setDurationMinutes}
-                onSelectedBankIdsChange={setSelectedBankIds}
+                onSelectedBankIdsChange={handleSelectedBankIdsChange}
                 onAllowPreviousQuestionsChange={setAllowPreviousQuestions}
-                onQuestionCountChange={setQuestionCount}
-                onPercentagesChange={setPercentages}
+                onSameQuestionsForAllChange={setSameQuestionsForAll}
+                onDifficultyCountsChange={handleDifficultyCountsChange}
+                onDifficultyPointsChange={setDifficultyPoints}
                 onClose={() => {
                     onCreateDialogOpenChange(false)
                     resetCreationForm()
