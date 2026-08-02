@@ -452,9 +452,6 @@ test("teacher can create a quiz from a question bank", async ({ page }) => {
 
     const dialog = page.getByRole("dialog", { name: "New exam quiz" })
     await dialog.getByLabel("Quiz title").fill("Energy assessment")
-    await dialog
-        .getByRole("switch", { name: "Same questions for every student" })
-        .click()
     await dialog.getByText("Matter and energy", { exact: true }).click()
     await dialog.getByLabel("Easy", { exact: true }).fill("10")
     await dialog.getByLabel("Points for Easy questions").fill("15")

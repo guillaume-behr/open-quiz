@@ -46,11 +46,10 @@ test("a signed-in student enters exam mode from the dashboard", async ({
     await expect(
         page.getByRole("heading", { name: "Welcome, Alex Example" })
     ).toBeVisible()
-    await page.getByRole("button", { name: /Enter an exam/ }).click()
+    await page.getByRole("button", { name: "Exams", exact: true }).click()
 
-    await expect(page).toHaveURL(/\/student\/exam$/)
     await expect(
-        page.getByRole("heading", { name: "Join a quiz" })
+        page.getByRole("heading", { name: "Exams" })
     ).toBeVisible()
     await expect(page.getByLabel("Quiz code")).toBeVisible()
 })
@@ -207,7 +206,7 @@ test("a student launches training and sees the correct answer", async ({
     await page.getByLabel("Student ID").fill("alex-8b")
     await page.getByLabel("Password").fill("student-password")
     await studentSignInButton.click()
-    await page.getByRole("tab", { name: "Training" }).click()
+    await page.getByRole("button", { name: "Training", exact: true }).click()
     await expect(page.getByText("Practice science")).toBeVisible()
     await page.getByRole("button", { name: "Start training" }).click()
     await expect(page).toHaveURL(/\/student\/training$/)

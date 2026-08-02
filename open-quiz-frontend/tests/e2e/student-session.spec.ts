@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 
 const baseSession = {
     quiz_title: "Science review",
@@ -40,6 +40,15 @@ test.beforeEach(async ({ page }) => {
     })
 })
 
+// Joining an exam happens on the student dashboard; the exam page then
+// restores the saved session by polling its current state.
+async function joinExamViaDashboard(page: Page, code: string): Promise<void> {
+    await page.goto("/student/dashboard")
+    await page.getByLabel("Quiz code").fill(code)
+    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await expect(page).toHaveURL(/\/student\/exam$/)
+}
+
 test("joining an active quiz stores the session and requests full screen", async ({
     page,
 }) => {
@@ -60,9 +69,17 @@ test("joining an active quiz stores the session and requests full screen", async
             }),
         })
     })
-    await page.goto("/student/exam")
-    await page.getByLabel("Quiz code").fill("abcd")
-    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+                ...baseSession,
+                status: "waiting",
+            }),
+        })
+    })
+    await joinExamViaDashboard(page, "abcd")
 
     await expect(page.getByText("Alex Example", { exact: true })).toBeVisible()
     await expect(page.getByText("Full-screen mode is required")).toBeVisible()
@@ -95,14 +112,20 @@ test("student can leave a quiz before entering full screen", async ({
             }),
         })
     })
-    await page.goto("/student/exam")
-    await page.getByLabel("Quiz code").fill("ABCD")
-    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+                ...baseSession,
+                status: "waiting",
+            }),
+        })
+    })
+    await joinExamViaDashboard(page, "ABCD")
     await page.getByRole("button", { name: "Leave quiz" }).click()
 
-    await expect(
-        page.getByRole("heading", { name: "Join a quiz" })
-    ).toBeVisible()
+    await expect(page).toHaveURL(/\/student\/dashboard$/)
     await expect
         .poll(() =>
             page.evaluate(() =>
@@ -112,7 +135,7 @@ test("student can leave a quiz before entering full screen", async ({
         .toBeNull()
 })
 
-test("student can join and leave when session storage is unavailable", async ({
+test("student stays on a usable join screen when session storage is unavailable", async ({
     page,
 }) => {
     await page.addInitScript(() => {
@@ -142,18 +165,14 @@ test("student can join and leave when session storage is unavailable", async ({
             }),
         })
     })
-    await page.goto("/student/exam")
+    await page.goto("/student/dashboard")
     await page.getByLabel("Quiz code").fill("ABCD")
     await page.getByRole("button", { name: "Join the quiz" }).click()
 
-    await expect(page.getByText("Full-screen mode is required")).toBeVisible()
-    await expect(
-        page.getByText(/Leaving it during the quiz may be reported/)
-    ).toBeVisible()
-    await page.getByRole("button", { name: "Leave quiz" }).click()
-    await expect(
-        page.getByRole("heading", { name: "Join a quiz" })
-    ).toBeVisible()
+    // The session cannot be persisted, so the exam page cannot restore it and
+    // the student is returned to a usable join screen instead of crashing.
+    await expect(page).toHaveURL(/\/student\/dashboard$/)
+    await expect(page.getByLabel("Quiz code")).toBeVisible()
 })
 
 test("an expired stored quiz session is discarded", async ({ page }) => {
@@ -171,9 +190,9 @@ test("an expired stored quiz session is discarded", async ({ page }) => {
     })
     await page.goto("/student/exam")
 
-    await expect(page.getByRole("alert")).toHaveText(
-        "The previous session is no longer available. Ask your teacher for help."
-    )
+    // The stored entry cannot be restored, so the student returns to the
+    // dashboard and the stale session is cleared.
+    await expect(page).toHaveURL(/\/student\/dashboard$/)
     await expect
         .poll(() =>
             page.evaluate(() =>
@@ -230,6 +249,16 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
             },
         })
     })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            json: {
+                ...baseSession,
+                status: "in_progress",
+                question_number: 1,
+                question,
+            },
+        })
+    })
     await page.route(
         "**/api/quizzes/student/sessions/ABCD/answer",
         async (route) => {
@@ -250,9 +279,7 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
             })
         }
     )
-    await page.goto("/student/exam")
-    await page.getByLabel("Quiz code").fill("ABCD")
-    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await joinExamViaDashboard(page, "ABCD")
 
     await expect(
         page.getByRole("heading", {
@@ -305,6 +332,11 @@ test("a delayed poll cannot restore a question after submission", async ({
             },
         ],
     }
+    // In development React strict mode mounts the component twice, so up to
+    // two state requests (one per mount) restore the active question; the
+    // following background poll is held so it lands after the answer is
+    // submitted.
+    let pollCall = 0
     let markPollStarted: () => void = () => undefined
     const pollStarted = new Promise<void>((resolve) => {
         markPollStarted = resolve
@@ -328,6 +360,18 @@ test("a delayed poll cannot restore a question after submission", async ({
     await page.route(
         /\/api\/quizzes\/student\/sessions\/ABCD$/,
         async (route) => {
+            pollCall += 1
+            if (pollCall < 3) {
+                await route.fulfill({
+                    json: {
+                        ...baseSession,
+                        status: "in_progress",
+                        question_number: 1,
+                        question,
+                    },
+                })
+                return
+            }
             markPollStarted()
             await pollRelease
             await route.fulfill({
@@ -353,9 +397,12 @@ test("a delayed poll cannot restore a question after submission", async ({
         }
     )
 
-    await page.goto("/student/exam")
-    await page.getByLabel("Quiz code").fill("ABCD")
-    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await joinExamViaDashboard(page, "ABCD")
+    await expect(
+        page.getByRole("heading", {
+            name: "Which state should remain visible?",
+        })
+    ).toBeVisible()
     await pollStarted
     await page.getByLabel("The completed state").check()
     await page.getByRole("button", { name: "Submit my answer" }).click()
@@ -403,6 +450,27 @@ test("student can submit a written answer", async ({ page }) => {
             },
         })
     })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            json: {
+                ...baseSession,
+                status: "in_progress",
+                question_number: 1,
+                question: {
+                    id: 42,
+                    prompt: "Explain photosynthesis briefly.",
+                    difficulty: "medium",
+                    answer_mode: "written",
+                    answer_mode_disclosed: true,
+                    response_language: null,
+                    has_image: false,
+                    code_language: null,
+                    code_content: null,
+                    choices: [],
+                },
+            },
+        })
+    })
     await page.route(
         "**/api/quizzes/student/sessions/ABCD/answer",
         async (route) => {
@@ -420,9 +488,7 @@ test("student can submit a written answer", async ({ page }) => {
             })
         }
     )
-    await page.goto("/student/exam")
-    await page.getByLabel("Quiz code").fill("ABCD")
-    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await joinExamViaDashboard(page, "ABCD")
     const submitAnswer = page.getByRole("button", {
         name: "Submit my answer",
     })
