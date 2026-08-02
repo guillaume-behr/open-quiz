@@ -399,6 +399,7 @@
     "remove-code": "删除代码",
     "code-language": "语言",
     "source-code": "源代码",
+    "code-block-region": "代码块",
     "run-python": "运行",
     "running-python": "执行...",
     "execution-result": "结果",

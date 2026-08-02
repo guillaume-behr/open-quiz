@@ -39,7 +39,6 @@ import { LoaderCircle, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 type QuizzesPanelProps = {
-    mode: "exam"
     isCreateDialogOpen: boolean
     onCreateDialogOpenChange: (open: boolean) => void
 }
@@ -55,7 +54,6 @@ function pageContaining(items: Quiz[], id: number): number {
 type Difficulty = (typeof difficultyKeys)[number]
 
 export function QuizzesPanel({
-    mode,
     isCreateDialogOpen,
     onCreateDialogOpenChange,
 }: QuizzesPanelProps) {
@@ -121,7 +119,7 @@ export function QuizzesPanel({
         let isActive = true
         Promise.all([
             getAllQuestionBanks(),
-            mode === "exam" ? getActiveQuizSessions() : Promise.resolve([]),
+            getActiveQuizSessions(),
             getAllStudentClasses(),
         ])
             .then(([loadedBanks, loadedSessions, loadedClasses]) => {
@@ -140,11 +138,11 @@ export function QuizzesPanel({
         return () => {
             isActive = false
         }
-    }, [mode, t])
+    }, [])
 
     useEffect(() => {
         let isActive = true
-        getQuizzes(page, quizFilter.trim(), gradeLevelFilter, 8, mode)
+        getQuizzes(page, quizFilter.trim(), gradeLevelFilter, 8)
             .then((result) => {
                 if (!isActive) return
                 setQuizzes(result.items)
@@ -161,7 +159,7 @@ export function QuizzesPanel({
         return () => {
             isActive = false
         }
-    }, [gradeLevelFilter, mode, page, quizFilter, reloadKey, t])
+    }, [gradeLevelFilter, page, quizFilter, reloadKey])
 
     useEffect(() => {
         if (
@@ -310,7 +308,7 @@ export function QuizzesPanel({
         setIsCreating(true)
         try {
             const payload = {
-                mode,
+                mode: "exam" as const,
                 title: title.trim(),
                 source_language:
                     editingQuiz?.source_language ??
@@ -323,25 +321,25 @@ export function QuizzesPanel({
                 easy_question_count: difficultyCounts.easy,
                 medium_question_count: difficultyCounts.medium,
                 hard_question_count: difficultyCounts.hard,
-                easy_points: mode === "exam" ? difficultyPoints.easy : 0,
-                medium_points: mode === "exam" ? difficultyPoints.medium : 0,
-                hard_points: mode === "exam" ? difficultyPoints.hard : 0,
+                easy_points: difficultyPoints.easy,
+                medium_points: difficultyPoints.medium,
+                hard_points: difficultyPoints.hard,
             }
             const isEditing = editingQuiz !== null
             const quiz = isEditing
                 ? await updateQuiz(editingQuiz.id, payload)
                 : await createQuiz(payload)
-            setQuizzes((current) =>
-                editingQuiz
-                    ? current.map((item) => (item.id === quiz.id ? quiz : item))
-                    : [quiz, ...current]
-            )
+            if (isEditing) {
+                setQuizzes((current) =>
+                    current.map((item) => (item.id === quiz.id ? quiz : item))
+                )
+            }
             onCreateDialogOpenChange(false)
             resetCreationForm()
             if (!isEditing) {
                 setQuizFilter("")
                 setGradeLevelFilter("")
-                const allQuizzes = await getAllQuizzes(mode).catch(() => [])
+                const allQuizzes = await getAllQuizzes().catch(() => [])
                 setPage(pageContaining(allQuizzes, quiz.id))
             }
             setReloadKey((current) => current + 1)
@@ -491,9 +489,7 @@ export function QuizzesPanel({
     return (
         <div className="mt-6">
             <QuizzesList
-                mode={mode}
                 quizzes={quizzes}
-                filteredQuizzes={quizzes}
                 sessions={sessions}
                 gradeLevels={quizGradeLevels}
                 isLoading={isLoading}
@@ -528,7 +524,6 @@ export function QuizzesPanel({
             />
 
             <QuizFormDialog
-                mode={mode}
                 open={isCreateDialogOpen || editingQuiz !== null}
                 editingQuiz={editingQuiz}
                 banks={banks}

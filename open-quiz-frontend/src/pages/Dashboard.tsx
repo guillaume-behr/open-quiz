@@ -375,7 +375,6 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                     )}
                     {activeSection === "exam-quizzes" && (
                         <QuizzesPanel
-                            mode="exam"
                             isCreateDialogOpen={isQuizCreationOpen}
                             onCreateDialogOpenChange={setIsQuizCreationOpen}
                         />

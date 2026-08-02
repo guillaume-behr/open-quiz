@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, func, select
 
 from app.audit import audit_event
-from app.dependencies import AdminUser, DbSession, client_ip
+from app.dependencies import AdminUser, DbSession
 from app.models import ProblemReport
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import ProblemReportCreate, ProblemReportResponse
@@ -30,8 +30,11 @@ def create_problem_report(
     request: Request,
     session: DbSession,
 ) -> ProblemReport:
+    # Anonymous endpoint: abuse is contained by an instance-wide budget so that
+    # no client identifier (especially an IP address) is ever used as a quota
+    # identity.
     retry_after = request.app.state.problem_report_rate_limiter.reserve(
-        session, f"client:{client_ip(request)}"
+        session, "problem-report:instance"
     )
     if retry_after:
         raise HTTPException(

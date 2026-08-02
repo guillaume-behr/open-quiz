@@ -413,6 +413,7 @@
     "remove-code": "Видалити код",
     "code-language": "Мова",
     "source-code": "Вихідний код",
+    "code-block-region": "Блок коду",
     "run-python": "Біжи",
     "running-python": "Виконання…",
     "execution-result": "Результат",

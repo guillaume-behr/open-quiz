@@ -52,7 +52,17 @@ export function StudentQuestionForm({
                     total: session.total_questions,
                 })}
             </p>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+                className="h-2 overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-valuenow={session.answered_count}
+                aria-valuemin={0}
+                aria-valuemax={session.total_questions}
+                aria-label={t("student-answered-progress", {
+                    count: session.answered_count,
+                    total: session.total_questions,
+                })}
+            >
                 <div
                     className="h-full rounded-full bg-primary transition-all"
                     style={{ width: `${progress}%` }}

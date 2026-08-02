@@ -399,6 +399,7 @@
     "remove-code": "Remover código",
     "code-language": "Idioma",
     "source-code": "Código-fonte",
+    "code-block-region": "Bloco de código",
     "run-python": "Executar",
     "running-python": "Execução…",
     "execution-result": "Resultado",

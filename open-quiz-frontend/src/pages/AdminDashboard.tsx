@@ -35,10 +35,10 @@ import {
 import { useEffect, useState, type SyntheticEvent } from "react"
 import { useTranslation } from "react-i18next"
 
-async function requireAdmin(user: User, errorMessage: string): Promise<void> {
+async function requireAdmin(user: User, message: string): Promise<void> {
     if (!user.is_admin) {
         await logout()
-        throw new Error(errorMessage)
+        throw new Error(message)
     }
 }
 

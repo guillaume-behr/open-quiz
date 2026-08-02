@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 COPY main.py ./
+COPY scripts ./scripts
 
 RUN mkdir /data && chown 10001:10001 /data
 

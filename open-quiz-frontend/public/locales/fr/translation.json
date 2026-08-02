@@ -401,6 +401,7 @@
     "remove-code": "Retirer le code",
     "code-language": "Langage",
     "source-code": "Code source",
+    "code-block-region": "Bloc de code",
     "run-python": "Exécuter",
     "running-python": "Exécution…",
     "execution-result": "Résultat",

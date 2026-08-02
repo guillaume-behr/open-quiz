@@ -71,7 +71,7 @@ class Settings:
     quiz_violation_attempts: int = 20
     quiz_rate_window_seconds: int = 60
     quiz_result_retention_days: int = 365
-    problem_report_attempts: int = 5
+    problem_report_attempts: int = 30
     problem_report_window_seconds: int = 900
     problem_report_retention_days: int = 90
     max_request_body_bytes: int = 65536
@@ -150,8 +150,8 @@ class Settings:
             raise ValueError("QUIZ_RATE_WINDOW_SECONDS must be between 10 and 3600")
         if not 1 <= self.quiz_result_retention_days <= 3650:
             raise ValueError("QUIZ_RESULT_RETENTION_DAYS must be between 1 and 3650")
-        if not 1 <= self.problem_report_attempts <= 20:
-            raise ValueError("PROBLEM_REPORT_ATTEMPTS must be between 1 and 20")
+        if not 1 <= self.problem_report_attempts <= 1000:
+            raise ValueError("PROBLEM_REPORT_ATTEMPTS must be between 1 and 1000")
         if not 60 <= self.problem_report_window_seconds <= 86400:
             raise ValueError(
                 "PROBLEM_REPORT_WINDOW_SECONDS must be between 60 and 86400"
@@ -221,7 +221,7 @@ def get_settings() -> Settings:
         quiz_violation_attempts=int(os.getenv("QUIZ_VIOLATION_ATTEMPTS", "20")),
         quiz_rate_window_seconds=int(os.getenv("QUIZ_RATE_WINDOW_SECONDS", "60")),
         quiz_result_retention_days=int(os.getenv("QUIZ_RESULT_RETENTION_DAYS", "365")),
-        problem_report_attempts=int(os.getenv("PROBLEM_REPORT_ATTEMPTS", "5")),
+        problem_report_attempts=int(os.getenv("PROBLEM_REPORT_ATTEMPTS", "30")),
         problem_report_window_seconds=int(
             os.getenv("PROBLEM_REPORT_WINDOW_SECONDS", "900")
         ),

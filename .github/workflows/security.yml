@@ -28,6 +28,7 @@ jobs:
       - run: uv run --frozen ruff format --check app tests main.py scripts
       - name: Run backend tests
         env:
+          # Disposable values, only used by the ephemeral CI test database.
           APP_ENV: test
           JWT_SECRET: ci-test-jwt-secret-with-enough-variety-2026
           TOTP_ENCRYPTION_KEY: ci-test-totp-key-with-different-variety-2026

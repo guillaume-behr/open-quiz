@@ -22,6 +22,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import case, delete, func, or_, select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
@@ -504,8 +505,21 @@ def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
         hard_points=0,
     )
     session.add(quiz)
-    session.flush()
-    session.add(TrainingQuizProfile(owner_id=owner_id, quiz_id=quiz.id))
+    try:
+        session.flush()
+        session.add(TrainingQuizProfile(owner_id=owner_id, quiz_id=quiz.id))
+        session.flush()
+    except IntegrityError:
+        # A concurrent request created the training profile first; callers
+        # have only performed reads so far, so rolling back is safe.
+        session.rollback()
+        quiz = session.scalar(
+            select(Quiz)
+            .join(TrainingQuizProfile, TrainingQuizProfile.quiz_id == Quiz.id)
+            .where(TrainingQuizProfile.owner_id == owner_id)
+        )
+        if quiz is None:
+            raise
     return quiz
 
 
@@ -932,7 +946,7 @@ def public_session_subject(
     return (
         f"{purpose}:session:{session_id}"
         if session_id is not None
-        else f"{purpose}:unknown"
+        else f"{purpose}:code:{normalized_join_code}"
     )
 
 
@@ -1063,7 +1077,7 @@ def student_state_response(
     if existing_answer is not None:
         try:
             saved_answer = json.loads(existing_answer.answer_data)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             saved_answer = {}
         if not isinstance(saved_answer, dict):
             saved_answer = {}
@@ -1339,7 +1353,7 @@ def export_quiz_results(
         for participant in result.participants:
             writer.writerow(
                 [
-                    safe_spreadsheet_cell(result.class_name),
+                    safe_spreadsheet_cell(result.class_name or ""),
                     safe_spreadsheet_cell(result.quiz_title),
                     result_date.isoformat(),
                     safe_spreadsheet_cell(participant.student_identifier),
@@ -1371,7 +1385,7 @@ def answer_review(
 ) -> QuizAnswerReview:
     try:
         submitted = json.loads(answer.answer_data)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         submitted = {}
     if not isinstance(submitted, dict):
         submitted = {}
@@ -1474,10 +1488,10 @@ def list_student_quiz_history(
     student: Annotated[StudentAccount, Depends(current_student)],
     session: DbSession,
 ) -> list[StudentQuizHistoryItem]:
-    membership_id = session.scalar(
-        select(Student.id).where(Student.account_id == student.id)
+    membership_ids = list(
+        session.scalars(select(Student.id).where(Student.account_id == student.id))
     )
-    if membership_id is None:
+    if not membership_ids:
         return []
     rows = list(
         session.execute(
@@ -1488,7 +1502,7 @@ def list_student_quiz_history(
             )
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
-                QuizParticipant.student_id == membership_id,
+                QuizParticipant.student_id.in_(membership_ids),
                 QuizSession.status == "finished",
                 QuizSession.started_at.is_not(None),
                 Quiz.mode == "exam",
@@ -2189,12 +2203,12 @@ def control_makeup_session(
                 paused_at = child.paused_at
                 if paused_at.tzinfo is None:
                     paused_at = paused_at.replace(tzinfo=UTC)
-                child.paused_duration_seconds += ceil(
-                    max(0, (now - paused_at).total_seconds())
-                )
+                child.paused_duration_seconds = (
+                    child.paused_duration_seconds or 0
+                ) + ceil(max(0, (now - paused_at).total_seconds()))
                 child.paused_at = None
         elif action == "finish":
-            if child.status != "in_progress":
+            if child.status not in {"in_progress", "paused"}:
                 continue
             child.status = "finished"
             quiz = session.get(Quiz, child.quiz_id)
@@ -2217,6 +2231,7 @@ def control_makeup_session(
 )
 def join_makeup_session(
     payload: QuizJoin,
+    request: Request,
     account: Annotated[StudentAccount, Depends(current_student)],
     session: DbSession,
 ) -> MakeupSessionJoinResponse:
@@ -2227,6 +2242,13 @@ def join_makeup_session(
         )
     )
     if makeup is None:
+        # Bound join-code brute-force per student account, never per IP.
+        enforce_public_rate_limit(
+            request,
+            session,
+            "quiz_join_rate_limiter",
+            f"makeup-join:account:{account.id}",
+        )
         raise HTTPException(
             status_code=403, detail="Impossible de rejoindre ce rattrapage"
         )
@@ -2284,6 +2306,7 @@ def join_makeup_session(
 def select_makeup_quiz(
     join_code: str,
     payload: MakeupQuizSelection,
+    request: Request,
     account: Annotated[StudentAccount, Depends(current_student)],
     session: DbSession,
 ) -> StudentQuizJoinResponse:
@@ -2294,6 +2317,12 @@ def select_makeup_quiz(
         )
     )
     if makeup is None:
+        enforce_public_rate_limit(
+            request,
+            session,
+            "quiz_join_rate_limiter",
+            f"makeup-join:account:{account.id}",
+        )
         raise HTTPException(
             status_code=409, detail="Ce rattrapage n’accepte plus de choix"
         )
@@ -2560,7 +2589,7 @@ def join_quiz(
         .where(QuizSession.join_code == payload.join_code, Quiz.mode == "exam")
     ).first()
     if row is None:
-        reject_quiz_join(request, session, "join:unknown")
+        reject_quiz_join(request, session, f"join:unknown:{account.id}")
     quiz_session, quiz = row
     join_subject = f"join:session:{quiz_session.id}"
     if quiz_session.status != "waiting":
@@ -2684,14 +2713,12 @@ def submit_student_answer(
             status_code=status.HTTP_409_CONFLICT,
             detail="Aucune question en cours",
         )
-    existing_answer = session.scalar(
-        select(QuizAnswer).where(
-            QuizAnswer.session_id == quiz_session.id,
-            QuizAnswer.participant_id == participant.id,
-            QuizAnswer.question_id == question_id,
-        )
-    )
     question = session.get(Question, question_id)
+    if question is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La question actuelle n’est pas disponible",
+        )
     choices = list(
         session.scalars(
             select(QuestionChoice)
@@ -2700,11 +2727,6 @@ def submit_student_answer(
         )
     )
     choices_by_id = {choice.id: choice for choice in choices}
-    if question is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="La question actuelle n’est pas disponible",
-        )
 
     feedback: TrainingFeedback | None = None
     if question.answer_mode == "written":
@@ -2754,21 +2776,30 @@ def submit_student_answer(
                 correct_choice_ids=correct_ids,
             )
 
-    if existing_answer is None:
-        session.add(
-            QuizAnswer(
-                session_id=quiz_session.id,
-                participant_id=participant.id,
-                question_id=question_id,
-                answer_data=json.dumps(answer_data, ensure_ascii=False),
-                score=0,
-                is_graded=False,
-            )
+    # Atomic upsert: concurrent submissions for the same question can never
+    # create duplicate answers nor crash on the uniqueness constraint.
+    answer_statement = sqlite_insert(QuizAnswer).values(
+        session_id=quiz_session.id,
+        participant_id=participant.id,
+        question_id=question_id,
+        answer_data=json.dumps(answer_data, ensure_ascii=False),
+        score=0,
+        is_graded=False,
+    )
+    session.execute(
+        answer_statement.on_conflict_do_update(
+            index_elements=[
+                QuizAnswer.session_id,
+                QuizAnswer.participant_id,
+                QuizAnswer.question_id,
+            ],
+            set_={
+                "answer_data": answer_statement.excluded.answer_data,
+                "score": 0,
+                "is_graded": False,
+            },
         )
-    else:
-        existing_answer.answer_data = json.dumps(answer_data, ensure_ascii=False)
-        existing_answer.score = 0
-        existing_answer.is_graded = False
+    )
     total_questions = len(session_question_ids(quiz_session, session, participant))
     if (
         participant.current_position is not None
@@ -2880,7 +2911,7 @@ def report_student_violation(
         and (now - last_violation_at).total_seconds() < VIOLATION_DEDUPLICATION_SECONDS
     ):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    participant.violation_count += 1
+    participant.violation_count = (participant.violation_count or 0) + 1
     participant.last_violation_type = payload.event_type
     participant.last_violation_at = now
     session.commit()

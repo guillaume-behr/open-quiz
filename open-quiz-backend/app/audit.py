@@ -21,5 +21,6 @@ def audit_event(event: str, **details: object) -> None:
                 **details,
             },
             separators=(",", ":"),
+            default=str,
         )
     )

@@ -43,12 +43,11 @@ function storeRefreshProof(proof: string | null) {
 
 async function errorFrom(response: Response): Promise<Error> {
     const body = (await response.json().catch(() => ({}))) as {
-        detail?: string
+        detail?: unknown
     }
-    return new ApiError(
-        body.detail ?? "Une erreur est survenue.",
-        response.status
-    )
+    // FastAPI validation failures return `detail` as an array of issues.
+    const detail = typeof body.detail === "string" ? body.detail : null
+    return new ApiError(detail ?? "Une erreur est survenue.", response.status)
 }
 
 async function refreshAccessToken(): Promise<boolean> {

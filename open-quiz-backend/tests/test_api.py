@@ -37,7 +37,7 @@ from app.rate_limit import LoginRateLimiter
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.routers.quizzes import adjust_last_question_for_points, safe_spreadsheet_cell
 from app.schemas import QuestionBatchImport, StudentQuizAnswer
-from app.security import refresh_request_proof
+from app.security import DUMMY_PASSWORD_HASH, refresh_request_proof
 from main import create_app
 from scripts.reset_two_factor import reset
 
@@ -524,9 +524,11 @@ def test_professor_manages_student_accounts_and_class_assignments(
         assert account["class_id"] is None
         assert "password" not in account
         assert account["identifier"] == "lea.dupont"
-        assert len(account["generated_password"]) == 8
-        assert account["generated_password"].isalpha()
-        assert account["generated_password"].isupper()
+        generated_password = account["generated_password"]
+        assert len(generated_password) == 10
+        assert generated_password[:8].isalpha()
+        assert generated_password[:8].isupper()
+        assert generated_password[8:].isdigit()
         inactive_account = client.post(
             "/api/students",
             headers=teacher_headers,
@@ -3448,3 +3450,348 @@ def test_rejects_unsafe_quiz_rate_limit_configuration(
             tmp_path / f"{setting_name}.db",
             **{setting_name: value},
         )
+
+
+def exam_environment(client: TestClient) -> dict[str, Any]:
+    """Provision a teacher, a class with one student and a one-question quiz."""
+    admin_headers = login_admin(client)
+    assert (
+        client.post(
+            "/api/admin/users",
+            headers=admin_headers,
+            json={
+                "username": "edge.teacher",
+                "display_name": "Edge Teacher",
+                "password": "a-secure-edge-password",
+            },
+        ).status_code
+        == 201
+    )
+    teacher_headers, _ = complete_first_login(
+        client, "edge.teacher", "a-secure-edge-password"
+    )
+    student_class = client.post(
+        "/api/classes",
+        headers=teacher_headers,
+        json={"name": "5e A", "grade_level": "5e"},
+    ).json()
+    account = client.post(
+        "/api/students",
+        headers=teacher_headers,
+        json={"first_name": "Edge", "last_name": "Student"},
+    ).json()
+    assert (
+        client.post(
+            f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+            headers=teacher_headers,
+        ).status_code
+        == 200
+    )
+    student_login = client.post(
+        "/api/student-auth/login",
+        json={
+            "identifier": account["identifier"],
+            "password": account["generated_password"],
+        },
+    )
+    assert student_login.status_code == 200
+    student_headers = {
+        "Authorization": f"Bearer {student_login.json()['access_token']}"
+    }
+    bank = client.post(
+        "/api/question-banks",
+        headers=teacher_headers,
+        json={"grade_level": "5e", "chapter": "Edge cases"},
+    ).json()
+    question = client.post(
+        f"/api/question-banks/{bank['id']}/questions",
+        headers=teacher_headers,
+        data={
+            "payload": json.dumps(
+                {
+                    "prompt": "One plus one?",
+                    "points": 2,
+                    "difficulty": "easy",
+                    "answer_mode": "single",
+                    "answer_mode_disclosed": True,
+                    "choices": [
+                        {"label": "Two", "is_correct": True},
+                        {"label": "Three", "is_correct": False},
+                    ],
+                }
+            )
+        },
+    ).json()
+    quiz = client.post(
+        "/api/quizzes",
+        headers=teacher_headers,
+        json={
+            "title": "Edge quiz",
+            "question_bank_ids": [bank["id"]],
+            "allow_previous_questions": False,
+            "easy_question_count": 1,
+            "medium_question_count": 0,
+            "hard_question_count": 0,
+        },
+    ).json()
+    return {
+        "teacher_headers": teacher_headers,
+        "student_headers": student_headers,
+        "student_class": student_class,
+        "account": account,
+        "question": question,
+        "quiz": quiz,
+    }
+
+
+def launch_and_join(
+    client: TestClient,
+    environment: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, str]]:
+    launched = client.post(
+        f"/api/quizzes/{environment['quiz']['id']}/launch",
+        headers=environment["teacher_headers"],
+        json={"class_id": environment["student_class"]["id"]},
+    )
+    assert launched.status_code == 201
+    joined = client.post(
+        "/api/quizzes/join",
+        headers=environment["student_headers"],
+        json={"join_code": launched.json()["join_code"]},
+    )
+    assert joined.status_code == 201
+    participant_headers = {"X-Quiz-Token": joined.json()["participant_token"]}
+    return launched.json(), participant_headers
+
+
+def correct_choice_id(question: dict[str, Any]) -> int:
+    return next(choice["id"] for choice in question["choices"] if choice["is_correct"])
+
+
+def test_student_login_verifies_password_for_unknown_accounts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifications: list[tuple[str, str]] = []
+
+    def spy(password: str, encoded: str) -> bool:
+        verifications.append((password, encoded))
+        return False
+
+    monkeypatch.setattr("app.routers.student_auth.verify_password", spy)
+    with make_client(settings_for(tmp_path / "student-timing.db")) as client:
+        response = client.post(
+            "/api/student-auth/login",
+            json={"identifier": "ghost.student", "password": "wrong-password"},
+        )
+
+    assert response.status_code == 401
+    # The verification must run even for unknown identifiers so the response
+    # time does not reveal whether the account exists.
+    assert verifications == [("wrong-password", DUMMY_PASSWORD_HASH)]
+
+
+def test_problem_report_rate_limit_is_instance_wide(tmp_path: Path) -> None:
+    settings = settings_for(
+        tmp_path / "problem-report-instance-limit.db",
+        problem_report_attempts=2,
+    )
+    with make_client(settings) as client:
+        for index in range(2):
+            response = client.post(
+                "/api/problem-reports",
+                json={"message": f"Problème numéro {index}", "page_path": "/"},
+                headers={"X-Forwarded-For": f"203.0.113.{index + 1}"},
+            )
+            assert response.status_code == 201
+
+        # A fresh client address must not grant a fresh budget: the quota is
+        # never keyed on an IP address.
+        limited = client.post(
+            "/api/problem-reports",
+            json={"message": "Encore un problème", "page_path": "/"},
+            headers={"X-Forwarded-For": "198.51.100.99"},
+        )
+        assert limited.status_code == 429
+
+
+def test_makeup_join_is_rate_limited_per_student_account(tmp_path: Path) -> None:
+    settings = settings_for(
+        tmp_path / "makeup-join-limit.db",
+        quiz_join_attempts=5,
+        quiz_rate_window_seconds=60,
+    )
+    with make_client(settings) as client:
+        environment = exam_environment(client)
+        for _ in range(5):
+            response = client.post(
+                "/api/quizzes/makeup/join",
+                headers=environment["student_headers"],
+                json={"join_code": "ZZZZZZ"},
+            )
+            assert response.status_code == 403
+
+        limited = client.post(
+            "/api/quizzes/makeup/join",
+            headers=environment["student_headers"],
+            json={"join_code": "ZZZZZZ"},
+        )
+        assert limited.status_code == 429
+
+        # Another student account keeps its own budget.
+        other_account = client.post(
+            "/api/students",
+            headers=environment["teacher_headers"],
+            json={"first_name": "Other", "last_name": "Student"},
+        ).json()
+        other_login = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": other_account["identifier"],
+                "password": other_account["generated_password"],
+            },
+        )
+        assert other_login.status_code == 200
+        other_headers = {
+            "Authorization": f"Bearer {other_login.json()['access_token']}"
+        }
+        other_attempt = client.post(
+            "/api/quizzes/makeup/join",
+            headers=other_headers,
+            json={"join_code": "ZZZZZZ"},
+        )
+        assert other_attempt.status_code == 403
+
+
+def test_makeup_finish_completes_paused_child_sessions(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "makeup-paused-finish.db")) as client:
+        environment = exam_environment(client)
+        quiz_session, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{quiz_session['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        answered = client.post(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert answered.status_code == 200
+        assert answered.json()["status"] == "finished"
+
+        makeup = client.post(
+            "/api/quizzes/makeup/sessions",
+            headers=environment["teacher_headers"],
+            json={
+                "class_id": environment["student_class"]["id"],
+                "quiz_ids": [environment["quiz"]["id"]],
+            },
+        ).json()
+        assert (
+            client.post(
+                "/api/quizzes/makeup/join",
+                headers=environment["student_headers"],
+                json={"join_code": makeup["join_code"]},
+            ).status_code
+            == 200
+        )
+        selected = client.post(
+            f"/api/quizzes/makeup/{makeup['join_code']}/select",
+            headers=environment["student_headers"],
+            json={"quiz_id": environment["quiz"]["id"]},
+        )
+        assert selected.status_code == 201
+        child_headers = {"X-Quiz-Token": selected.json()["participant_token"]}
+        child_state_url = (
+            f"/api/quizzes/student/sessions/{selected.json()['join_code']}"
+        )
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/pause",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        resumed = client.post(
+            f"/api/quizzes/makeup/sessions/{makeup['id']}/resume",
+            headers=environment["teacher_headers"],
+        )
+        assert resumed.status_code == 200
+        assert resumed.json()["status"] == "in_progress"
+
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/pause",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/resume",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        finished = client.post(
+            f"/api/quizzes/makeup/sessions/{makeup['id']}/finish",
+            headers=environment["teacher_headers"],
+        )
+        assert finished.status_code == 200
+        assert finished.json()["status"] == "finished"
+        # A child paused when the makeup finishes must not stay stuck.
+        child_state = client.get(child_state_url, headers=child_headers)
+        assert child_state.status_code == 200
+        assert child_state.json()["status"] == "finished"
+
+
+def test_concurrent_answer_submissions_keep_a_single_answer(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "concurrent-answers.db"
+    with make_client(settings_for(database_path)) as client:
+        environment = exam_environment(client)
+        quiz_session, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{quiz_session['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        barrier = Barrier(4)
+        answer_url = f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer"
+        payload = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
+
+        def submit() -> int:
+            barrier.wait()
+            return client.post(
+                answer_url,
+                headers=participant_headers,
+                json=payload,
+            ).status_code
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            statuses = [
+                future.result() for future in [pool.submit(submit) for _ in range(4)]
+            ]
+
+        assert statuses == [200, 200, 200, 200]
+        with sqlite3.connect(database_path) as connection:
+            answer_count = connection.execute(
+                "SELECT COUNT(*) FROM quiz_answers WHERE session_id = ?",
+                (quiz_session["id"],),
+            ).fetchone()[0]
+        assert answer_count == 1

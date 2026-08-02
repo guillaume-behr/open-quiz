@@ -17,7 +17,6 @@ import { useTranslation } from "react-i18next"
 
 type QuestionBanksListProps = {
     banks: QuestionBank[]
-    filteredBanks: QuestionBank[]
     gradeLevels: GradeLevel[]
     titleFilter: string
     gradeLevelFilter: string
@@ -40,7 +39,6 @@ type QuestionBanksListProps = {
 
 export function QuestionBanksList({
     banks,
-    filteredBanks,
     gradeLevels,
     titleFilter,
     gradeLevelFilter,
@@ -153,7 +151,7 @@ export function QuestionBanksList({
                 )}
                 <BanksContent
                     banks={banks}
-                    filteredBanks={filteredBanks}
+                    hasActiveFilters={Boolean(titleFilter || gradeLevelFilter)}
                     isLoading={isLoading}
                     loadError={loadError}
                     isBatchBusy={isBatchBusy}
@@ -172,7 +170,7 @@ export function QuestionBanksList({
 
 function BanksContent({
     banks,
-    filteredBanks,
+    hasActiveFilters,
     isLoading,
     loadError,
     isBatchBusy,
@@ -185,7 +183,7 @@ function BanksContent({
     onPageChange,
 }: {
     banks: QuestionBank[]
-    filteredBanks: QuestionBank[]
+    hasActiveFilters: boolean
     isLoading: boolean
     loadError: string | null
     isBatchBusy: boolean
@@ -213,15 +211,7 @@ function BanksContent({
                 {loadError}
             </p>
         )
-    if (banks.length === 0)
-        return (
-            <div className="mt-3 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                <BookOpenText className="mb-2 size-8" />
-                <p className="font-medium">{t("no-question-bank")}</p>
-                <p className="mt-1 text-sm">{t("no-question-bank-help")}</p>
-            </div>
-        )
-    if (filteredBanks.length === 0)
+    if (banks.length === 0 && hasActiveFilters)
         return (
             <div className="mt-3 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                 <p className="font-medium">{t("no-question-bank-filtered")}</p>
@@ -235,14 +225,22 @@ function BanksContent({
                 </Button>
             </div>
         )
+    if (banks.length === 0)
+        return (
+            <div className="mt-3 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                <BookOpenText className="mb-2 size-8" />
+                <p className="font-medium">{t("no-question-bank")}</p>
+                <p className="mt-1 text-sm">{t("no-question-bank-help")}</p>
+            </div>
+        )
 
     return (
         <>
             <ul
-                key={filteredBanks.map((bank) => bank.id).join(",")}
+                key={banks.map((bank) => bank.id).join(",")}
                 className="mt-3 grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:grid-cols-2"
             >
-                {filteredBanks.map((bank) => (
+                {banks.map((bank) => (
                     <li
                         key={bank.id}
                         className="relative rounded-xl border bg-background p-4"

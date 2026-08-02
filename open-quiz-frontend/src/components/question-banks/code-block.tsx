@@ -51,10 +51,17 @@ export function CodeBlock({
     const [result, setResult] = useState<string | null>(null)
     const highlightedCodeRef = useRef<HTMLPreElement>(null)
     const currentCodeRef = useRef(code)
+    const mountedRef = useRef(true)
 
     useEffect(() => {
         currentCodeRef.current = code
     }, [code])
+
+    useEffect(() => {
+        return () => {
+            mountedRef.current = false
+        }
+    }, [])
 
     const canRun = runnable && language === "python"
 
@@ -73,9 +80,10 @@ export function CodeBlock({
             const output = await serializePythonExecution(async () => {
                 return (await executePython(source)) || t("python-no-output")
             })
-            if (currentCodeRef.current === source) setResult(output)
+            if (mountedRef.current && currentCodeRef.current === source)
+                setResult(output)
         } catch (error) {
-            if (currentCodeRef.current === source) {
+            if (mountedRef.current && currentCodeRef.current === source) {
                 setResult(
                     `${t("python-run-error")}\n${
                         error instanceof Error ? error.message : String(error)
@@ -83,7 +91,7 @@ export function CodeBlock({
                 )
             }
         } finally {
-            setIsRunning(false)
+            if (mountedRef.current) setIsRunning(false)
         }
     }
 
@@ -130,6 +138,8 @@ export function CodeBlock({
                             } ${canRun ? "pr-28" : ""}`}
                             style={style}
                             tabIndex={0}
+                            role="region"
+                            aria-label={t("code-block-region")}
                         >
                             <code>
                                 {tokens.map((line, lineIndex) => (

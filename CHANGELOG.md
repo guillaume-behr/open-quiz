@@ -4,6 +4,26 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ## 0.2.0 — En développement
 
+### Sécurité et corrections
+
+- la limitation des signalements anonymes n'utilise plus jamais l'adresse IP :
+  le budget est désormais global à l'instance (`PROBLEM_REPORT_ATTEMPTS`, 30
+  par défaut) ;
+- la connexion élève vérifie toujours le mot de passe, même pour un
+  identifiant inconnu, afin de ne pas révéler les comptes existants par le
+  temps de réponse ;
+- les mots de passe élèves générés gagnent deux chiffres (10 caractères) ;
+- les codes de rattrapage sont protégés contre la force brute par un quota par
+  compte élève ;
+- les réponses envoyées simultanément ne peuvent plus créer de doublons ni
+  provoquer d'erreur 500 (écriture atomique) ;
+- la fin d'un rattrapage termine aussi les sessions en pause et la reprise
+  tolère les durées de pause héritées ;
+- l'historique élève couvre toutes les classes du compte ;
+- le cookie de session est supprimé avec les mêmes attributs qu'à sa création ;
+- audit des créations, modifications et suppressions de comptes élèves ;
+- Dependabot activé pour GitHub Actions, Docker, uv et npm.
+
 ### Ajouts
 
 - comptes élèves avec identifiant, mot de passe et tableau de bord dédié ;

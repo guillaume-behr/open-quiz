@@ -91,6 +91,16 @@ def set_refresh_cookie(
     )
 
 
+def clear_refresh_cookie(response: Response, request: Request) -> None:
+    settings = request.app.state.settings
+    response.delete_cookie(
+        REFRESH_COOKIE,
+        path="/api/auth",
+        secure=settings.cookie_secure,
+        samesite="strict",
+    )
+
+
 def password_rate_subject(username: str) -> str:
     return f"password:identity:{username}"
 
@@ -367,7 +377,7 @@ def verify_two_factor(
             payload.challenge_token,
             settings.jwt_secret,
         )
-    except (jwt.PyJWTError, ValueError, KeyError):
+    except jwt.PyJWTError, ValueError, KeyError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Demande de double authentification invalide ou expirée",
@@ -466,7 +476,6 @@ def verify_two_factor(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Demande de double authentification invalide ou déjà utilisée",
         )
-    limiter.release(session, rate_subject)
     limiter.clear_subject(session, rate_subject)
     audit_event("auth.two_factor_succeeded", user_id=user.id)
     return issue_session(user, request, response, session)
@@ -604,5 +613,5 @@ def logout(
             .values(revoked_at=int(time()))
         )
         session.commit()
-    response.delete_cookie(REFRESH_COOKIE, path="/api/auth")
+    clear_refresh_cookie(response, request)
     audit_event("auth.logout")

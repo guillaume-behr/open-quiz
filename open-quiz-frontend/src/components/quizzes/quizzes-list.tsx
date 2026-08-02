@@ -17,9 +17,7 @@ import { useTranslation } from "react-i18next"
 
 const difficulties = ["easy", "medium", "hard"] as const
 type QuizzesListProps = {
-    mode: "exam" | "training"
     quizzes: Quiz[]
-    filteredQuizzes: Quiz[]
     sessions: QuizSession[]
     gradeLevels: string[]
     isLoading: boolean
@@ -39,9 +37,7 @@ type QuizzesListProps = {
 }
 
 export function QuizzesList({
-    mode,
     quizzes,
-    filteredQuizzes,
     sessions,
     gradeLevels,
     isLoading,
@@ -63,7 +59,7 @@ export function QuizzesList({
 
     return (
         <>
-            {mode === "exam" && sessions.length > 0 && (
+            {sessions.length > 0 && (
                 <div className="mb-5 rounded-xl border bg-primary/5 p-4">
                     <h3 className="font-semibold">{t("recent-sessions")}</h3>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -112,25 +108,24 @@ export function QuizzesList({
                         onQuizFilterChange={onQuizFilterChange}
                         onGradeLevelFilterChange={onGradeLevelFilterChange}
                     />
-                    {quizzes.length === 0 ? (
+                    {quizzes.length === 0 &&
+                    (quizFilter || gradeLevelFilter) ? (
+                        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                            {t("no-quiz-filtered")}
+                        </p>
+                    ) : quizzes.length === 0 ? (
                         <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                             <BookOpenText className="mb-2 size-8" />
                             <p className="font-medium">{t("no-quiz")}</p>
                             <p className="mt-1 text-sm">{t("no-quiz-help")}</p>
                         </div>
-                    ) : filteredQuizzes.length === 0 ? (
-                        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                            {t("no-quiz-filtered")}
-                        </p>
                     ) : (
                         <div>
                             <ul
-                                key={filteredQuizzes
-                                    .map((quiz) => quiz.id)
-                                    .join(",")}
+                                key={quizzes.map((quiz) => quiz.id).join(",")}
                                 className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
                             >
-                                {filteredQuizzes.map((quiz) => (
+                                {quizzes.map((quiz) => (
                                     <QuizCard
                                         key={quiz.id}
                                         quiz={quiz}
@@ -138,7 +133,6 @@ export function QuizzesList({
                                         onPreview={() => onPreview(quiz)}
                                         onLaunch={() => onLaunch(quiz)}
                                         onDelete={() => onDelete(quiz)}
-                                        mode={mode}
                                     />
                                 ))}
                             </ul>
@@ -222,14 +216,12 @@ function QuizFilters({
 }
 
 function QuizCard({
-    mode,
     quiz,
     onEdit,
     onPreview,
     onLaunch,
     onDelete,
 }: {
-    mode: "exam" | "training"
     quiz: Quiz
     onEdit: () => void
     onPreview: () => void
@@ -239,19 +231,17 @@ function QuizCard({
     const { t } = useTranslation()
     return (
         <li className="relative flex h-full flex-col rounded-xl border bg-background p-4">
-            {mode === "exam" && (
-                <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="destructive"
-                    className="absolute top-4 right-4"
-                    aria-label={t("delete-quiz")}
-                    title={t("delete-quiz")}
-                    onClick={onDelete}
-                >
-                    <Trash2 />
-                </Button>
-            )}
+            <Button
+                type="button"
+                size="icon-sm"
+                variant="destructive"
+                className="absolute top-4 right-4"
+                aria-label={t("delete-quiz")}
+                title={t("delete-quiz")}
+                onClick={onDelete}
+            >
+                <Trash2 />
+            </Button>
             <div className="flex items-start gap-3 pr-10">
                 <div className="min-w-0">
                     <h3 className="font-semibold break-words">{quiz.title}</h3>
@@ -291,16 +281,14 @@ function QuizCard({
                         {quiz[`${difficulty}_question_count`]}
                     </span>
                 ))}
-                {mode === "exam" && (
-                    <span className="font-semibold text-foreground">
-                        {t("quiz-total-points", {
-                            count:
-                                quiz.easy_points +
-                                quiz.medium_points +
-                                quiz.hard_points,
-                        })}
-                    </span>
-                )}
+                <span className="font-semibold text-foreground">
+                    {t("quiz-total-points", {
+                        count:
+                            quiz.easy_points +
+                            quiz.medium_points +
+                            quiz.hard_points,
+                    })}
+                </span>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
                 {quiz.question_banks
@@ -308,12 +296,10 @@ function QuizCard({
                     .join(" · ")}
             </p>
             <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                {mode === "exam" && (
-                    <Button type="button" size="sm" onClick={onLaunch}>
-                        <Play />
-                        {t("launch-quiz")}
-                    </Button>
-                )}
+                <Button type="button" size="sm" onClick={onLaunch}>
+                    <Play />
+                    {t("launch-quiz")}
+                </Button>
                 <Button
                     type="button"
                     size="sm"

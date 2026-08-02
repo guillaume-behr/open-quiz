@@ -218,7 +218,7 @@ afin que la politique CSP Caddy autorise les requêtes API.
 | `QUIZ_VIOLATION_ATTEMPTS` | Alertes de surveillance par fenêtre | `20` |
 | `QUIZ_RATE_WINDOW_SECONDS` | Fenêtre des limites publiques | `60` |
 | `QUIZ_RESULT_RETENTION_DAYS` | Conservation des résultats terminés | `365` |
-| `PROBLEM_REPORT_ATTEMPTS` | Signalements admis par fenêtre | `5` |
+| `PROBLEM_REPORT_ATTEMPTS` | Signalements admis par fenêtre (instance entière) | `30` |
 | `PROBLEM_REPORT_WINDOW_SECONDS` | Fenêtre de limitation des signalements | `900` |
 | `PROBLEM_REPORT_RETENTION_DAYS` | Conservation maximale des signalements | `90` |
 | `MAX_REQUEST_BODY_BYTES` | Taille des requêtes ordinaires | `65536` |
@@ -344,7 +344,7 @@ pnpm test
 pnpm typecheck
 pnpm test:e2e
 pnpm build
-pnpm audit --prod --audit-level low
+pnpm audit --audit-level low
 ```
 
 `pnpm test` vérifie notamment les huit catalogues de traduction et leurs
@@ -426,7 +426,7 @@ barème afin qu’une modification ultérieure du quiz ne change pas leurs notes
 | --- | --- |
 | L’API refuse de démarrer | Vérifiez les secrets, `APP_ENV` et l’absence de `/` final dans `FRONTEND_ORIGIN`. |
 | Le navigateur bloque l’API | Faites correspondre exactement l’origine visible et `FRONTEND_ORIGIN`. |
-| Un enseignant a perdu son authentificateur | Utilisez « Récupérer l’accès » ou `uv run python -m scripts.reset_two_factor identifiant`. |
+| Un enseignant a perdu son authentificateur | Utilisez « Récupérer l’accès », `uv run python -m scripts.reset_two_factor identifiant` ou, en Docker, `docker compose exec open-quiz-backend python -m scripts.reset_two_factor identifiant`. |
 | Le frontend ne trouve pas le backend | Démarrez l’API sur le port 8000 ou configurez `VITE_API_URL`. |
 | La traduction est indisponible | Utilisez un navigateur et une paire de langues compatibles avec `Translator`. |
 | Docker ne devient pas sain | Consultez `docker compose ps`, puis `docker compose logs open-quiz-backend open-quiz-frontend`. |

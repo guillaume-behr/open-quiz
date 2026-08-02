@@ -34,20 +34,25 @@ export function MakeupSessionsPanel() {
             .catch(() => setError(t("makeup-load-error")))
     }, [t])
 
+    const hasActiveSession = sessions.some((item) =>
+        ["waiting", "in_progress", "paused"].includes(item.status)
+    )
+
     useEffect(() => {
-        if (
-            !sessions.some((item) =>
-                ["waiting", "in_progress", "paused"].includes(item.status)
-            )
-        )
-            return
+        if (!hasActiveSession) return
+        let isActive = true
         const interval = window.setInterval(() => {
             void getMakeupSessions()
-                .then(setSessions)
+                .then((loaded) => {
+                    if (isActive) setSessions(loaded)
+                })
                 .catch(() => undefined)
         }, 2000)
-        return () => window.clearInterval(interval)
-    }, [sessions])
+        return () => {
+            isActive = false
+            window.clearInterval(interval)
+        }
+    }, [hasActiveSession])
 
     async function create(event: FormEvent) {
         event.preventDefault()

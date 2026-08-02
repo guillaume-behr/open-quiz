@@ -9,28 +9,33 @@ from app.database import build_session_factory
 from app.models import RefreshSession
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
-SECURE_DEFAULTS = {
-    "JWT_SECRET": token_urlsafe(48),
-    "ADMIN_PASSWORD": token_urlsafe(24),
-}
+ROTATED_KEYS = ("JWT_SECRET", "ADMIN_PASSWORD")
 
 
 def rotate() -> None:
+    secure_defaults = {
+        "JWT_SECRET": token_urlsafe(48),
+        "ADMIN_PASSWORD": token_urlsafe(24),
+    }
     lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
     updated: set[str] = set()
     output: list[str] = []
 
     for line in lines:
         name = line.split("=", 1)[0] if "=" in line else ""
-        if name in SECURE_DEFAULTS:
-            output.append(f"{name}={SECURE_DEFAULTS[name]}")
+        if name in secure_defaults:
+            output.append(f"{name}={secure_defaults[name]}")
             updated.add(name)
         else:
             output.append(line)
 
-    for name, value in SECURE_DEFAULTS.items():
+    for name in ROTATED_KEYS:
         if name not in updated:
-            output.append(f"{name}={value}")
+            output.append(f"{name}={secure_defaults[name]}")
+
+    backup = ENV_FILE.with_suffix(f".env.{int(time())}.bak")
+    backup.write_text(ENV_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+    secure_private_file(backup)
 
     ENV_FILE.write_text("\n".join(output) + "\n", encoding="utf-8")
     secure_private_file(ENV_FILE)
@@ -43,6 +48,8 @@ def rotate() -> None:
             .values(revoked_at=int(time()))
         )
         session.commit()
+    print(f"Backup written to {backup}")
+    print("Secrets rotated. Restart the service to reload them.")
 
 
 if __name__ == "__main__":

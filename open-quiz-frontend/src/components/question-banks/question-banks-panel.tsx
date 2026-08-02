@@ -361,7 +361,6 @@ export function QuestionBanksPanel({
         <div className="mt-6">
             <QuestionBanksList
                 banks={questionBanks}
-                filteredBanks={questionBanks}
                 gradeLevels={gradeLevels}
                 titleFilter={titleFilter}
                 gradeLevelFilter={gradeLevelFilter}

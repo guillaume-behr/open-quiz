@@ -675,7 +675,7 @@ def decode_image_payload(
         return None, None
     try:
         image_data = b64decode(image.data_base64, validate=True)
-    except (Base64Error, ValueError):
+    except Base64Error, ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Une image importée n’est pas encodée correctement",
@@ -762,9 +762,7 @@ def import_question_bank(
         )
     ]
     session.commit()
-    session.refresh(question_bank)
-    for question, _, _ in created:
-        session.refresh(question)
+    # expire_on_commit=False: instances stay populated, no refresh needed.
     questions = [
         question_response(question, choices, code)
         for question, choices, code in created
@@ -814,7 +812,7 @@ async def create_question(
         )
     try:
         question_payload = QuestionCreate.model_validate(json.loads(payload))
-    except (json.JSONDecodeError, ValidationError):
+    except json.JSONDecodeError, ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Question invalide",
@@ -893,7 +891,7 @@ async def update_question(
         )
     try:
         question_payload = QuestionUpdate.model_validate(json.loads(payload))
-    except (json.JSONDecodeError, ValidationError):
+    except json.JSONDecodeError, ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Question invalide",

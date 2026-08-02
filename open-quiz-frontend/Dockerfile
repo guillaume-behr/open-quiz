@@ -25,7 +25,9 @@ RUN setcap -r /usr/bin/caddy \
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
 
-RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
+    && mkdir -p /config /data \
+    && chown -R openquiz:openquiz /config /data
 
 USER openquiz
 

@@ -25,8 +25,20 @@ type QuestionFormProps = {
     onCancel: () => void
 }
 
+const ALLOWED_IMAGE_TYPES: ReadonlySet<string> = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+])
+
 function encodeImage(file: File): Promise<EncodedImage> {
     return new Promise((resolve, reject) => {
+        if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+            reject(new Error("Unsupported image type"))
+            return
+        }
+        const contentType = file.type as EncodedImage["content_type"]
         const reader = new FileReader()
         reader.onerror = () => reject(reader.error)
         reader.onload = () => {
@@ -37,7 +49,7 @@ function encodeImage(file: File): Promise<EncodedImage> {
                 return
             }
             resolve({
-                content_type: file.type as EncodedImage["content_type"],
+                content_type: contentType,
                 data_base64: result.slice(separatorIndex + 1),
             })
         }

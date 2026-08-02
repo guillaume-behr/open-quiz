@@ -1,12 +1,14 @@
 import re
 import unicodedata
 from secrets import choice
+from string import digits
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
+from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
 from app.models import (
     Quiz,
@@ -32,10 +34,13 @@ READABLE_VOWELS = "AEU"
 
 
 def generated_student_password() -> str:
-    return "".join(
+    # Pronounceable letters plus digits: 19^4 * 3^4 * 10^2 (~30 bits) while
+    # staying easy for young students to copy.
+    letters = "".join(
         choice(READABLE_CONSONANTS if index % 2 == 0 else READABLE_VOWELS)
         for index in range(8)
     )
+    return f"{letters}{choice(digits)}{choice(digits)}"
 
 
 def identifier_part(value: str) -> str:
@@ -123,6 +128,14 @@ def list_student_accounts(
             | StudentAccount.identifier.ilike(term)
         )
     if class_id is not None:
+        student_class = session.scalar(
+            select(StudentClass.id).where(
+                StudentClass.id == class_id,
+                StudentClass.owner_id == professor.id,
+            )
+        )
+        if student_class is None:
+            raise HTTPException(status_code=404, detail="Classe introuvable")
         filters.append(
             StudentAccount.id.in_(
                 select(Student.account_id).where(
@@ -180,6 +193,11 @@ def create_student_account(
             detail="Cet identifiant élève est déjà utilisé",
         ) from None
     session.refresh(account)
+    audit_event(
+        "students.account_created",
+        professor_id=professor.id,
+        account_id=account.id,
+    )
     response = account_response(account, session)
     return StudentAccountCreatedResponse(
         **response.model_dump(), generated_password=password
@@ -210,6 +228,11 @@ def update_student_account(
         raise HTTPException(
             status_code=409, detail="Cet identifiant élève est déjà utilisé"
         ) from None
+    audit_event(
+        "students.account_updated",
+        professor_id=professor.id,
+        account_id=account.id,
+    )
     return account_response(account, session)
 
 
@@ -243,3 +266,8 @@ def delete_student_account(
         session.execute(delete(Student).where(Student.id == membership.id))
     session.execute(delete(StudentAccount).where(StudentAccount.id == account.id))
     session.commit()
+    audit_event(
+        "students.account_deleted",
+        professor_id=professor.id,
+        account_id=account_id,
+    )

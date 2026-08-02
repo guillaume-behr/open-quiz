@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 
 from sqlalchemy import delete, select
 
+from app.audit import audit_event
 from app.config import Settings, get_settings
 from app.database import build_session_factory
 from app.models import (
@@ -38,6 +39,7 @@ def reset(username: str, settings: Settings | None = None) -> bool:
             delete(TwoFactorCredential).where(TwoFactorCredential.user_id == user.id)
         )
         session.commit()
+        audit_event("security.two_factor_reset_by_script", user_id=user.id)
         return True
 
 
@@ -46,6 +48,17 @@ if __name__ == "__main__":
         description="Reset a user's 2FA enrollment and revoke active sessions."
     )
     parser.add_argument("username")
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the confirmation prompt.",
+    )
     arguments = parser.parse_args()
+    if not arguments.yes:
+        confirmation = input(
+            f"Reset 2FA and revoke all sessions for '{arguments.username}'? [y/N] "
+        )
+        if confirmation.strip().lower() not in {"y", "yes"}:
+            parser.exit(1, "Aborted.\n")
     if not reset(arguments.username):
         parser.error("user not found")

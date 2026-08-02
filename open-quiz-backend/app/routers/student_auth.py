@@ -1,4 +1,5 @@
 from hmac import compare_digest
+from typing import Annotated
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -34,7 +35,7 @@ def student_from_token(
         student_id, version = decode_student_access_token(
             token, request.app.state.settings.jwt_secret
         )
-    except (jwt.PyJWTError, ValueError, KeyError):
+    except jwt.PyJWTError, ValueError, KeyError:
         return None
     account = session.get(StudentAccount, student_id)
     if (
@@ -91,11 +92,10 @@ def login_student(
         select(StudentAccount).where(StudentAccount.identifier == payload.identifier)
     )
     encoded = account.password_hash if account else DUMMY_PASSWORD_HASH
-    if (
-        account is None
-        or not account.is_active
-        or not verify_password(payload.password, encoded)
-    ):
+    # Always run the password verification, even for unknown identifiers, so
+    # the response time does not reveal whether the account exists.
+    password_valid = verify_password(payload.password, encoded)
+    if account is None or not account.is_active or not password_valid:
         audit_event("student_auth.login_failed")
         raise HTTPException(
             status_code=401, detail="Identifiant ou mot de passe incorrect"
@@ -115,15 +115,7 @@ def login_student(
 
 @router.get("/me", response_model=StudentAccountResponse)
 def student_me(
-    request: Request,
+    account: Annotated[StudentAccount, Depends(current_student)],
     session: DbSession,
-    credentials: HTTPAuthorizationCredentials | None = Depends(student_bearer),
 ) -> StudentAccountResponse:
-    account = (
-        student_from_token(credentials.credentials, request, session)
-        if credentials is not None
-        else None
-    )
-    if account is None:
-        raise HTTPException(status_code=401, detail="Session élève invalide ou expirée")
     return account_response(account, session)

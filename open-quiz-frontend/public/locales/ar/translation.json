@@ -427,6 +427,7 @@
     "remove-code": "إزالة الكود",
     "code-language": "اللغة",
     "source-code": "كود المصدر",
+    "code-block-region": "كتلة التعليمات البرمجية",
     "run-python": "تشغيل",
     "running-python": "التنفيذ...",
     "execution-result": "النتيجة",
