@@ -2,6 +2,11 @@ import { request } from "./client"
 import type { StudentAccount } from "./types"
 
 const TOKEN_KEY = "open-quiz-student-access-token"
+const STUDENT_SESSION_KEYS = [
+    TOKEN_KEY,
+    "open-quiz-student-session",
+    "open-quiz-training-session",
+] as const
 
 export function readStudentToken(): string | null {
     try {
@@ -13,7 +18,7 @@ export function readStudentToken(): string | null {
 
 export function clearStudentSession(): void {
     try {
-        sessionStorage.removeItem(TOKEN_KEY)
+        for (const key of STUDENT_SESSION_KEYS) sessionStorage.removeItem(key)
     } catch {
         // The in-memory portal state is cleared by its caller.
     }
@@ -35,6 +40,7 @@ export async function loginStudent(
         false
     )
     try {
+        for (const key of STUDENT_SESSION_KEYS) sessionStorage.removeItem(key)
         sessionStorage.setItem(TOKEN_KEY, result.access_token)
     } catch {
         // The session still works in memory if storage is unavailable.

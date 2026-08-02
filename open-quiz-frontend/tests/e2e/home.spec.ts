@@ -55,6 +55,49 @@ test("a signed-in student enters exam mode from the dashboard", async ({
     await expect(page.getByLabel("Quiz code")).toBeVisible()
 })
 
+test("student authentication clears activity sessions between users", async ({
+    page,
+}) => {
+    await page.route("**/api/student-auth/login", async (route) => {
+        await route.fulfill({
+            json: { access_token: "student-token", student },
+        })
+    })
+    await page.goto("/student/login")
+    await page.evaluate(() => {
+        sessionStorage.setItem("open-quiz-student-session", "stale-exam")
+        sessionStorage.setItem("open-quiz-training-session", "stale-training")
+    })
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Password").fill("student-password")
+    await page.getByRole("button", { name: "Sign in" }).click()
+
+    await expect(page).toHaveURL(/\/student\/dashboard$/)
+    expect(
+        await page.evaluate(() => ({
+            exam: sessionStorage.getItem("open-quiz-student-session"),
+            training: sessionStorage.getItem("open-quiz-training-session"),
+        }))
+    ).toEqual({ exam: null, training: null })
+
+    await page.evaluate(() => {
+        sessionStorage.setItem("open-quiz-student-session", "current-exam")
+        sessionStorage.setItem("open-quiz-training-session", "current-training")
+    })
+    await page.getByRole("button", { name: "Log out" }).click()
+
+    await expect(page).toHaveURL(/\/student\/login$/)
+    expect(
+        await page.evaluate(() => ({
+            account: sessionStorage.getItem(
+                "open-quiz-student-access-token"
+            ),
+            exam: sessionStorage.getItem("open-quiz-student-session"),
+            training: sessionStorage.getItem("open-quiz-training-session"),
+        }))
+    ).toEqual({ account: null, exam: null, training: null })
+})
+
 test("a student launches training and sees the correct answer", async ({
     page,
 }) => {

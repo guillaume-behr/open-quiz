@@ -329,7 +329,7 @@ test("teacher can create a quiz from a question bank", async ({ page }) => {
         .getByRole("switch", { name: "Same questions for every student" })
         .click()
     await dialog.getByText("Matter and energy", { exact: true }).click()
-    await dialog.getByLabel("Easy").fill("10")
+    await dialog.getByLabel("Easy", { exact: true }).fill("10")
     await dialog.getByLabel("Points for Easy questions").fill("15")
     await dialog.getByRole("button", { name: "New quiz", exact: true }).click()
 
