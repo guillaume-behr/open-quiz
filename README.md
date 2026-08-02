@@ -200,7 +200,9 @@ fichiers d’exemple ne contiennent aucune vraie donnée sensible.
 
 Le frontend accepte aussi `VITE_API_URL`. Laissez-la vide avec le proxy Vite
 ou le déploiement Caddy fourni. Utilisez une URL absolue uniquement si l’API
-est servie séparément, avec une configuration CORS correspondante.
+est servie séparément, avec une configuration CORS correspondante. Pour Docker,
+transmettez cette même origine avec `--build-arg VITE_API_URL=https://api.example.com`
+afin que la politique CSP Caddy autorise les requêtes API.
 
 <details>
 <summary><strong>Durées, limites de débit et conservation</strong></summary>

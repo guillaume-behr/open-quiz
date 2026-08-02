@@ -48,6 +48,8 @@ services:
         build:
             context: ./open-quiz-frontend
             dockerfile: Dockerfile
+            args:
+                VITE_API_URL: ${VITE_API_URL:-}
         ports:
             - "127.0.0.1:7800:8080"
         depends_on:
