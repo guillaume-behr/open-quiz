@@ -11,13 +11,18 @@ import type { GradeLevel, StudentAccount, StudentClass } from "@/api/types"
 import { ClassFormDialog } from "@/components/classes/class-form-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
-import { FieldError } from "@/components/ui/field"
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import {
     LoaderCircle,
     Pencil,
-    Search,
     Trash2,
     UserMinus,
     UserPlus,
@@ -42,6 +47,7 @@ export function ClassesPanel({
     const { t } = useTranslation()
     const [classes, setClasses] = useState<StudentClass[]>([])
     const [search, setSearch] = useState("")
+    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
     const [page, setPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [reloadKey, setReloadKey] = useState(0)
@@ -63,7 +69,7 @@ export function ClassesPanel({
 
     useEffect(() => {
         let active = true
-        getStudentClasses(page, search.trim())
+        getStudentClasses(page, search.trim(), gradeLevelFilter)
             .then((result) => {
                 if (!active) return
                 setClasses(result.items)
@@ -82,7 +88,7 @@ export function ClassesPanel({
         return () => {
             active = false
         }
-    }, [page, reloadKey, search, t])
+    }, [gradeLevelFilter, page, reloadKey, search, t])
 
     function closeClassForm() {
         setEditing(null)
@@ -199,94 +205,144 @@ export function ClassesPanel({
 
     return (
         <div className="mt-6">
-            <div className="relative mb-5 max-w-md">
-                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                    className="pl-9"
-                    aria-label={t("search-class")}
-                    value={search}
-                    onChange={(event) => {
-                        setSearch(event.target.value)
-                        setPage(1)
-                    }}
-                    placeholder={t("search-class")}
-                />
-            </div>
-            {isLoading ? (
-                <div className="flex min-h-40 items-center justify-center">
-                    <LoaderCircle className="size-7 animate-spin text-primary" />
-                </div>
-            ) : classes.length === 0 ? (
-                <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground">
-                    <UsersRound className="mb-2 size-8" />
-                    <p>{t("no-class")}</p>
-                </div>
-            ) : (
-                <div className="grid gap-4 lg:grid-cols-2">
-                    {classes.map((studentClass) => (
-                        <article
-                            key={studentClass.id}
-                            className="rounded-xl border p-4"
-                        >
-                            <div className="flex items-start justify-between gap-3">
-                                <button
-                                    className="min-w-0 text-left"
-                                    onClick={() => setManaged(studentClass)}
-                                >
-                                    <h3 className="truncate text-lg font-semibold">
-                                        {studentClass.name}
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        {studentClass.grade_level} ·{" "}
-                                        {t("student-count", {
-                                            count: studentClass.student_count,
-                                        })}
-                                    </p>
-                                </button>
-                                <div className="flex gap-1">
-                                    <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => {
-                                            setEditing(studentClass)
-                                            setClassName(studentClass.name)
-                                            setGradeLevel(
-                                                studentClass.grade_level
-                                            )
-                                        }}
-                                        aria-label={t("edit-class")}
-                                    >
-                                        <Pencil />
-                                    </Button>
-                                    <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() =>
-                                            setDeleting(studentClass)
-                                        }
-                                        aria-label={t("delete-class")}
-                                    >
-                                        <Trash2 />
-                                    </Button>
-                                </div>
-                            </div>
-                            <Button
-                                className="mt-4 w-full"
-                                variant="outline"
-                                onClick={() => setManaged(studentClass)}
+            <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                <aside className="h-fit rounded-xl border bg-background p-4">
+                    <h3 className="font-semibold">{t("filters")}</h3>
+                    <FieldGroup className="mt-4 gap-4">
+                        <Field>
+                            <FieldLabel htmlFor="class-filter-search">
+                                {t("search")}
+                            </FieldLabel>
+                            <Input
+                                id="class-filter-search"
+                                value={search}
+                                onChange={(event) => {
+                                    setSearch(event.target.value)
+                                    setPage(1)
+                                }}
+                                placeholder={t("search-class")}
+                            />
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="class-filter-grade-level">
+                                {t("grade-level")}
+                            </FieldLabel>
+                            <select
+                                id="class-filter-grade-level"
+                                className={NATIVE_SELECT_CLASS_NAME}
+                                value={gradeLevelFilter}
+                                onChange={(event) => {
+                                    setGradeLevelFilter(event.target.value)
+                                    setPage(1)
+                                }}
                             >
-                                {t("manage-students")}
+                                <option value="">
+                                    {t("all-grade-levels")}
+                                </option>
+                                {gradeLevels.map((level) => (
+                                    <option key={level.id} value={level.name}>
+                                        {level.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        {(search || gradeLevelFilter) && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setSearch("")
+                                    setGradeLevelFilter("")
+                                    setPage(1)
+                                }}
+                            >
+                                {t("clear-filters")}
                             </Button>
-                        </article>
-                    ))}
+                        )}
+                    </FieldGroup>
+                </aside>
+                <div className="min-w-0">
+                    {isLoading ? (
+                        <div className="flex min-h-40 items-center justify-center">
+                            <LoaderCircle className="size-7 animate-spin text-primary" />
+                        </div>
+                    ) : classes.length === 0 ? (
+                        <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground">
+                            <UsersRound className="mb-2 size-8" />
+                            <p>{t("no-class")}</p>
+                        </div>
+                    ) : (
+                        <div className="grid gap-4 lg:grid-cols-2">
+                            {classes.map((studentClass) => (
+                                <article
+                                    key={studentClass.id}
+                                    className="rounded-xl border p-4"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <button
+                                            className="min-w-0 text-left"
+                                            onClick={() =>
+                                                setManaged(studentClass)
+                                            }
+                                        >
+                                            <h3 className="truncate text-lg font-semibold">
+                                                {studentClass.name}
+                                            </h3>
+                                            <p className="text-sm text-muted-foreground">
+                                                {studentClass.grade_level} ·{" "}
+                                                {t("student-count", {
+                                                    count: studentClass.student_count,
+                                                })}
+                                            </p>
+                                        </button>
+                                        <div className="flex gap-1">
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                onClick={() => {
+                                                    setEditing(studentClass)
+                                                    setClassName(
+                                                        studentClass.name
+                                                    )
+                                                    setGradeLevel(
+                                                        studentClass.grade_level
+                                                    )
+                                                }}
+                                                aria-label={t("edit-class")}
+                                            >
+                                                <Pencil />
+                                            </Button>
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    setDeleting(studentClass)
+                                                }
+                                                aria-label={t("delete-class")}
+                                            >
+                                                <Trash2 />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        className="mt-4 w-full"
+                                        variant="outline"
+                                        onClick={() => setManaged(studentClass)}
+                                    >
+                                        {t("manage-students")}
+                                    </Button>
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                    {error && <FieldError className="mt-4">{error}</FieldError>}
+                    <Pagination
+                        currentPage={page}
+                        totalPages={totalPages}
+                        onPageChange={setPage}
+                    />
                 </div>
-            )}
-            {error && <FieldError className="mt-4">{error}</FieldError>}
-            <Pagination
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-            />
+            </div>
 
             <ClassFormDialog
                 open={isCreateDialogOpen || editing !== null}

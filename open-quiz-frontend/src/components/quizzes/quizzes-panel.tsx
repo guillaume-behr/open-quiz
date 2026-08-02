@@ -34,7 +34,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 type QuizzesPanelProps = {
-    mode: "exam" | "training"
+    mode: "exam"
     isCreateDialogOpen: boolean
     onCreateDialogOpenChange: (open: boolean) => void
 }

@@ -1,8 +1,8 @@
 import type { CodeLanguage, Question } from "@/api/types"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { CodeBlock } from "./code-block"
 import { CODE_LANGUAGES } from "./code-languages"
 import { indentCode } from "./code-editor-utils"
-import { selectClassName } from "./question-form-types"
 import { SelectedImagePreview } from "./selected-image-preview"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -123,7 +123,7 @@ export function QuestionContentFields({
                             </FieldLabel>
                             <select
                                 id="question-code-language"
-                                className={selectClassName}
+                                className={NATIVE_SELECT_CLASS_NAME}
                                 value={codeLanguage}
                                 onChange={(event) =>
                                     onCodeLanguageChange(

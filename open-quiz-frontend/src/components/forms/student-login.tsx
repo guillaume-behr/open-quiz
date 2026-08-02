@@ -6,7 +6,6 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { GraduationCap, LoaderCircle } from "lucide-react"
 import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -34,9 +33,6 @@ export function StudentLogin({
             onSubmit={onSubmit}
         >
             <div className="flex flex-col items-center gap-2 text-center">
-                <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                    <GraduationCap className="size-9" />
-                </div>
                 <h1 className="text-4xl font-extrabold">
                     {t("student-login-title")}
                 </h1>
@@ -80,11 +76,6 @@ export function StudentLogin({
                     type="submit"
                     disabled={isBusy}
                 >
-                    {isBusy ? (
-                        <LoaderCircle className="animate-spin" />
-                    ) : (
-                        <GraduationCap />
-                    )}
                     {t(isBusy ? "signing-in" : "login")}
                 </Button>
             </FieldGroup>

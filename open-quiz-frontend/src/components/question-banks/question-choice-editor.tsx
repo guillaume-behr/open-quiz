@@ -1,13 +1,14 @@
 import type { AnswerMode, CodeLanguage } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { Code2, ImagePlus, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { CodeBlock } from "./code-block"
 import { CODE_LANGUAGES } from "./code-languages"
 import { indentCode } from "./code-editor-utils"
-import { selectClassName, type EditableChoice } from "./question-form-types"
+import type { EditableChoice } from "./question-form-types"
 import { SelectedImagePreview } from "./selected-image-preview"
 
 type QuestionChoiceEditorProps = {
@@ -219,7 +220,7 @@ function ChoiceAttachments({
                 {choice.hasCode && (
                     <div className="space-y-2">
                         <select
-                            className={selectClassName}
+                            className={NATIVE_SELECT_CLASS_NAME}
                             value={choice.codeLanguage}
                             onChange={(event) =>
                                 onUpdate({

@@ -181,7 +181,7 @@ export type Quiz = {
 }
 
 export type NewQuiz = {
-    mode: "exam" | "training"
+    mode: "exam"
     title: string
     source_language: string
     question_bank_ids: number[]

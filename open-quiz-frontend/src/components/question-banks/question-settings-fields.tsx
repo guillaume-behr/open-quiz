@@ -1,6 +1,6 @@
 import type { AnswerMode, CodeLanguage, QuestionDifficulty } from "@/api/types"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { CODE_LANGUAGES } from "./code-languages"
-import { selectClassName } from "./question-form-types"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Switch } from "@/components/ui/switch"
 import { useTranslation } from "react-i18next"
@@ -37,7 +37,7 @@ export function QuestionSettingsFields({
                     </FieldLabel>
                     <select
                         id="question-difficulty"
-                        className={selectClassName}
+                        className={NATIVE_SELECT_CLASS_NAME}
                         value={difficulty}
                         onChange={(event) =>
                             onDifficultyChange(
@@ -56,7 +56,7 @@ export function QuestionSettingsFields({
                     </FieldLabel>
                     <select
                         id="question-answer-mode"
-                        className={selectClassName}
+                        className={NATIVE_SELECT_CLASS_NAME}
                         value={answerMode}
                         onChange={(event) =>
                             onAnswerModeChange(event.target.value as AnswerMode)
@@ -85,7 +85,7 @@ export function QuestionSettingsFields({
                     </FieldLabel>
                     <select
                         id="written-response-language"
-                        className={selectClassName}
+                        className={NATIVE_SELECT_CLASS_NAME}
                         value={responseLanguage ?? ""}
                         onChange={(event) =>
                             onResponseLanguageChange(

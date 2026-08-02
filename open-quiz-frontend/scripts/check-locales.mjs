@@ -7,6 +7,38 @@ const localesDirectory = fileURLToPath(
 )
 const pluralSuffix = /_(zero|one|two|few|many|other)$/
 const interpolationPattern = /{{\s*([^},\s]+)/g
+const identicalTranslationAllowlist = new Set([
+    "admin",
+    "admin-login",
+    "administration",
+    "app-name",
+    "app-version",
+    "bank-questions",
+    "classes",
+    "cookies-clear-after-link",
+    "cookies-name-column",
+    "cookies-protection-column",
+    "cookies-type-column",
+    "image-attached",
+    "importing-json",
+    "legal-notice-hosting-title",
+    "legal-page-browser-title",
+    "pagination",
+    "points-short",
+    "points-value_one",
+    "points-value_other",
+    "privacy-complaint-after-link",
+    "question-count_one",
+    "question-count_other",
+    "question-number",
+    "question-wording",
+    "quiz-management",
+    "quiz-total-points",
+    "reported-page",
+    "result-participants",
+    "result-score",
+    "system",
+])
 
 function interpolationNames(value) {
     return [...value.matchAll(interpolationPattern)]
@@ -44,6 +76,15 @@ for (const [localeName, locale] of translations) {
         if (!(key in locale)) {
             failures.push(`${localeName}: missing "${key}"`)
             continue
+        }
+        if (
+            localeName !== "en" &&
+            locale[key] === reference[key] &&
+            !identicalTranslationAllowlist.has(key)
+        ) {
+            failures.push(
+                `${localeName}: "${key}" is still identical to English`
+            )
         }
         const expectedNames = interpolationNames(reference[key])
         const actualNames = interpolationNames(locale[key])

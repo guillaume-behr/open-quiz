@@ -4,13 +4,18 @@ import type { Page, StudentAccount } from "./types"
 export function getStudents(
     page = 1,
     search = "",
-    pageSize = 12
+    pageSize = 12,
+    classFilter = "",
+    statusFilter = ""
 ): Promise<Page<StudentAccount>> {
     const params = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
     })
     if (search) params.set("search", search)
+    if (classFilter === "unassigned") params.set("unassigned", "true")
+    else if (classFilter) params.set("class_id", classFilter)
+    if (statusFilter) params.set("is_active", statusFilter)
     return requestPage<StudentAccount>(`/api/students?${params}`)
 }
 

@@ -12,6 +12,7 @@ import { QuestionBanksPanel } from "@/components/question-banks/question-banks-p
 import { QuizzesPanel } from "@/components/quizzes/quizzes-panel"
 import { ResultsPanel } from "@/components/results/results-panel"
 import { StudentsPanel } from "@/components/students/students-panel"
+import { ClassTrainingBanksPanel } from "@/components/training/class-training-banks-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -200,7 +201,10 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                         onCancel={() => setChallenge(null)}
                     />
                 ) : (
-                    <DashboardLogin onLogin={handleLogin} />
+                    <DashboardLogin
+                        onLogin={handleLogin}
+                        title={t("professor-space")}
+                    />
                 )}
             </div>
         )
@@ -227,8 +231,8 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                 </Button>
             </div>
 
-            <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-                <aside className="h-fit rounded-2xl border bg-card p-3 shadow-sm">
+            <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+                <aside className="h-fit min-w-0 rounded-2xl border bg-card p-3 shadow-sm">
                     <p className="px-3 py-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                         {t("dashboard-menu")}
                     </p>
@@ -262,7 +266,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                 </aside>
 
                 <section
-                    className="min-h-72 rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
+                    className="min-h-72 min-w-0 overflow-hidden rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
                     aria-labelledby={`${activeEntry.id}-title`}
                 >
                     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -311,18 +315,13 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                                 {t("create-class")}
                             </Button>
                         )}
-                        {(activeSection === "exam-quizzes" ||
-                            activeSection === "training-quizzes") && (
+                        {activeSection === "exam-quizzes" && (
                             <Button
                                 type="button"
                                 onClick={() => setIsQuizCreationOpen(true)}
                             >
                                 <Plus />
-                                {t(
-                                    activeSection === "exam-quizzes"
-                                        ? "create-exam-quiz"
-                                        : "create-training-quiz"
-                                )}
+                                {t("create-exam-quiz")}
                             </Button>
                         )}
                         {activeSection === "results" && (
@@ -369,11 +368,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                         />
                     )}
                     {activeSection === "training-quizzes" && (
-                        <QuizzesPanel
-                            mode="training"
-                            isCreateDialogOpen={isQuizCreationOpen}
-                            onCreateDialogOpenChange={setIsQuizCreationOpen}
-                        />
+                        <ClassTrainingBanksPanel />
                     )}
                     {activeSection === "results" && (
                         <ResultsPanel

@@ -111,20 +111,12 @@ test("a student launches training and sees the correct answer", async ({
             json: [
                 {
                     id: 12,
-                    mode: "training",
-                    title: "Practice science",
-                    source_language: "en",
+                    grade_level: "Grade 8",
+                    chapter: "Practice science",
                     question_count: 1,
-                    duration_seconds: 1800,
-                    allow_previous_questions: false,
-                    same_questions_for_all: false,
                     easy_question_count: 1,
                     medium_question_count: 0,
                     hard_question_count: 0,
-                    easy_points: 0,
-                    medium_points: 0,
-                    hard_points: 0,
-                    question_banks: [],
                     created_at: "2026-01-01T00:00:00Z",
                 },
             ],
@@ -206,9 +198,15 @@ test("a student launches training and sees the correct answer", async ({
     )
 
     await page.goto("/student/login")
+    const studentLoginHeading = page.getByRole("heading", {
+        name: "Student space",
+    })
+    const studentSignInButton = page.getByRole("button", { name: "Sign in" })
+    await expect(studentLoginHeading.locator("..").locator("svg")).toHaveCount(0)
+    await expect(studentSignInButton.locator("svg")).toHaveCount(0)
     await page.getByLabel("Student ID").fill("alex-8b")
     await page.getByLabel("Password").fill("student-password")
-    await page.getByRole("button", { name: "Sign in" }).click()
+    await studentSignInButton.click()
     await page.getByRole("tab", { name: "Training" }).click()
     await expect(page.getByText("Practice science")).toBeVisible()
     await page.getByRole("button", { name: "Start training" }).click()
@@ -230,8 +228,10 @@ test("teacher area navigation works without a page reload", async ({
     await page.getByRole("link", { name: "Teacher area" }).click()
 
     await expect(page).toHaveURL(/\/teacher\/login$/)
+    await expect(
+        page.getByRole("heading", { name: "Teacher area" })
+    ).toBeVisible()
     await expect(page.getByRole("link", { name: "Home" })).toBeVisible()
-    await expect(page.getByRole("heading").first()).toBeVisible()
 })
 
 test("student login remains usable on a mobile viewport", async ({ page }) => {

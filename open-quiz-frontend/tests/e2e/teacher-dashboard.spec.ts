@@ -22,6 +22,16 @@ const existingClass = {
 async function mockTeacherApi(page: Page) {
     const requests: Request[] = []
     let classes = [existingClass]
+    let trainingBankIds: number[] = []
+    const studentAccount = {
+        id: 41,
+        identifier: "alex-8b",
+        display_name: "Alex Example",
+        is_active: true,
+        class_id: 11,
+        class_name: "Class 8B",
+        created_at: "2026-01-03T00:00:00Z",
+    }
     const bank = {
         id: 21,
         grade_level: "Grade 8",
@@ -31,6 +41,12 @@ async function mockTeacherApi(page: Page) {
         easy_question_count: 10,
         medium_question_count: 10,
         hard_question_count: 10,
+    }
+    const otherGradeBank = {
+        ...bank,
+        id: 22,
+        grade_level: "Grade 9",
+        chapter: "Advanced matter",
     }
     let quizzes = [
         {
@@ -106,10 +122,20 @@ async function mockTeacherApi(page: Page) {
         }
         if (url.pathname === "/api/question-banks") {
             return route.fulfill({
-                json: [bank],
+                json: [bank, otherGradeBank],
                 headers: {
                     "X-Page": "1",
                     "X-Page-Size": "100",
+                    "X-Total-Count": "2",
+                },
+            })
+        }
+        if (url.pathname === "/api/students") {
+            return route.fulfill({
+                json: [studentAccount],
+                headers: {
+                    "X-Page": "1",
+                    "X-Page-Size": "12",
                     "X-Total-Count": "1",
                 },
             })
@@ -125,6 +151,19 @@ async function mockTeacherApi(page: Page) {
                     "X-Page-Size": "8",
                     "X-Total-Count": "0",
                 },
+            })
+        }
+        if (
+            url.pathname ===
+            "/api/quizzes/training/classes/11/question-banks"
+        ) {
+            if (request.method() === "PUT") {
+                trainingBankIds = (
+                    request.postDataJSON() as { question_bank_ids: number[] }
+                ).question_bank_ids
+            }
+            return route.fulfill({
+                json: trainingBankIds.includes(bank.id) ? [bank] : [],
             })
         }
         if (url.pathname === "/api/quizzes") {
@@ -183,6 +222,22 @@ test("restores a teacher session and displays their classes", async ({
         .toBe("Bearer teacher-access-token")
 })
 
+test("teacher dashboard does not overflow on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+
+    await expect(page.getByRole("button", { name: "New class" })).toBeVisible()
+    await expect
+        .poll(() =>
+            page.evaluate(() => ({
+                viewport: document.documentElement.clientWidth,
+                content: document.documentElement.scrollWidth,
+            }))
+        )
+        .toEqual({ viewport: 390, content: 390 })
+})
+
 test("teacher can switch between all dashboard sections", async ({ page }) => {
     await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
@@ -192,7 +247,7 @@ test("teacher can switch between all dashboard sections", async ({ page }) => {
 
     for (const section of [
         "Exam quizzes",
-        "Training quizzes",
+        "Training",
         "Question banks",
         "Results",
     ] as const) {
@@ -204,6 +259,47 @@ test("teacher can switch between all dashboard sections", async ({ page }) => {
             page.getByRole("button", { name: section, exact: true })
         ).toHaveAttribute("aria-current", "page")
     }
+})
+
+test("teacher filters student accounts and classes from side panels", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+
+    await page.getByRole("button", { name: "Students", exact: true }).click()
+    await page.getByRole("combobox", { name: "Class" }).selectOption("11")
+    await page
+        .getByRole("combobox", { name: "Account status" })
+        .selectOption("true")
+    await expect
+        .poll(() =>
+            requests.some((request) => {
+                const url = new URL(request.url())
+                return (
+                    url.pathname === "/api/students" &&
+                    url.searchParams.get("class_id") === "11" &&
+                    url.searchParams.get("is_active") === "true"
+                )
+            })
+        )
+        .toBe(true)
+
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
+    await page
+        .getByRole("combobox", { name: "Grade level" })
+        .selectOption("Grade 8")
+    await expect
+        .poll(() =>
+            requests.some((request) => {
+                const url = new URL(request.url())
+                return (
+                    url.pathname === "/api/classes" &&
+                    url.searchParams.get("grade_level") === "Grade 8"
+                )
+            })
+        )
+        .toBe(true)
 })
 
 test("teacher can open class and question-bank creation dialogs", async ({
@@ -270,9 +366,9 @@ test("class list recovers after a temporary load failure", async ({ page }) => {
     await page.goto("/teacher/dashboard")
     await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
 
-    await page.getByLabel("Search for a class").fill("first request")
+    await page.getByPlaceholder("Search for a class").fill("first request")
     await expect(page.getByRole("alert")).toHaveText("Failed to load classes.")
-    await page.getByLabel("Search for a class").fill("Class")
+    await page.getByPlaceholder("Search for a class").fill("Class")
     await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
     await expect(page.getByRole("alert")).toHaveCount(0)
 })
@@ -313,6 +409,37 @@ test("teacher can review configured quizzes", async ({ page }) => {
     await expect(page.getByText("Matter and energy")).toBeVisible()
     await expect(page.getByRole("button", { name: "Preview" })).toBeVisible()
     await expect(page.getByRole("button", { name: "Launch" })).toBeVisible()
+})
+
+test("teacher assigns existing question banks to a training class", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Training", exact: true })
+        .click()
+
+    await expect(page.getByLabel("Class")).toHaveValue("11")
+    await page.getByText("Matter and energy", { exact: true }).click()
+    await expect(page.getByText("Advanced matter", { exact: true })).toHaveCount(
+        0
+    )
+    await page.getByRole("button", { name: "Save question banks" }).click()
+    await expect(
+        page.getByText("The class training question banks have been saved.")
+    ).toBeVisible()
+
+    const saveRequest = requests.find(
+        (request) =>
+            new URL(request.url()).pathname ===
+                "/api/quizzes/training/classes/11/question-banks" &&
+            request.method() === "PUT"
+    )
+    expect(saveRequest?.postDataJSON()).toEqual({ question_bank_ids: [21] })
+    await expect(
+        page.getByRole("button", { name: "New training quiz" })
+    ).toHaveCount(0)
 })
 
 test("teacher can create a quiz from a question bank", async ({ page }) => {

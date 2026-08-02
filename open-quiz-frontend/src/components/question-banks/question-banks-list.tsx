@@ -2,6 +2,7 @@ import type { GradeLevel, QuestionBank } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import {
     BookOpenText,
@@ -13,9 +14,6 @@ import {
     Upload,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
-
-const selectClassName =
-    "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
 type QuestionBanksListProps = {
     banks: QuestionBank[]
@@ -92,7 +90,7 @@ export function QuestionBanksList({
                         </FieldLabel>
                         <select
                             id="question-bank-grade-filter"
-                            className={selectClassName}
+                            className={NATIVE_SELECT_CLASS_NAME}
                             value={gradeLevelFilter}
                             onChange={(event) =>
                                 onGradeLevelFilterChange(event.target.value)

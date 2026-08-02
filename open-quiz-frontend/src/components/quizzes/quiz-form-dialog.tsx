@@ -18,7 +18,7 @@ type Difficulty = (typeof difficultyKeys)[number]
 type DifficultyValues = Record<Difficulty, number>
 
 type QuizFormDialogProps = {
-    mode: "exam" | "training"
+    mode: "exam"
     open: boolean
     editingQuiz: Quiz | null
     banks: QuestionBank[]
@@ -80,20 +80,8 @@ export function QuizFormDialog({
             onOpenChange={(nextOpen) => {
                 if (!nextOpen && !isBusy) onClose()
             }}
-            title={t(
-                editingQuiz
-                    ? mode === "exam"
-                        ? "edit-exam-quiz"
-                        : "edit-training-quiz"
-                    : mode === "exam"
-                      ? "create-exam-quiz"
-                      : "create-training-quiz"
-            )}
-            description={t(
-                mode === "exam"
-                    ? "create-exam-quiz-help"
-                    : "create-training-quiz-help"
-            )}
+            title={t(editingQuiz ? "edit-exam-quiz" : "create-exam-quiz")}
+            description={t("create-exam-quiz-help")}
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup className="gap-5">

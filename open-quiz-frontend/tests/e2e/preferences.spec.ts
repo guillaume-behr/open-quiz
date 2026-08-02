@@ -25,7 +25,7 @@ test("language selection updates the interface and document direction", async ({
     await page.getByRole("menuitem", { name: "العربية" }).click()
 
     await expect(
-        page.getByRole("heading", { name: "Student space" })
+        page.getByRole("heading", { name: "مساحة الطالب" })
     ).toBeVisible()
     await expect(page.locator("html")).toHaveAttribute("dir", "rtl")
     await expect

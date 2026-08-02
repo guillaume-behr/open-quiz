@@ -1,5 +1,5 @@
-import { getTrainingQuizzes, startTrainingQuiz } from "@/api/quizzes"
-import type { Quiz, StudentAccount } from "@/api/types"
+import { getTrainingQuestionBanks, startTrainingQuiz } from "@/api/quizzes"
+import type { QuestionBank, StudentAccount } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dumbbell, LoaderCircle, Play } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -15,16 +15,16 @@ export function TrainingQuizzesPanel({
 }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
-    const [quizzes, setQuizzes] = useState<Quiz[]>([])
+    const [banks, setBanks] = useState<QuestionBank[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [startingId, setStartingId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         let active = true
-        getTrainingQuizzes(token)
+        getTrainingQuestionBanks(token)
             .then((items) => {
-                if (active) setQuizzes(items)
+                if (active) setBanks(items)
             })
             .catch(() => active && setError(t("training-load-error")))
             .finally(() => active && setIsLoading(false))
@@ -33,11 +33,11 @@ export function TrainingQuizzesPanel({
         }
     }, [t, token])
 
-    async function start(quiz: Quiz) {
-        setStartingId(quiz.id)
+    async function start(bank: QuestionBank) {
+        setStartingId(bank.id)
         setError(null)
         try {
-            const joined = await startTrainingQuiz(quiz.id, token)
+            const joined = await startTrainingQuiz(bank.id, token)
             const { participant_token: participantToken, ...session } = joined
             try {
                 sessionStorage.setItem(
@@ -75,7 +75,7 @@ export function TrainingQuizzesPanel({
                     {error}
                 </p>
             )}
-            {quizzes.length === 0 ? (
+            {banks.length === 0 ? (
                 <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed text-center text-muted-foreground">
                     <Dumbbell className="mb-3 size-9" />
                     <p className="font-semibold">{t("no-training-quiz")}</p>
@@ -83,18 +83,19 @@ export function TrainingQuizzesPanel({
                 </div>
             ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
-                    {quizzes.map((quiz) => (
+                    {banks.map((bank) => (
                         <article
-                            key={quiz.id}
+                            key={bank.id}
                             className="flex flex-col rounded-xl border bg-background p-5"
                         >
                             <Dumbbell className="size-7 text-primary" />
                             <h2 className="mt-4 text-lg font-bold">
-                                {quiz.title}
+                                {bank.chapter}
                             </h2>
                             <p className="mt-1 text-sm text-muted-foreground">
+                                {bank.grade_level} ·{" "}
                                 {t("training-quiz-summary", {
-                                    count: quiz.question_count,
+                                    count: bank.question_count,
                                 })}
                             </p>
                             <p className="mt-3 text-xs text-muted-foreground">
@@ -102,10 +103,13 @@ export function TrainingQuizzesPanel({
                             </p>
                             <Button
                                 className="mt-5"
-                                onClick={() => void start(quiz)}
-                                disabled={startingId !== null}
+                                onClick={() => void start(bank)}
+                                disabled={
+                                    startingId !== null ||
+                                    bank.question_count === 0
+                                }
                             >
-                                {startingId === quiz.id ? (
+                                {startingId === bank.id ? (
                                     <LoaderCircle className="animate-spin" />
                                 ) : (
                                     <Play />
