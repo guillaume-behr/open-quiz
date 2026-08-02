@@ -71,6 +71,23 @@ export function StudentFormDialog({
                             required
                         />
                     </Field>
+                    <Field>
+                        <FieldLabel htmlFor="student-last-name">
+                            {t("last-name")}
+                        </FieldLabel>
+                        <Input
+                            id="student-last-name"
+                            value={lastName}
+                            onChange={(event) =>
+                                onLastNameChange(event.target.value)
+                            }
+                            maxLength={120}
+                            required
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            {t("student-id-generated-help")}
+                        </p>
+                    </Field>
                     {editingStudent && destinationClassId !== null && (
                         <Field>
                             <FieldLabel htmlFor="student-class">
@@ -101,23 +118,6 @@ export function StudentFormDialog({
                             </p>
                         </Field>
                     )}
-                    <Field>
-                        <FieldLabel htmlFor="student-last-name">
-                            {t("last-name")}
-                        </FieldLabel>
-                        <Input
-                            id="student-last-name"
-                            value={lastName}
-                            onChange={(event) =>
-                                onLastNameChange(event.target.value)
-                            }
-                            maxLength={120}
-                            required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            {t("student-id-generated-help")}
-                        </p>
-                    </Field>
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2">
                         <Button
