@@ -9,7 +9,7 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - comptes élèves avec identifiant, mot de passe et tableau de bord dédié ;
 - routes séparées `/student/*` et `/teacher/*` ;
 - gestion indépendante des élèves et des classes ;
-- quiz d’examen et d’entraînement créés dans des onglets distincts ;
+- examens créés séparément et banques d’entraînement affectées par classe ;
 - entraînements relançables librement avec correction immédiate ;
 - tirage commun ou individuel des questions au lancement d’un examen ;
 - ordre aléatoire propre à chaque élève, y compris avec un tirage commun ;

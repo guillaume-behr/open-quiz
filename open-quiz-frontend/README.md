@@ -66,10 +66,11 @@ principale.
 ## Parcours des quiz
 
 Le tableau de bord enseignant sépare les comptes **Élèves**, leur affectation
-aux **Classes**, les **Examens** et les **Entraînements**. Le formulaire de quiz
+aux **Classes**, les **Examens** et les **Entraînements**. Le formulaire d’examen
 demande des quantités faciles, moyennes et difficiles plafonnées par les banques
-sélectionnées. Pour un examen, il demande aussi le total de points de chaque
-difficulté et affiche la valeur répartie par question.
+sélectionnées, ainsi que le total de points de chaque difficulté. Dans l’onglet
+**Entraînements**, l’enseignant choisit une classe puis les banques que ses élèves
+pourront utiliser.
 
 Le tableau de bord élève propose deux activités :
 

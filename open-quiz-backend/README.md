@@ -49,8 +49,9 @@ la rotation des sessions d’authentification.
   affectent chaque compte à une classe ;
 - les élèves s’authentifient sur `/api/student-auth/login` avant de rejoindre un
   examen avec son code ;
-- les quiz `exam` sont notés et lancés par l’enseignant, tandis que les quiz
-  `training` sont tirés et démarrés librement par l’élève ;
+- les quiz `exam` sont notés et lancés par l’enseignant, tandis que les banques
+  d’entraînement sont autorisées par classe puis tirées et démarrées librement
+  par l’élève ;
 - un quiz stocke un nombre de questions et un total de points pour chaque
   difficulté, pas des pourcentages ni des points sur les propositions ;
 - les questions sont tirées au lancement. Un tirage commun conserve le même

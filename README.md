@@ -3,9 +3,9 @@
 Plateforme libre et auto-hébergeable pour organiser des quiz en classe.
 
 Les enseignants créent les comptes élèves, leurs classes et leurs questions,
-lancent des examens chronométrés et publient des entraînements libres. Les
-élèves se connectent à leur tableau de bord pour rejoindre un examen ou démarrer
-un entraînement.
+lancent des examens chronométrés et rendent des banques de questions disponibles
+pour l’entraînement de chaque classe. Les élèves se connectent à leur tableau de
+bord pour rejoindre un examen ou démarrer un entraînement.
 
 > [!IMPORTANT]
 > **Préversion 0.2.0.** Le projet est fonctionnel et testé, mais son schéma de
@@ -79,8 +79,9 @@ Pour la première configuration, utilisez directement l’espace adapté :
    les affecte depuis l’onglet **Classes**.
 3. Il alimente ses banques avec des questions faciles, moyennes ou difficiles.
    Les banques définissent les bonnes réponses, mais ne portent aucun point.
-4. Il crée séparément un examen ou un entraînement en indiquant le nombre de
-   questions voulu pour chaque difficulté.
+4. Il crée les examens en indiquant le nombre de questions voulu pour chaque
+   difficulté et choisit, pour chaque classe, les banques accessibles en
+   entraînement.
 5. Pour un examen, il attribue un total de points par difficulté, choisit si le
    tirage doit être commun, sélectionne une classe et ouvre la salle d’attente.
 6. L’élève se connecte à son compte et saisit uniquement le code de l’examen.
@@ -93,9 +94,9 @@ mais l’ordre est mélangé et mémorisé séparément pour chaque élève. Un 
 individuel sélectionne un ensemble distinct pour chaque élève affecté à la
 classe.
 
-Un entraînement est disponible à tout moment dans le tableau de bord élève. Un
-nouveau tirage est effectué à chaque démarrage, sans points ni note, et la bonne
-réponse apparaît après chaque question.
+Une banque autorisée est disponible à tout moment dans le tableau de bord des
+élèves de la classe. Un nouveau tirage est effectué à chaque démarrage, sans
+points ni note, et la bonne réponse apparaît après chaque question.
 
 Si la langue d’un élève diffère de celle du quiz, il peut demander une
 traduction automatique ou conserver le texte original.
@@ -124,7 +125,7 @@ absente ou expirée.
 - gestion séparée des classes et affectation d’un compte élève à une classe ;
 - banques de questions à choix unique, choix multiple ou réponse rédactionnelle ;
 - images privées, extraits de code et réponses attendues dans un langage donné ;
-- quiz d’examen et quiz d’entraînement gérés dans deux onglets distincts ;
+- examens créés dans leur onglet et banques d’entraînement affectées par classe ;
 - composition par quantité de questions faciles, moyennes et difficiles, avec
   plafonnement selon la disponibilité des banques sélectionnées ;
 - barème d’examen défini par difficulté et réparti également entre les questions
