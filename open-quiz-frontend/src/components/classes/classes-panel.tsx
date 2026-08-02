@@ -280,7 +280,8 @@ export function ClassesPanel({
                                 >
                                     <div className="flex items-start justify-between gap-3">
                                         <button
-                                            className="min-w-0 text-left"
+                                            type="button"
+                                            className="min-w-0 rounded-lg text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                                             onClick={() =>
                                                 setManaged(studentClass)
                                             }

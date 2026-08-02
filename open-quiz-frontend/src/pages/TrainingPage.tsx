@@ -204,9 +204,9 @@ function TrainingCorrection({
         >
             <div className="flex items-center gap-3">
                 {feedback.is_correct ? (
-                    <CheckCircle2 className="size-7 text-emerald-600" />
+                    <CheckCircle2 className="size-7 text-emerald-700 dark:text-emerald-300" />
                 ) : (
-                    <XCircle className="size-7 text-amber-600" />
+                    <XCircle className="size-7 text-amber-700 dark:text-amber-300" />
                 )}
                 <h2 className="text-xl font-bold">
                     {t(

@@ -89,9 +89,9 @@ export function TrainingQuizzesPanel({
                             className="flex flex-col rounded-xl border bg-background p-5"
                         >
                             <Dumbbell className="size-7 text-primary" />
-                            <h2 className="mt-4 text-lg font-bold">
+                            <h3 className="mt-4 text-lg font-bold">
                                 {bank.chapter}
-                            </h2>
+                            </h3>
                             <p className="mt-1 text-sm text-muted-foreground">
                                 {bank.grade_level} ·{" "}
                                 {t("training-quiz-summary", {

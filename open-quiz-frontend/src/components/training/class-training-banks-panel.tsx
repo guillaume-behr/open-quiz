@@ -191,7 +191,10 @@ export function ClassTrainingBanksPanel() {
                     </p>
                 )}
                 {saved && (
-                    <p className="mt-4 flex items-center gap-2 text-sm text-emerald-600">
+                    <p
+                        className="mt-4 flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300"
+                        role="status"
+                    >
                         <CheckCircle2 className="size-4" />
                         {t("training-settings-saved")}
                     </p>
@@ -220,7 +223,7 @@ export function ClassTrainingBanksPanel() {
                             return (
                                 <label
                                     key={bank.id}
-                                    className={`flex cursor-pointer gap-3 rounded-xl border bg-background p-4 transition ${
+                                    className={`flex cursor-pointer gap-3 rounded-xl border bg-background p-4 transition focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 ${
                                         selected
                                             ? "border-primary bg-primary/5"
                                             : "hover:border-primary/50"
@@ -228,7 +231,7 @@ export function ClassTrainingBanksPanel() {
                                 >
                                     <input
                                         type="checkbox"
-                                        className="mt-1"
+                                        className="mt-1 accent-primary"
                                         checked={selected}
                                         onChange={() =>
                                             setSelectedBankIds((current) =>

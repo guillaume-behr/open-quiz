@@ -273,7 +273,10 @@ export function ResultsPanel({
 
     if (loadError) {
         return (
-            <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">
+            <div
+                className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive"
+                role="alert"
+            >
                 {t("results-load-error")}
             </div>
         )
@@ -473,7 +476,10 @@ export function ResultsPanel({
                             </p>
                         )}
                         {exportError && (
-                            <p className="text-sm text-destructive">
+                            <p
+                                className="text-sm text-destructive"
+                                role="alert"
+                            >
                                 {t("export-results-error")}
                             </p>
                         )}
