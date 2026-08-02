@@ -4,16 +4,27 @@ import {
     readStudentToken,
     restoreStudent,
 } from "@/api/student-auth"
+import { joinQuiz } from "@/api/quizzes"
 import type { StudentAccount } from "@/api/types"
 import { StudentLogin } from "@/components/forms/student-login"
+import { JoinQuizForm } from "@/components/forms/join-quiz-form"
 import { TrainingQuizzesPanel } from "@/components/training/training-quizzes-panel"
+import { StudentQuizHistory } from "@/components/student-quiz/student-quiz-history"
+import { StudentMakeupPanel } from "@/components/student-quiz/student-makeup-panel"
+import {
+    readStoredQuizSession,
+    storeQuizSession,
+} from "@/components/student-quiz/student-quiz-session"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
     ClipboardPenLine,
     Dumbbell,
-    GraduationCap,
+    History,
     LoaderCircle,
     LogOut,
+    RotateCcw,
+    type LucideIcon,
 } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -22,6 +33,15 @@ import { useLocation, useNavigate } from "react-router"
 type StudentRouteState = {
     student?: StudentAccount
     token?: string
+}
+
+type StudentSection = "exam" | "training" | "makeup" | "history"
+
+type StudentDashboardEntry = {
+    id: StudentSection
+    icon: LucideIcon
+    label: string
+    description: string
 }
 
 export function HomePage({ page }: { page: "login" | "dashboard" }) {
@@ -40,7 +60,40 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
     const [isLoading, setIsLoading] = useState(Boolean(token && !student))
     const [isBusy, setIsBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<"exam" | "training">("exam")
+    const [joinCode, setJoinCode] = useState("")
+    const [joinError, setJoinError] = useState<string | null>(null)
+    const [isJoining, setIsJoining] = useState(false)
+    const [storedExam] = useState(readStoredQuizSession)
+    const [activeTab, setActiveTab] = useState<StudentSection>("exam")
+    const dashboardEntries: StudentDashboardEntry[] = [
+        {
+            id: "exam",
+            icon: ClipboardPenLine,
+            label: t("exams-tab"),
+            description: t("enter-exam-help"),
+        },
+        {
+            id: "training",
+            icon: Dumbbell,
+            label: t("training-tab"),
+            description: t("training-no-score-help"),
+        },
+        {
+            id: "makeup",
+            icon: RotateCcw,
+            label: t("makeup-tab"),
+            description: t("makeup-code-help"),
+        },
+        {
+            id: "history",
+            icon: History,
+            label: t("history-tab"),
+            description: t("quiz-history-empty-help"),
+        },
+    ]
+    const activeEntry =
+        dashboardEntries.find((entry) => entry.id === activeTab) ??
+        dashboardEntries[0]
 
     useEffect(() => {
         if (!token) {
@@ -74,6 +127,14 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
             .finally(() => setIsLoading(false))
     }, [navigate, page, student, token])
 
+    useEffect(() => {
+        const previousTitle = document.title
+        document.title = `Open Quiz | ${t("student-dashboard")}`
+        return () => {
+            document.title = previousTitle
+        }
+    }, [t])
+
     async function handleLogin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
         setIsBusy(true)
@@ -99,9 +160,31 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
         navigate("/student/login", { replace: true })
     }
 
+    async function joinExam(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault()
+        setIsJoining(true)
+        setJoinError(null)
+        try {
+            const joined = await joinQuiz(joinCode.trim(), token!)
+            storeQuizSession({
+                joinCode: joined.join_code,
+                participantToken: joined.participant_token,
+            })
+            navigate("/student/exam", { state: { student, token } })
+        } catch {
+            setJoinError(t("join-quiz-error"))
+        } finally {
+            setIsJoining(false)
+        }
+    }
+
     if (isLoading) {
         return (
-            <div className="flex flex-1 items-center justify-center">
+            <div
+                className="flex flex-1 items-center justify-center"
+                role="status"
+                aria-label={t("page-loading")}
+            >
                 <LoaderCircle className="size-9 animate-spin text-primary" />
             </div>
         )
@@ -126,87 +209,121 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
     if (!student || !token) return null
 
     return (
-        <div className="flex flex-1 flex-col px-4">
-            <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 py-2">
-                <p className="text-sm text-muted-foreground">
-                    {t("signed-in-as", { name: student.display_name })}
-                </p>
-                <Button variant="outline" size="sm" onClick={logout}>
+        <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-extrabold">
+                        {t("student-dashboard-welcome", {
+                            name: student.display_name,
+                        })}
+                    </h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {t("student-dashboard-help")}
+                    </p>
+                </div>
+                <Button variant="outline" onClick={logout}>
                     <LogOut />
                     {t("sign-out")}
                 </Button>
             </div>
-            <div className="flex flex-1 items-center justify-center">
-                <section className="w-full max-w-3xl rounded-2xl border bg-card p-6 shadow-lg sm:p-10">
-                    <div className="flex flex-col items-center text-center">
-                        <div className="rounded-2xl bg-primary/10 p-4 text-primary">
-                            <GraduationCap className="size-10" />
-                        </div>
-                        <h1 className="mt-4 text-3xl font-extrabold">
-                            {t("student-dashboard-welcome", {
-                                name: student.display_name,
-                            })}
-                        </h1>
-                        <p className="mt-2 max-w-xl text-muted-foreground">
-                            {t("student-dashboard-help")}
-                        </p>
-                    </div>
-                    <div
-                        className="mt-8 flex rounded-xl bg-muted p-1"
-                        role="tablist"
+
+            <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+                <aside className="h-fit min-w-0 rounded-2xl border bg-card p-3 shadow-sm">
+                    <p className="px-3 py-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                        {t("dashboard-menu")}
+                    </p>
+                    <nav
+                        className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible"
                         aria-label={t("student-activities")}
                     >
-                        <button
-                            type="button"
-                            role="tab"
-                            aria-selected={activeTab === "exam"}
-                            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${activeTab === "exam" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
-                            onClick={() => setActiveTab("exam")}
-                        >
-                            <ClipboardPenLine className="size-4" />
-                            {t("exams-tab")}
-                        </button>
-                        <button
-                            type="button"
-                            role="tab"
-                            aria-selected={activeTab === "training"}
-                            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${activeTab === "training" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
-                            onClick={() => setActiveTab("training")}
-                        >
-                            <Dumbbell className="size-4" />
-                            {t("training-tab")}
-                        </button>
+                        {dashboardEntries.map((entry) => {
+                            const Icon = entry.icon
+                            const isActive = entry.id === activeTab
+                            return (
+                                <button
+                                    key={entry.id}
+                                    type="button"
+                                    onClick={() => setActiveTab(entry.id)}
+                                    aria-current={isActive ? "page" : undefined}
+                                    className={cn(
+                                        "flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:w-full lg:min-w-0",
+                                        isActive
+                                            ? "bg-primary text-primary-foreground shadow-sm"
+                                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    )}
+                                >
+                                    <Icon className="size-5 shrink-0" />
+                                    <span>{entry.label}</span>
+                                </button>
+                            )
+                        })}
+                    </nav>
+                </aside>
+
+                <section
+                    className="min-h-72 min-w-0 overflow-hidden rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
+                    aria-labelledby={`${activeEntry.id}-title`}
+                >
+                    <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                        <div className="rounded-xl bg-primary/10 p-3 text-primary">
+                            <activeEntry.icon className="size-6" />
+                        </div>
+                        <div className="min-w-0">
+                            <h2
+                                id={`${activeEntry.id}-title`}
+                                className="text-2xl font-bold"
+                            >
+                                {activeEntry.label}
+                            </h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                {activeEntry.description}
+                            </p>
+                        </div>
                     </div>
                     {activeTab === "exam" ? (
-                        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                            <button
-                                type="button"
-                                className="group flex min-h-40 flex-col items-start justify-between rounded-2xl border bg-background p-5 text-left transition hover:border-primary hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:col-span-2"
-                                onClick={() =>
-                                    navigate("/student/exam", {
-                                        state: { student, token },
-                                    })
-                                }
-                            >
-                                <span className="rounded-xl bg-primary/10 p-3 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
-                                    <ClipboardPenLine className="size-7" />
-                                </span>
-                                <span>
-                                    <span className="block text-xl font-bold">
-                                        {t("enter-exam")}
-                                    </span>
-                                    <span className="mt-1 block text-sm text-muted-foreground">
-                                        {t("enter-exam-help")}
-                                    </span>
-                                </span>
-                            </button>
+                        <div className="mt-6">
+                            {storedExam ? (
+                                <div className="w-full max-w-md rounded-xl border bg-background p-5">
+                                    <Button
+                                        className="w-full"
+                                        onClick={() =>
+                                            navigate("/student/exam", {
+                                                state: { student, token },
+                                            })
+                                        }
+                                    >
+                                        <ClipboardPenLine />
+                                        {t("resume-quiz")}
+                                    </Button>
+                                </div>
+                            ) : (
+                                <JoinQuizForm
+                                    embedded
+                                    joinCode={joinCode}
+                                    isBusy={isJoining}
+                                    error={joinError}
+                                    onJoinCodeChange={(value) => {
+                                        setJoinCode(value)
+                                        setJoinError(null)
+                                    }}
+                                    onSubmit={joinExam}
+                                />
+                            )}
                         </div>
-                    ) : (
+                    ) : activeTab === "training" ? (
                         <div className="mt-6">
                             <TrainingQuizzesPanel
                                 student={student}
                                 token={token}
                             />
+                        </div>
+                    ) : activeTab === "makeup" ? (
+                        <div className="mt-6">
+                            <StudentMakeupPanel token={token} />
+                        </div>
+                    ) : (
+                        <div className="mt-6">
+                            <StudentQuizHistory token={token} />
                         </div>
                     )}
                 </section>

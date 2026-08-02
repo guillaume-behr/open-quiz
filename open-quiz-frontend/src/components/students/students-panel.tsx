@@ -6,7 +6,11 @@ import {
 } from "@/api/students"
 import { ApiError } from "@/api/client"
 import { getAllStudentClasses } from "@/api/classes"
-import type { StudentAccount, StudentClass } from "@/api/types"
+import type {
+    CreatedStudentAccount,
+    StudentAccount,
+    StudentClass,
+} from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -49,11 +53,15 @@ export function StudentsPanel({
     const [editing, setEditing] = useState<StudentAccount | null>(null)
     const [deleting, setDeleting] = useState<StudentAccount | null>(null)
     const [displayName, setDisplayName] = useState("")
+    const [firstName, setFirstName] = useState("")
+    const [lastName, setLastName] = useState("")
     const [identifier, setIdentifier] = useState("")
     const [password, setPassword] = useState("")
     const [isActive, setIsActive] = useState(true)
     const [isBusy, setIsBusy] = useState(false)
     const [formError, setFormError] = useState<string | null>(null)
+    const [createdCredentials, setCreatedCredentials] =
+        useState<CreatedStudentAccount | null>(null)
 
     useEffect(() => {
         let active = true
@@ -85,6 +93,8 @@ export function StudentsPanel({
         onCreateDialogOpenChange(false)
         setEditing(null)
         setDisplayName("")
+        setFirstName("")
+        setLastName("")
         setIdentifier("")
         setPassword("")
         setIsActive(true)
@@ -113,11 +123,11 @@ export function StudentsPanel({
                     is_active: isActive,
                 })
             } else {
-                await createStudentAccount({
-                    display_name: displayName.trim(),
-                    identifier: identifier.trim(),
-                    password,
+                const created = await createStudentAccount({
+                    first_name: firstName.trim(),
+                    last_name: lastName.trim(),
                 })
+                setCreatedCredentials(created)
             }
             closeForm()
             setReloadKey((value) => value + 1)
@@ -307,65 +317,98 @@ export function StudentsPanel({
                 title={t(
                     editing ? "edit-student-account" : "create-student-account"
                 )}
-                description={t("student-account-form-help")}
+                description={t(
+                    editing
+                        ? "student-account-form-help"
+                        : "student-id-generated-help"
+                )}
                 className="max-w-lg"
             >
                 <form onSubmit={submit}>
                     <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="account-name">
-                                {t("student-name")}
-                            </FieldLabel>
-                            <Input
-                                id="account-name"
-                                value={displayName}
-                                onChange={(event) =>
-                                    setDisplayName(event.target.value)
-                                }
-                                required
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="account-id">
-                                {t("student-id")}
-                            </FieldLabel>
-                            <Input
-                                id="account-id"
-                                value={identifier}
-                                onChange={(event) =>
-                                    setIdentifier(
-                                        event.target.value.toLowerCase()
-                                    )
-                                }
-                                pattern="[a-zA-Z0-9._-]+"
-                                autoComplete="off"
-                                required
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="account-password">
-                                {t(
-                                    editing
-                                        ? "new-password-optional"
-                                        : "login-password"
-                                )}
-                            </FieldLabel>
-                            <Input
-                                id="account-password"
-                                type="password"
-                                value={password}
-                                onChange={(event) =>
-                                    setPassword(event.target.value)
-                                }
-                                minLength={8}
-                                autoComplete="new-password"
-                                required={!editing}
-                            />
-                        </Field>
+                        {editing ? (
+                            <>
+                                <Field>
+                                    <FieldLabel htmlFor="account-name">
+                                        {t("student-name")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="account-name"
+                                        value={displayName}
+                                        onChange={(event) =>
+                                            setDisplayName(event.target.value)
+                                        }
+                                        required
+                                    />
+                                </Field>
+                                <Field>
+                                    <FieldLabel htmlFor="account-id">
+                                        {t("student-id")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="account-id"
+                                        value={identifier}
+                                        onChange={(event) =>
+                                            setIdentifier(
+                                                event.target.value.toLowerCase()
+                                            )
+                                        }
+                                        pattern="[a-zA-Z0-9._-]+"
+                                        autoComplete="off"
+                                        required
+                                    />
+                                </Field>
+                                <Field>
+                                    <FieldLabel htmlFor="account-password">
+                                        {t("new-password-optional")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="account-password"
+                                        type="password"
+                                        value={password}
+                                        onChange={(event) =>
+                                            setPassword(event.target.value)
+                                        }
+                                        minLength={8}
+                                        autoComplete="new-password"
+                                    />
+                                </Field>
+                            </>
+                        ) : (
+                            <>
+                                <Field>
+                                    <FieldLabel htmlFor="account-first-name">
+                                        {t("first-name")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="account-first-name"
+                                        value={firstName}
+                                        onChange={(event) =>
+                                            setFirstName(event.target.value)
+                                        }
+                                        required
+                                    />
+                                </Field>
+                                <Field>
+                                    <FieldLabel htmlFor="account-last-name">
+                                        {t("last-name")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="account-last-name"
+                                        value={lastName}
+                                        onChange={(event) =>
+                                            setLastName(event.target.value)
+                                        }
+                                        required
+                                    />
+                                </Field>
+                            </>
+                        )}
                         {editing && (
                             <label className="flex items-center gap-2 text-sm">
                                 <input
                                     type="checkbox"
+                                    className="accent-primary"
                                     checked={isActive}
                                     onChange={(event) =>
                                         setIsActive(event.target.checked)
@@ -395,6 +438,37 @@ export function StudentsPanel({
                         </div>
                     </FieldGroup>
                 </form>
+            </Dialog>
+
+            <Dialog
+                open={createdCredentials !== null}
+                onOpenChange={(open) => !open && setCreatedCredentials(null)}
+                title={t("student-credentials-created")}
+                description={t("student-credentials-save-help")}
+                className="max-w-md"
+            >
+                {createdCredentials && (
+                    <div className="space-y-4">
+                        <div className="rounded-lg border bg-muted/40 p-4 font-mono">
+                            <p>
+                                {t("student-id")}:{" "}
+                                {createdCredentials.identifier}
+                            </p>
+                            <p>
+                                {t("login-password")}:{" "}
+                                {createdCredentials.generated_password}
+                            </p>
+                        </div>
+                        <div className="flex justify-end">
+                            <Button
+                                type="button"
+                                onClick={() => setCreatedCredentials(null)}
+                            >
+                                {t("close")}
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Dialog>
 
             <Dialog

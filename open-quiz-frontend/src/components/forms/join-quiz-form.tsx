@@ -11,6 +11,7 @@ type JoinQuizFormProps = {
     error: string | null
     onJoinCodeChange: (value: string) => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
+    embedded?: boolean
 }
 
 export function JoinQuizForm({
@@ -19,22 +20,29 @@ export function JoinQuizForm({
     error,
     onJoinCodeChange,
     onSubmit,
+    embedded = false,
 }: JoinQuizFormProps) {
     const { t } = useTranslation()
 
     return (
         <form
-            className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-15"
+            className={
+                embedded
+                    ? "flex w-full max-w-md flex-col gap-5 rounded-xl border bg-background p-5"
+                    : "flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-15"
+            }
             onSubmit={onSubmit}
         >
-            <div className="flex flex-col gap-2">
-                <h1 className="text-center text-4xl font-extrabold">
-                    {t("join-quiz-title")}
-                </h1>
-                <p className="text-center font-light">
-                    {t("join-quiz-instructions")}
-                </p>
-            </div>
+            {!embedded && (
+                <div className="flex flex-col gap-2">
+                    <h1 className="text-center text-4xl font-extrabold">
+                        {t("join-quiz-title")}
+                    </h1>
+                    <p className="text-center font-light">
+                        {t("join-quiz-instructions")}
+                    </p>
+                </div>
+            )}
             <FieldGroup className="gap-4">
                 <Field>
                     <FieldLabel htmlFor="quiz-id">{t("quiz-id")}</FieldLabel>
@@ -60,7 +68,7 @@ export function JoinQuizForm({
                     </p>
                 )}
                 <Button
-                    className="text-md py-7 shadow"
+                    className={embedded ? "w-full" : "text-md py-7 shadow"}
                     type="submit"
                     disabled={isBusy}
                 >

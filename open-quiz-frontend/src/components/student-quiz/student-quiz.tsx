@@ -19,7 +19,13 @@ import { StudentQuizPage } from "./student-quiz-page"
 import { useQuizMonitoring } from "./use-quiz-monitoring"
 import { useQuizTranslation } from "./use-quiz-translation"
 
-export function StudentQuiz({ studentToken }: { studentToken: string }) {
+export function StudentQuiz({
+    studentToken,
+    onSessionCleared,
+}: {
+    studentToken: string
+    onSessionCleared?: () => void
+}) {
     const { t, i18n } = useTranslation()
     const [restoredSession] = useState(readStoredQuizSession)
     const [joinCode, setJoinCode] = useState(restoredSession?.joinCode ?? "")
@@ -68,13 +74,14 @@ export function StudentQuiz({ studentToken }: { studentToken: string }) {
                 ) {
                     clearStoredQuizSession()
                     setParticipantToken(null)
+                    onSessionCleared?.()
                 }
                 setError(t("student-session-restore-error"))
             })
         return () => {
             active = false
         }
-    }, [applySession, restoredSession, t])
+    }, [applySession, onSessionCleared, restoredSession, t])
 
     useEffect(() => {
         if (
@@ -164,6 +171,7 @@ export function StudentQuiz({ studentToken }: { studentToken: string }) {
         setWrittenAnswer("")
         setError(null)
         translation.reset()
+        onSessionCleared?.()
 
         if (document.fullscreenElement) {
             void document

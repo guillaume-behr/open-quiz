@@ -5,9 +5,10 @@ import {
 } from "@/api/student-auth"
 import type { StudentAccount } from "@/api/types"
 import { StudentQuiz } from "@/components/student-quiz/student-quiz"
+import { readStoredQuizSession } from "@/components/student-quiz/student-quiz-session"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, LoaderCircle } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router"
 
@@ -26,8 +27,15 @@ export function ExamPage() {
         routeState?.student ?? null
     )
     const [isLoading, setIsLoading] = useState(Boolean(token && !student))
+    const returnToDashboard = useCallback(() => {
+        navigate("/student/dashboard", { replace: true })
+    }, [navigate])
 
     useEffect(() => {
+        if (!readStoredQuizSession()) {
+            navigate("/student/dashboard", { replace: true })
+            return
+        }
         if (!token) {
             navigate("/student/login", { replace: true })
             return
@@ -74,7 +82,10 @@ export function ExamPage() {
                 </p>
             </div>
             <div className="flex flex-1 items-center justify-center">
-                <StudentQuiz studentToken={token} />
+                <StudentQuiz
+                    studentToken={token}
+                    onSessionCleared={returnToDashboard}
+                />
             </div>
         </div>
     )

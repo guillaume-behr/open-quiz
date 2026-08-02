@@ -10,6 +10,7 @@ import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { ClassesPanel } from "@/components/classes/classes-panel"
 import { QuestionBanksPanel } from "@/components/question-banks/question-banks-panel"
 import { QuizzesPanel } from "@/components/quizzes/quizzes-panel"
+import { MakeupSessionsPanel } from "@/components/quizzes/makeup-sessions-panel"
 import { ResultsPanel } from "@/components/results/results-panel"
 import { StudentsPanel } from "@/components/students/students-panel"
 import { ClassTrainingBanksPanel } from "@/components/training/class-training-banks-panel"
@@ -24,6 +25,7 @@ import {
     LoaderCircle,
     LogOut,
     Plus,
+    RotateCcw,
     School,
     UsersRound,
     type LucideIcon,
@@ -36,6 +38,7 @@ type DashboardSection =
     | "students"
     | "classes"
     | "exam-quizzes"
+    | "makeup"
     | "training-quizzes"
     | "question-banks"
     | "results"
@@ -81,6 +84,12 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
             icon: ClipboardList,
             label: t("exam-quizzes"),
             description: t("exam-quizzes-help"),
+        },
+        {
+            id: "makeup",
+            icon: RotateCcw,
+            label: t("makeup-tab"),
+            description: t("makeup-professor-help"),
         },
         {
             id: "training-quizzes",
@@ -185,7 +194,11 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
 
     if (isLoading) {
         return (
-            <div className="flex flex-1 items-center justify-center">
+            <div
+                className="flex flex-1 items-center justify-center"
+                role="status"
+                aria-label={t("page-loading")}
+            >
                 <LoaderCircle className="size-9 animate-spin text-primary" />
             </div>
         )
@@ -251,7 +264,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                                     onClick={() => setActiveSection(entry.id)}
                                     aria-current={isActive ? "page" : undefined}
                                     className={cn(
-                                        "flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors lg:w-full lg:min-w-0",
+                                        "flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:w-full lg:min-w-0",
                                         isActive
                                             ? "bg-primary text-primary-foreground shadow-sm"
                                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -367,6 +380,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                             onCreateDialogOpenChange={setIsQuizCreationOpen}
                         />
                     )}
+                    {activeSection === "makeup" && <MakeupSessionsPanel />}
                     {activeSection === "training-quizzes" && (
                         <ClassTrainingBanksPanel />
                     )}
