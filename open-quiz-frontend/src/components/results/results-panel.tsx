@@ -1,13 +1,18 @@
 import {
     deleteQuizSession,
+    downloadQuizResults,
+    getAllQuizzes,
     getParticipantAnswers,
     getQuizResults,
     gradeWrittenAnswer,
 } from "@/api/quizzes"
+import { getAllStudentClasses } from "@/api/classes"
 import type {
+    Quiz,
     QuizAnswerReview,
     QuizParticipant,
     QuizSession,
+    StudentClass,
 } from "@/api/types"
 import { ParticipantAnswersDialog } from "@/components/results/participant-answers-dialog"
 import { Button } from "@/components/ui/button"
@@ -19,6 +24,7 @@ import {
     CalendarDays,
     ChartColumn,
     CheckCircle2,
+    Download,
     Eye,
     FileText,
     LoaderCircle,
@@ -35,7 +41,15 @@ function formatScore(score: number, locale: string) {
     }).format(score)
 }
 
-export function ResultsPanel() {
+type ResultsPanelProps = {
+    isExportDialogOpen: boolean
+    onExportDialogOpenChange: (open: boolean) => void
+}
+
+export function ResultsPanel({
+    isExportDialogOpen,
+    onExportDialogOpenChange,
+}: ResultsPanelProps) {
     const { t, i18n } = useTranslation()
     const [results, setResults] = useState<QuizSession[]>([])
     const [page, setPage] = useState(1)
@@ -60,6 +74,13 @@ export function ResultsPanel() {
     const [answersError, setAnswersError] = useState(false)
     const [scoreDrafts, setScoreDrafts] = useState<Record<number, string>>({})
     const [gradingAnswerId, setGradingAnswerId] = useState<number | null>(null)
+    const [exportClasses, setExportClasses] = useState<StudentClass[]>([])
+    const [exportQuizzes, setExportQuizzes] = useState<Quiz[]>([])
+    const [exportClassId, setExportClassId] = useState<number | null>(null)
+    const [exportQuizId, setExportQuizId] = useState<number | null>(null)
+    const [isExportLoading, setIsExportLoading] = useState(false)
+    const [isExporting, setIsExporting] = useState(false)
+    const [exportError, setExportError] = useState(false)
     useEffect(() => {
         let isActive = true
         getQuizResults(page, quizFilter.trim(), classFilter.trim())
@@ -80,6 +101,51 @@ export function ResultsPanel() {
             isActive = false
         }
     }, [classFilter, page, quizFilter, reloadKey])
+
+    useEffect(() => {
+        if (!isExportDialogOpen || exportClasses.length > 0) return
+        let isActive = true
+        setExportError(false)
+        setIsExportLoading(true)
+        Promise.all([getAllStudentClasses(), getAllQuizzes()])
+            .then(([classes, quizzes]) => {
+                if (!isActive) return
+                setExportClasses(classes)
+                setExportQuizzes(quizzes)
+                setExportClassId(classes[0]?.id ?? null)
+            })
+            .catch(() => {
+                if (isActive) setExportError(true)
+            })
+            .finally(() => {
+                if (isActive) setIsExportLoading(false)
+            })
+        return () => {
+            isActive = false
+        }
+    }, [exportClasses.length, isExportDialogOpen])
+
+    async function handleExport(): Promise<void> {
+        if (exportClassId === null) return
+        setIsExporting(true)
+        setExportError(false)
+        try {
+            const blob = await downloadQuizResults(exportClassId, exportQuizId)
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement("a")
+            link.href = url
+            link.download = `resultats-classe-${exportClassId}${exportQuizId === null ? "-tous-les-quiz" : `-quiz-${exportQuizId}`}.csv`
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+            onExportDialogOpenChange(false)
+        } catch {
+            setExportError(true)
+        } finally {
+            setIsExporting(false)
+        }
+    }
 
     const dateFormatter = useMemo(
         () =>
@@ -335,6 +401,103 @@ export function ResultsPanel() {
                     </div>
                 )}
             </div>
+
+            <Dialog
+                open={isExportDialogOpen}
+                onOpenChange={(open) => {
+                    if (!isExporting) onExportDialogOpenChange(open)
+                }}
+                title={t("export-results-csv")}
+                description={t("export-results-help")}
+            >
+                {isExportLoading ? (
+                    <div className="flex min-h-32 items-center justify-center">
+                        <LoaderCircle className="size-7 animate-spin text-primary" />
+                    </div>
+                ) : (
+                    <FieldGroup>
+                        <Field>
+                            <FieldLabel htmlFor="export-results-class">
+                                {t("class-name")}
+                            </FieldLabel>
+                            <select
+                                id="export-results-class"
+                                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                                value={exportClassId ?? ""}
+                                onChange={(event) =>
+                                    setExportClassId(Number(event.target.value))
+                                }
+                            >
+                                {exportClasses.map((studentClass) => (
+                                    <option
+                                        key={studentClass.id}
+                                        value={studentClass.id}
+                                    >
+                                        {studentClass.name} —{" "}
+                                        {studentClass.grade_level}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="export-results-quiz">
+                                {t("quiz-title")}
+                            </FieldLabel>
+                            <select
+                                id="export-results-quiz"
+                                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                                value={exportQuizId ?? ""}
+                                onChange={(event) =>
+                                    setExportQuizId(
+                                        event.target.value
+                                            ? Number(event.target.value)
+                                            : null
+                                    )
+                                }
+                            >
+                                <option value="">{t("all-quizzes")}</option>
+                                {exportQuizzes.map((quiz) => (
+                                    <option key={quiz.id} value={quiz.id}>
+                                        {quiz.title}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        {exportClasses.length === 0 && !exportError && (
+                            <p className="text-sm text-muted-foreground">
+                                {t("export-results-no-classes")}
+                            </p>
+                        )}
+                        {exportError && (
+                            <p className="text-sm text-destructive">
+                                {t("export-results-error")}
+                            </p>
+                        )}
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={isExporting}
+                                onClick={() => onExportDialogOpenChange(false)}
+                            >
+                                {t("cancel")}
+                            </Button>
+                            <Button
+                                type="button"
+                                disabled={isExporting || exportClassId === null}
+                                onClick={handleExport}
+                            >
+                                {isExporting ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <Download />
+                                )}
+                                {t("export-csv")}
+                            </Button>
+                        </div>
+                    </FieldGroup>
+                )}
+            </Dialog>
 
             <Dialog
                 open={selectedResult !== null}

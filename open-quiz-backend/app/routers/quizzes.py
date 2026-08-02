@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
@@ -9,6 +11,7 @@ from string import ascii_uppercase, digits
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
@@ -929,6 +932,93 @@ def list_quiz_results(
     return [
         session_response(quiz_session, quiz, session) for quiz_session, quiz in rows
     ]
+
+
+@router.get("/sessions/results/export")
+def export_quiz_results(
+    request: Request,
+    professor: ProfessorUser,
+    session: DbSession,
+    class_id: Annotated[int, Query(ge=1)],
+    quiz_id: Annotated[int | None, Query(ge=1)] = None,
+) -> StreamingResponse:
+    purge_expired_quiz_results(professor, request, session)
+    student_class = session.scalar(
+        select(StudentClass).where(
+            StudentClass.id == class_id,
+            StudentClass.owner_id == professor.id,
+        )
+    )
+    if student_class is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    filters = [
+        Quiz.owner_id == professor.id,
+        QuizSession.class_id == class_id,
+        QuizSession.status == "finished",
+    ]
+    if quiz_id is not None:
+        quiz = session.scalar(
+            select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
+        )
+        if quiz is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        filters.append(QuizSession.quiz_id == quiz_id)
+
+    rows = session.execute(
+        select(QuizSession, Quiz)
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(*filters)
+        .order_by(
+            QuizSession.started_at.desc(),
+            QuizSession.created_at.desc(),
+            QuizSession.id.desc(),
+        )
+    )
+    output = io.StringIO(newline="")
+    output.write("\ufeff")
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "class",
+            "quiz",
+            "date",
+            "student_identifier",
+            "student_name",
+            "questions_answered",
+            "total_questions",
+            "score",
+            "pending_manual_grading",
+            "violations",
+        ]
+    )
+    for quiz_session, quiz in rows:
+        result = session_response(quiz_session, quiz, session)
+        result_date = result.started_at or result.created_at
+        for participant in result.participants:
+            writer.writerow(
+                [
+                    result.class_name,
+                    result.quiz_title,
+                    result_date.isoformat(),
+                    participant.student_identifier,
+                    participant.student_display_name or "",
+                    participant.answered_count,
+                    result.total_questions,
+                    participant.score,
+                    participant.pending_manual_grading_count,
+                    participant.violation_count,
+                ]
+            )
+
+    safe_class_id = student_class.id
+    safe_quiz = f"-quiz-{quiz_id}" if quiz_id is not None else "-tous-les-quiz"
+    filename = f"resultats-classe-{safe_class_id}{safe_quiz}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def answer_review(

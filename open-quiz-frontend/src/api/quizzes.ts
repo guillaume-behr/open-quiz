@@ -26,6 +26,15 @@ export function getQuizzes(
     return requestPage<Quiz>(`/api/quizzes?${params}`)
 }
 
+export async function getAllQuizzes(): Promise<Quiz[]> {
+    const firstPage = await getQuizzes(1, "", "", 100)
+    const quizzes = [...firstPage.items]
+    for (let page = 2; page <= firstPage.totalPages; page += 1) {
+        quizzes.push(...(await getQuizzes(page, "", "", 100)).items)
+    }
+    return quizzes
+}
+
 export function createQuiz(quiz: NewQuiz): Promise<Quiz> {
     return request<Quiz>("/api/quizzes", {
         method: "POST",
@@ -71,6 +80,15 @@ export function getQuizResults(
     if (quizSearch) params.set("quiz_search", quizSearch)
     if (classSearch) params.set("class_search", classSearch)
     return requestPage<QuizSession>(`/api/quizzes/sessions/results?${params}`)
+}
+
+export function downloadQuizResults(
+    classId: number,
+    quizId: number | null
+): Promise<Blob> {
+    const params = new URLSearchParams({ class_id: String(classId) })
+    if (quizId !== null) params.set("quiz_id", String(quizId))
+    return requestBlob(`/api/quizzes/sessions/results/export?${params}`)
 }
 
 export function getParticipantAnswers(

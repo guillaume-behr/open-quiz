@@ -1431,6 +1431,28 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert results.json()[0]["participants"][0]["pending_manual_grading_count"] == 1
         original_ends_at = results.json()[0]["ends_at"]
 
+        exported_results = client.get(
+            "/api/quizzes/sessions/results/export",
+            headers=teacher_headers,
+            params={"class_id": student_class["id"], "quiz_id": quiz["id"]},
+        )
+        assert exported_results.status_code == 200
+        assert exported_results.headers["content-type"].startswith("text/csv")
+        assert "attachment;" in exported_results.headers["content-disposition"]
+        assert exported_results.text.startswith("\ufeffclass,quiz,date,")
+        assert quiz["title"] in exported_results.text
+        assert teacher_state["participants"][0]["student_identifier"] in (
+            exported_results.text
+        )
+
+        all_quiz_results = client.get(
+            "/api/quizzes/sessions/results/export",
+            headers=teacher_headers,
+            params={"class_id": student_class["id"]},
+        )
+        assert all_quiz_results.status_code == 200
+        assert quiz["title"] in all_quiz_results.text
+
         edited_quiz = client.post(
             f"/api/quizzes/{quiz['id']}/update",
             headers=teacher_headers,

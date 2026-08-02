@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import {
     ChartColumn,
     ClipboardList,
+    Download,
     LibraryBig,
     LoaderCircle,
     LogOut,
@@ -48,6 +49,7 @@ export function Dashboard() {
         useState(false)
     const [isQuizCreationOpen, setIsQuizCreationOpen] = useState(false)
     const [isClassCreationOpen, setIsClassCreationOpen] = useState(false)
+    const [isResultsExportOpen, setIsResultsExportOpen] = useState(false)
     const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([])
 
     const dashboardEntries: DashboardEntry[] = [
@@ -275,6 +277,15 @@ export function Dashboard() {
                                 {t("create-quiz")}
                             </Button>
                         )}
+                        {activeSection === "results" && (
+                            <Button
+                                type="button"
+                                onClick={() => setIsResultsExportOpen(true)}
+                            >
+                                <Download />
+                                {t("export-results-csv")}
+                            </Button>
+                        )}
                     </div>
                     {activeSection === "question-banks" && (
                         <QuestionBanksPanel
@@ -302,7 +313,12 @@ export function Dashboard() {
                             onCreateDialogOpenChange={setIsQuizCreationOpen}
                         />
                     )}
-                    {activeSection === "results" && <ResultsPanel />}
+                    {activeSection === "results" && (
+                        <ResultsPanel
+                            isExportDialogOpen={isResultsExportOpen}
+                            onExportDialogOpenChange={setIsResultsExportOpen}
+                        />
+                    )}
                 </section>
             </div>
         </div>
