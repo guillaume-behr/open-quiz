@@ -284,6 +284,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.login_window_seconds,
         settings.jwt_secret,
     )
+    app.state.auth_global_rate_limiter = FixedWindowRateLimiter(
+        settings.global_login_attempts,
+        settings.global_login_window_seconds,
+        "auth",
+    )
     app.state.quiz_join_rate_limiter = FixedWindowRateLimiter(
         settings.quiz_join_attempts,
         settings.quiz_rate_window_seconds,

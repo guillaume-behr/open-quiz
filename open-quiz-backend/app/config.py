@@ -64,6 +64,8 @@ class Settings:
     refresh_token_days: int = 7
     login_attempts: int = 5
     login_window_seconds: int = 900
+    global_login_attempts: int = 500
+    global_login_window_seconds: int = 60
     quiz_join_attempts: int = 20
     quiz_participant_attempts: int = 240
     quiz_violation_attempts: int = 20
@@ -134,6 +136,10 @@ class Settings:
             raise ValueError("LOGIN_ATTEMPTS must be between 3 and 20")
         if self.login_window_seconds < 60:
             raise ValueError("LOGIN_WINDOW_SECONDS must be at least 60")
+        if not 50 <= self.global_login_attempts <= 100000:
+            raise ValueError("GLOBAL_LOGIN_ATTEMPTS must be between 50 and 100000")
+        if not 10 <= self.global_login_window_seconds <= 3600:
+            raise ValueError("GLOBAL_LOGIN_WINDOW_SECONDS must be between 10 and 3600")
         if not 5 <= self.quiz_join_attempts <= 100:
             raise ValueError("QUIZ_JOIN_ATTEMPTS must be between 5 and 100")
         if not 30 <= self.quiz_participant_attempts <= 1000:
@@ -208,6 +214,8 @@ def get_settings() -> Settings:
         refresh_token_days=int(os.getenv("REFRESH_TOKEN_DAYS", "7")),
         login_attempts=int(os.getenv("LOGIN_ATTEMPTS", "5")),
         login_window_seconds=int(os.getenv("LOGIN_WINDOW_SECONDS", "900")),
+        global_login_attempts=int(os.getenv("GLOBAL_LOGIN_ATTEMPTS", "500")),
+        global_login_window_seconds=int(os.getenv("GLOBAL_LOGIN_WINDOW_SECONDS", "60")),
         quiz_join_attempts=int(os.getenv("QUIZ_JOIN_ATTEMPTS", "20")),
         quiz_participant_attempts=int(os.getenv("QUIZ_PARTICIPANT_ATTEMPTS", "240")),
         quiz_violation_attempts=int(os.getenv("QUIZ_VIOLATION_ATTEMPTS", "20")),

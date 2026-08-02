@@ -95,6 +95,23 @@ def password_rate_subject(username: str) -> str:
     return f"password:identity:{username}"
 
 
+def enforce_global_auth_limit(request: Request, session: DbSession) -> None:
+    """Bound total authentication hashing work instance-wide regardless of source.
+
+    Unlike per-account buckets, this single budget cannot be evaded by
+    rotating usernames, so it caps the CPU cost an attacker can force.
+    """
+    retry_after = request.app.state.auth_global_rate_limiter.reserve(
+        session, "instance"
+    )
+    if retry_after:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Trop de tentatives de connexion",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 def two_factor_rate_subject(user_id: int) -> str:
     return f"two-factor:user:{user_id}"
 
@@ -247,6 +264,7 @@ def login(
 ) -> LoginResponse:
     """Verify a password and begin 2FA setup or verification."""
     validate_origin(request)
+    enforce_global_auth_limit(request, session)
     limiter = request.app.state.login_rate_limiter
     rate_subject = password_rate_subject(payload.username)
     user = session.scalar(select(User).where(User.username == payload.username))
@@ -342,6 +360,7 @@ def verify_two_factor(
 ) -> TokenResponse:
     """Complete 2FA setup or verify a login challenge."""
     validate_origin(request)
+    enforce_global_auth_limit(request, session)
     settings = request.app.state.settings
     try:
         user_id, purpose, token_id_hash = decode_two_factor_token(

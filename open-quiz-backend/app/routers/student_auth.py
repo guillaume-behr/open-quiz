@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.audit import audit_event
 from app.dependencies import DbSession
 from app.models import StudentAccount
-from app.routers.auth import validate_origin
+from app.routers.auth import enforce_global_auth_limit, validate_origin
 from app.routers.students import account_response
 from app.schemas import (
     StudentAccountResponse,
@@ -77,6 +77,7 @@ def login_student(
     session: DbSession,
 ) -> StudentLoginResponse:
     validate_origin(request)
+    enforce_global_auth_limit(request, session)
     subject = f"student-password:identity:{payload.identifier}"
     limiter = request.app.state.login_rate_limiter
     retry_after = limiter.reserve(session, subject)

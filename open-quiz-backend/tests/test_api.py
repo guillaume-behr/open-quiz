@@ -2928,6 +2928,43 @@ def test_login_rate_limit_reserves_concurrent_attempts_atomically(
     assert statuses.count(429) >= 5
 
 
+def test_global_auth_rate_limit_is_shared_across_login_flows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings_for(
+        tmp_path / "global-auth-limit.db",
+        global_login_attempts=50,
+    )
+    monkeypatch.setattr("app.routers.auth.verify_password", lambda *_: False)
+    monkeypatch.setattr("app.routers.student_auth.verify_password", lambda *_: False)
+
+    with make_client(app_settings) as client:
+        for attempt in range(49):
+            response = client.post(
+                "/api/auth/login",
+                json={
+                    "username": f"unknown-{attempt}",
+                    "password": "incorrect-password",
+                },
+            )
+            assert response.status_code == 401
+
+        student_response = client.post(
+            "/api/student-auth/login",
+            json={"identifier": "unknown", "password": "incorrect-password"},
+        )
+        assert student_response.status_code == 401
+
+        limited = client.post(
+            "/api/auth/login",
+            json={"username": "another-account", "password": "incorrect-password"},
+        )
+
+    assert limited.status_code == 429
+    assert int(limited.headers["retry-after"]) > 0
+
+
 def test_correct_password_does_not_reset_two_factor_throttling(
     tmp_path: Path,
 ) -> None:
@@ -3271,6 +3308,8 @@ def test_written_answers_have_an_application_level_size_limit() -> None:
 @pytest.mark.parametrize(
     ("setting_name", "value", "expected_message"),
     [
+        ("global_login_attempts", 49, "GLOBAL_LOGIN_ATTEMPTS"),
+        ("global_login_window_seconds", 9, "GLOBAL_LOGIN_WINDOW_SECONDS"),
         ("quiz_join_attempts", 4, "QUIZ_JOIN_ATTEMPTS"),
         ("quiz_participant_attempts", 29, "QUIZ_PARTICIPANT_ATTEMPTS"),
         ("quiz_violation_attempts", 4, "QUIZ_VIOLATION_ATTEMPTS"),
