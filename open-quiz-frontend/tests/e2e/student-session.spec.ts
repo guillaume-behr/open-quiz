@@ -423,10 +423,17 @@ test("student can submit a written answer", async ({ page }) => {
     await page.goto("/student/exam")
     await page.getByLabel("Quiz code").fill("ABCD")
     await page.getByRole("button", { name: "Join the quiz" }).click()
+    const submitAnswer = page.getByRole("button", {
+        name: "Submit my answer",
+    })
+    await expect(submitAnswer).toBeDisabled()
+    await page.getByLabel("Written answer").fill("   ")
+    await expect(submitAnswer).toBeDisabled()
     await page
         .getByLabel("Written answer")
         .fill("Plants convert light energy into chemical energy.")
-    await page.getByRole("button", { name: "Submit my answer" }).click()
+    await expect(submitAnswer).toBeEnabled()
+    await submitAnswer.click()
 
     await expect(
         page.getByText("The quiz is over. Thank you for your participation!")

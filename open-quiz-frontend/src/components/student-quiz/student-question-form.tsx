@@ -114,8 +114,9 @@ export function StudentQuestionForm({
                     type="submit"
                     disabled={
                         isBusy ||
-                        (question.answer_mode !== "written" &&
-                            selectedChoiceIds.length === 0)
+                        (question.answer_mode === "written"
+                            ? writtenAnswer.trim().length === 0
+                            : selectedChoiceIds.length === 0)
                     }
                 >
                     {isBusy && <LoaderCircle className="animate-spin" />}
@@ -156,6 +157,7 @@ function WrittenAnswer({
                     editable
                     onCodeChange={onAnswerChange}
                     editorClassName="min-h-48"
+                    required
                 />
             ) : (
                 <textarea
