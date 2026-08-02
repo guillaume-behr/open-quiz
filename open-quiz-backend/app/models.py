@@ -150,6 +150,7 @@ class Question(Base):
     answer_mode_disclosed: Mapped[bool] = mapped_column(Boolean, default=True)
     response_language: Mapped[str | None] = mapped_column(String(30), nullable=True)
     correction_mode: Mapped[str] = mapped_column(String(20))
+    points: Mapped[float] = mapped_column(Float, default=1.0, server_default="1")
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     image_content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -263,6 +264,34 @@ class QuizSession(Base):
         DateTime(timezone=True), nullable=True
     )
     paused_duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    makeup_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("makeup_sessions.id"), nullable=True, index=True
+    )
+
+
+class MakeupSession(Base):
+    __tablename__ = "makeup_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    class_id: Mapped[int | None] = mapped_column(
+        ForeignKey("student_classes.id"), nullable=True, index=True
+    )
+    class_name: Mapped[str] = mapped_column(String(120))
+    join_code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="waiting")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
+class MakeupSessionQuiz(Base):
+    __tablename__ = "makeup_session_quizzes"
+
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("makeup_sessions.id"), primary_key=True
+    )
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), primary_key=True)
 
 
 class QuizSessionQuestion(Base):

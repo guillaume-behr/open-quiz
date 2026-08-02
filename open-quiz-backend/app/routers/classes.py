@@ -8,6 +8,7 @@ from app.dependencies import DbSession, ProfessorUser
 from app.grade_levels import ensure_grade_level
 from app.models import (
     ClassTrainingQuestionBank,
+    MakeupSession,
     Quiz,
     QuizParticipant,
     QuizSession,
@@ -194,6 +195,19 @@ def delete_class(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette classe est utilisée par une salle d’attente active",
         )
+    if (
+        session.scalar(
+            select(MakeupSession.id).where(
+                MakeupSession.class_id == class_id,
+                MakeupSession.status.in_(["waiting", "in_progress", "paused"]),
+            )
+        )
+        is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cette classe est utilisée par un rattrapage actif",
+        )
     student_ids = select(Student.id).where(Student.class_id == class_id)
     session.execute(
         update(QuizParticipant)
@@ -203,6 +217,11 @@ def delete_class(
     session.execute(
         update(QuizSession)
         .where(QuizSession.class_id == class_id)
+        .values(class_id=None)
+    )
+    session.execute(
+        update(MakeupSession)
+        .where(MakeupSession.class_id == class_id)
         .values(class_id=None)
     )
     session.execute(

@@ -47,6 +47,10 @@ export type StudentAccount = {
     created_at: string
 }
 
+export type CreatedStudentAccount = StudentAccount & {
+    generated_password: string
+}
+
 export type StudentClass = {
     id: number
     name: string
@@ -119,6 +123,7 @@ export type Question = {
     id: number
     question_bank_id: number
     prompt: string
+    points: number
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
@@ -132,6 +137,7 @@ export type Question = {
 
 export type NewQuestion = {
     prompt: string
+    points: number
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
@@ -223,6 +229,19 @@ export type QuizAnswerReview = {
     is_graded: boolean
 }
 
+export type StudentQuizHistoryAnswer = Omit<
+    QuizAnswerReview,
+    "id" | "score" | "max_score" | "is_graded"
+>
+
+export type StudentQuizHistoryItem = {
+    session_id: number
+    quiz_title: string
+    class_name: string
+    started_at: string
+    answers: StudentQuizHistoryAnswer[]
+}
+
 export type QuizSession = {
     id: number
     quiz_id: number
@@ -239,6 +258,30 @@ export type QuizSession = {
     created_at: string
     started_at: string | null
     ends_at: string | null
+}
+
+export type MakeupQuizOption = {
+    id: number
+    title: string
+    duration_seconds: number
+}
+
+export type MakeupSession = {
+    id: number
+    class_id: number | null
+    class_name: string
+    join_code: string
+    status: "waiting" | "in_progress" | "paused" | "finished" | "cancelled"
+    quizzes: MakeupQuizOption[]
+    participant_count: number
+    created_at: string
+}
+
+export type MakeupJoin = {
+    join_code: string
+    class_name: string
+    status: "waiting"
+    quizzes: MakeupQuizOption[]
 }
 
 export type StudentQuizChoice = {

@@ -1,5 +1,5 @@
 import { request, requestPage } from "./client"
-import type { Page, StudentAccount } from "./types"
+import type { CreatedStudentAccount, Page, StudentAccount } from "./types"
 
 export function getStudents(
     page = 1,
@@ -30,11 +30,10 @@ export async function getAllStudents(): Promise<StudentAccount[]> {
 }
 
 export function createStudentAccount(payload: {
-    identifier: string
-    display_name: string
-    password: string
-}): Promise<StudentAccount> {
-    return request<StudentAccount>("/api/students", {
+    first_name: string
+    last_name: string
+}): Promise<CreatedStudentAccount> {
+    return request<CreatedStudentAccount>("/api/students", {
         method: "POST",
         body: JSON.stringify(payload),
     })

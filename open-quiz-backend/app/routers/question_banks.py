@@ -328,6 +328,7 @@ def question_response(
         id=question.id,
         question_bank_id=question.question_bank_id,
         prompt=question.prompt,
+        points=question.points,
         difficulty=question.difficulty,
         answer_mode=question.answer_mode,
         answer_mode_disclosed=question.answer_mode_disclosed,
@@ -367,6 +368,7 @@ def add_question(
     question = Question(
         question_bank_id=question_bank_id,
         prompt=payload.prompt,
+        points=payload.points,
         difficulty=payload.difficulty,
         answer_mode=payload.answer_mode,
         answer_mode_disclosed=payload.answer_mode_disclosed,
@@ -466,6 +468,7 @@ def download_import_example(_: ProfessorUser) -> Response:
         "questions": [
             {
                 "prompt": "Quelle est la capitale de la France ?",
+                "points": 3,
                 "difficulty": "easy",
                 "answer_mode": "single",
                 "answer_mode_disclosed": True,
@@ -491,6 +494,7 @@ def download_import_example(_: ProfessorUser) -> Response:
             },
             {
                 "prompt": "Quels nombres sont premiers ?",
+                "points": 6,
                 "difficulty": "medium",
                 "answer_mode": "multiple",
                 "answer_mode_disclosed": False,
@@ -541,6 +545,7 @@ def download_import_example(_: ProfessorUser) -> Response:
             },
             {
                 "prompt": "Expliquez pourquoi la Terre tourne autour du Soleil.",
+                "points": 9,
                 "difficulty": "hard",
                 "answer_mode": "written",
                 "answer_mode_disclosed": True,
@@ -608,6 +613,7 @@ def export_questions(
                 )
                 exported_question = {
                     "prompt": question.prompt,
+                    "points": question.points,
                     "difficulty": question.difficulty,
                     "answer_mode": question.answer_mode,
                     "answer_mode_disclosed": question.answer_mode_disclosed,
@@ -920,6 +926,8 @@ async def update_question(
                 ) from None
 
     question.prompt = question_payload.prompt
+    if question_payload.points is not None:
+        question.points = question_payload.points
     question.difficulty = question_payload.difficulty
     question.answer_mode = question_payload.answer_mode
     question.answer_mode_disclosed = question_payload.answer_mode_disclosed

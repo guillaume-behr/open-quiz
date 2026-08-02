@@ -4,7 +4,7 @@ import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from math import ceil
+from math import ceil, comb
 from random import SystemRandom
 from secrets import token_urlsafe
 from string import ascii_uppercase, digits
@@ -30,6 +30,8 @@ from app.dependencies import DbSession, ProfessorUser
 from app.grading import compute_final_scores
 from app.models import (
     ClassTrainingQuestionBank,
+    MakeupSession,
+    MakeupSessionQuiz,
     Question,
     QuestionBank,
     QuestionChoice,
@@ -50,6 +52,11 @@ from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_head
 from app.routers.question_banks import question_response
 from app.routers.student_auth import current_student
 from app.schemas import (
+    MakeupQuizOption,
+    MakeupQuizSelection,
+    MakeupSessionCreate,
+    MakeupSessionJoinResponse,
+    MakeupSessionResponse,
     QuestionBankResponse,
     QuestionResponse,
     QuizAnswerGrade,
@@ -63,6 +70,8 @@ from app.schemas import (
     QuizSessionResponse,
     StudentQuizAnswer,
     StudentQuizChoiceResponse,
+    StudentQuizHistoryAnswer,
+    StudentQuizHistoryItem,
     StudentQuizJoinResponse,
     StudentQuizNavigation,
     StudentQuizQuestionResponse,
@@ -148,23 +157,49 @@ def points_for_drawn_questions(
     question_ids: list[int],
     session: DbSession,
 ) -> dict[int, float]:
-    difficulties = dict(
+    return dict(
         session.execute(
-            select(Question.id, Question.difficulty).where(
-                Question.id.in_(question_ids)
-            )
+            select(Question.id, Question.points).where(Question.id.in_(question_ids))
         ).all()
     )
-    counts = difficulty_counts(quiz)
-    totals = difficulty_points(quiz)
-    per_question = {
-        difficulty: totals[difficulty] / count if count else 0
-        for difficulty, count in counts.items()
-    }
-    return {
-        question_id: per_question[difficulties[question_id]]
-        for question_id in question_ids
-    }
+
+
+POINT_TARGET_SHORTFALL_TOLERANCE = 0.75
+MAX_QUIZ_BONUS_POINTS = 2.0
+
+
+def adjust_last_question_for_points(
+    selected: list[Question],
+    candidates: list[Question],
+    target: float,
+) -> list[Question]:
+    if not selected or target <= 0:
+        return selected
+    total = sum(question.points for question in selected)
+    minimum = target - POINT_TARGET_SHORTFALL_TOLERANCE
+    maximum = target + MAX_QUIZ_BONUS_POINTS
+    if minimum <= total <= maximum:
+        return selected
+    fixed_total = total - selected[-1].points
+    fixed_ids = {question.id for question in selected[:-1]}
+    replacements = [question for question in candidates if question.id not in fixed_ids]
+    if not replacements:
+        return selected
+    valid_replacements = [
+        question
+        for question in replacements
+        if minimum <= fixed_total + question.points <= maximum
+    ]
+    if not valid_replacements:
+        raise ValueError("Aucun remplacement ne respecte la limite de points")
+    replacement = min(
+        valid_replacements,
+        key=lambda question: (
+            abs(target - (fixed_total + question.points)),
+            randomizer.random(),
+        ),
+    )
+    return [*selected[:-1], replacement]
 
 
 def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Quiz:
@@ -251,21 +286,76 @@ def difficulty_counts_for_banks(
 def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
     bank_ids = quiz_bank_ids(quiz.id, session)
     requested = difficulty_counts_for_banks(quiz, bank_ids, session)
-    selected_ids: list[int] = []
-    for difficulty, count in requested.items():
-        if count == 0:
-            continue
-        candidates = list(
+    candidates_by_difficulty = {
+        difficulty: list(
             session.scalars(
-                select(Question.id).where(
+                select(Question).where(
                     Question.question_bank_id.in_(bank_ids),
                     Question.difficulty == difficulty,
                 )
             )
         )
-        selected_ids.extend(randomizer.sample(candidates, count))
+        for difficulty, count in requested.items()
+        if count > 0
+    }
+    target = sum(difficulty_points(quiz).values())
+    selected: list[Question] = []
+    for _ in range(100):
+        selected = []
+        for difficulty, count in requested.items():
+            if count > 0:
+                selected.extend(
+                    randomizer.sample(candidates_by_difficulty[difficulty], count)
+                )
+        if target <= 0:
+            break
+        last_difficulty = selected[-1].difficulty
+        try:
+            selected = adjust_last_question_for_points(
+                selected,
+                candidates_by_difficulty[last_difficulty],
+                target,
+            )
+            break
+        except ValueError:
+            continue
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Les questions disponibles ne permettent pas de respecter "
+                "la limite totale de points"
+            ),
+        )
+    selected_ids = [question.id for question in selected]
     randomizer.shuffle(selected_ids)
     return selected_ids
+
+
+def draw_unique_question_ids(
+    quiz: Quiz,
+    session: DbSession,
+    used_draws: set[tuple[int, ...]],
+) -> list[int]:
+    if used_draws:
+        bank_ids = quiz_bank_ids(quiz.id, session)
+        requested = difficulty_counts_for_banks(quiz, bank_ids, session)
+        available = available_difficulty_counts(bank_ids, session)
+        possible_combination_count = 1
+        for difficulty, count in requested.items():
+            possible_combination_count *= comb(available.get(difficulty, 0), count)
+        if len(used_draws) >= possible_combination_count:
+            return draw_question_ids(quiz, session)
+
+    for _ in range(200):
+        question_ids = draw_question_ids(quiz, session)
+        signature = tuple(sorted(question_ids))
+        if signature not in used_draws:
+            used_draws.add(signature)
+            return question_ids
+    # If the banks contain only one possible combination, every student still
+    # receives an independent draw even though the resulting sets must match.
+    return draw_question_ids(quiz, session)
 
 
 def load_question_responses(
@@ -1014,6 +1104,10 @@ def generate_join_code(session: DbSession) -> str:
         if (
             session.scalar(select(QuizSession.id).where(QuizSession.join_code == code))
             is None
+            and session.scalar(
+                select(MakeupSession.id).where(MakeupSession.join_code == code)
+            )
+            is None
         ):
             return code
     raise HTTPException(
@@ -1080,7 +1174,7 @@ def create_quiz(
         question_count=payload.question_count,
         duration_seconds=payload.duration_seconds,
         allow_previous_questions=payload.allow_previous_questions,
-        same_questions_for_all=payload.same_questions_for_all,
+        same_questions_for_all=False,
         easy_question_count=payload.easy_question_count,
         medium_question_count=payload.medium_question_count,
         hard_question_count=payload.hard_question_count,
@@ -1357,6 +1451,105 @@ def list_participant_answers(
         )
         for answer, question in rows
     ]
+
+
+@router.get(
+    "/student/history",
+    response_model=list[StudentQuizHistoryItem],
+)
+def list_student_quiz_history(
+    student: Annotated[StudentAccount, Depends(current_student)],
+    session: DbSession,
+) -> list[StudentQuizHistoryItem]:
+    membership_id = session.scalar(
+        select(Student.id).where(Student.account_id == student.id)
+    )
+    if membership_id is None:
+        return []
+    rows = list(
+        session.execute(
+            select(QuizSession, QuizParticipant)
+            .join(
+                QuizParticipant,
+                QuizParticipant.session_id == QuizSession.id,
+            )
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                QuizParticipant.student_id == membership_id,
+                QuizSession.status == "finished",
+                QuizSession.started_at.is_not(None),
+                Quiz.mode == "exam",
+            )
+            .order_by(QuizSession.started_at.desc(), QuizSession.id.desc())
+        )
+    )
+    history: list[StudentQuizHistoryItem] = []
+    for quiz_session, participant in rows:
+        question_ids = session_question_ids(quiz_session, session, participant)
+        questions_by_id = {
+            question.id: question
+            for question in session.scalars(
+                select(Question).where(Question.id.in_(question_ids))
+            )
+        }
+        answers_by_question = {
+            answer.question_id: answer
+            for answer in session.scalars(
+                select(QuizAnswer).where(
+                    QuizAnswer.session_id == quiz_session.id,
+                    QuizAnswer.participant_id == participant.id,
+                )
+            )
+        }
+        choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
+        if question_ids:
+            for choice in session.scalars(
+                select(QuestionChoice)
+                .where(QuestionChoice.question_id.in_(question_ids))
+                .order_by(QuestionChoice.position, QuestionChoice.id)
+            ):
+                choices_by_question[choice.question_id].append(choice)
+        answers = []
+        for position, question_id in enumerate(question_ids):
+            question = questions_by_id.get(question_id)
+            if question is None:
+                continue
+            question_choices = choices_by_question[question.id]
+            answer = answers_by_question.get(question.id)
+            if answer is not None:
+                review = answer_review(
+                    answer,
+                    question,
+                    position,
+                    question_choices,
+                    0,
+                )
+                submitted_answers = review.submitted_answers
+            else:
+                submitted_answers = []
+            answers.append(
+                StudentQuizHistoryAnswer(
+                    question_id=question.id,
+                    position=position + 1,
+                    prompt=question.prompt,
+                    difficulty=question.difficulty,
+                    answer_mode=question.answer_mode,
+                    submitted_answers=submitted_answers,
+                    expected_answers=[
+                        choice.label for choice in question_choices if choice.is_correct
+                    ],
+                )
+            )
+        history.append(
+            StudentQuizHistoryItem(
+                session_id=quiz_session.id,
+                quiz_title=quiz_session.quiz_title or "Quiz",
+                class_name=quiz_session.class_name,
+                started_at=quiz_session.started_at,
+                answers=answers,
+            )
+        )
+    return history
 
 
 @router.post(
@@ -1775,6 +1968,367 @@ def start_training_quiz(
     )
 
 
+def makeup_session_response(
+    makeup: MakeupSession, session: DbSession
+) -> MakeupSessionResponse:
+    quizzes = list(
+        session.scalars(
+            select(Quiz)
+            .join(MakeupSessionQuiz, MakeupSessionQuiz.quiz_id == Quiz.id)
+            .where(MakeupSessionQuiz.session_id == makeup.id)
+            .order_by(Quiz.title, Quiz.id)
+        )
+    )
+    participant_count = session.scalar(
+        select(func.count(QuizParticipant.id))
+        .join(QuizSession, QuizSession.id == QuizParticipant.session_id)
+        .where(QuizSession.makeup_session_id == makeup.id)
+    )
+    return MakeupSessionResponse(
+        id=makeup.id,
+        class_id=makeup.class_id,
+        class_name=makeup.class_name,
+        join_code=makeup.join_code,
+        status=makeup.status,
+        quizzes=[
+            MakeupQuizOption(
+                id=quiz.id,
+                title=quiz.title,
+                duration_seconds=quiz.duration_seconds,
+            )
+            for quiz in quizzes
+        ],
+        participant_count=participant_count or 0,
+        created_at=makeup.created_at,
+    )
+
+
+def owned_makeup_session(
+    session_id: int, professor: ProfessorUser, session: DbSession
+) -> MakeupSession:
+    makeup = session.scalar(
+        select(MakeupSession).where(
+            MakeupSession.id == session_id,
+            MakeupSession.owner_id == professor.id,
+        )
+    )
+    if makeup is None:
+        raise HTTPException(status_code=404, detail="Session de rattrapage introuvable")
+    return makeup
+
+
+@router.get("/makeup/sessions", response_model=list[MakeupSessionResponse])
+def list_makeup_sessions(
+    professor: ProfessorUser, session: DbSession
+) -> list[MakeupSessionResponse]:
+    makeups = list(
+        session.scalars(
+            select(MakeupSession)
+            .where(MakeupSession.owner_id == professor.id)
+            .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
+        )
+    )
+    return [makeup_session_response(item, session) for item in makeups]
+
+
+@router.post(
+    "/makeup/sessions",
+    response_model=MakeupSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_makeup_session(
+    payload: MakeupSessionCreate,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> MakeupSessionResponse:
+    student_class = session.scalar(
+        select(StudentClass).where(
+            StudentClass.id == payload.class_id,
+            StudentClass.owner_id == professor.id,
+        )
+    )
+    quiz_ids = set(payload.quiz_ids)
+    quizzes = list(
+        session.scalars(
+            select(Quiz).where(
+                Quiz.id.in_(quiz_ids),
+                Quiz.owner_id == professor.id,
+                Quiz.mode == "exam",
+            )
+        )
+    )
+    if student_class is None or len(quizzes) != len(quiz_ids):
+        raise HTTPException(status_code=422, detail="Classe ou quiz invalide")
+    makeup = MakeupSession(
+        owner_id=professor.id,
+        class_id=student_class.id,
+        class_name=student_class.name,
+        join_code=generate_join_code(session),
+        status="waiting",
+    )
+    session.add(makeup)
+    session.flush()
+    session.add_all(
+        MakeupSessionQuiz(session_id=makeup.id, quiz_id=quiz_id) for quiz_id in quiz_ids
+    )
+    session.commit()
+    return makeup_session_response(makeup, session)
+
+
+@router.post(
+    "/makeup/sessions/{session_id}/{action}",
+    response_model=MakeupSessionResponse,
+)
+def control_makeup_session(
+    session_id: int,
+    action: str,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> MakeupSessionResponse:
+    makeup = owned_makeup_session(session_id, professor, session)
+    allowed = {
+        "start": ("waiting", "in_progress"),
+        "pause": ("in_progress", "paused"),
+        "resume": ("paused", "in_progress"),
+        "finish": ("in_progress", "finished"),
+        "cancel": ("waiting", "cancelled"),
+    }
+    if action not in allowed:
+        raise HTTPException(status_code=404)
+    expected, target = allowed[action]
+    if makeup.status != expected:
+        raise HTTPException(
+            status_code=409, detail="Action impossible pour cette session"
+        )
+    children = list(
+        session.scalars(
+            select(QuizSession).where(QuizSession.makeup_session_id == makeup.id)
+        )
+    )
+    if action == "start" and not children:
+        raise HTTPException(
+            status_code=409,
+            detail="Au moins un élève doit choisir un quiz avant le démarrage",
+        )
+    now = datetime.now(UTC)
+    for child in children:
+        child.status = target
+        if action == "start":
+            child.started_at = now
+            for participant in session.scalars(
+                select(QuizParticipant).where(QuizParticipant.session_id == child.id)
+            ):
+                participant.current_position = 0
+        elif action == "pause":
+            child.paused_at = now
+        elif action == "resume" and child.paused_at is not None:
+            paused_at = child.paused_at
+            if paused_at.tzinfo is None:
+                paused_at = paused_at.replace(tzinfo=UTC)
+            child.paused_duration_seconds += ceil(
+                max(0, (now - paused_at).total_seconds())
+            )
+            child.paused_at = None
+        elif action == "finish":
+            quiz = session.get(Quiz, child.quiz_id)
+            if quiz is not None:
+                compute_final_scores(child, session)
+            for participant in session.scalars(
+                select(QuizParticipant).where(QuizParticipant.session_id == child.id)
+            ):
+                participant.current_position = None
+    makeup.status = target
+    session.commit()
+    return makeup_session_response(makeup, session)
+
+
+@router.post(
+    "/makeup/join",
+    response_model=MakeupSessionJoinResponse,
+)
+def join_makeup_session(
+    payload: QuizJoin,
+    account: Annotated[StudentAccount, Depends(current_student)],
+    session: DbSession,
+) -> MakeupSessionJoinResponse:
+    makeup = session.scalar(
+        select(MakeupSession).where(
+            MakeupSession.join_code == payload.join_code,
+            MakeupSession.status == "waiting",
+        )
+    )
+    if makeup is None:
+        raise HTTPException(
+            status_code=403, detail="Impossible de rejoindre ce rattrapage"
+        )
+    membership = session.scalar(
+        select(Student).where(
+            Student.class_id == makeup.class_id,
+            Student.account_id == account.id,
+        )
+    )
+    if membership is None:
+        raise HTTPException(
+            status_code=403, detail="Impossible de rejoindre ce rattrapage"
+        )
+    eligible = list(
+        session.scalars(
+            select(Quiz)
+            .join(MakeupSessionQuiz, MakeupSessionQuiz.quiz_id == Quiz.id)
+            .where(
+                MakeupSessionQuiz.session_id == makeup.id,
+                Quiz.id.in_(
+                    select(QuizSession.quiz_id)
+                    .join(
+                        QuizParticipant,
+                        QuizParticipant.session_id == QuizSession.id,
+                    )
+                    .where(
+                        QuizParticipant.student_id == membership.id,
+                        QuizSession.status == "finished",
+                    )
+                ),
+            )
+            .order_by(Quiz.title, Quiz.id)
+        )
+    )
+    return MakeupSessionJoinResponse(
+        join_code=makeup.join_code,
+        class_name=makeup.class_name,
+        status="waiting",
+        quizzes=[
+            MakeupQuizOption(
+                id=quiz.id,
+                title=quiz.title,
+                duration_seconds=quiz.duration_seconds,
+            )
+            for quiz in eligible
+        ],
+    )
+
+
+@router.post(
+    "/makeup/{join_code}/select",
+    response_model=StudentQuizJoinResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def select_makeup_quiz(
+    join_code: str,
+    payload: MakeupQuizSelection,
+    account: Annotated[StudentAccount, Depends(current_student)],
+    session: DbSession,
+) -> StudentQuizJoinResponse:
+    makeup = session.scalar(
+        select(MakeupSession).where(
+            MakeupSession.join_code == join_code.strip().upper(),
+            MakeupSession.status == "waiting",
+        )
+    )
+    if makeup is None:
+        raise HTTPException(
+            status_code=409, detail="Ce rattrapage n’accepte plus de choix"
+        )
+    membership = session.scalar(
+        select(Student).where(
+            Student.class_id == makeup.class_id,
+            Student.account_id == account.id,
+        )
+    )
+    quiz = session.scalar(
+        select(Quiz)
+        .join(MakeupSessionQuiz, MakeupSessionQuiz.quiz_id == Quiz.id)
+        .where(
+            MakeupSessionQuiz.session_id == makeup.id,
+            Quiz.id == payload.quiz_id,
+        )
+    )
+    passed = (
+        session.scalar(
+            select(QuizParticipant.id)
+            .join(QuizSession, QuizSession.id == QuizParticipant.session_id)
+            .where(
+                QuizParticipant.student_id == (membership.id if membership else -1),
+                QuizSession.quiz_id == payload.quiz_id,
+                QuizSession.status == "finished",
+            )
+            .limit(1)
+        )
+        is not None
+    )
+    existing = session.scalar(
+        select(QuizSession.id)
+        .join(QuizParticipant, QuizParticipant.session_id == QuizSession.id)
+        .where(
+            QuizSession.makeup_session_id == makeup.id,
+            QuizParticipant.student_id == (membership.id if membership else -1),
+        )
+    )
+    if membership is None or quiz is None or not passed or existing is not None:
+        raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
+    child = QuizSession(
+        quiz_id=quiz.id,
+        quiz_title=quiz.title,
+        source_language=quiz.source_language,
+        duration_seconds=quiz.duration_seconds,
+        allow_previous_questions=quiz.allow_previous_questions,
+        same_questions_for_all=False,
+        class_id=makeup.class_id,
+        class_name=makeup.class_name,
+        join_code=generate_join_code(session),
+        status="waiting",
+        makeup_session_id=makeup.id,
+    )
+    session.add(child)
+    session.flush()
+    existing_draw_rows = list(
+        session.execute(
+            select(
+                QuizSessionStudentQuestion.session_id,
+                QuizSessionStudentQuestion.question_id,
+            )
+            .join(
+                QuizSession,
+                QuizSession.id == QuizSessionStudentQuestion.session_id,
+            )
+            .where(
+                QuizSession.makeup_session_id == makeup.id,
+                QuizSession.quiz_id == quiz.id,
+            )
+        )
+    )
+    questions_by_session: dict[int, list[int]] = defaultdict(list)
+    for existing_session_id, question_id in existing_draw_rows:
+        questions_by_session[existing_session_id].append(question_id)
+    used_draws = {
+        tuple(sorted(question_ids)) for question_ids in questions_by_session.values()
+    }
+    question_ids = draw_unique_question_ids(quiz, session, used_draws)
+    points = points_for_drawn_questions(quiz, question_ids, session)
+    session.add_all(
+        QuizSessionStudentQuestion(
+            session_id=child.id,
+            student_id=membership.id,
+            student_identifier=membership.identifier,
+            question_id=question_id,
+            position=position,
+            points=points[question_id],
+        )
+        for position, question_id in enumerate(question_ids)
+    )
+    token = token_urlsafe(32)
+    participant = QuizParticipant(
+        session_id=child.id,
+        student_id=membership.id,
+        student_identifier=membership.identifier,
+        student_display_name=membership.display_name,
+        access_token_hash=participant_token_hash(token),
+    )
+    session.add(participant)
+    session.commit()
+    state = student_state_response(child, quiz, participant, session)
+    return StudentQuizJoinResponse(**state.model_dump(), participant_token=token)
+
+
 @router.get("/{quiz_id}/preview", response_model=list[QuestionResponse])
 def preview_quiz(
     quiz_id: int,
@@ -1826,7 +2380,7 @@ def update_quiz(
     quiz.question_count = payload.question_count
     quiz.duration_seconds = payload.duration_seconds
     quiz.allow_previous_questions = payload.allow_previous_questions
-    quiz.same_questions_for_all = payload.same_questions_for_all
+    quiz.same_questions_for_all = False
     quiz.easy_question_count = payload.easy_question_count
     quiz.medium_question_count = payload.medium_question_count
     quiz.hard_question_count = payload.hard_question_count
@@ -1879,7 +2433,7 @@ def launch_quiz(
             )
         )
     )
-    if not quiz.same_questions_for_all and not students:
+    if not students:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="La classe doit contenir au moins un élève",
@@ -1890,7 +2444,7 @@ def launch_quiz(
         source_language=quiz.source_language,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
-        same_questions_for_all=quiz.same_questions_for_all,
+        same_questions_for_all=False,
         class_id=student_class.id,
         class_name=student_class.name,
         join_code=generate_join_code(session),
@@ -1898,35 +2452,23 @@ def launch_quiz(
     )
     session.add(quiz_session)
     session.flush()
-    if quiz.same_questions_for_all:
-        question_ids = draw_question_ids(quiz, session)
+    assignments: list[QuizSessionStudentQuestion] = []
+    used_draws: set[tuple[int, ...]] = set()
+    for student in students:
+        question_ids = draw_unique_question_ids(quiz, session, used_draws)
         assigned_points = points_for_drawn_questions(quiz, question_ids, session)
-        session.add_all(
-            QuizSessionQuestion(
+        assignments.extend(
+            QuizSessionStudentQuestion(
                 session_id=quiz_session.id,
+                student_id=student.id,
+                student_identifier=student.identifier,
                 question_id=question_id,
                 position=position,
                 points=assigned_points[question_id],
             )
             for position, question_id in enumerate(question_ids)
         )
-    else:
-        assignments: list[QuizSessionStudentQuestion] = []
-        for student in students:
-            question_ids = draw_question_ids(quiz, session)
-            assigned_points = points_for_drawn_questions(quiz, question_ids, session)
-            assignments.extend(
-                QuizSessionStudentQuestion(
-                    session_id=quiz_session.id,
-                    student_id=student.id,
-                    student_identifier=student.identifier,
-                    question_id=question_id,
-                    position=position,
-                    points=assigned_points[question_id],
-                )
-                for position, question_id in enumerate(question_ids)
-            )
-        session.add_all(assignments)
+    session.add_all(assignments)
     session.commit()
     session.refresh(quiz_session)
     return session_response(quiz_session, quiz, session)

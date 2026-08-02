@@ -1,3 +1,6 @@
+import re
+import unicodedata
+from secrets import choice
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -16,12 +19,50 @@ from app.models import (
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import (
     StudentAccountCreate,
+    StudentAccountCreatedResponse,
     StudentAccountResponse,
     StudentAccountUpdate,
 )
 from app.security import hash_password
 
 router = APIRouter(prefix="/api/students", tags=["student accounts"])
+
+READABLE_CONSONANTS = "BCDFGHJKMNPRSTVWXYZ"
+READABLE_VOWELS = "AEU"
+
+
+def generated_student_password() -> str:
+    return "".join(
+        choice(READABLE_CONSONANTS if index % 2 == 0 else READABLE_VOWELS)
+        for index in range(8)
+    )
+
+
+def identifier_part(value: str) -> str:
+    ascii_value = (
+        unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    )
+    return re.sub(r"[^a-z0-9]+", ".", ascii_value.lower()).strip(".")
+
+
+def generated_student_identifier(
+    first_name: str, last_name: str, session: DbSession
+) -> str:
+    parts = [identifier_part(first_name), identifier_part(last_name)]
+    base = ".".join(part for part in parts if part) or "eleve"
+    base = base[:80].rstrip(".")
+    identifier = base
+    suffix = 2
+    while (
+        session.scalar(
+            select(StudentAccount.id).where(StudentAccount.identifier == identifier)
+        )
+        is not None
+    ):
+        suffix_text = str(suffix)
+        identifier = f"{base[: 79 - len(suffix_text)].rstrip('.')}.{suffix_text}"
+        suffix += 1
+    return identifier
 
 
 def account_response(
@@ -113,17 +154,21 @@ def list_student_accounts(
     return [account_response(account, session) for account in accounts]
 
 
-@router.post("", response_model=StudentAccountResponse, status_code=201)
+@router.post("", response_model=StudentAccountCreatedResponse, status_code=201)
 def create_student_account(
     payload: StudentAccountCreate,
     professor: ProfessorUser,
     session: DbSession,
-) -> StudentAccountResponse:
+) -> StudentAccountCreatedResponse:
+    identifier = generated_student_identifier(
+        payload.first_name, payload.last_name, session
+    )
+    password = generated_student_password()
     account = StudentAccount(
         owner_id=professor.id,
-        identifier=payload.identifier,
-        display_name=payload.display_name,
-        password_hash=hash_password(payload.password),
+        identifier=identifier,
+        display_name=f"{payload.first_name} {payload.last_name}",
+        password_hash=hash_password(password),
     )
     session.add(account)
     try:
@@ -135,7 +180,10 @@ def create_student_account(
             detail="Cet identifiant élève est déjà utilisé",
         ) from None
     session.refresh(account)
-    return account_response(account, session)
+    response = account_response(account, session)
+    return StudentAccountCreatedResponse(
+        **response.model_dump(), generated_password=password
+    )
 
 
 @router.post("/{account_id}/update", response_model=StudentAccountResponse)

@@ -1,5 +1,5 @@
 import { request } from "./client"
-import type { StudentAccount } from "./types"
+import type { StudentAccount, StudentQuizHistoryItem } from "./types"
 
 const TOKEN_KEY = "open-quiz-student-access-token"
 const STUDENT_SESSION_KEYS = [
@@ -51,6 +51,16 @@ export async function loginStudent(
 export function restoreStudent(token: string): Promise<StudentAccount> {
     return request<StudentAccount>(
         "/api/student-auth/me",
+        { headers: { Authorization: `Bearer ${token}` } },
+        false
+    )
+}
+
+export function getStudentQuizHistory(
+    token: string
+): Promise<StudentQuizHistoryItem[]> {
+    return request<StudentQuizHistoryItem[]>(
+        "/api/quizzes/student/history",
         { headers: { Authorization: `Bearer ${token}` } },
         false
     )

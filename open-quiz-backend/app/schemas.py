@@ -127,18 +127,12 @@ class StudentResponse(BaseModel):
 
 
 class StudentAccountCreate(BaseModel):
-    identifier: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
-    display_name: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=8, max_length=256)
+    first_name: str = Field(min_length=1, max_length=60)
+    last_name: str = Field(min_length=1, max_length=60)
 
-    @field_validator("identifier")
+    @field_validator("first_name", "last_name")
     @classmethod
-    def normalize_account_identifier(cls, value: str) -> str:
-        return value.strip().lower()
-
-    @field_validator("display_name")
-    @classmethod
-    def normalize_account_display_name(cls, value: str) -> str:
+    def normalize_account_name(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
             raise ValueError("Le nom ne peut pas être vide")
@@ -173,6 +167,10 @@ class StudentAccountResponse(BaseModel):
     class_id: int | None
     class_name: str | None
     created_at: datetime
+
+
+class StudentAccountCreatedResponse(StudentAccountResponse):
+    generated_password: str
 
 
 class StudentLoginRequest(BaseModel):
@@ -313,6 +311,7 @@ class QuestionChoiceCreate(BaseModel):
 
 class QuestionCreate(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
+    points: float = Field(default=1, gt=0, le=10000)
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool = True
@@ -385,6 +384,7 @@ class QuestionResponse(BaseModel):
     id: int
     question_bank_id: int
     prompt: str
+    points: float
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool
@@ -397,6 +397,7 @@ class QuestionResponse(BaseModel):
 
 
 class QuestionUpdate(QuestionCreate):
+    points: float | None = Field(default=None, gt=0, le=10000)
     remove_image: bool = False
 
 
@@ -427,7 +428,7 @@ class QuizCreate(BaseModel):
     question_bank_ids: list[int] = Field(min_length=1, max_length=100)
     duration_seconds: int = Field(default=1800, ge=60, le=28800)
     allow_previous_questions: bool = False
-    same_questions_for_all: bool = True
+    same_questions_for_all: bool = False
     easy_question_count: int = Field(ge=0, le=200)
     medium_question_count: int = Field(ge=0, le=200)
     hard_question_count: int = Field(ge=0, le=200)
@@ -453,6 +454,7 @@ class QuizCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_question_counts(self) -> QuizCreate:
+        self.same_questions_for_all = False
         if self.question_count < 1:
             raise ValueError("Le quiz doit contenir au moins une question")
         if self.question_count > 200:
@@ -503,6 +505,39 @@ class QuizResponse(BaseModel):
 
 class QuizLaunch(BaseModel):
     class_id: int = Field(gt=0)
+
+
+class MakeupSessionCreate(BaseModel):
+    class_id: int = Field(gt=0)
+    quiz_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+class MakeupQuizOption(BaseModel):
+    id: int
+    title: str
+    duration_seconds: int
+
+
+class MakeupSessionResponse(BaseModel):
+    id: int
+    class_id: int | None
+    class_name: str
+    join_code: str
+    status: Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
+    quizzes: list[MakeupQuizOption]
+    participant_count: int
+    created_at: datetime
+
+
+class MakeupSessionJoinResponse(BaseModel):
+    join_code: str
+    class_name: str
+    status: Literal["waiting"]
+    quizzes: list[MakeupQuizOption]
+
+
+class MakeupQuizSelection(BaseModel):
+    quiz_id: int = Field(gt=0)
 
 
 class QuizParticipantResponse(BaseModel):
@@ -614,6 +649,24 @@ class QuizAnswerReview(BaseModel):
     score: float
     max_score: float
     is_graded: bool
+
+
+class StudentQuizHistoryAnswer(BaseModel):
+    question_id: int
+    position: int
+    prompt: str
+    difficulty: Literal["easy", "medium", "hard"]
+    answer_mode: Literal["single", "multiple", "written"]
+    submitted_answers: list[str]
+    expected_answers: list[str]
+
+
+class StudentQuizHistoryItem(BaseModel):
+    session_id: int
+    quiz_title: str
+    class_name: str
+    started_at: datetime
+    answers: list[StudentQuizHistoryAnswer]
 
 
 class StudentQuizNavigation(BaseModel):

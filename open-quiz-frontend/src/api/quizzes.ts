@@ -1,5 +1,7 @@
 import { request, requestBlob, requestPage } from "./client"
 import type {
+    MakeupJoin,
+    MakeupSession,
     NewQuiz,
     Page,
     Question,
@@ -109,6 +111,61 @@ export function launchQuiz(
         method: "POST",
         body: JSON.stringify({ class_id: classId }),
     })
+}
+
+export function getMakeupSessions(): Promise<MakeupSession[]> {
+    return request<MakeupSession[]>("/api/quizzes/makeup/sessions")
+}
+
+export function createMakeupSession(
+    classId: number,
+    quizIds: number[]
+): Promise<MakeupSession> {
+    return request<MakeupSession>("/api/quizzes/makeup/sessions", {
+        method: "POST",
+        body: JSON.stringify({ class_id: classId, quiz_ids: quizIds }),
+    })
+}
+
+export function controlMakeupSession(
+    sessionId: number,
+    action: "start" | "pause" | "resume" | "finish" | "cancel"
+): Promise<MakeupSession> {
+    return request<MakeupSession>(
+        `/api/quizzes/makeup/sessions/${sessionId}/${action}`,
+        { method: "POST" }
+    )
+}
+
+export function joinMakeupSession(
+    joinCode: string,
+    studentToken: string
+): Promise<MakeupJoin> {
+    return request<MakeupJoin>(
+        "/api/quizzes/makeup/join",
+        {
+            method: "POST",
+            headers: { Authorization: `Bearer ${studentToken}` },
+            body: JSON.stringify({ join_code: joinCode }),
+        },
+        false
+    )
+}
+
+export function selectMakeupQuiz(
+    joinCode: string,
+    quizId: number,
+    studentToken: string
+): Promise<StudentQuizJoin> {
+    return request<StudentQuizJoin>(
+        `/api/quizzes/makeup/${encodeURIComponent(joinCode)}/select`,
+        {
+            method: "POST",
+            headers: { Authorization: `Bearer ${studentToken}` },
+            body: JSON.stringify({ quiz_id: quizId }),
+        },
+        false
+    )
 }
 
 export function getQuizSession(sessionId: number): Promise<QuizSession> {

@@ -151,6 +151,10 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             connection.execute(
                 text("ALTER TABLE questions ADD COLUMN response_language VARCHAR(30)")
             )
+        if "points" not in question_columns:
+            connection.execute(
+                text("ALTER TABLE questions ADD COLUMN points FLOAT NOT NULL DEFAULT 1")
+            )
         quiz_columns = {
             column["name"] for column in inspect(connection).get_columns("quizzes")
         }
@@ -165,6 +169,10 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             column["name"]
             for column in inspect(connection).get_columns("quiz_sessions")
         }
+        if "makeup_session_id" not in quiz_session_columns:
+            connection.execute(
+                text("ALTER TABLE quiz_sessions ADD COLUMN makeup_session_id INTEGER")
+            )
         if "duration_seconds" not in quiz_columns:
             connection.execute(
                 text(
@@ -186,6 +194,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "same_questions_for_all BOOLEAN NOT NULL DEFAULT TRUE"
                 )
             )
+        connection.execute(text("UPDATE quizzes SET same_questions_for_all = FALSE"))
         if "source_language" not in quiz_columns:
             connection.execute(
                 text(

@@ -25,6 +25,7 @@ from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
     ProblemReport,
+    Question,
     Quiz,
     QuizParticipant,
     QuizSession,
@@ -34,7 +35,7 @@ from app.models import (
 )
 from app.rate_limit import LoginRateLimiter
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
-from app.routers.quizzes import safe_spreadsheet_cell
+from app.routers.quizzes import adjust_last_question_for_points, safe_spreadsheet_cell
 from app.schemas import QuestionBatchImport, StudentQuizAnswer
 from app.security import refresh_request_proof
 from main import create_app
@@ -225,6 +226,37 @@ def test_question_batch_import_has_a_fixed_question_limit() -> None:
 )
 def test_csv_cells_neutralize_spreadsheet_formulas(value: str) -> None:
     assert safe_spreadsheet_cell(value) == f"'{value}"
+
+
+def test_question_draw_keeps_an_overshoot_within_point_tolerance() -> None:
+    selected = [Question(id=1, points=2), Question(id=2, points=3.5)]
+    candidates = [*selected, Question(id=3, points=3)]
+
+    adjusted = adjust_last_question_for_points(selected, candidates, target=5)
+
+    assert [question.id for question in adjusted] == [1, 2]
+
+
+def test_question_draw_replaces_the_last_question_to_reach_point_tolerance() -> None:
+    selected = [Question(id=1, points=2), Question(id=2, points=1)]
+    candidates = [*selected, Question(id=3, points=2.5)]
+
+    adjusted = adjust_last_question_for_points(selected, candidates, target=5)
+
+    assert [question.id for question in adjusted] == [1, 3]
+    assert sum(question.points for question in adjusted) >= 5 - 0.75
+
+
+def test_question_draw_never_exceeds_two_bonus_points() -> None:
+    selected = [Question(id=1, points=3), Question(id=2, points=5)]
+    candidates = [*selected, Question(id=3, points=4)]
+
+    adjusted = adjust_last_question_for_points(selected, candidates, target=5)
+
+    assert [question.id for question in adjusted] == [1, 3]
+    assert sum(question.points for question in adjusted) == 7
+    assert selected[0].points == 3
+    assert selected[1].points == 5
 
 
 def test_login_rate_limit_buckets_use_a_secret_key() -> None:
@@ -468,22 +500,24 @@ def test_professor_manages_student_accounts_and_class_assignments(
             "/api/students",
             headers=teacher_headers,
             json={
-                "identifier": "lea.dupont",
-                "display_name": "Léa Dupont",
-                "password": "student-password",
+                "first_name": "Léa",
+                "last_name": "Dupont",
             },
         )
         assert created.status_code == 201
         account = created.json()
         assert account["class_id"] is None
         assert "password" not in account
+        assert account["identifier"] == "lea.dupont"
+        assert len(account["generated_password"]) == 8
+        assert account["generated_password"].isalpha()
+        assert account["generated_password"].isupper()
         inactive_account = client.post(
             "/api/students",
             headers=teacher_headers,
             json={
-                "identifier": "inactive.student",
-                "display_name": "Inactive Student",
-                "password": "student-password",
+                "first_name": "Inactive",
+                "last_name": "Student",
             },
         ).json()
         assert (
@@ -501,7 +535,10 @@ def test_professor_manages_student_accounts_and_class_assignments(
 
         logged_in = client.post(
             "/api/student-auth/login",
-            json={"identifier": "LEA.DUPONT", "password": "student-password"},
+            json={
+                "identifier": "LEA.DUPONT",
+                "password": account["generated_password"],
+            },
         )
         assert logged_in.status_code == 200
         student_headers = {
@@ -604,9 +641,8 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             "/api/students",
             headers=teacher_headers,
             json={
-                "identifier": "training.student",
-                "display_name": "Training Student",
-                "password": "student-password",
+                "first_name": "Training",
+                "last_name": "Student",
             },
         ).json()
         assert (
@@ -628,6 +664,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                 "payload": json.dumps(
                     {
                         "prompt": "Two plus two?",
+                        "points": 7.5,
                         "difficulty": "easy",
                         "answer_mode": "single",
                         "answer_mode_disclosed": True,
@@ -701,9 +738,8 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             "/api/students",
             headers=teacher_headers,
             json={
-                "identifier": "other.class.student",
-                "display_name": "Other Class Student",
-                "password": "student-password",
+                "first_name": "Other",
+                "last_name": "Class Student",
             },
         ).json()
         assert (
@@ -717,7 +753,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             "/api/student-auth/login",
             json={
                 "identifier": "other.class.student",
-                "password": "student-password",
+                "password": other_class_account["generated_password"],
             },
         ).json()
         other_student_headers = {
@@ -739,7 +775,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             "/api/student-auth/login",
             json={
                 "identifier": "training.student",
-                "password": "student-password",
+                "password": account["generated_password"],
             },
         ).json()
         student_headers = {"Authorization": f"Bearer {login['access_token']}"}
@@ -764,9 +800,8 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             "/api/students",
             headers=teacher_headers,
             json={
-                "identifier": "other.student",
-                "display_name": "Other Student",
-                "password": "student-password",
+                "first_name": "Other",
+                "last_name": "Student",
             },
         ).json()
         assert (
@@ -857,6 +892,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                 "payload": json.dumps(
                     {
                         "prompt": "Three plus three?",
+                        "points": 7.5,
                         "difficulty": "easy",
                         "answer_mode": "single",
                         "choices": [
@@ -893,6 +929,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                 "payload": json.dumps(
                     {
                         "prompt": "Four plus four?",
+                        "points": 7.5,
                         "difficulty": "easy",
                         "answer_mode": "single",
                         "choices": [
@@ -953,9 +990,9 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                     (launched_exam.json()["id"], account["identifier"]),
                 )
             ]
-        assert assigned == [(7.5,), (7.5,)]
-        assert set(student_question_ids) == common_question_ids
-        assert len(student_question_ids) == len(common_question_ids) == 2
+        assert assigned == []
+        assert common_question_ids == set()
+        assert len(student_question_ids) == 2
         assert (
             client.post(
                 f"/api/quizzes/sessions/{launched_exam.json()['id']}/start",
@@ -1159,9 +1196,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "/api/students",
             headers=teacher_headers,
             json={
-                "identifier": "martin.g",
-                "display_name": "Martin Giraud",
-                "password": "martin-student-password",
+                "first_name": "Martin",
+                "last_name": "Giraud",
             },
         ).json()
         assigned_class = client.post(
@@ -1175,8 +1211,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         exam_student_login = client.post(
             "/api/student-auth/login",
             json={
-                "identifier": "martin.g",
-                "password": "martin-student-password",
+                "identifier": "martin.giraud",
+                "password": student_account["generated_password"],
             },
         )
         assert exam_student_login.status_code == 200
@@ -1567,7 +1603,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert quiz["hard_points"] == 9
         assert quiz["duration_seconds"] == 1800
         assert quiz["allow_previous_questions"] is False
-        assert quiz["same_questions_for_all"] is True
+        assert quiz["same_questions_for_all"] is False
         assert len(quiz["question_banks"]) == 1
         assert quiz["question_banks"][0]["easy_question_count"] == 1
         assert quiz["question_banks"][0]["medium_question_count"] == 1
@@ -1618,9 +1654,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "/api/students",
             headers=teacher_headers,
             json={
-                "identifier": "late.student",
-                "display_name": "Late Student",
-                "password": "late-student-password",
+                "first_name": "Late",
+                "last_name": "Student",
             },
         )
         assert late_student.status_code == 201
@@ -1636,7 +1671,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "/api/student-auth/login",
             json={
                 "identifier": "late.student",
-                "password": "late-student-password",
+                "password": late_student.json()["generated_password"],
             },
         )
         late_account_headers = {
@@ -1728,7 +1763,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=exam_account_headers,
             json={
                 "join_code": quiz_session["join_code"],
-                "student_identifier": "martin.g",
+                "student_identifier": "martin.giraud",
             },
         )
         assert legacy_join_payload.status_code == 422
@@ -2036,6 +2071,20 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 assert resubmitted.json()["question_number"] == 3
 
         assert teacher_state["status"] == "finished"
+        student_history = client.get(
+            "/api/quizzes/student/history",
+            headers=exam_account_headers,
+        )
+        assert student_history.status_code == 200
+        assert len(student_history.json()) == 1
+        history_item = student_history.json()[0]
+        assert history_item["session_id"] == quiz_session["id"]
+        assert history_item["quiz_title"] == quiz["title"]
+        assert len(history_item["answers"]) == 3
+        assert all(
+            {"score", "max_score", "is_graded"}.isdisjoint(answer)
+            for answer in history_item["answers"]
+        )
         assert teacher_state["participants"][0]["score"] > 0
         assert (
             client.get(
@@ -2193,6 +2242,63 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         ).json()
         assert refreshed_results == graded_results
 
+        makeup_created = client.post(
+            "/api/quizzes/makeup/sessions",
+            headers=teacher_headers,
+            json={
+                "class_id": student_class["id"],
+                "quiz_ids": [quiz["id"]],
+            },
+        )
+        assert makeup_created.status_code == 201
+        makeup = makeup_created.json()
+        assert (
+            makeup["quizzes"][0]["duration_seconds"]
+            == edited_quiz.json()["duration_seconds"]
+        )
+        makeup_joined = client.post(
+            "/api/quizzes/makeup/join",
+            headers=exam_account_headers,
+            json={"join_code": makeup["join_code"]},
+        )
+        assert makeup_joined.status_code == 200
+        assert [item["id"] for item in makeup_joined.json()["quizzes"]] == [quiz["id"]]
+        makeup_selected = client.post(
+            f"/api/quizzes/makeup/{makeup['join_code']}/select",
+            headers=exam_account_headers,
+            json={"quiz_id": quiz["id"]},
+        )
+        assert makeup_selected.status_code == 201
+        assert makeup_selected.json()["status"] == "waiting"
+        assert makeup_selected.json()["quiz_title"] == edited_quiz.json()["title"]
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/{makeup['join_code']}/select",
+                headers=exam_account_headers,
+                json={"quiz_id": quiz["id"]},
+            ).status_code
+            == 409
+        )
+        makeup_started = client.post(
+            f"/api/quizzes/makeup/sessions/{makeup['id']}/start",
+            headers=teacher_headers,
+        )
+        assert makeup_started.status_code == 200
+        assert makeup_started.json()["status"] == "in_progress"
+        makeup_state = client.get(
+            f"/api/quizzes/student/sessions/{makeup_selected.json()['join_code']}",
+            headers={"X-Quiz-Token": makeup_selected.json()["participant_token"]},
+        )
+        assert makeup_state.status_code == 200
+        assert makeup_state.json()["status"] == "in_progress"
+        assert makeup_state.json()["question"] is not None
+        makeup_finished = client.post(
+            f"/api/quizzes/makeup/sessions/{makeup['id']}/finish",
+            headers=teacher_headers,
+        )
+        assert makeup_finished.status_code == 200
+        assert makeup_finished.json()["status"] == "finished"
+
         cancelled_launch = client.post(
             f"/api/quizzes/{quiz['id']}/launch",
             headers=teacher_headers,
@@ -2290,9 +2396,9 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             == []
         )
         completed_class = client.get("/api/classes", headers=teacher_headers).json()[0]
-        assert completed_class["completed_quiz_count"] == 1
-        assert completed_class["latest_quiz_title"] == quiz["title"]
-        assert completed_class["latest_quiz_at"] == teacher_state["started_at"]
+        assert completed_class["completed_quiz_count"] == 2
+        assert completed_class["latest_quiz_title"] == edited_quiz.json()["title"]
+        assert completed_class["latest_quiz_at"] is not None
         assert (
             client.get(student_state_url, headers=student_headers).json()["status"]
             == "finished"
