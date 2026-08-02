@@ -2,12 +2,13 @@
 
 Plateforme libre et auto-hébergeable pour organiser des quiz en classe.
 
-Les enseignants créent leurs classes et leurs questions, lancent des sessions
-chronométrées, puis corrigent les réponses. Les élèves participent avec un code
-et leur identifiant de classe, sans créer de compte.
+Les enseignants créent les comptes élèves, leurs classes et leurs questions,
+lancent des examens chronométrés et publient des entraînements libres. Les
+élèves se connectent à leur tableau de bord pour rejoindre un examen ou démarrer
+un entraînement.
 
 > [!IMPORTANT]
-> **Préversion 0.1.0.** Le projet est fonctionnel et testé, mais son schéma de
+> **Préversion 0.2.0.** Le projet est fonctionnel et testé, mais son schéma de
 > données et ses interfaces peuvent évoluer avant la version 1.0. Sauvegardez
 > vos données avant chaque mise à jour.
 
