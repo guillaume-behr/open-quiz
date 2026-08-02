@@ -262,14 +262,38 @@ export function StudentsPanel({
                             {students.map((student) => (
                                 <article
                                     key={student.id}
-                                    className="flex items-center justify-between gap-3 rounded-xl border p-4"
+                                    className="relative flex items-start gap-3 rounded-xl border bg-background p-4"
                                 >
-                                    <div className="min-w-0">
-                                        <p className="truncate font-semibold">
-                                            {student.display_name}
-                                        </p>
-                                        <p className="text-sm text-muted-foreground">
+                                    <Button
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        className="absolute top-4 right-12"
+                                        aria-label={t("edit-student")}
+                                        onClick={() => edit(student)}
+                                    >
+                                        <Pencil />
+                                    </Button>
+                                    <Button
+                                        size="icon-sm"
+                                        variant="destructive"
+                                        className="absolute top-4 right-4"
+                                        aria-label={t("delete-student")}
+                                        onClick={() => {
+                                            setDeleting(student)
+                                            setFormError(null)
+                                        }}
+                                    >
+                                        <Trash2 />
+                                    </Button>
+                                    <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                                        <UserRound className="size-5" />
+                                    </div>
+                                    <div className="min-w-0 flex-1 pr-20">
+                                        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                             {student.identifier}
+                                        </p>
+                                        <p className="mt-1 font-semibold break-words">
+                                            {student.display_name}
                                         </p>
                                         <p className="mt-1 text-xs text-muted-foreground">
                                             {student.class_name ??
@@ -277,27 +301,6 @@ export function StudentsPanel({
                                             {!student.is_active &&
                                                 ` · ${t("student-disabled")}`}
                                         </p>
-                                    </div>
-                                    <div className="flex gap-1">
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            aria-label={t("edit-student")}
-                                            onClick={() => edit(student)}
-                                        >
-                                            <Pencil />
-                                        </Button>
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            aria-label={t("delete-student")}
-                                            onClick={() => {
-                                                setDeleting(student)
-                                                setFormError(null)
-                                            }}
-                                        >
-                                            <Trash2 />
-                                        </Button>
                                     </div>
                                 </article>
                             ))}

@@ -3,6 +3,7 @@ import { getAllQuestionBanks } from "@/api/question-banks"
 import {
     cancelQuizSession,
     createQuiz,
+    deleteQuiz,
     deleteQuizSession,
     getAllQuizzes,
     getActiveQuizSessions,
@@ -30,7 +31,11 @@ import {
     SessionActionDialog,
 } from "@/components/quizzes/quiz-secondary-dialogs"
 import { QuizzesList } from "@/components/quizzes/quizzes-list"
+import { Button } from "@/components/ui/button"
+import { Dialog } from "@/components/ui/dialog"
+import { FieldError } from "@/components/ui/field"
 import { type FormEvent, useEffect, useRef, useState } from "react"
+import { LoaderCircle, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 type QuizzesPanelProps = {
@@ -103,6 +108,9 @@ export function QuizzesPanel({
     >(null)
     const [quizFilter, setQuizFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
+    const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [deleteError, setDeleteError] = useState<string | null>(null)
     const sessionRequestVersion = useRef(0)
     const previewRequestVersion = useRef(0)
     const activeSessionId = activeSession?.id
@@ -466,6 +474,21 @@ export function QuizzesPanel({
         }
     }
 
+    async function handleDeleteQuiz(): Promise<void> {
+        if (!quizToDelete) return
+        setDeleteError(null)
+        setIsDeleting(true)
+        try {
+            await deleteQuiz(quizToDelete.id)
+            setQuizToDelete(null)
+            setReloadKey((k) => k + 1)
+        } catch {
+            setDeleteError(t("quiz-delete-error"))
+        } finally {
+            setIsDeleting(false)
+        }
+    }
+
     return (
         <div className="mt-6">
             <QuizzesList
@@ -494,6 +517,10 @@ export function QuizzesPanel({
                 onLaunch={(quiz) => {
                     setLaunchError(null)
                     setQuizToLaunch(quiz)
+                }}
+                onDelete={(quiz) => {
+                    setDeleteError(null)
+                    setQuizToDelete(quiz)
                 }}
                 onOpenSession={(quizSession) => {
                     setActiveSessionError(null)
@@ -582,6 +609,41 @@ export function QuizzesPanel({
                         : void handleSessionAction("cancel")
                 }
             />
+
+            <Dialog
+                open={quizToDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open && !isDeleting) setQuizToDelete(null)
+                }}
+                title={t("delete-quiz")}
+                description={t("delete-quiz-help", { title: quizToDelete?.title ?? "" })}
+                className="max-w-md"
+            >
+                {deleteError && (
+                    <FieldError className="mb-4">{deleteError}</FieldError>
+                )}
+                <div className="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        disabled={isDeleting}
+                        onClick={() => setQuizToDelete(null)}
+                    >
+                        {t("cancel")}
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        disabled={isDeleting}
+                        onClick={() => void handleDeleteQuiz()}
+                    >
+                        {isDeleting ? (
+                            <LoaderCircle className="animate-spin" />
+                        ) : (
+                            <Trash2 />
+                        )}
+                        {t("delete")}
+                    </Button>
+                </div>
+            </Dialog>
         </div>
     )
 }

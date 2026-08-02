@@ -164,7 +164,7 @@ def points_for_drawn_questions(
     )
 
 
-POINT_TARGET_SHORTFALL_TOLERANCE = 0.75
+POINT_TARGET_SHORTFALL_TOLERANCE = 0.0
 MAX_QUIZ_BONUS_POINTS = 2.0
 
 
@@ -1691,6 +1691,56 @@ def start_quiz_session(
         session.commit()
         session.refresh(quiz_session)
     return session_response(quiz_session, quiz, session)
+
+
+@router.delete(
+    "/{quiz_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_quiz(
+    quiz_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> None:
+    quiz = owned_quiz(quiz_id, professor, session)
+    active_session_id = session.scalar(
+        select(QuizSession.id)
+        .where(
+            QuizSession.quiz_id == quiz.id,
+            QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+        )
+        .limit(1)
+    )
+    if active_session_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un quiz avec une session active ne peut pas être supprimé",
+        )
+    session.execute(
+        delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz_id)
+    )
+    session.execute(
+        delete(TrainingQuizProfile).where(TrainingQuizProfile.quiz_id == quiz_id)
+    )
+    session.execute(
+        delete(MakeupSessionQuiz).where(MakeupSessionQuiz.quiz_id == quiz_id)
+    )
+    finished_session_ids = list(
+        session.scalars(
+            select(QuizSession.id).where(
+                QuizSession.quiz_id == quiz.id,
+                QuizSession.status.in_(["finished", "cancelled"]),
+            )
+        )
+    )
+    delete_quiz_session_records(finished_session_ids, session)
+    session.execute(delete(Quiz).where(Quiz.id == quiz_id))
+    session.commit()
+    audit_event(
+        "quiz.deleted",
+        professor_id=professor.id,
+        quiz_id=quiz_id,
+    )
 
 
 @router.post(

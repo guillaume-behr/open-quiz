@@ -10,6 +10,7 @@ import {
     LoaderCircle,
     Pencil,
     Play,
+    Trash2,
     UsersRound,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -30,6 +31,7 @@ type QuizzesListProps = {
     onEdit: (quiz: Quiz) => void
     onPreview: (quiz: Quiz) => void
     onLaunch: (quiz: Quiz) => void
+    onDelete: (quiz: Quiz) => void
     onOpenSession: (session: QuizSession) => void
     page: number
     totalPages: number
@@ -51,6 +53,7 @@ export function QuizzesList({
     onEdit,
     onPreview,
     onLaunch,
+    onDelete,
     onOpenSession,
     page,
     totalPages,
@@ -134,6 +137,7 @@ export function QuizzesList({
                                         onEdit={() => onEdit(quiz)}
                                         onPreview={() => onPreview(quiz)}
                                         onLaunch={() => onLaunch(quiz)}
+                                        onDelete={() => onDelete(quiz)}
                                         mode={mode}
                                     />
                                 ))}
@@ -223,17 +227,32 @@ function QuizCard({
     onEdit,
     onPreview,
     onLaunch,
+    onDelete,
 }: {
     mode: "exam" | "training"
     quiz: Quiz
     onEdit: () => void
     onPreview: () => void
     onLaunch: () => void
+    onDelete: () => void
 }) {
     const { t } = useTranslation()
     return (
-        <li className="flex h-full flex-col rounded-xl border bg-background p-4">
-            <div className="flex items-start justify-between gap-3">
+        <li className="relative flex h-full flex-col rounded-xl border bg-background p-4">
+            {mode === "exam" && (
+                <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="destructive"
+                    className="absolute top-4 right-4"
+                    aria-label={t("delete-quiz")}
+                    title={t("delete-quiz")}
+                    onClick={onDelete}
+                >
+                    <Trash2 />
+                </Button>
+            )}
+            <div className="flex items-start gap-3 pr-10">
                 <div className="min-w-0">
                     <h3 className="font-semibold break-words">{quiz.title}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -243,9 +262,6 @@ function QuizCard({
                         })}
                     </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                    {quiz.question_count}
-                </span>
             </div>
             <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted">
                 {difficulties.map((difficulty) => (
@@ -292,6 +308,12 @@ function QuizCard({
                     .join(" · ")}
             </p>
             <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                {mode === "exam" && (
+                    <Button type="button" size="sm" onClick={onLaunch}>
+                        <Play />
+                        {t("launch-quiz")}
+                    </Button>
+                )}
                 <Button
                     type="button"
                     size="sm"
@@ -310,12 +332,6 @@ function QuizCard({
                     <Eye />
                     {t("preview-quiz")}
                 </Button>
-                {mode === "exam" && (
-                    <Button type="button" size="sm" onClick={onLaunch}>
-                        <Play />
-                        {t("launch-quiz")}
-                    </Button>
-                )}
             </div>
         </li>
     )

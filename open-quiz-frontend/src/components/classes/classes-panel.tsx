@@ -276,62 +276,67 @@ export function ClassesPanel({
                             {classes.map((studentClass) => (
                                 <article
                                     key={studentClass.id}
-                                    className="rounded-xl border p-4"
+                                    className="relative rounded-xl border bg-background p-4"
                                 >
-                                    <div className="flex items-start justify-between gap-3">
-                                        <button
-                                            type="button"
-                                            className="min-w-0 rounded-lg text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                                            onClick={() =>
-                                                setManaged(studentClass)
-                                            }
-                                        >
-                                            <h3 className="truncate text-lg font-semibold">
-                                                {studentClass.name}
-                                            </h3>
-                                            <p className="text-sm text-muted-foreground">
-                                                {studentClass.grade_level} ·{" "}
-                                                {t("student-count", {
-                                                    count: studentClass.student_count,
-                                                })}
+                                    <Button
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        className="absolute top-4 right-12"
+                                        onClick={() => {
+                                            setEditing(studentClass)
+                                            setClassName(
+                                                studentClass.name
+                                            )
+                                            setGradeLevel(
+                                                studentClass.grade_level
+                                            )
+                                        }}
+                                        aria-label={t("edit-class")}
+                                    >
+                                        <Pencil />
+                                    </Button>
+                                    <Button
+                                        size="icon-sm"
+                                        variant="destructive"
+                                        className="absolute top-4 right-4"
+                                        onClick={() =>
+                                            setDeleting(studentClass)
+                                        }
+                                        aria-label={t("delete-class")}
+                                    >
+                                        <Trash2 />
+                                    </Button>
+                                    <div className="flex items-start gap-3 pr-20">
+                                        <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                                            <UsersRound className="size-5" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                                {studentClass.grade_level}
                                             </p>
-                                        </button>
-                                        <div className="flex gap-1">
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                onClick={() => {
-                                                    setEditing(studentClass)
-                                                    setClassName(
-                                                        studentClass.name
-                                                    )
-                                                    setGradeLevel(
-                                                        studentClass.grade_level
-                                                    )
-                                                }}
-                                                aria-label={t("edit-class")}
-                                            >
-                                                <Pencil />
-                                            </Button>
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                onClick={() =>
-                                                    setDeleting(studentClass)
-                                                }
-                                                aria-label={t("delete-class")}
-                                            >
-                                                <Trash2 />
-                                            </Button>
+                                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                                                <p className="font-semibold break-words">
+                                                    {studentClass.name}
+                                                </p>
+                                                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-primary">
+                                                    {t("student-count", {
+                                                        count: studentClass.student_count,
+                                                    })}
+                                                </span>
+                                            </div>
+                                            <div className="mt-3">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        setManaged(studentClass)
+                                                    }
+                                                >
+                                                    {t("manage-students")}
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
-                                    <Button
-                                        className="mt-4 w-full"
-                                        variant="outline"
-                                        onClick={() => setManaged(studentClass)}
-                                    >
-                                        {t("manage-students")}
-                                    </Button>
                                 </article>
                             ))}
                         </div>

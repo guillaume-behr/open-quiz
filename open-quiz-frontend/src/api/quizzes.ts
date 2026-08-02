@@ -225,6 +225,12 @@ export function deleteQuizSession(sessionId: number): Promise<void> {
     })
 }
 
+export function deleteQuiz(quizId: number): Promise<void> {
+    return request<void>(`/api/quizzes/${quizId}`, {
+        method: "DELETE",
+    })
+}
+
 export function startQuizSession(sessionId: number): Promise<QuizSession> {
     return request<QuizSession>(`/api/quizzes/sessions/${sessionId}/start`, {
         method: "POST",
