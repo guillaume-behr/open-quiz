@@ -12,10 +12,14 @@ un entraînement.
 > données et ses interfaces peuvent évoluer avant la version 1.0. Sauvegardez
 > vos données avant chaque mise à jour.
 
+Consultez le [journal des versions](CHANGELOG.md) pour les nouveautés et les
+changements incompatibles.
+
 ## 🧭 Sommaire
 
 - [Démarrage rapide](#démarrage-rapide)
 - [Fonctionnement](#fonctionnement)
+- [Routes de l’interface](#routes-de-linterface)
 - [Fonctionnalités](#fonctionnalités)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
@@ -59,30 +63,73 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Ouvrez `http://localhost:5173`. Le serveur Vite transmet automatiquement les
-requêtes `/api` au backend.
+Ouvrez `http://localhost:5173`. La racine redirige vers la connexion élève. Le
+serveur Vite transmet automatiquement les requêtes `/api` au backend.
+
+Pour la première configuration, utilisez directement l’espace adapté :
+
+- enseignant : `http://localhost:5173/teacher/login` ;
+- administrateur : `http://localhost:5173/admin/dashboard` ;
+- élève : `http://localhost:5173/student/login`.
 
 ## 🎯 Fonctionnement
 
 1. L’administrateur se connecte, configure TOTP et crée les comptes enseignants.
-2. L’enseignant configure TOTP, puis crée sa classe et ses élèves.
-3. Il prépare des banques de questions et compose un quiz.
-4. Il ouvre une salle d’attente et partage son code avec la classe.
-5. Les élèves rejoignent la session avec le code et leur identifiant.
-6. L’enseignant démarre le quiz, consulte les résultats, corrige les réponses
+2. L’enseignant configure TOTP, crée les comptes dans l’onglet **Élèves**, puis
+   les affecte depuis l’onglet **Classes**.
+3. Il alimente ses banques avec des questions faciles, moyennes ou difficiles.
+   Les banques définissent les bonnes réponses, mais ne portent aucun point.
+4. Il crée séparément un examen ou un entraînement en indiquant le nombre de
+   questions voulu pour chaque difficulté.
+5. Pour un examen, il attribue un total de points par difficulté, choisit si le
+   tirage doit être commun, sélectionne une classe et ouvre la salle d’attente.
+6. L’élève se connecte à son compte et saisit uniquement le code de l’examen.
+7. L’enseignant démarre la session, consulte les résultats, corrige les réponses
    rédactionnelles et peut exporter les notes au format CSV.
+
+Les questions sont tirées au lancement, jamais lors de la création du quiz. Un
+tirage commun utilise le même ensemble de questions et le même barème pour tous,
+mais l’ordre est mélangé et mémorisé séparément pour chaque élève. Un tirage
+individuel sélectionne un ensemble distinct pour chaque élève affecté à la
+classe.
+
+Un entraînement est disponible à tout moment dans le tableau de bord élève. Un
+nouveau tirage est effectué à chaque démarrage, sans points ni note, et la bonne
+réponse apparaît après chaque question.
 
 Si la langue d’un élève diffère de celle du quiz, il peut demander une
 traduction automatique ou conserver le texte original.
+
+## 🧭 Routes de l’interface
+
+| Espace | Route | Usage |
+| --- | --- | --- |
+| Élève | `/student/login` | Connexion par identifiant et mot de passe |
+| Élève | `/student/dashboard` | Accès aux examens et aux entraînements |
+| Élève | `/student/exam` | Participation à un examen avec son code |
+| Élève | `/student/training` | Exécution d’un entraînement libre |
+| Enseignant | `/teacher/login` | Connexion enseignant et validation TOTP |
+| Enseignant | `/teacher/dashboard` | Élèves, classes, quiz, banques et résultats |
+| Administrateur | `/admin/dashboard` | Gestion des comptes enseignants |
+
+La route `/` redirige vers `/student/login`. Les tableaux de bord protégés
+renvoient vers leur écran de connexion lorsque la session correspondante est
+absente ou expirée.
 
 ## ✨ Fonctionnalités
 
 ### Pour les enseignants
 
-- gestion des classes, élèves et niveaux, avec import et export JSON ;
+- création, modification, désactivation et suppression des comptes élèves ;
+- gestion séparée des classes et affectation d’un compte élève à une classe ;
 - banques de questions à choix unique, choix multiple ou réponse rédactionnelle ;
 - images privées, extraits de code et réponses attendues dans un langage donné ;
-- composition aléatoire par niveau de difficulté ;
+- quiz d’examen et quiz d’entraînement gérés dans deux onglets distincts ;
+- composition par quantité de questions faciles, moyennes et difficiles, avec
+  plafonnement selon la disponibilité des banques sélectionnées ;
+- barème d’examen défini par difficulté et réparti également entre les questions
+  tirées de cette difficulté ;
+- tirage effectué au lancement, commun ou individuel selon la configuration ;
 - sessions chronométrées avec pause, reprise et retour optionnel aux questions ;
 - notation automatique et correction manuelle des réponses rédactionnelles ;
 - export CSV des résultats d’une classe, pour un quiz précis ou pour tous ses
@@ -95,7 +142,10 @@ exploitables dans un tableur.
 
 ### Pour les élèves
 
-- participation sans compte ;
+- connexion avec un compte créé par l’enseignant ;
+- tableau de bord séparant l’entrée en examen des entraînements disponibles ;
+- entrée en examen avec le seul code de session après authentification ;
+- entraînements relançables librement, sans note et avec correction immédiate ;
 - interface claire ou sombre ;
 - français, anglais, allemand, espagnol, portugais, ukrainien, arabe et chinois
   simplifié ;
@@ -104,7 +154,8 @@ exploitables dans un tableur.
 
 ### Sécurité et hébergement
 
-- mots de passe Argon2 et authentification TOTP obligatoire ;
+- mots de passe Argon2 pour tous les comptes et TOTP obligatoire pour les
+  enseignants et administrateurs ;
 - jetons d’accès courts et cookies HttpOnly rotatifs ;
 - limites de débit sur les routes sensibles ;
 - déploiement Docker derrière Caddy avec SQLite persistant.
@@ -241,10 +292,11 @@ FastAPI (authentification, métier, limites de débit)
 SQLite en mode WAL (volume persistant)
 ```
 
-Le backend applique les autorisations, compose les quiz, calcule les notes et
-limite le débit. Le frontend conserve les jetons d’accès en mémoire. Les
-cookies de session rotatifs sont HttpOnly et les jetons élève restent dans
-`sessionStorage` le temps de l’onglet.
+Le backend applique les autorisations, effectue les tirages, fige le barème de
+chaque session, calcule les notes et limite le débit. Le frontend conserve les
+jetons d’accès enseignant en mémoire. Les cookies de session enseignant sont
+HttpOnly et rotatifs ; les jetons d’authentification et de participation élève
+restent dans `sessionStorage` le temps de l’onglet.
 
 ### Structure du dépôt
 
@@ -260,6 +312,7 @@ cookies de session rotatifs sont HttpOnly et les jetons élève restent dans
 │   ├── public/pyodide/      runtime Python hors ligne
 │   ├── scripts/             validations frontend
 │   └── src/                 API cliente, pages et composants React
+├── CHANGELOG.md             nouveautés et changements incompatibles
 ├── docker-compose.yml       déploiement autonome
 ├── update.ps1               mise à jour Windows
 └── update.sh                mise à jour Unix
@@ -286,6 +339,7 @@ pnpm lint
 pnpm format:check
 pnpm test
 pnpm typecheck
+pnpm test:e2e
 pnpm build
 pnpm audit --prod --audit-level low
 ```
@@ -338,6 +392,21 @@ La réponse attendue est `{"status":"ok"}`. Appliquez les mises à jour en
 avance rapide avec `update.ps1` sous Windows ou `sh ./update.sh` sous Unix.
 
 ## 💾 Exploitation et sauvegardes
+
+### Migration de 0.1.x vers 0.2.0
+
+Effectuez une sauvegarde de la base avant le premier démarrage en `0.2.0`. La
+migration SQLite est automatique, mais elle comporte volontairement des
+changements incompatibles avec l’ancien fonctionnement :
+
+- les anciens élèves dépourvus de compte sont supprimés ;
+- les répartitions de quiz en pourcentages sont converties en nombres de
+  questions par difficulté ;
+- les points autrefois portés par les propositions sont neutralisés ; le nouveau
+  barème est défini lors de la création ou de la modification d’un examen.
+
+Les nouvelles sessions utilisent des instantanés du tirage, de l’ordre et du
+barème afin qu’une modification ultérieure du quiz ne change pas leurs notes.
 
 - surveillez `/api/health`, l’espace disque et le certificat TLS ;
 - sauvegardez régulièrement le volume `open-quiz-data` avec un outil compatible

@@ -43,6 +43,21 @@ La suite teste les parcours d’administration et d’enseignement, la participa
 des élèves, la notation, la migration du schéma SQLite, les limites de débit et
 la rotation des sessions d’authentification.
 
+## Modèle fonctionnel 0.2
+
+- les enseignants créent des comptes élèves indépendamment des classes, puis
+  affectent chaque compte à une classe ;
+- les élèves s’authentifient sur `/api/student-auth/login` avant de rejoindre un
+  examen avec son code ;
+- les quiz `exam` sont notés et lancés par l’enseignant, tandis que les quiz
+  `training` sont tirés et démarrés librement par l’élève ;
+- un quiz stocke un nombre de questions et un total de points pour chaque
+  difficulté, pas des pourcentages ni des points sur les propositions ;
+- les questions sont tirées au lancement. Un tirage commun conserve le même
+  ensemble pour tous, avec un ordre aléatoire propre à chaque élève ;
+- le tirage, l’ordre et les points par question sont enregistrés dans la session
+  pour préserver la notation historique.
+
 Chaque quiz conserve dans `source_language` la langue d’interface utilisée lors
 de sa création. Cette valeur est renvoyée dans les réponses destinées à l’élève
 afin que le frontend puisse proposer une traduction lorsque sa propre langue
@@ -53,20 +68,26 @@ anciens quiz reçoivent la valeur par défaut `fr`.
 Le point `/api/health` vérifie à la fois le processus HTTP et l’accès réel à la
 base de données. Il doit être utilisé pour les contrôles de disponibilité.
 
-Les jetons d'accès expirent rapidement et restent uniquement en mémoire dans le
-navigateur. Les sessions longues utilisent un cookie HttpOnly rotatif et
-révocable. Chaque appareil reste reconnu pendant 7 jours au maximum à partir de
-la dernière validation 2FA, sans prolongation glissante lors de l'utilisation.
-Après cette échéance, ou sur un nouvel appareil, une nouvelle validation 2FA est
-obligatoire. La réutilisation d'un ancien jeton révoque toute sa famille de
-sessions. Un changement de mot de passe administrateur révoque ses sessions et
-invalide immédiatement ses jetons d'accès. Un changement de `JWT_SECRET`
-révoque toutes les sessions. Tous les comptes
-doivent configurer une application
-d'authentification TOTP lors de leur première connexion. Les secrets TOTP sont
-chiffrés dans SQLite avec `TOTP_ENCRYPTION_KEY`. Sauvegardez cette clé : si elle
-est perdue ou remplacée, chaque utilisateur devra réinitialiser son inscription
-2FA.
+Les jetons d’accès enseignant et administrateur expirent rapidement et restent
+uniquement en mémoire dans le navigateur. Leurs sessions longues utilisent un
+cookie HttpOnly rotatif et révocable. Chaque appareil reste reconnu pendant
+7 jours au maximum à partir de la dernière validation 2FA, sans prolongation
+glissante lors de l’utilisation. Après cette échéance, ou sur un nouvel
+appareil, une nouvelle validation 2FA est obligatoire. La réutilisation d’un
+ancien jeton révoque toute sa famille de sessions.
+
+Les comptes élèves n’utilisent pas TOTP ni le cookie de renouvellement. Ils
+reçoivent après vérification du mot de passe un jeton Bearer de 12 heures,
+invalidé par un changement de mot de passe ou de `JWT_SECRET`. Les jetons de
+participation à un quiz restent distincts et limités à leur session.
+
+Un changement de mot de passe administrateur révoque ses sessions et invalide
+immédiatement ses jetons d’accès. Un changement de `JWT_SECRET` révoque toutes
+les sessions. Les enseignants et administrateurs doivent configurer une
+application d’authentification TOTP lors de leur première connexion. Les secrets
+TOTP sont chiffrés dans SQLite avec `TOTP_ENCRYPTION_KEY`. Sauvegardez cette
+clé : si elle est perdue ou remplacée, chaque enseignant et administrateur devra
+réinitialiser son inscription 2FA.
 
 Si un utilisateur perd son authentificateur, réinitialisez son inscription 2FA
 et révoquez ses sessions actives depuis l'espace d'administration en utilisant
@@ -114,6 +135,11 @@ SQLite est configuré en mode WAL avec vérification des clés étrangères, att
 sur verrou et contrôle de disponibilité. Le volume `/data` doit rester
 persistant et être sauvegardé avec un outil compatible SQLite WAL ou pendant un
 arrêt contrôlé.
+
+Lors du premier démarrage en `0.2.0`, la migration supprime les anciens élèves
+sans compte, convertit les répartitions en pourcentages vers des quantités par
+difficulté et neutralise les anciens points portés par les propositions.
+Sauvegardez la base avant cette migration.
 
 Les images de questions sont décodées, limitées en dimensions puis réencodées
 avant stockage. Les métadonnées et les trames d'animation ne sont pas

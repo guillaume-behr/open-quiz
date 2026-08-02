@@ -13,7 +13,15 @@ pnpm dev
 ```
 
 L’interface est ensuite disponible sur `http://localhost:5173`. Le proxy Vite
-transmet `/api` au backend.
+transmet `/api` au backend. La racine ouvre désormais la connexion élève.
+
+Routes principales :
+
+- `/student/login` et `/student/dashboard` pour les élèves ;
+- `/student/exam` pour entrer dans un examen avec son code ;
+- `/student/training` pour un entraînement libre ;
+- `/teacher/login` et `/teacher/dashboard` pour les enseignants ;
+- `/admin/dashboard` pour l’administration.
 
 ## Vérifications
 
@@ -39,7 +47,8 @@ Caddy fournis.
 ## Architecture
 
 - `src/api` centralise les appels HTTP et la rotation de session ;
-- `src/pages` contient les espaces public, enseignant et administrateur ;
+- `src/pages` contient les espaces élève, enseignant, administrateur et les
+  pages légales publiques ;
 - `src/components` regroupe les fonctions métier et les composants d’interface ;
 - `public/locales` contient les traductions française, anglaise, allemande,
   espagnole, portugaise, ukrainienne, arabe et chinoise simplifiée ;
@@ -53,6 +62,28 @@ vendoriées avant que le Worker perde ses API réseau et sa capacité à créer
 d’autres Workers. Le renouvellement des sessions enseignantes et
 administratrices exige en plus une preuve conservée uniquement par la fenêtre
 principale.
+
+## Parcours des quiz
+
+Le tableau de bord enseignant sépare les comptes **Élèves**, leur affectation
+aux **Classes**, les **Examens** et les **Entraînements**. Le formulaire de quiz
+demande des quantités faciles, moyennes et difficiles plafonnées par les banques
+sélectionnées. Pour un examen, il demande aussi le total de points de chaque
+difficulté et affiche la valeur répartie par question.
+
+Le tableau de bord élève propose deux activités :
+
+- saisir le code d’un examen après authentification ;
+- relancer à volonté un entraînement disponible, sans points ni note, avec la
+  bonne réponse affichée après chaque question.
+
+Un tirage commun présente le même ensemble de questions à tous les élèves, mais
+le backend fournit à chacun un ordre aléatoire stable pour sa session.
+
+Les jetons d’accès élève et les jetons de participation au quiz sont conservés
+dans `sessionStorage` pour permettre un rafraîchissement de l’onglet. Les jetons
+d’accès enseignant et administrateur restent en mémoire ; leur renouvellement
+repose sur un cookie HttpOnly.
 
 ## Traduction des quiz
 
