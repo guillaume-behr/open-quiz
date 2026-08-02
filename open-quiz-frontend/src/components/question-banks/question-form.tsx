@@ -80,6 +80,7 @@ export function QuestionForm({
 }: QuestionFormProps) {
     const { t } = useTranslation()
     const [prompt, setPrompt] = useState(question?.prompt ?? "")
+    const [points, setPoints] = useState(question?.points ?? 1)
     const [difficulty, setDifficulty] = useState<QuestionDifficulty>(
         question?.difficulty ?? "medium"
     )
@@ -219,6 +220,7 @@ export function QuestionForm({
             )
             const payload: NewQuestion = {
                 prompt: prompt.trim(),
+                points,
                 difficulty,
                 answer_mode: answerMode,
                 answer_mode_disclosed: answerModeDisclosed,
@@ -266,11 +268,13 @@ export function QuestionForm({
                     onCodeContentChange={setCodeContent}
                 />
                 <QuestionSettingsFields
+                    points={points}
                     difficulty={difficulty}
                     answerMode={answerMode}
                     answerModeDisclosed={answerModeDisclosed}
                     responseLanguage={responseLanguage}
                     onDifficultyChange={setDifficulty}
+                    onPointsChange={setPoints}
                     onAnswerModeChange={changeAnswerMode}
                     onAnswerModeDisclosedChange={setAnswerModeDisclosed}
                     onResponseLanguageChange={setResponseLanguage}

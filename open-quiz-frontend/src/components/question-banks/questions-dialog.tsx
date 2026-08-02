@@ -106,6 +106,9 @@ function QuestionCard({
                     <span className="rounded-full bg-muted px-2 py-1 text-xs whitespace-nowrap">
                         {t(`difficulty-${question.difficulty}`)}
                     </span>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold whitespace-nowrap text-primary">
+                        {t("points-count", { count: question.points })}
+                    </span>
                     <Button
                         type="button"
                         size="sm"

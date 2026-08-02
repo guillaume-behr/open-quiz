@@ -26,7 +26,6 @@ type QuizFormDialogProps = {
     durationMinutes: number
     selectedBankIds: number[]
     allowPreviousQuestions: boolean
-    sameQuestionsForAll: boolean
     difficultyCounts: DifficultyValues
     difficultyPoints: DifficultyValues
     availableByDifficulty: DifficultyValues
@@ -36,7 +35,6 @@ type QuizFormDialogProps = {
     onDurationChange: (value: number) => void
     onSelectedBankIdsChange: (ids: number[]) => void
     onAllowPreviousQuestionsChange: (value: boolean) => void
-    onSameQuestionsForAllChange: (value: boolean) => void
     onDifficultyCountsChange: (values: DifficultyValues) => void
     onDifficultyPointsChange: (values: DifficultyValues) => void
     onClose: () => void
@@ -52,7 +50,6 @@ export function QuizFormDialog({
     durationMinutes,
     selectedBankIds,
     allowPreviousQuestions,
-    sameQuestionsForAll,
     difficultyCounts,
     difficultyPoints,
     availableByDifficulty,
@@ -62,7 +59,6 @@ export function QuizFormDialog({
     onDurationChange,
     onSelectedBankIdsChange,
     onAllowPreviousQuestionsChange,
-    onSameQuestionsForAllChange,
     onDifficultyCountsChange,
     onDifficultyPointsChange,
     onClose,
@@ -126,27 +122,6 @@ export function QuizFormDialog({
                             <p className="text-xs text-muted-foreground">
                                 {t("quiz-duration-help")}
                             </p>
-                        </Field>
-                    )}
-                    {mode === "exam" && (
-                        <Field>
-                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
-                                <span>
-                                    <span className="block font-medium">
-                                        {t("same-questions-for-all")}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t("same-questions-for-all-help")}
-                                    </span>
-                                </span>
-                                <Switch
-                                    checked={sameQuestionsForAll}
-                                    onCheckedChange={
-                                        onSameQuestionsForAllChange
-                                    }
-                                    aria-label={t("same-questions-for-all")}
-                                />
-                            </label>
                         </Field>
                     )}
                     <QuestionBankPicker
@@ -242,7 +217,7 @@ function QuestionBankPicker({
                         return (
                             <label
                                 key={bank.id}
-                                className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
+                                className={`flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 ${
                                     selected
                                         ? "border-primary bg-primary/5"
                                         : ""
@@ -250,6 +225,7 @@ function QuestionBankPicker({
                             >
                                 <input
                                     type="checkbox"
+                                    className="mt-1 accent-primary"
                                     checked={selected}
                                     onChange={() =>
                                         onSelectedIdsChange(
@@ -374,14 +350,7 @@ function DifficultyQuestionCounts({
                                 />
                                 {counts[difficulty] > 0 && (
                                     <p className="mt-1 text-xs text-muted-foreground">
-                                        {t("quiz-points-per-question", {
-                                            count: Number(
-                                                (
-                                                    points[difficulty] /
-                                                    counts[difficulty]
-                                                ).toFixed(2)
-                                            ),
-                                        })}
+                                        {t("quiz-points-target-help")}
                                     </p>
                                 )}
                             </div>
