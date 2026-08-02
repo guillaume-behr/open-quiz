@@ -1,6 +1,3 @@
-import json
-import re
-import unicodedata
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -14,53 +11,13 @@ from app.models import (
     QuizParticipant,
     QuizSession,
     Student,
+    StudentAccount,
     StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
-from app.schemas import (
-    StudentClassCreate,
-    StudentClassResponse,
-    StudentCreate,
-    StudentImportBatch,
-    StudentResponse,
-    StudentUpdate,
-)
+from app.schemas import StudentClassCreate, StudentClassResponse, StudentResponse
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
-
-
-def identifier_base(display_name: str) -> str:
-    normalized = unicodedata.normalize("NFKD", display_name)
-    ascii_name = normalized.encode("ascii", "ignore").decode().lower()
-    parts = re.findall(r"[a-z0-9]+", ascii_name)
-    return ".".join(parts)[:72] or "eleve"
-
-
-def generated_student_identifier(
-    class_id: int,
-    display_name: str,
-    session: DbSession,
-    excluded_student_id: int | None = None,
-) -> str:
-    base = identifier_base(display_name)
-    existing = set(
-        session.scalars(
-            select(Student.identifier).where(
-                Student.class_id == class_id,
-                *(
-                    [Student.id != excluded_student_id]
-                    if excluded_student_id is not None
-                    else []
-                ),
-            )
-        )
-    )
-    if base not in existing:
-        return base
-    suffix = 2
-    while f"{base[: 80 - len(str(suffix))]}{suffix}" in existing:
-        suffix += 1
-    return f"{base[: 80 - len(str(suffix))]}{suffix}"
 
 
 def owned_class(
@@ -82,27 +39,6 @@ def owned_class(
     return student_class
 
 
-def owned_student(
-    student_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> Student:
-    student = session.scalar(
-        select(Student)
-        .join(StudentClass, StudentClass.id == Student.class_id)
-        .where(
-            Student.id == student_id,
-            StudentClass.owner_id == professor.id,
-        )
-    )
-    if student is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Élève introuvable",
-        )
-    return student
-
-
 def class_response(
     student_class: StudentClass,
     session: DbSession,
@@ -110,7 +46,10 @@ def class_response(
     students = list(
         session.scalars(
             select(Student)
-            .where(Student.class_id == student_class.id)
+            .where(
+                Student.class_id == student_class.id,
+                Student.account_id.is_not(None),
+            )
             .order_by(Student.display_name, Student.identifier, Student.id)
         )
     )
@@ -151,6 +90,7 @@ def class_response(
             StudentResponse(
                 id=student.id,
                 class_id=student.class_id,
+                account_id=student.account_id,
                 identifier=student.identifier,
                 display_name=student.display_name,
                 created_at=student.created_at,
@@ -263,6 +203,106 @@ def delete_class(
 
 
 @router.post(
+    "/{class_id}/accounts/{account_id}",
+    response_model=StudentClassResponse,
+)
+def assign_student_account(
+    class_id: int,
+    account_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> StudentClassResponse:
+    student_class = owned_class(class_id, professor, session)
+    account = session.scalar(
+        select(StudentAccount).where(
+            StudentAccount.id == account_id,
+            StudentAccount.owner_id == professor.id,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Compte élève introuvable")
+    membership = session.scalar(select(Student).where(Student.account_id == account.id))
+    if membership is not None:
+        if membership.class_id == class_id:
+            return class_response(student_class, session)
+        active_class_id = session.scalar(
+            select(QuizSession.class_id)
+            .where(
+                QuizSession.class_id.in_([membership.class_id, class_id]),
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            )
+            .limit(1)
+        )
+        if active_class_id is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Un élève ne peut pas être transféré pendant une session active",
+            )
+        membership.class_id = class_id
+        membership.identifier = account.identifier
+        membership.display_name = account.display_name
+    else:
+        session.add(
+            Student(
+                class_id=class_id,
+                account_id=account.id,
+                identifier=account.identifier,
+                display_name=account.display_name,
+            )
+        )
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Cet identifiant existe déjà dans la classe",
+        ) from None
+    return class_response(student_class, session)
+
+
+@router.delete(
+    "/{class_id}/accounts/{account_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def unassign_student_account(
+    class_id: int,
+    account_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> None:
+    owned_class(class_id, professor, session)
+    membership = session.scalar(
+        select(Student)
+        .join(StudentAccount, StudentAccount.id == Student.account_id)
+        .where(
+            Student.class_id == class_id,
+            Student.account_id == account_id,
+            StudentAccount.owner_id == professor.id,
+        )
+    )
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Affectation introuvable")
+    if (
+        session.scalar(
+            select(QuizSession.id).where(
+                QuizSession.class_id == class_id,
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            )
+        )
+        is not None
+    ):
+        raise HTTPException(status_code=409, detail="La classe a une session active")
+    session.execute(
+        update(QuizParticipant)
+        .where(QuizParticipant.student_id == membership.id)
+        .values(student_id=None)
+    )
+    session.execute(delete(Student).where(Student.id == membership.id))
+    session.commit()
+
+
+@router.post(
     "/{class_id}/update",
     response_model=StudentClassResponse,
 )
@@ -286,199 +326,3 @@ def update_class(
         ) from None
     session.refresh(student_class)
     return class_response(student_class, session)
-
-
-@router.get("/{class_id}/students/export")
-def export_students(
-    class_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> Response:
-    student_class = owned_class(class_id, professor, session)
-    students = session.scalars(
-        select(Student)
-        .where(Student.class_id == class_id)
-        .order_by(Student.display_name, Student.identifier, Student.id)
-    )
-    content = json.dumps(
-        {
-            "version": 1,
-            "class": {
-                "name": student_class.name,
-                "grade_level": student_class.grade_level,
-            },
-            "students": [
-                {
-                    "identifier": student.identifier,
-                    "display_name": student.display_name,
-                }
-                for student in students
-            ],
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    return Response(
-        content=f"{content}\n",
-        media_type="application/json",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="classe-{student_class.id}-eleves.json"'
-            )
-        },
-    )
-
-
-@router.post(
-    "/{class_id}/students/import",
-    response_model=StudentClassResponse,
-)
-def import_students(
-    class_id: int,
-    payload: StudentImportBatch,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> StudentClassResponse:
-    student_class = owned_class(class_id, professor, session)
-    imported_identifiers = [student.identifier for student in payload.students]
-    if imported_identifiers and session.scalar(
-        select(Student.id)
-        .where(
-            Student.class_id == class_id,
-            Student.identifier.in_(imported_identifiers),
-        )
-        .limit(1)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Un identifiant du fichier existe déjà dans cette classe",
-        )
-    session.add_all(
-        Student(
-            class_id=class_id,
-            identifier=student.identifier,
-            display_name=student.display_name,
-        )
-        for student in payload.students
-    )
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Le fichier contient un identifiant déjà utilisé",
-        ) from None
-    return class_response(student_class, session)
-
-
-@router.post(
-    "/{class_id}/students",
-    response_model=StudentResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_student(
-    class_id: int,
-    payload: StudentCreate,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> Student:
-    owned_class(class_id, professor, session)
-    student = Student(
-        class_id=class_id,
-        identifier=payload.identifier
-        or generated_student_identifier(class_id, payload.display_name, session),
-        display_name=payload.display_name,
-    )
-    session.add(student)
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cet identifiant d’élève existe déjà dans la classe",
-        ) from None
-    session.refresh(student)
-    return student
-
-
-@router.post(
-    "/students/{student_id}/update",
-    response_model=StudentResponse,
-)
-def update_student(
-    student_id: int,
-    payload: StudentUpdate,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> Student:
-    student = owned_student(student_id, professor, session)
-    destination_class_id = payload.class_id or student.class_id
-    if destination_class_id != student.class_id:
-        owned_class(destination_class_id, professor, session)
-        active_class_id = session.scalar(
-            select(QuizSession.class_id)
-            .where(
-                QuizSession.class_id.in_([student.class_id, destination_class_id]),
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
-            )
-            .limit(1)
-        )
-        if active_class_id is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Un élève ne peut pas être transféré pendant une session active",
-            )
-    student.identifier = payload.identifier or generated_student_identifier(
-        destination_class_id,
-        payload.display_name,
-        session,
-        excluded_student_id=(
-            student.id if destination_class_id == student.class_id else None
-        ),
-    )
-    student.class_id = destination_class_id
-    student.display_name = payload.display_name
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cet identifiant d’élève existe déjà dans la classe",
-        ) from None
-    session.refresh(student)
-    return student
-
-
-@router.delete(
-    "/students/{student_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_student(
-    student_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> None:
-    student = owned_student(student_id, professor, session)
-    if (
-        session.scalar(
-            select(QuizSession.id).where(
-                QuizSession.class_id == student.class_id,
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
-            )
-        )
-        is not None
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cet élève participe à une session de quiz active",
-        )
-    session.execute(
-        update(QuizParticipant)
-        .where(QuizParticipant.student_id == student_id)
-        .values(student_id=None)
-    )
-    session.execute(delete(Student).where(Student.id == student_id))
-    session.commit()

@@ -117,72 +117,78 @@ class GradeLevelResponse(BaseModel):
     name: str
 
 
-class StudentCreate(BaseModel):
-    identifier: str | None = Field(default=None, min_length=1, max_length=80)
-    display_name: str = Field(min_length=1, max_length=120)
-
-    @field_validator("display_name")
-    @classmethod
-    def normalize_student_text(cls, value: str) -> str:
-        normalized = " ".join(value.split())
-        if not normalized:
-            raise ValueError("Ce champ ne peut pas être vide")
-        return normalized
-
-    @field_validator("identifier")
-    @classmethod
-    def normalize_student_identifier(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = "".join(value.split()).lower()
-        if not normalized:
-            raise ValueError("L’identifiant ne peut pas être vide")
-        return normalized
-
-
-class StudentUpdate(StudentCreate):
-    class_id: int | None = Field(default=None, ge=1)
-
-
 class StudentResponse(BaseModel):
     id: int
     class_id: int
+    account_id: int | None = None
     identifier: str
     display_name: str
     created_at: datetime
 
 
-class StudentImportItem(BaseModel):
-    identifier: str = Field(min_length=1, max_length=80)
+class StudentAccountCreate(BaseModel):
+    identifier: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
     display_name: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=8, max_length=256)
+
+    @field_validator("identifier")
+    @classmethod
+    def normalize_account_identifier(cls, value: str) -> str:
+        return value.strip().lower()
 
     @field_validator("display_name")
     @classmethod
-    def normalize_display_name(cls, value: str) -> str:
+    def normalize_account_display_name(cls, value: str) -> str:
         normalized = " ".join(value.split())
         if not normalized:
             raise ValueError("Le nom ne peut pas être vide")
         return normalized
 
+
+class StudentAccountUpdate(BaseModel):
+    identifier: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
+    display_name: str = Field(min_length=1, max_length=120)
+    password: str | None = Field(default=None, min_length=8, max_length=256)
+    is_active: bool = True
+
     @field_validator("identifier")
     @classmethod
-    def normalize_identifier(cls, value: str) -> str:
-        normalized = "".join(value.split()).lower()
+    def normalize_account_identifier(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_account_display_name(cls, value: str) -> str:
+        normalized = " ".join(value.split())
         if not normalized:
-            raise ValueError("L’identifiant ne peut pas être vide")
+            raise ValueError("Le nom ne peut pas être vide")
         return normalized
 
 
-class StudentImportBatch(BaseModel):
-    version: Literal[1]
-    students: list[StudentImportItem] = Field(max_length=1000)
+class StudentAccountResponse(BaseModel):
+    id: int
+    identifier: str
+    display_name: str
+    is_active: bool
+    class_id: int | None
+    class_name: str | None
+    created_at: datetime
 
-    @model_validator(mode="after")
-    def validate_unique_identifiers(self) -> StudentImportBatch:
-        identifiers = [student.identifier for student in self.students]
-        if len(identifiers) != len(set(identifiers)):
-            raise ValueError("Le fichier contient des identifiants en double")
-        return self
+
+class StudentLoginRequest(BaseModel):
+    identifier: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=256)
+
+    @field_validator("identifier")
+    @classmethod
+    def normalize_login_identifier(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class StudentLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    student: StudentAccountResponse
 
 
 class StudentClassCreate(BaseModel):
@@ -260,7 +266,6 @@ class QuestionChoiceCreate(BaseModel):
     id: int | None = None
     label: str = Field(min_length=1, max_length=4000)
     is_correct: bool = False
-    points: float = Field(default=0, ge=-1000, le=1000)
     image: QuestionImportImage | None = None
     remove_image: bool = False
     code_language: CodeLanguage | None = None
@@ -321,9 +326,6 @@ class QuestionCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_correct_choices(self) -> QuestionCreate:
-        for choice in self.choices:
-            if "points" not in choice.model_fields_set:
-                choice.points = 1 if choice.is_correct else 0
         correct_count = sum(choice.is_correct for choice in self.choices)
         if self.answer_mode in {"single", "written"} and correct_count > 1:
             raise ValueError(
@@ -345,12 +347,6 @@ class QuestionCreate(BaseModel):
             raise ValueError(
                 "Une question à choix unique nécessite une seule bonne réponse"
             )
-        if any(choice.points < 0 for choice in self.choices if choice.is_correct):
-            raise ValueError("Une bonne réponse ne peut pas retirer de points")
-        if any(choice.points > 0 for choice in self.choices if not choice.is_correct):
-            raise ValueError(
-                "Une mauvaise réponse ne peut pas attribuer de points positifs"
-            )
         if (self.code_language is None) != (self.code_content is None):
             raise ValueError(
                 "Le langage et le contenu du code doivent être renseignés ensemble"
@@ -364,7 +360,6 @@ class QuestionChoiceResponse(BaseModel):
     id: int
     label: str
     is_correct: bool
-    points: float
     position: int
     has_image: bool
     code_language: str | None
@@ -406,6 +401,7 @@ class QuestionBatchImportResponse(BaseModel):
 
 
 class QuizCreate(BaseModel):
+    mode: Literal["exam", "training"] = "exam"
     title: str = Field(min_length=1, max_length=160)
     source_language: str = Field(
         default="fr",
@@ -414,12 +410,23 @@ class QuizCreate(BaseModel):
         pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
     )
     question_bank_ids: list[int] = Field(min_length=1, max_length=100)
-    question_count: int = Field(ge=1, le=200)
     duration_seconds: int = Field(default=1800, ge=60, le=28800)
     allow_previous_questions: bool = False
-    easy_percentage: int = Field(ge=0, le=100)
-    medium_percentage: int = Field(ge=0, le=100)
-    hard_percentage: int = Field(ge=0, le=100)
+    same_questions_for_all: bool = True
+    easy_question_count: int = Field(ge=0, le=200)
+    medium_question_count: int = Field(ge=0, le=200)
+    hard_question_count: int = Field(ge=0, le=200)
+    easy_points: float = Field(default=0, ge=0, le=10000)
+    medium_points: float = Field(default=0, ge=0, le=10000)
+    hard_points: float = Field(default=0, ge=0, le=10000)
+
+    @property
+    def question_count(self) -> int:
+        return (
+            self.easy_question_count
+            + self.medium_question_count
+            + self.hard_question_count
+        )
 
     @field_validator("title")
     @classmethod
@@ -430,11 +437,23 @@ class QuizCreate(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_distribution(self) -> QuizCreate:
-        if self.easy_percentage + self.medium_percentage + self.hard_percentage != 100:
-            raise ValueError(
-                "La somme des pourcentages de difficulté doit être égale à 100"
-            )
+    def validate_question_counts(self) -> QuizCreate:
+        if self.question_count < 1:
+            raise ValueError("Le quiz doit contenir au moins une question")
+        if self.question_count > 200:
+            raise ValueError("Le quiz ne peut pas contenir plus de 200 questions")
+        for difficulty in ("easy", "medium", "hard"):
+            if (
+                getattr(self, f"{difficulty}_question_count") == 0
+                and getattr(self, f"{difficulty}_points") != 0
+            ):
+                raise ValueError(
+                    "Des points ne peuvent être attribués à une difficulté sans question"
+                )
+        if self.mode == "training" and any(
+            (self.easy_points, self.medium_points, self.hard_points)
+        ):
+            raise ValueError("Un entraînement ne peut pas attribuer de points")
         if len(set(self.question_bank_ids)) != len(self.question_bank_ids):
             raise ValueError(
                 "Chaque banque de questions ne peut être sélectionnée qu’une fois"
@@ -454,14 +473,19 @@ class QuizBankSummary(BaseModel):
 
 class QuizResponse(BaseModel):
     id: int
+    mode: Literal["exam", "training"]
     title: str
     source_language: str
     question_count: int
     duration_seconds: int
     allow_previous_questions: bool
-    easy_percentage: int
-    medium_percentage: int
-    hard_percentage: int
+    same_questions_for_all: bool
+    easy_question_count: int
+    medium_question_count: int
+    hard_question_count: int
+    easy_points: float
+    medium_points: float
+    hard_points: float
     question_banks: list[QuizBankSummary]
     created_at: datetime
 
@@ -533,6 +557,13 @@ class StudentQuizQuestionResponse(BaseModel):
     choices: list[StudentQuizChoiceResponse]
 
 
+class TrainingFeedback(BaseModel):
+    question_id: int
+    is_correct: bool
+    correct_choice_ids: list[int]
+    expected_answer: str | None = None
+
+
 class StudentQuizStateResponse(StudentQuizSessionResponse):
     question_number: int | None
     total_questions: int
@@ -542,6 +573,7 @@ class StudentQuizStateResponse(StudentQuizSessionResponse):
     selected_choice_ids: list[int] | None = None
     written_answer: str | None = None
     question: StudentQuizQuestionResponse | None
+    training_feedback: TrainingFeedback | None = None
 
 
 class StudentQuizJoinResponse(StudentQuizStateResponse):
@@ -587,18 +619,11 @@ class StudentQuizViolation(BaseModel):
 
 
 class QuizJoin(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     join_code: str = Field(min_length=4, max_length=8)
-    student_identifier: str = Field(min_length=1, max_length=80)
 
     @field_validator("join_code")
     @classmethod
     def normalize_join_code(cls, value: str) -> str:
         return value.strip().upper()
-
-    @field_validator("student_identifier")
-    @classmethod
-    def normalize_student_identifier(cls, value: str) -> str:
-        normalized = "".join(value.split()).lower()
-        if not normalized:
-            raise ValueError("L’identifiant de l’élève ne peut pas être vide")
-        return normalized

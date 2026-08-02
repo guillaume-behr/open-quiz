@@ -108,6 +108,13 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
         quiz_columns = {
             column["name"] for column in inspect(connection).get_columns("quizzes")
         }
+        if "mode" not in quiz_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quizzes ADD COLUMN "
+                    "mode VARCHAR(20) NOT NULL DEFAULT 'exam'"
+                )
+            )
         quiz_session_columns = {
             column["name"]
             for column in inspect(connection).get_columns("quiz_sessions")
@@ -126,11 +133,62 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "allow_previous_questions BOOLEAN NOT NULL DEFAULT FALSE"
                 )
             )
+        if "same_questions_for_all" not in quiz_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quizzes ADD COLUMN "
+                    "same_questions_for_all BOOLEAN NOT NULL DEFAULT TRUE"
+                )
+            )
         if "source_language" not in quiz_columns:
             connection.execute(
                 text(
                     "ALTER TABLE quizzes ADD COLUMN "
                     "source_language VARCHAR(35) NOT NULL DEFAULT 'fr'"
+                )
+            )
+        difficulty_count_columns = (
+            "easy_question_count",
+            "medium_question_count",
+            "hard_question_count",
+        )
+        added_difficulty_counts = any(
+            column_name not in quiz_columns for column_name in difficulty_count_columns
+        )
+        for column_name in difficulty_count_columns:
+            if column_name not in quiz_columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE quizzes ADD COLUMN {column_name} "
+                        "INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
+        for column_name in ("easy_points", "medium_points", "hard_points"):
+            if column_name not in quiz_columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE quizzes ADD COLUMN {column_name} "
+                        "FLOAT NOT NULL DEFAULT 0"
+                    )
+                )
+        if added_difficulty_counts and {
+            "easy_percentage",
+            "medium_percentage",
+            "hard_percentage",
+        }.issubset(quiz_columns):
+            connection.execute(
+                text(
+                    "UPDATE quizzes SET "
+                    "easy_question_count = CAST("
+                    "question_count * easy_percentage / 100.0 AS INTEGER), "
+                    "medium_question_count = CAST("
+                    "question_count * medium_percentage / 100.0 AS INTEGER)"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE quizzes SET hard_question_count = "
+                    "question_count - easy_question_count - medium_question_count"
                 )
             )
         if "paused_at" not in quiz_session_columns:
@@ -152,6 +210,11 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                 "allow_previous_questions",
                 "BOOLEAN",
                 "allow_previous_questions",
+            ),
+            (
+                "same_questions_for_all",
+                "BOOLEAN",
+                "same_questions_for_all",
             ),
         ):
             if column_name not in quiz_session_columns:
@@ -175,9 +238,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "ADD COLUMN points FLOAT NOT NULL DEFAULT 0"
                 )
             )
-            connection.execute(
-                text("UPDATE question_choices SET points = 1 WHERE is_correct = TRUE")
-            )
+        connection.execute(text("UPDATE question_choices SET points = 0"))
         for column_name, column_type in (
             ("image_data", LargeBinary()),
             ("image_content_type", String(80)),
@@ -195,6 +256,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
         for table_name, column_name in (
             ("quiz_sessions", "class_id"),
             ("quiz_participants", "student_id"),
+            ("students", "account_id"),
         ):
             columns = {
                 column["name"] for column in inspect(connection).get_columns(table_name)
@@ -203,6 +265,52 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                 connection.execute(
                     text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} INTEGER")
                 )
+        student_question_columns = {
+            column["name"]
+            for column in inspect(connection).get_columns(
+                "quiz_session_student_questions"
+            )
+        }
+        if "student_id" not in student_question_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quiz_session_student_questions "
+                    "ADD COLUMN student_id INTEGER"
+                )
+            )
+        if "points" not in student_question_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quiz_session_student_questions "
+                    "ADD COLUMN points FLOAT NOT NULL DEFAULT 0"
+                )
+            )
+        session_question_columns = {
+            column["name"]
+            for column in inspect(connection).get_columns("quiz_session_questions")
+        }
+        if "points" not in session_question_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quiz_session_questions "
+                    "ADD COLUMN points FLOAT NOT NULL DEFAULT 0"
+                )
+            )
+        connection.execute(
+            text(
+                "UPDATE quiz_participants SET student_id = NULL "
+                "WHERE student_id IN "
+                "(SELECT id FROM students WHERE account_id IS NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "DELETE FROM quiz_session_student_questions "
+                "WHERE student_id IN "
+                "(SELECT id FROM students WHERE account_id IS NULL)"
+            )
+        )
+        connection.execute(text("DELETE FROM students WHERE account_id IS NULL"))
         participant_columns = {
             column["name"]
             for column in inspect(connection).get_columns("quiz_participants")

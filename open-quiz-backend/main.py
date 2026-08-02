@@ -23,6 +23,8 @@ from app.routers import (
     problem_reports,
     question_banks,
     quizzes,
+    student_auth,
+    students,
     users,
 )
 from app.security import hash_password, verify_password
@@ -176,7 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     production = settings.environment == "production"
     app = FastAPI(
         title="Open Quiz API",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
@@ -256,6 +258,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users.router)
     app.include_router(admin.router)
     app.include_router(classes.router)
+    app.include_router(students.router)
+    app.include_router(student_auth.router)
     app.include_router(grade_levels.router)
     app.include_router(quizzes.router)
     app.include_router(question_banks.router)

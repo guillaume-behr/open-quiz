@@ -68,6 +68,33 @@ def decode_access_token(token: str, secret: str) -> tuple[int, str]:
     return int(payload["sub"]), version
 
 
+def create_student_access_token(
+    student_id: int, secret: str, version: str, expires_hours: int = 12
+) -> str:
+    now = datetime.now(UTC)
+    return jwt.encode(
+        {
+            "sub": str(student_id),
+            "type": "student_access",
+            "ver": version,
+            "iat": now,
+            "exp": now + timedelta(hours=expires_hours),
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+
+def decode_student_access_token(token: str, secret: str) -> tuple[int, str]:
+    payload = jwt.decode(token, secret, algorithms=["HS256"])
+    if payload.get("type") != "student_access":
+        raise jwt.InvalidTokenError("Unexpected token type")
+    version = payload.get("ver")
+    if not isinstance(version, str) or not version:
+        raise jwt.InvalidTokenError("Missing token version")
+    return int(payload["sub"]), version
+
+
 def create_two_factor_token(
     user_id: int, secret: str, purpose: str
 ) -> tuple[str, str, int]:

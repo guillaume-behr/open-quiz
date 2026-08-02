@@ -36,6 +36,7 @@ from app.models import (
     QuestionCode,
     QuizQuestionBank,
     QuizSessionQuestion,
+    QuizSessionStudentQuestion,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import (
@@ -232,6 +233,24 @@ def owned_question(
     return question
 
 
+def question_is_in_launched_quiz(question_id: int, session: DbSession) -> bool:
+    common_assignment = session.scalar(
+        select(QuizSessionQuestion.session_id).where(
+            QuizSessionQuestion.question_id == question_id
+        )
+    )
+    if common_assignment is not None:
+        return True
+    return (
+        session.scalar(
+            select(QuizSessionStudentQuestion.session_id).where(
+                QuizSessionStudentQuestion.question_id == question_id
+            )
+        )
+        is not None
+    )
+
+
 def question_response(
     question: Question,
     choices: list[QuestionChoice],
@@ -253,7 +272,6 @@ def question_response(
                 "id": choice.id,
                 "label": choice.label,
                 "is_correct": choice.is_correct,
-                "points": choice.points,
                 "position": choice.position,
                 "has_image": choice.image_content_type is not None,
                 "code_language": choice.code_language,
@@ -296,7 +314,7 @@ def add_question(
             question_id=question.id,
             label=choice.label,
             is_correct=choice.is_correct,
-            points=choice.points,
+            points=0,
             image_data=choice_image_data,
             image_content_type=choice_image_content_type,
             code_language=choice.code_language,
@@ -387,7 +405,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "Paris",
                         "is_correct": True,
-                        "points": 1,
                         "image": None,
                         "code_language": None,
                         "code_content": None,
@@ -395,7 +412,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "Lyon",
                         "is_correct": False,
-                        "points": -0.25,
                         "image": None,
                         "code_language": None,
                         "code_content": None,
@@ -414,7 +430,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "2",
                         "is_correct": True,
-                        "points": 0.5,
                         "image": None,
                         "code_language": "python",
                         "code_content": "print(2)",
@@ -422,7 +437,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "3",
                         "is_correct": True,
-                        "points": 0.5,
                         "image": {
                             "content_type": "image/png",
                             "data_base64": (
@@ -436,7 +450,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "4",
                         "is_correct": False,
-                        "points": -0.25,
                         "image": {
                             "content_type": "image/png",
                             "data_base64": (
@@ -468,7 +481,6 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "La gravitation maintient la Terre en orbite autour du Soleil.",
                         "is_correct": True,
-                        "points": 1,
                         "image": None,
                         "code_language": None,
                         "code_content": None,
@@ -536,7 +548,6 @@ def export_questions(
                         {
                             "label": choice.label,
                             "is_correct": choice.is_correct,
-                            "points": choice.points,
                             "image": (
                                 {
                                     "content_type": choice.image_content_type,
@@ -801,14 +812,7 @@ async def update_question(
 ) -> QuestionResponse:
     """Update a professor's question and replace its answer configuration."""
     question = owned_question(question_id, professor, session)
-    if (
-        session.scalar(
-            select(QuizSessionQuestion.session_id).where(
-                QuizSessionQuestion.question_id == question_id
-            )
-        )
-        is not None
-    ):
+    if question_is_in_launched_quiz(question_id, session):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette question est utilisée par un quiz déjà lancé",
@@ -937,7 +941,7 @@ async def update_question(
         )
         choice.label = choice_payload.label
         choice.is_correct = choice_payload.is_correct
-        choice.points = choice_payload.points
+        choice.points = 0
         choice.image_data = choice_image_data
         choice.image_content_type = choice_image_content_type
         choice.code_language = choice_payload.code_language
@@ -978,14 +982,7 @@ def delete_question(
 ) -> None:
     """Delete one question owned by the authenticated professor."""
     owned_question(question_id, professor, session)
-    if (
-        session.scalar(
-            select(QuizSessionQuestion.session_id).where(
-                QuizSessionQuestion.question_id == question_id
-            )
-        )
-        is not None
-    ):
+    if question_is_in_launched_quiz(question_id, session):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette question est utilisée par un quiz déjà lancé",

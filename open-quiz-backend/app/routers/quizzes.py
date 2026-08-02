@@ -10,9 +10,18 @@ from secrets import token_urlsafe
 from string import ascii_uppercase, digits
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import StreamingResponse
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
@@ -30,11 +39,14 @@ from app.models import (
     QuizQuestionBank,
     QuizSession,
     QuizSessionQuestion,
+    QuizSessionStudentQuestion,
     Student,
+    StudentAccount,
     StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.routers.question_banks import question_response
+from app.routers.student_auth import current_student
 from app.schemas import (
     QuestionResponse,
     QuizAnswerGrade,
@@ -54,6 +66,7 @@ from app.schemas import (
     StudentQuizSessionResponse,
     StudentQuizStateResponse,
     StudentQuizViolation,
+    TrainingFeedback,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
@@ -99,60 +112,44 @@ def reject_quiz_join(
     raise quiz_join_rejected()
 
 
-DIFFICULTY_EASE_PRIORITY = {"easy": 2, "medium": 1, "hard": 0}
+def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
+    return {
+        "easy": payload.easy_question_count,
+        "medium": payload.medium_question_count,
+        "hard": payload.hard_question_count,
+    }
 
 
-def difficulty_counts(
-    payload: Quiz | QuizCreate,
-    available: dict[str, int] | None = None,
-) -> dict[str, int]:
-    percentages = {
-        "easy": payload.easy_percentage,
-        "medium": payload.medium_percentage,
-        "hard": payload.hard_percentage,
+def difficulty_points(quiz: Quiz) -> dict[str, float]:
+    return {
+        "easy": quiz.easy_points,
+        "medium": quiz.medium_points,
+        "hard": quiz.hard_points,
     }
-    exact = {
-        difficulty: payload.question_count * percentage / 100
-        for difficulty, percentage in percentages.items()
-    }
-    counts = {difficulty: int(value) for difficulty, value in exact.items()}
-    remaining = payload.question_count - sum(counts.values())
-    priorities = sorted(
-        percentages,
-        key=lambda difficulty: (
-            exact[difficulty] - counts[difficulty],
-            percentages[difficulty],
-            DIFFICULTY_EASE_PRIORITY[difficulty],
-        ),
-        reverse=True,
+
+
+def points_for_drawn_questions(
+    quiz: Quiz,
+    question_ids: list[int],
+    session: DbSession,
+) -> dict[int, float]:
+    difficulties = dict(
+        session.execute(
+            select(Question.id, Question.difficulty).where(
+                Question.id.in_(question_ids)
+            )
+        ).all()
     )
-    for difficulty in priorities[:remaining]:
-        counts[difficulty] += 1
-    if available is None:
-        return counts
-    counts = {
-        difficulty: min(count, available.get(difficulty, 0))
+    counts = difficulty_counts(quiz)
+    totals = difficulty_points(quiz)
+    per_question = {
+        difficulty: totals[difficulty] / count if count else 0
         for difficulty, count in counts.items()
     }
-    remaining = payload.question_count - sum(counts.values())
-    while remaining:
-        candidates = [
-            difficulty
-            for difficulty in percentages
-            if counts[difficulty] < available.get(difficulty, 0)
-        ]
-        if not candidates:
-            break
-        difficulty = max(
-            candidates,
-            key=lambda item: (
-                percentages[item],
-                DIFFICULTY_EASE_PRIORITY[item],
-            ),
-        )
-        counts[difficulty] += 1
-        remaining -= 1
-    return counts
+    return {
+        question_id: per_question[difficulties[question_id]]
+        for question_id in question_ids
+    }
 
 
 def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Quiz:
@@ -219,12 +216,21 @@ def difficulty_counts_for_banks(
     session: DbSession,
 ) -> dict[str, int]:
     available = available_difficulty_counts(bank_ids, session)
-    if sum(available.values()) < payload.question_count:
+    requested = difficulty_counts(payload)
+    unavailable = [
+        difficulty
+        for difficulty, count in requested.items()
+        if count > available.get(difficulty, 0)
+    ]
+    if unavailable:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Nombre total de questions insuffisant dans les banques sélectionnées",
+            detail=(
+                "Nombre de questions insuffisant pour une ou plusieurs difficultés "
+                "dans les banques sélectionnées"
+            ),
         )
-    return difficulty_counts(payload, available)
+    return requested
 
 
 def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
@@ -305,14 +311,19 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
     )
     return QuizResponse(
         id=quiz.id,
+        mode=quiz.mode,
         title=quiz.title,
         source_language=quiz.source_language,
         question_count=quiz.question_count,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
-        easy_percentage=quiz.easy_percentage,
-        medium_percentage=quiz.medium_percentage,
-        hard_percentage=quiz.hard_percentage,
+        same_questions_for_all=quiz.same_questions_for_all,
+        easy_question_count=quiz.easy_question_count,
+        medium_question_count=quiz.medium_question_count,
+        hard_question_count=quiz.hard_question_count,
+        easy_points=quiz.easy_points,
+        medium_points=quiz.medium_points,
+        hard_points=quiz.hard_points,
         question_banks=[
             QuizBankSummary(
                 id=bank.id,
@@ -353,13 +364,84 @@ def owned_quiz_session(
 def session_question_ids(
     quiz_session: QuizSession,
     session: DbSession,
+    participant: QuizParticipant | None = None,
 ) -> list[int]:
+    if participant is not None and participant.student_id is not None:
+        personalized_ids = list(
+            session.scalars(
+                select(QuizSessionStudentQuestion.question_id)
+                .where(
+                    QuizSessionStudentQuestion.session_id == quiz_session.id,
+                    QuizSessionStudentQuestion.student_id == participant.student_id,
+                )
+                .order_by(QuizSessionStudentQuestion.position)
+            )
+        )
+        if personalized_ids:
+            return personalized_ids
+    if participant is not None:
+        personalized_ids = list(
+            session.scalars(
+                select(QuizSessionStudentQuestion.question_id)
+                .where(
+                    QuizSessionStudentQuestion.session_id == quiz_session.id,
+                    QuizSessionStudentQuestion.student_identifier
+                    == participant.student_identifier,
+                )
+                .order_by(QuizSessionStudentQuestion.position)
+            )
+        )
+        if personalized_ids:
+            return personalized_ids
     return list(
         session.scalars(
             select(QuizSessionQuestion.question_id)
             .where(QuizSessionQuestion.session_id == quiz_session.id)
             .order_by(QuizSessionQuestion.position)
         )
+    )
+
+
+def session_question_points(
+    quiz_session: QuizSession,
+    session: DbSession,
+    participant: QuizParticipant | None = None,
+) -> dict[int, float]:
+    if participant is not None and participant.student_id is not None:
+        personalized = dict(
+            session.execute(
+                select(
+                    QuizSessionStudentQuestion.question_id,
+                    QuizSessionStudentQuestion.points,
+                ).where(
+                    QuizSessionStudentQuestion.session_id == quiz_session.id,
+                    QuizSessionStudentQuestion.student_id == participant.student_id,
+                )
+            ).all()
+        )
+        if personalized:
+            return personalized
+    if participant is not None:
+        personalized = dict(
+            session.execute(
+                select(
+                    QuizSessionStudentQuestion.question_id,
+                    QuizSessionStudentQuestion.points,
+                ).where(
+                    QuizSessionStudentQuestion.session_id == quiz_session.id,
+                    QuizSessionStudentQuestion.student_identifier
+                    == participant.student_identifier,
+                )
+            ).all()
+        )
+        if personalized:
+            return personalized
+    return dict(
+        session.execute(
+            select(QuizSessionQuestion.question_id, QuizSessionQuestion.points).where(
+                QuizSessionQuestion.session_id == quiz_session.id
+            )
+        ).all()
     )
 
 
@@ -373,12 +455,27 @@ def current_question_id(
         or participant.current_position is None
     ):
         return None
-    return session.scalar(
-        select(QuizSessionQuestion.question_id).where(
-            QuizSessionQuestion.session_id == quiz_session.id,
-            QuizSessionQuestion.position == participant.current_position,
+    question_ids = session_question_ids(quiz_session, session, participant)
+    if participant.current_position >= len(question_ids):
+        return None
+    return question_ids[participant.current_position]
+
+
+def session_question_count(quiz_session: QuizSession, session: DbSession) -> int:
+    common_count = session.scalar(
+        select(func.count(QuizSessionQuestion.question_id)).where(
+            QuizSessionQuestion.session_id == quiz_session.id
         )
     )
+    if common_count:
+        return common_count
+    personalized_count = session.scalar(
+        select(func.count(QuizSessionStudentQuestion.question_id))
+        .where(QuizSessionStudentQuestion.session_id == quiz_session.id)
+        .group_by(QuizSessionStudentQuestion.student_identifier)
+        .limit(1)
+    )
+    return personalized_count or 0
 
 
 def session_response(
@@ -394,7 +491,6 @@ def session_response(
             .order_by(QuizParticipant.joined_at, QuizParticipant.id)
         )
     )
-    question_ids = session_question_ids(quiz_session, session)
     answer_rows = list(
         session.execute(
             select(
@@ -463,7 +559,7 @@ def session_response(
             for participant in participants
         ],
         current_question_number=None,
-        total_questions=len(question_ids),
+        total_questions=session_question_count(quiz_session, session),
         current_submission_count=0,
         created_at=quiz_session.created_at,
         started_at=quiz_session.started_at,
@@ -523,7 +619,8 @@ def expire_quiz_session(
             select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
         ):
             participant.current_position = None
-        compute_final_scores(quiz_session, session)
+        if quiz.mode == "exam":
+            compute_final_scores(quiz_session, session)
         session.commit()
 
 
@@ -558,6 +655,11 @@ def delete_quiz_session_records(
     session.execute(
         delete(QuizSessionQuestion).where(
             QuizSessionQuestion.session_id.in_(session_ids)
+        )
+    )
+    session.execute(
+        delete(QuizSessionStudentQuestion).where(
+            QuizSessionStudentQuestion.session_id.in_(session_ids)
         )
     )
     session.execute(delete(QuizSession).where(QuizSession.id.in_(session_ids)))
@@ -714,7 +816,7 @@ def student_state_response(
     session: DbSession,
 ) -> StudentQuizStateResponse:
     expire_quiz_session(quiz_session, quiz, session)
-    question_ids = session_question_ids(quiz_session, session)
+    question_ids = session_question_ids(quiz_session, session, participant)
     question_id = current_question_id(quiz_session, participant, session)
     has_answered = (
         question_id is not None
@@ -801,8 +903,9 @@ def list_quizzes(
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     search: Annotated[str, Query(max_length=160)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
+    mode: Annotated[str, Query(pattern="^(exam|training)$")] = "exam",
 ) -> list[QuizResponse]:
-    filters = [Quiz.owner_id == professor.id]
+    filters = [Quiz.owner_id == professor.id, Quiz.mode == mode]
     if search:
         filters.append(Quiz.title.ilike(f"%{search}%"))
     if grade_level:
@@ -843,14 +946,21 @@ def create_quiz(
     validate_bank_selection(payload, professor, session)
     quiz = Quiz(
         owner_id=professor.id,
+        mode=payload.mode,
         title=payload.title,
         source_language=payload.source_language,
         question_count=payload.question_count,
         duration_seconds=payload.duration_seconds,
         allow_previous_questions=payload.allow_previous_questions,
-        easy_percentage=payload.easy_percentage,
-        medium_percentage=payload.medium_percentage,
-        hard_percentage=payload.hard_percentage,
+        same_questions_for_all=(
+            payload.same_questions_for_all if payload.mode == "exam" else False
+        ),
+        easy_question_count=payload.easy_question_count,
+        medium_question_count=payload.medium_question_count,
+        hard_question_count=payload.hard_question_count,
+        easy_points=payload.easy_points,
+        medium_points=payload.medium_points,
+        hard_points=payload.hard_points,
     )
     session.add(quiz)
     session.flush()
@@ -874,6 +984,7 @@ def list_active_sessions(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             Quiz.owner_id == professor.id,
+            Quiz.mode == "exam",
             QuizSession.status.in_(["waiting", "in_progress", "paused", "cancelled"]),
         )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
@@ -899,6 +1010,7 @@ def list_quiz_results(
     purge_expired_quiz_results(professor, request, session)
     filters = [
         Quiz.owner_id == professor.id,
+        Quiz.mode == "exam",
         QuizSession.status == "finished",
     ]
     if quiz_search:
@@ -954,6 +1066,7 @@ def export_quiz_results(
 
     filters = [
         Quiz.owner_id == professor.id,
+        Quiz.mode == "exam",
         QuizSession.class_id == class_id,
         QuizSession.status == "finished",
     ]
@@ -1026,6 +1139,7 @@ def answer_review(
     question: Question,
     position: int,
     choices: list[QuestionChoice],
+    max_score: float,
 ) -> QuizAnswerReview:
     submitted = json.loads(answer.answer_data)
     choices_by_id = {choice.id: choice for choice in choices}
@@ -1048,10 +1162,7 @@ def answer_review(
         submitted_answers=submitted_answers,
         expected_answers=expected_answers,
         score=answer.score,
-        max_score=max(
-            0,
-            sum(choice.points for choice in choices if choice.is_correct),
-        ),
+        max_score=max_score,
         is_graded=answer.is_graded,
     )
 
@@ -1085,21 +1196,23 @@ def list_participant_answers(
         )
     rows = list(
         session.execute(
-            select(QuizAnswer, Question, QuizSessionQuestion.position)
+            select(QuizAnswer, Question)
             .join(Question, Question.id == QuizAnswer.question_id)
-            .join(
-                QuizSessionQuestion,
-                (QuizSessionQuestion.session_id == QuizAnswer.session_id)
-                & (QuizSessionQuestion.question_id == QuizAnswer.question_id),
-            )
             .where(
                 QuizAnswer.session_id == quiz_session.id,
                 QuizAnswer.participant_id == participant.id,
             )
-            .order_by(QuizSessionQuestion.position)
         )
     )
-    question_ids = [question.id for _, question, _ in rows]
+    question_order = {
+        question_id: position
+        for position, question_id in enumerate(
+            session_question_ids(quiz_session, session, participant)
+        )
+    }
+    question_points = session_question_points(quiz_session, session, participant)
+    rows.sort(key=lambda row: question_order[row[1].id])
+    question_ids = [question.id for _, question in rows]
     choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
     if question_ids:
         for choice in session.scalars(
@@ -1112,10 +1225,11 @@ def list_participant_answers(
         answer_review(
             answer,
             question,
-            position,
+            question_order[question.id],
             choices_by_question[question.id],
+            question_points.get(question.id, 0),
         )
-        for answer, question, position in rows
+        for answer, question in rows
     ]
 
 
@@ -1137,13 +1251,8 @@ def grade_written_answer(
             detail="La correction est disponible une fois le quiz terminé",
         )
     row = session.execute(
-        select(QuizAnswer, Question, QuizSessionQuestion.position)
+        select(QuizAnswer, Question)
         .join(Question, Question.id == QuizAnswer.question_id)
-        .join(
-            QuizSessionQuestion,
-            (QuizSessionQuestion.session_id == QuizAnswer.session_id)
-            & (QuizSessionQuestion.question_id == QuizAnswer.question_id),
-        )
         .where(
             QuizAnswer.id == answer_id,
             QuizAnswer.session_id == quiz_session.id,
@@ -1154,7 +1263,19 @@ def grade_written_answer(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Réponse introuvable",
         )
-    answer, question, position = row
+    answer, question = row
+    participant = session.get(QuizParticipant, answer.participant_id)
+    question_ids = (
+        session_question_ids(quiz_session, session, participant)
+        if participant is not None
+        else []
+    )
+    if question.id not in question_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La question ne fait pas partie de cette session",
+        )
+    position = question_ids.index(question.id)
     if question.answer_mode != "written":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -1167,9 +1288,8 @@ def grade_written_answer(
             .order_by(QuestionChoice.position, QuestionChoice.id)
         )
     )
-    max_score = max(
-        0,
-        sum(choice.points for choice in choices if choice.is_correct),
+    max_score = session_question_points(quiz_session, session, participant).get(
+        question.id, 0
     )
     if payload.score > max_score:
         raise HTTPException(
@@ -1179,7 +1299,7 @@ def grade_written_answer(
     answer.score = payload.score
     answer.is_graded = True
     session.commit()
-    return answer_review(answer, question, position, choices)
+    return answer_review(answer, question, position, choices, max_score)
 
 
 @router.get(
@@ -1332,6 +1452,96 @@ def cancel_quiz_session(
     return session_response(quiz_session, quiz, session)
 
 
+@router.get("/training", response_model=list[QuizResponse])
+def list_student_training_quizzes(
+    session: DbSession,
+    student: StudentAccount = Depends(current_student),
+) -> list[QuizResponse]:
+    quizzes = session.scalars(
+        select(Quiz)
+        .where(
+            Quiz.owner_id == student.owner_id,
+            Quiz.mode == "training",
+        )
+        .order_by(Quiz.created_at.desc(), Quiz.id.desc())
+    )
+    return [quiz_response(quiz, session) for quiz in quizzes]
+
+
+@router.post(
+    "/training/{quiz_id}/start",
+    response_model=StudentQuizJoinResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def start_training_quiz(
+    quiz_id: int,
+    session: DbSession,
+    student: StudentAccount = Depends(current_student),
+) -> StudentQuizJoinResponse:
+    quiz = session.scalar(
+        select(Quiz).where(
+            Quiz.id == quiz_id,
+            Quiz.owner_id == student.owner_id,
+            Quiz.mode == "training",
+        )
+    )
+    membership = session.execute(
+        select(Student, StudentClass)
+        .join(StudentClass, StudentClass.id == Student.class_id)
+        .where(Student.account_id == student.id)
+    ).first()
+    if quiz is None:
+        raise HTTPException(status_code=404, detail="Entraînement introuvable")
+    if membership is None:
+        raise HTTPException(
+            status_code=409,
+            detail="L’élève doit être affecté à une classe",
+        )
+    class_student, student_class = membership
+    question_ids = draw_question_ids(quiz, session)
+    now = datetime.now(UTC)
+    quiz_session = QuizSession(
+        quiz_id=quiz.id,
+        quiz_title=quiz.title,
+        source_language=quiz.source_language,
+        duration_seconds=28800,
+        allow_previous_questions=False,
+        same_questions_for_all=False,
+        class_id=student_class.id,
+        class_name=student_class.name,
+        join_code=generate_join_code(session),
+        status="in_progress",
+        started_at=now,
+    )
+    session.add(quiz_session)
+    session.flush()
+    session.add_all(
+        QuizSessionQuestion(
+            session_id=quiz_session.id,
+            question_id=question_id,
+            position=position,
+            points=0,
+        )
+        for position, question_id in enumerate(question_ids)
+    )
+    participant_token = token_urlsafe(32)
+    participant = QuizParticipant(
+        session_id=quiz_session.id,
+        student_id=class_student.id,
+        student_identifier=student.identifier,
+        student_display_name=student.display_name,
+        access_token_hash=participant_token_hash(participant_token),
+        current_position=0,
+    )
+    session.add(participant)
+    session.commit()
+    state = student_state_response(quiz_session, quiz, participant, session)
+    return StudentQuizJoinResponse(
+        **state.model_dump(),
+        participant_token=participant_token,
+    )
+
+
 @router.get("/{quiz_id}/preview", response_model=list[QuestionResponse])
 def preview_quiz(
     quiz_id: int,
@@ -1368,13 +1578,20 @@ def update_quiz(
         )
     validate_bank_selection(payload, professor, session)
     quiz.title = payload.title
+    quiz.mode = payload.mode
     quiz.source_language = payload.source_language
     quiz.question_count = payload.question_count
     quiz.duration_seconds = payload.duration_seconds
     quiz.allow_previous_questions = payload.allow_previous_questions
-    quiz.easy_percentage = payload.easy_percentage
-    quiz.medium_percentage = payload.medium_percentage
-    quiz.hard_percentage = payload.hard_percentage
+    quiz.same_questions_for_all = (
+        payload.same_questions_for_all if payload.mode == "exam" else False
+    )
+    quiz.easy_question_count = payload.easy_question_count
+    quiz.medium_question_count = payload.medium_question_count
+    quiz.hard_question_count = payload.hard_question_count
+    quiz.easy_points = payload.easy_points
+    quiz.medium_points = payload.medium_points
+    quiz.hard_points = payload.hard_points
     session.execute(delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz.id))
     session.add_all(
         QuizQuestionBank(quiz_id=quiz.id, question_bank_id=bank_id)
@@ -1397,7 +1614,11 @@ def launch_quiz(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz = owned_quiz(quiz_id, professor, session)
-    question_ids = draw_question_ids(quiz, session)
+    if quiz.mode != "exam":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un entraînement est lancé directement par l’élève",
+        )
     student_class = session.scalar(
         select(StudentClass).where(
             StudentClass.id == payload.class_id,
@@ -1409,12 +1630,26 @@ def launch_quiz(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="La classe sélectionnée est invalide",
         )
+    students = list(
+        session.scalars(
+            select(Student).where(
+                Student.class_id == student_class.id,
+                Student.account_id.is_not(None),
+            )
+        )
+    )
+    if not quiz.same_questions_for_all and not students:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La classe doit contenir au moins un élève",
+        )
     quiz_session = QuizSession(
         quiz_id=quiz.id,
         quiz_title=quiz.title,
         source_language=quiz.source_language,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
+        same_questions_for_all=quiz.same_questions_for_all,
         class_id=student_class.id,
         class_name=student_class.name,
         join_code=generate_join_code(session),
@@ -1422,14 +1657,35 @@ def launch_quiz(
     )
     session.add(quiz_session)
     session.flush()
-    session.add_all(
-        QuizSessionQuestion(
-            session_id=quiz_session.id,
-            question_id=question_id,
-            position=position,
+    if quiz.same_questions_for_all:
+        question_ids = draw_question_ids(quiz, session)
+        assigned_points = points_for_drawn_questions(quiz, question_ids, session)
+        session.add_all(
+            QuizSessionQuestion(
+                session_id=quiz_session.id,
+                question_id=question_id,
+                position=position,
+                points=assigned_points[question_id],
+            )
+            for position, question_id in enumerate(question_ids)
         )
-        for position, question_id in enumerate(question_ids)
-    )
+    else:
+        assignments: list[QuizSessionStudentQuestion] = []
+        for student in students:
+            question_ids = draw_question_ids(quiz, session)
+            assigned_points = points_for_drawn_questions(quiz, question_ids, session)
+            assignments.extend(
+                QuizSessionStudentQuestion(
+                    session_id=quiz_session.id,
+                    student_id=student.id,
+                    student_identifier=student.identifier,
+                    question_id=question_id,
+                    position=position,
+                    points=assigned_points[question_id],
+                )
+                for position, question_id in enumerate(question_ids)
+            )
+        session.add_all(assignments)
     session.commit()
     session.refresh(quiz_session)
     return session_response(quiz_session, quiz, session)
@@ -1444,11 +1700,12 @@ def join_quiz(
     payload: QuizJoin,
     request: Request,
     session: DbSession,
+    account: StudentAccount = Depends(current_student),
 ) -> StudentQuizJoinResponse:
     row = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(QuizSession.join_code == payload.join_code)
+        .where(QuizSession.join_code == payload.join_code, Quiz.mode == "exam")
     ).first()
     if row is None:
         reject_quiz_join(request, session, "join:unknown")
@@ -1461,11 +1718,30 @@ def join_quiz(
     student = session.scalar(
         select(Student).where(
             Student.class_id == quiz_session.class_id,
-            Student.identifier == payload.student_identifier,
+            Student.account_id == account.id,
         )
     )
     if student is None:
         reject_quiz_join(request, session, join_subject)
+    if quiz_session.same_questions_for_all is False:
+        assigned_question_id = session.scalar(
+            select(QuizSessionStudentQuestion.question_id)
+            .where(
+                QuizSessionStudentQuestion.session_id == quiz_session.id,
+                QuizSessionStudentQuestion.student_id == student.id,
+            )
+            .limit(1)
+        )
+        if assigned_question_id is None:
+            reject_quiz_join(request, session, join_subject)
+        session.execute(
+            update(QuizSessionStudentQuestion)
+            .where(
+                QuizSessionStudentQuestion.session_id == quiz_session.id,
+                QuizSessionStudentQuestion.student_id == student.id,
+            )
+            .values(student_identifier=student.identifier)
+        )
     existing = session.scalar(
         select(QuizParticipant).where(
             QuizParticipant.session_id == quiz_session.id,
@@ -1474,6 +1750,31 @@ def join_quiz(
     )
     if existing is not None:
         reject_quiz_join(request, session, join_subject)
+    if quiz_session.same_questions_for_all is not False:
+        common_questions = list(
+            session.execute(
+                select(
+                    QuizSessionQuestion.question_id,
+                    QuizSessionQuestion.points,
+                )
+                .where(QuizSessionQuestion.session_id == quiz_session.id)
+                .order_by(QuizSessionQuestion.position)
+            ).all()
+        )
+        if not common_questions:
+            reject_quiz_join(request, session, join_subject)
+        randomizer.shuffle(common_questions)
+        session.add_all(
+            QuizSessionStudentQuestion(
+                session_id=quiz_session.id,
+                student_id=student.id,
+                student_identifier=student.identifier,
+                question_id=question_id,
+                position=position,
+                points=points,
+            )
+            for position, (question_id, points) in enumerate(common_questions)
+        )
     participant_token = token_urlsafe(32)
     participant = QuizParticipant(
         session_id=quiz_session.id,
@@ -1576,6 +1877,7 @@ def submit_student_answer(
             detail="La question actuelle n’est pas disponible",
         )
 
+    feedback: TrainingFeedback | None = None
     if question.answer_mode == "written":
         written_answer = (payload.written_answer or "").strip()
         if not written_answer or payload.selected_choice_ids is not None:
@@ -1584,6 +1886,17 @@ def submit_student_answer(
                 detail="Une réponse rédactionnelle est requise",
             )
         answer_data = {"written_answer": written_answer}
+        expected_answer = next(
+            (choice.label for choice in choices if choice.is_correct),
+            "",
+        )
+        if quiz.mode == "training":
+            feedback = TrainingFeedback(
+                question_id=question.id,
+                is_correct=written_answer.casefold() == expected_answer.casefold(),
+                correct_choice_ids=[],
+                expected_answer=expected_answer,
+            )
     else:
         if payload.selected_choice_ids is None:
             raise HTTPException(
@@ -1604,6 +1917,13 @@ def submit_student_answer(
                 detail="Une proposition sélectionnée est invalide",
             )
         answer_data = {"selected_choice_ids": selected_ids}
+        if quiz.mode == "training":
+            correct_ids = [choice.id for choice in choices if choice.is_correct]
+            feedback = TrainingFeedback(
+                question_id=question.id,
+                is_correct=set(selected_ids) == set(correct_ids),
+                correct_choice_ids=correct_ids,
+            )
 
     if existing_answer is None:
         session.add(
@@ -1620,7 +1940,7 @@ def submit_student_answer(
         existing_answer.answer_data = json.dumps(answer_data, ensure_ascii=False)
         existing_answer.score = 0
         existing_answer.is_graded = False
-    total_questions = len(session_question_ids(quiz_session, session))
+    total_questions = len(session_question_ids(quiz_session, session, participant))
     if (
         participant.current_position is not None
         and participant.current_position + 1 < total_questions
@@ -1637,9 +1957,13 @@ def submit_student_answer(
     )
     if unfinished_count == 0:
         quiz_session.status = "finished"
-        compute_final_scores(quiz_session, session)
+        if quiz.mode == "exam":
+            compute_final_scores(quiz_session, session)
     session.commit()
-    return student_state_response(quiz_session, quiz, participant, session)
+    state = student_state_response(quiz_session, quiz, participant, session)
+    if feedback is not None:
+        state.training_feedback = feedback
+    return state
 
 
 @router.post(

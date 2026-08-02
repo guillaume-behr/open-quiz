@@ -67,6 +67,20 @@ class StudentClass(Base):
     )
 
 
+class StudentAccount(Base):
+    __tablename__ = "student_accounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    identifier: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(120))
+    password_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
 class Student(Base):
     __tablename__ = "students"
     __table_args__ = (
@@ -79,6 +93,9 @@ class Student(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     class_id: Mapped[int] = mapped_column(ForeignKey("student_classes.id"), index=True)
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("student_accounts.id"), nullable=True, unique=True, index=True
+    )
     identifier: Mapped[str] = mapped_column(String(80))
     display_name: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(
@@ -163,14 +180,24 @@ class Quiz(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    mode: Mapped[str] = mapped_column(String(20), default="exam", index=True)
     title: Mapped[str] = mapped_column(String(160))
     source_language: Mapped[str] = mapped_column(String(35), default="fr")
     question_count: Mapped[int] = mapped_column(Integer)
     duration_seconds: Mapped[int] = mapped_column(Integer, default=1800)
     allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
-    easy_percentage: Mapped[int] = mapped_column(Integer)
-    medium_percentage: Mapped[int] = mapped_column(Integer)
-    hard_percentage: Mapped[int] = mapped_column(Integer)
+    same_questions_for_all: Mapped[bool] = mapped_column(Boolean, default=True)
+    easy_question_count: Mapped[int] = mapped_column(Integer, default=0)
+    medium_question_count: Mapped[int] = mapped_column(Integer, default=0)
+    hard_question_count: Mapped[int] = mapped_column(Integer, default=0)
+    easy_points: Mapped[float] = mapped_column(Float, default=0.0)
+    medium_points: Mapped[float] = mapped_column(Float, default=0.0)
+    hard_points: Mapped[float] = mapped_column(Float, default=0.0)
+    # Kept only so databases created before explicit difficulty counts can still
+    # satisfy their legacy NOT NULL columns. These values are no longer exposed.
+    easy_percentage: Mapped[int] = mapped_column(Integer, default=0)
+    medium_percentage: Mapped[int] = mapped_column(Integer, default=0)
+    hard_percentage: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
@@ -196,6 +223,7 @@ class QuizSession(Base):
     allow_previous_questions: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True
     )
+    same_questions_for_all: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     class_id: Mapped[int | None] = mapped_column(
         ForeignKey("student_classes.id"), nullable=True, index=True
     )
@@ -231,6 +259,30 @@ class QuizSessionQuestion(Base):
         ForeignKey("questions.id"), primary_key=True
     )
     position: Mapped[int] = mapped_column(Integer)
+    points: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class QuizSessionStudentQuestion(Base):
+    __tablename__ = "quiz_session_student_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "student_id",
+            "position",
+            name="uq_quiz_session_student_question_position",
+        ),
+    )
+
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_sessions.id"), primary_key=True
+    )
+    student_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    student_identifier: Mapped[str] = mapped_column(String(80), primary_key=True)
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("questions.id"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer)
+    points: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class QuizParticipant(Base):

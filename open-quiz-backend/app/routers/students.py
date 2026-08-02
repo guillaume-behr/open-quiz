@@ -1,0 +1,166 @@
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
+
+from app.dependencies import DbSession, ProfessorUser
+from app.models import (
+    QuizParticipant,
+    QuizSession,
+    Student,
+    StudentAccount,
+    StudentClass,
+)
+from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.schemas import (
+    StudentAccountCreate,
+    StudentAccountResponse,
+    StudentAccountUpdate,
+)
+from app.security import hash_password
+
+router = APIRouter(prefix="/api/students", tags=["student accounts"])
+
+
+def account_response(
+    account: StudentAccount, session: DbSession
+) -> StudentAccountResponse:
+    membership = session.execute(
+        select(Student.class_id, StudentClass.name)
+        .join(StudentClass, StudentClass.id == Student.class_id)
+        .where(Student.account_id == account.id)
+    ).first()
+    return StudentAccountResponse(
+        id=account.id,
+        identifier=account.identifier,
+        display_name=account.display_name,
+        is_active=account.is_active,
+        class_id=membership[0] if membership else None,
+        class_name=membership[1] if membership else None,
+        created_at=account.created_at,
+    )
+
+
+def owned_account(
+    account_id: int, professor: ProfessorUser, session: DbSession
+) -> StudentAccount:
+    account = session.scalar(
+        select(StudentAccount).where(
+            StudentAccount.id == account_id,
+            StudentAccount.owner_id == professor.id,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Compte élève introuvable")
+    return account
+
+
+@router.get("", response_model=list[StudentAccountResponse])
+def list_student_accounts(
+    professor: ProfessorUser,
+    session: DbSession,
+    response: Response,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    search: str = Query("", max_length=120),
+) -> list[StudentAccountResponse]:
+    filters = [StudentAccount.owner_id == professor.id]
+    if search:
+        term = f"%{search}%"
+        filters.append(
+            StudentAccount.display_name.ilike(term)
+            | StudentAccount.identifier.ilike(term)
+        )
+    total = (
+        session.scalar(select(func.count()).select_from(StudentAccount).where(*filters))
+        or 0
+    )
+    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    accounts = session.scalars(
+        select(StudentAccount)
+        .where(*filters)
+        .order_by(StudentAccount.display_name, StudentAccount.identifier)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return [account_response(account, session) for account in accounts]
+
+
+@router.post("", response_model=StudentAccountResponse, status_code=201)
+def create_student_account(
+    payload: StudentAccountCreate,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> StudentAccountResponse:
+    account = StudentAccount(
+        owner_id=professor.id,
+        identifier=payload.identifier,
+        display_name=payload.display_name,
+        password_hash=hash_password(payload.password),
+    )
+    session.add(account)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cet identifiant élève est déjà utilisé",
+        ) from None
+    session.refresh(account)
+    return account_response(account, session)
+
+
+@router.post("/{account_id}/update", response_model=StudentAccountResponse)
+def update_student_account(
+    account_id: int,
+    payload: StudentAccountUpdate,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> StudentAccountResponse:
+    account = owned_account(account_id, professor, session)
+    account.identifier = payload.identifier
+    account.display_name = payload.display_name
+    account.is_active = payload.is_active
+    if payload.password is not None:
+        account.password_hash = hash_password(payload.password)
+    membership = session.scalar(select(Student).where(Student.account_id == account.id))
+    if membership is not None:
+        membership.identifier = account.identifier
+        membership.display_name = account.display_name
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=409, detail="Cet identifiant élève est déjà utilisé"
+        ) from None
+    return account_response(account, session)
+
+
+@router.delete("/{account_id}", status_code=204)
+def delete_student_account(
+    account_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> None:
+    account = owned_account(account_id, professor, session)
+    membership = session.scalar(select(Student).where(Student.account_id == account.id))
+    if membership is not None:
+        active = session.scalar(
+            select(QuizSession.id).where(
+                QuizSession.class_id == membership.class_id,
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            )
+        )
+        if active is not None:
+            raise HTTPException(
+                status_code=409, detail="Ce compte participe à une session active"
+            )
+        session.execute(
+            update(QuizParticipant)
+            .where(QuizParticipant.student_id == membership.id)
+            .values(student_id=None)
+        )
+        session.execute(delete(Student).where(Student.id == membership.id))
+    session.execute(delete(StudentAccount).where(StudentAccount.id == account.id))
+    session.commit()
