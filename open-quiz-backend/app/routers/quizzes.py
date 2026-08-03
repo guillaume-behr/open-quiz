@@ -2245,6 +2245,8 @@ def control_makeup_session(
     now = datetime.now(UTC)
     for child in children:
         if action == "start":
+            if child.status != "waiting":
+                continue
             child.status = "in_progress"
             child.started_at = now
             for participant in session.scalars(
@@ -2252,18 +2254,21 @@ def control_makeup_session(
             ):
                 participant.current_position = 0
         elif action == "pause":
+            if child.status != "in_progress":
+                continue
             child.status = "paused"
             child.paused_at = now
         elif action == "resume":
+            if child.status != "paused" or child.paused_at is None:
+                continue
+            paused_at = child.paused_at
+            if paused_at.tzinfo is None:
+                paused_at = paused_at.replace(tzinfo=UTC)
+            child.paused_duration_seconds = (
+                child.paused_duration_seconds or 0
+            ) + ceil(max(0, (now - paused_at).total_seconds()))
+            child.paused_at = None
             child.status = "in_progress"
-            if child.paused_at is not None:
-                paused_at = child.paused_at
-                if paused_at.tzinfo is None:
-                    paused_at = paused_at.replace(tzinfo=UTC)
-                child.paused_duration_seconds = (
-                    child.paused_duration_seconds or 0
-                ) + ceil(max(0, (now - paused_at).total_seconds()))
-                child.paused_at = None
         elif action == "finish":
             if child.status not in {"in_progress", "paused"}:
                 continue
@@ -2276,6 +2281,8 @@ def control_makeup_session(
             ):
                 participant.current_position = None
         elif action == "cancel":
+            if child.status in {"finished", "cancelled"}:
+                continue
             child.status = "cancelled"
     makeup.status = target
     session.commit()

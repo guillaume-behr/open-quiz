@@ -3936,3 +3936,95 @@ def test_makeup_session_requires_quizzes_taken_by_the_class(
         )
         assert allowed.status_code == 201
         assert allowed.json()["status"] == "waiting"
+
+
+def test_makeup_pause_resume_leaves_finished_child_alone(
+    tmp_path: Path,
+) -> None:
+    """Pausing/resuming/cancelling a makeup must not reopen finished children."""
+    with make_client(settings_for(tmp_path / "makeup-finished-child.db")) as client:
+        environment = exam_environment(client)
+
+        def run_exam() -> dict[str, str]:
+            quiz_session, participant_headers = launch_and_join(client, environment)
+            assert (
+                client.post(
+                    f"/api/quizzes/sessions/{quiz_session['id']}/start",
+                    headers=environment["teacher_headers"],
+                ).status_code
+                == 200
+            )
+            answered = client.post(
+                f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+                headers=participant_headers,
+                json={
+                    "selected_choice_ids": [
+                        correct_choice_id(environment["question"])
+                    ]
+                },
+            )
+            assert answered.status_code == 200
+            assert answered.json()["status"] == "finished"
+            return {"participant_headers": participant_headers}
+
+        class_exam = run_exam()
+        makeup = client.post(
+            "/api/quizzes/makeup/sessions",
+            headers=environment["teacher_headers"],
+            json={
+                "class_id": environment["student_class"]["id"],
+                "quiz_ids": [environment["quiz"]["id"]],
+            },
+        ).json()
+        assert (
+            client.post(
+                "/api/quizzes/makeup/join",
+                headers=environment["student_headers"],
+                json={"join_code": makeup["join_code"]},
+            ).status_code
+            == 200
+        )
+        selected = client.post(
+            f"/api/quizzes/makeup/{makeup['join_code']}/select",
+            headers=environment["student_headers"],
+            json={"quiz_id": environment["quiz"]["id"]},
+        )
+        assert selected.status_code == 201
+        child_headers = {"X-Quiz-Token": selected.json()["participant_token"]}
+        child_url = (
+            f"/api/quizzes/student/sessions/{selected.json()['join_code']}"
+        )
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        # The student completes their retake and the child session finishes.
+        answered = client.post(
+            f"/api/quizzes/student/sessions/{selected.json()['join_code']}/answer",
+            headers=child_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert answered.status_code == 200
+        assert answered.json()["status"] == "finished"
+
+        # Teacher pauses then resumes the whole makeup: the finished child must
+        # remain finished instead of being reopened.
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/pause",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        assert client.get(child_url, headers=child_headers).json()["status"] == "finished"
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/resume",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        assert client.get(child_url, headers=child_headers).json()["status"] == "finished"
