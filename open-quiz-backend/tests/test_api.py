@@ -252,14 +252,22 @@ def test_question_draw_keeps_an_overshoot_within_point_tolerance() -> None:
     assert [question.id for question in adjusted] == [1, 2]
 
 
-def test_question_draw_replaces_the_last_question_to_reach_point_tolerance() -> None:
+def test_question_draw_never_goes_below_the_point_target() -> None:
     selected = [Question(id=1, points=2), Question(id=2, points=1)]
-    candidates = [*selected, Question(id=3, points=2.5)]
+    candidates = [*selected, Question(id=3, points=4)]
 
     adjusted = adjust_last_question_for_points(selected, candidates, target=5)
 
     assert [question.id for question in adjusted] == [1, 3]
-    assert sum(question.points for question in adjusted) >= 5 - 0.75
+    assert sum(question.points for question in adjusted) == 6
+    assert sum(question.points for question in adjusted) >= 5
+
+    too_small = [Question(id=1, points=2), Question(id=2, points=1)]
+    small_candidates = [*too_small, Question(id=3, points=2.5)]
+    with pytest.raises(ValueError):
+        # No replacement reaches the target: the draw is refused rather than
+        # producing a total below it.
+        adjust_last_question_for_points(too_small, small_candidates, target=5)
 
 
 def test_question_draw_never_exceeds_two_bonus_points() -> None:

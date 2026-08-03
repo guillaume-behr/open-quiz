@@ -618,6 +618,6 @@
     "join-code": "场次代码",
     "join-quiz": "加入",
     "question-points": "题目分值",
-    "quiz-points-target-help": "抽题允许少 0.75 分，或最多增加 2 分奖励分。",
+    "quiz-points-target-help": "抽题至少达到该总分，最多可加 2 分奖励分。",
     "points-count": "{{count}} 分"
 }

@@ -618,6 +618,6 @@
     "join-code": "Sitzungscode",
     "join-quiz": "Beitreten",
     "question-points": "Punkte der Frage",
-    "quiz-points-target-help": "Die Ziehung erlaubt bis zu 0,75 Punkte weniger oder höchstens 2 Bonuspunkte.",
+    "quiz-points-target-help": "Die Ziehung erreicht mindestens diesen Gesamtwert, höchstens mit 2 Bonuspunkten.",
     "points-count": "{{count}} Punkt(e)"
 }

@@ -167,7 +167,8 @@ def points_for_drawn_questions(
 
 # A small shortfall keeps a quiz launchable when the configured target cannot
 # be represented exactly by the available per-question point values.
-POINT_TARGET_SHORTFALL_TOLERANCE = 0.75
+# The drawn total is never below the configured target and may exceed it by
+# at most the per-quiz bonus allowance.
 MAX_QUIZ_BONUS_POINTS = 2.0
 
 
@@ -179,9 +180,8 @@ def adjust_last_question_for_points(
     if not selected or target <= 0:
         return selected
     total = sum(question.points for question in selected)
-    minimum = target - POINT_TARGET_SHORTFALL_TOLERANCE
     maximum = target + MAX_QUIZ_BONUS_POINTS
-    if minimum <= total <= maximum:
+    if target <= total <= maximum:
         return selected
     fixed_total = total - selected[-1].points
     fixed_ids = {question.id for question in selected[:-1]}
@@ -191,7 +191,7 @@ def adjust_last_question_for_points(
     valid_replacements = [
         question
         for question in replacements
-        if minimum <= fixed_total + question.points <= maximum
+        if target <= fixed_total + question.points <= maximum
     ]
     if not valid_replacements:
         raise ValueError("Aucun remplacement ne respecte la limite de points")

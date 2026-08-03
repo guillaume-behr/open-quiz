@@ -618,6 +618,6 @@
     "join-code": "Código da sessão",
     "join-quiz": "Entrar",
     "question-points": "Pontos da pergunta",
-    "quiz-points-target-help": "O sorteio admite até 0,75 pontos a menos ou no máximo 2 pontos de bónus.",
+    "quiz-points-target-help": "O sorteio atinge pelo menos este total, com no máximo 2 pontos de bónus.",
     "points-count": "{{count}} ponto(s)"
 }

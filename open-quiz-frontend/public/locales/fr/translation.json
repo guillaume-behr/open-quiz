@@ -622,6 +622,6 @@
     "join-code": "Code de session",
     "join-quiz": "Rejoindre",
     "question-points": "Points de la question",
-    "quiz-points-target-help": "Le tirage vise ce total, avec jusqu’à 0,75 point en moins ou 2 points bonus au maximum.",
+    "quiz-points-target-help": "Le tirage atteint au moins ce total, avec 2 points bonus au maximum.",
     "points-count": "{{count}} pt"
 }

@@ -618,6 +618,6 @@
     "join-code": "Session code",
     "join-quiz": "Join",
     "question-points": "Question points",
-    "quiz-points-target-help": "The draw targets this total, allowing up to 0.75 fewer points or 2 bonus points.",
+    "quiz-points-target-help": "The draw reaches this total or more, with up to 2 bonus points at most.",
     "points-count": "{{count}} point(s)"
 }

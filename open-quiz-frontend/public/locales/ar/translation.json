@@ -678,6 +678,6 @@
     "join-code": "رمز الجلسة",
     "join-quiz": "انضمام",
     "question-points": "نقاط السؤال",
-    "quiz-points-target-help": "يسمح السحب بنقص 0.75 نقطة أو بحد أقصى نقطتين إضافيتين.",
+    "quiz-points-target-help": "يصل السحب إلى هذا المجموع أو أكثر، مع حد أقصى نقطتين إضافيتين.",
     "points-count": "{{count}} نقطة"
 }

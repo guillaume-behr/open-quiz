@@ -64,7 +64,7 @@ export function QuestionSettingsFields({
                         type="number"
                         min="0.01"
                         max="10000"
-                        step="0.25"
+                        step="any"
                         value={points}
                         onChange={(event) =>
                             onPointsChange(Number(event.target.value))
