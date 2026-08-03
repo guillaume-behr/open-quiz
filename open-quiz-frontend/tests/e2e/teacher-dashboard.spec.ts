@@ -154,8 +154,7 @@ async function mockTeacherApi(page: Page) {
             })
         }
         if (
-            url.pathname ===
-            "/api/quizzes/training/classes/11/question-banks"
+            url.pathname === "/api/quizzes/training/classes/11/question-banks"
         ) {
             if (request.method() === "PUT") {
                 trainingBankIds = (
@@ -204,6 +203,7 @@ test("restores a teacher session and displays their classes", async ({
 }) => {
     const requests = await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
 
     await expect(
         page.getByRole("heading", { name: "Welcome, Ada Lovelace" })
@@ -226,6 +226,7 @@ test("teacher dashboard does not overflow on mobile", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
 
     await expect(page.getByRole("button", { name: "New class" })).toBeVisible()
     await expect
@@ -307,6 +308,7 @@ test("teacher can open class and question-bank creation dialogs", async ({
 }) => {
     await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
     await expect(page.getByRole("button", { name: "New class" })).toBeVisible()
 
     await page.getByRole("button", { name: "New class" }).click()
@@ -330,6 +332,7 @@ test("teacher can open class and question-bank creation dialogs", async ({
 test("teacher can create a class", async ({ page }) => {
     const requests = await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
     await page.getByRole("button", { name: "New class" }).click()
     const dialog = page.getByRole("dialog", { name: "New class" })
     await dialog.getByRole("combobox", { name: "Class" }).fill("Class 9A")
@@ -350,20 +353,16 @@ test("teacher can create a class", async ({ page }) => {
 
 test("class list recovers after a temporary load failure", async ({ page }) => {
     await mockTeacherApi(page)
-    let classRequests = 0
-    await page.route(
-        /^http:\/\/127\.0\.0\.1:4173\/api\/classes\?/,
-        async (route) => {
-            classRequests += 1
-            // React StrictMode performs the initial effect twice in development.
-            if (classRequests === 3) {
-                await route.fulfill({ status: 503, body: "{}" })
-                return
-            }
-            await route.fallback()
+    await page.route(/^http:\/\/127\.0\.0\.1:4173\/api\/classes\?/, async (route) => {
+        const search = new URL(route.request().url()).searchParams.get("search")
+        if (search === "first request") {
+            await route.fulfill({ status: 503, body: "{}" })
+            return
         }
-    )
+        await route.fallback()
+    })
     await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
     await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
 
     await page.getByPlaceholder("Search for a class").fill("first request")
@@ -416,15 +415,13 @@ test("teacher assigns existing question banks to a training class", async ({
 }) => {
     const requests = await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
-    await page
-        .getByRole("button", { name: "Training", exact: true })
-        .click()
+    await page.getByRole("button", { name: "Training", exact: true }).click()
 
     await expect(page.getByLabel("Class")).toHaveValue("11")
     await page.getByText("Matter and energy", { exact: true }).click()
-    await expect(page.getByText("Advanced matter", { exact: true })).toHaveCount(
-        0
-    )
+    await expect(
+        page.getByText("Advanced matter", { exact: true })
+    ).toHaveCount(0)
     await page.getByRole("button", { name: "Save question banks" }).click()
     await expect(
         page.getByText("The class training question banks have been saved.")
@@ -452,6 +449,7 @@ test("teacher can create a quiz from a question bank", async ({ page }) => {
 
     const dialog = page.getByRole("dialog", { name: "New exam quiz" })
     await dialog.getByLabel("Quiz title").fill("Energy assessment")
+    await dialog.getByLabel("Grade level").selectOption("Grade 8")
     await dialog.getByText("Matter and energy", { exact: true }).click()
     await dialog.getByLabel("Easy", { exact: true }).fill("10")
     await dialog.getByLabel("Points for Easy questions").fill("15")
