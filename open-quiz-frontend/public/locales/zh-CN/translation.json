@@ -361,7 +361,7 @@
     "question-count_one": "{{count}} 道题",
     "question-count_other": "{{count}} 道题",
     "add-question": "添加问题",
-    "view-questions": "查看题目",
+    "add-edit-questions": "添加/编辑题目",
     "edit": "编辑",
     "edit-question": "编辑问题",
     "delete-question": "删除问题",

@@ -7,9 +7,9 @@ import { Pagination } from "@/components/ui/pagination"
 import {
     BookOpenText,
     Download,
-    Eye,
     FileJson,
     LoaderCircle,
+    Pencil,
     Trash2,
     Upload,
 } from "lucide-react"
@@ -248,6 +248,17 @@ function BanksContent({
                         <Button
                             type="button"
                             size="icon-sm"
+                            variant="ghost"
+                            className="absolute top-4 right-12 z-10"
+                            aria-label={t("add-edit-questions")}
+                            title={t("add-edit-questions")}
+                            onClick={() => onOpen(bank.id)}
+                        >
+                            <Pencil />
+                        </Button>
+                        <Button
+                            type="button"
+                            size="icon-sm"
                             variant="destructive"
                             className="absolute top-4 right-4"
                             aria-label={t("delete-question-bank")}
@@ -256,7 +267,7 @@ function BanksContent({
                         >
                             <Trash2 />
                         </Button>
-                        <div className="flex items-start gap-3 pr-10">
+                        <div className="flex items-start gap-3 pr-20">
                             <div className="rounded-lg bg-primary/10 p-2 text-primary">
                                 <BookOpenText className="size-5" />
                             </div>
@@ -275,15 +286,6 @@ function BanksContent({
                                     </span>
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => onOpen(bank.id)}
-                                    >
-                                        <Eye />
-                                        {t("view-questions")}
-                                    </Button>
                                     <Button
                                         type="button"
                                         size="sm"

@@ -361,7 +361,7 @@
     "question-count_one": "{{count}} Frage",
     "question-count_other": "{{count}} Fragen",
     "add-question": "Fügen Sie eine Frage hinzu",
-    "view-questions": "Konsultieren",
+    "add-edit-questions": "Fragen hinzufügen/bearbeiten",
     "edit": "Bearbeiten",
     "edit-question": "Frage bearbeiten",
     "delete-question": "Frage löschen",

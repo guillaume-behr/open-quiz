@@ -373,7 +373,7 @@
     "question-count_few": "{{count}} запитань",
     "question-count_many": "{{count}} запитань",
     "add-question": "Додайте запитання",
-    "view-questions": "Проконсультуйтеся",
+    "add-edit-questions": "Додати / редагувати запитання",
     "edit": "Редагувати",
     "edit-question": "Редагувати запитання",
     "delete-question": "Видалити запитання",

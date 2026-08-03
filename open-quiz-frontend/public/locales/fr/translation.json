@@ -363,7 +363,7 @@
     "question-count_one": "{{count}} question",
     "question-count_other": "{{count}} questions",
     "add-question": "Ajouter une question",
-    "view-questions": "Consulter",
+    "add-edit-questions": "Ajouter / éditer des questions",
     "edit": "Modifier",
     "edit-question": "Modifier la question",
     "delete-question": "Supprimer la question",

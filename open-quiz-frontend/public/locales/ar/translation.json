@@ -385,7 +385,7 @@
     "question-count_few": "{{count}} الأسئلة",
     "question-count_many": "{{count}} الأسئلة",
     "add-question": "أضف سؤالاً",
-    "view-questions": "استشارة",
+    "add-edit-questions": "إضافة / تعديل الأسئلة",
     "edit": "تحرير",
     "edit-question": "تحرير السؤال",
     "delete-question": "حذف السؤال",

@@ -361,7 +361,7 @@
     "question-count_one": "{{count}} question",
     "question-count_other": "{{count}} questions",
     "add-question": "Add a question",
-    "view-questions": "View questions",
+    "add-edit-questions": "Add/edit questions",
     "edit": "Edit",
     "edit-question": "Edit question",
     "delete-question": "Delete question",

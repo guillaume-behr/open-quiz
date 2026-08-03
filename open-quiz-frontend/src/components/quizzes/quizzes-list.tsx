@@ -234,6 +234,17 @@ function QuizCard({
             <Button
                 type="button"
                 size="icon-sm"
+                variant="ghost"
+                className="absolute top-4 right-12 z-10"
+                aria-label={t("edit-quiz")}
+                title={t("edit-quiz")}
+                onClick={onEdit}
+            >
+                <Pencil />
+            </Button>
+            <Button
+                type="button"
+                size="icon-sm"
                 variant="destructive"
                 className="absolute top-4 right-4"
                 aria-label={t("delete-quiz")}
@@ -299,15 +310,6 @@ function QuizCard({
                 <Button type="button" size="sm" onClick={onLaunch}>
                     <Play />
                     {t("launch-quiz")}
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={onEdit}
-                >
-                    <Pencil />
-                    {t("edit-quiz")}
                 </Button>
                 <Button
                     type="button"
