@@ -2,18 +2,20 @@ import { getAllStudentClasses } from "@/api/classes"
 import {
     controlMakeupSession,
     createMakeupSession,
-    getAllQuizzes,
+    getMakeupQuizOptions,
     getMakeupSessions,
 } from "@/api/quizzes"
 import type { MakeupSession, Quiz, StudentClass } from "@/api/types"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { useEffect, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 
 export function MakeupSessionsPanel() {
     const { t } = useTranslation()
     const [classes, setClasses] = useState<StudentClass[]>([])
-    const [quizzes, setQuizzes] = useState<Quiz[]>([])
+    const [quizOptions, setQuizOptions] = useState<Quiz[]>([])
+    const [quizSearch, setQuizSearch] = useState("")
     const [sessions, setSessions] = useState<MakeupSession[]>([])
     const [classId, setClassId] = useState("")
     const [quizIds, setQuizIds] = useState<number[]>([])
@@ -21,18 +23,38 @@ export function MakeupSessionsPanel() {
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        Promise.all([
-            getAllStudentClasses(),
-            getAllQuizzes(),
-            getMakeupSessions(),
-        ])
-            .then(([loadedClasses, loadedQuizzes, loadedSessions]) => {
+        Promise.all([getAllStudentClasses(), getMakeupSessions()])
+            .then(([loadedClasses, loadedSessions]) => {
                 setClasses(loadedClasses)
-                setQuizzes(loadedQuizzes)
                 setSessions(loadedSessions)
             })
             .catch(() => setError(t("makeup-load-error")))
     }, [t])
+
+    useEffect(() => {
+        if (!classId) return
+        let active = true
+        getMakeupQuizOptions(Number(classId))
+            .then((options) => {
+                if (active) setQuizOptions(options)
+            })
+            .catch(() => {
+                if (active) {
+                    setQuizOptions([])
+                    setError(t("makeup-load-error"))
+                }
+            })
+        return () => {
+            active = false
+        }
+    }, [classId, t])
+
+    const trimmedSearch = quizSearch.trim().toLowerCase()
+    const filteredQuizOptions = trimmedSearch
+        ? quizOptions.filter((quiz) =>
+              quiz.title.toLowerCase().includes(trimmedSearch)
+          )
+        : quizOptions
 
     const hasActiveSession = sessions.some((item) =>
         ["waiting", "in_progress", "paused"].includes(item.status)
@@ -91,7 +113,7 @@ export function MakeupSessionsPanel() {
     }
 
     return (
-        <div className="grid gap-6">
+        <div className="mt-6 grid gap-6">
             <form onSubmit={create} className="rounded-2xl border bg-card p-5">
                 <h2 className="text-xl font-bold">{t("makeup-create")}</h2>
                 <div className="mt-4 grid gap-4">
@@ -100,7 +122,12 @@ export function MakeupSessionsPanel() {
                         <select
                             className="h-10 rounded-md border bg-background px-3"
                             value={classId}
-                            onChange={(event) => setClassId(event.target.value)}
+                            onChange={(event) => {
+                                setClassId(event.target.value)
+                                setQuizIds([])
+                                setQuizSearch("")
+                                setQuizOptions([])
+                            }}
                             required
                         >
                             <option value="">{t("select-class")}</option>
@@ -115,35 +142,55 @@ export function MakeupSessionsPanel() {
                         <legend className="mb-2 text-sm font-medium">
                             {t("makeup-authorized-quizzes")}
                         </legend>
-                        {quizzes.map((quiz) => (
-                            <label
-                                key={quiz.id}
-                                className="flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50"
-                            >
-                                <span className="flex items-center gap-3">
-                                    <input
-                                        type="checkbox"
-                                        className="accent-primary"
-                                        checked={quizIds.includes(quiz.id)}
-                                        onChange={(event) =>
-                                            setQuizIds((current) =>
-                                                event.target.checked
-                                                    ? [...current, quiz.id]
-                                                    : current.filter(
-                                                          (id) => id !== quiz.id
-                                                      )
-                                            )
-                                        }
-                                    />
-                                    <span className="font-medium">
-                                        {quiz.title}
-                                    </span>
-                                </span>
-                                <span className="text-muted-foreground">
-                                    {Math.round(quiz.duration_seconds / 60)} min
-                                </span>
+                        {classId && (
+                            <label className="grid gap-1 text-sm">
+                                {t("search")}
+                                <Input
+                                    value={quizSearch}
+                                    placeholder={t("search-quiz")}
+                                    onChange={(event) =>
+                                        setQuizSearch(event.target.value)
+                                    }
+                                />
                             </label>
-                        ))}
+                        )}
+                        {quizOptions.length === 0 && classId ? (
+                            <p className="text-sm text-muted-foreground">
+                                {t("makeup-no-eligible-quizzes")}
+                            </p>
+                        ) : (
+                            filteredQuizOptions.map((quiz) => (
+                                <label
+                                    key={quiz.id}
+                                    className="flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50"
+                                >
+                                    <span className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            className="accent-primary"
+                                            checked={quizIds.includes(quiz.id)}
+                                            onChange={(event) =>
+                                                setQuizIds((current) =>
+                                                    event.target.checked
+                                                        ? [...current, quiz.id]
+                                                        : current.filter(
+                                                              (id) =>
+                                                                  id !== quiz.id
+                                                          )
+                                                )
+                                            }
+                                        />
+                                        <span className="font-medium">
+                                            {quiz.title}
+                                        </span>
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                        {Math.round(quiz.duration_seconds / 60)}{" "}
+                                        min
+                                    </span>
+                                </label>
+                            ))
+                        )}
                     </fieldset>
                     <Button disabled={busy || !classId || !quizIds.length}>
                         {t("makeup-launch")}

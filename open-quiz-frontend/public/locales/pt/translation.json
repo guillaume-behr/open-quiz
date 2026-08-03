@@ -599,6 +599,7 @@
     "makeup-professor-help": "Permita que uma turma repita quizzes selecionados.",
     "makeup-create": "Nova sessão de recuperação",
     "makeup-authorized-quizzes": "Quizzes permitidos e duração",
+    "makeup-no-eligible-quizzes": "Esta turma ainda não fez nenhum quiz, portanto não há nada a recuperar.",
     "makeup-launch": "Criar sessão",
     "makeup-load-error": "Não foi possível carregar as recuperações.",
     "makeup-create-error": "Não foi possível criar a recuperação.",

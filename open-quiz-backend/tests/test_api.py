@@ -3803,3 +3803,46 @@ def test_concurrent_answer_submissions_keep_a_single_answer(
                 (quiz_session["id"],),
             ).fetchone()[0]
         assert answer_count == 1
+
+
+def test_makeup_session_requires_quizzes_taken_by_the_class(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "makeup-eligibility.db")) as client:
+        environment = exam_environment(client)
+        makeup_payload = {
+            "class_id": environment["student_class"]["id"],
+            "quiz_ids": [environment["quiz"]["id"]],
+        }
+        # The class has not taken the quiz yet: the retake must be refused.
+        refused = client.post(
+            "/api/quizzes/makeup/sessions",
+            headers=environment["teacher_headers"],
+            json=makeup_payload,
+        )
+        assert refused.status_code == 422
+
+        quiz_session, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{quiz_session['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        answered = client.post(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert answered.status_code == 200
+        assert answered.json()["status"] == "finished"
+
+        # Once the class has completed the quiz, the retake is allowed.
+        allowed = client.post(
+            "/api/quizzes/makeup/sessions",
+            headers=environment["teacher_headers"],
+            json=makeup_payload,
+        )
+        assert allowed.status_code == 201
+        assert allowed.json()["status"] == "waiting"

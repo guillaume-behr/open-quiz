@@ -659,6 +659,7 @@
     "makeup-professor-help": "اسمح للفصل بإعادة اختبارات محددة.",
     "makeup-create": "جلسة استدراك جديدة",
     "makeup-authorized-quizzes": "الاختبارات المسموحة ومدتها",
+    "makeup-no-eligible-quizzes": "لم تُجرِ هذه الفئة أي اختبار بعد، لذا لا يمكن استعادة أي شيء.",
     "makeup-launch": "إنشاء الجلسة",
     "makeup-load-error": "تعذر تحميل جلسات الاستدراك.",
     "makeup-create-error": "تعذر إنشاء جلسة الاستدراك.",

@@ -599,6 +599,7 @@
     "makeup-professor-help": "允许班级重做指定的已完成测验。",
     "makeup-create": "新建补考场次",
     "makeup-authorized-quizzes": "允许的测验及时间",
+    "makeup-no-eligible-quizzes": "该班级尚未参加任何测验，因此暂无可补考的测验。",
     "makeup-launch": "创建场次",
     "makeup-load-error": "无法加载补考场次。",
     "makeup-create-error": "无法创建补考场次。",

@@ -2106,6 +2106,53 @@ def list_makeup_sessions(
     return [makeup_session_response(item, session) for item in makeups]
 
 
+def class_finished_quiz_ids(
+    student_class_id: int, professor: ProfessorUser, session: DbSession
+) -> set[int]:
+    """Quizzes for which the class already completed an exam session."""
+    return set(
+        session.scalars(
+            select(QuizSession.quiz_id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                Quiz.owner_id == professor.id,
+                QuizSession.class_id == student_class_id,
+                QuizSession.status == "finished",
+            )
+        )
+    )
+
+
+@router.get("/makeup/quiz-options", response_model=list[QuizResponse])
+def makeup_quiz_options(
+    class_id: Annotated[int, Query(ge=1)],
+    professor: ProfessorUser,
+    session: DbSession,
+) -> list[QuizResponse]:
+    """Quizzes a class may make up: only those the class has already taken."""
+    student_class = session.scalar(
+        select(StudentClass).where(
+            StudentClass.id == class_id,
+            StudentClass.owner_id == professor.id,
+        )
+    )
+    if student_class is None:
+        raise HTTPException(status_code=404, detail="Classe introuvable")
+    finished_ids = class_finished_quiz_ids(student_class.id, professor, session)
+    quizzes = list(
+        session.scalars(
+            select(Quiz)
+            .where(
+                Quiz.owner_id == professor.id,
+                Quiz.mode == "exam",
+                Quiz.id.in_(finished_ids),
+            )
+            .order_by(Quiz.title, Quiz.id)
+        )
+    )
+    return [quiz_response(quiz, session) for quiz in quizzes]
+
+
 @router.post(
     "/makeup/sessions",
     response_model=MakeupSessionResponse,
@@ -2134,6 +2181,12 @@ def create_makeup_session(
     )
     if student_class is None or len(quizzes) != len(quiz_ids):
         raise HTTPException(status_code=422, detail="Classe ou quiz invalide")
+    eligible = class_finished_quiz_ids(student_class.id, professor, session)
+    if not quiz_ids.issubset(eligible):
+        raise HTTPException(
+            status_code=422,
+            detail="Seuls les quiz déjà passés par la classe peuvent être rattrapés",
+        )
     makeup = MakeupSession(
         owner_id=professor.id,
         class_id=student_class.id,

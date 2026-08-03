@@ -599,6 +599,7 @@
     "makeup-professor-help": "Permite que una clase repita cuestionarios seleccionados.",
     "makeup-create": "Nueva sesión de recuperación",
     "makeup-authorized-quizzes": "Cuestionarios permitidos y duración",
+    "makeup-no-eligible-quizzes": "Esta clase aún no ha hecho ningún cuestionario, por lo que no hay nada que recuperar.",
     "makeup-launch": "Crear sesión",
     "makeup-load-error": "No se pudieron cargar las recuperaciones.",
     "makeup-create-error": "No se pudo crear la recuperación.",

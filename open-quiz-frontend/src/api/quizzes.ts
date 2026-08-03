@@ -116,6 +116,12 @@ export function getMakeupSessions(): Promise<MakeupSession[]> {
     return request<MakeupSession[]>("/api/quizzes/makeup/sessions")
 }
 
+export function getMakeupQuizOptions(classId: number): Promise<Quiz[]> {
+    return request<Quiz[]>(
+        `/api/quizzes/makeup/quiz-options?class_id=${classId}`
+    )
+}
+
 export function createMakeupSession(
     classId: number,
     quizIds: number[]

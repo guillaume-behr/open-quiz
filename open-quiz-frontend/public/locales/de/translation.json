@@ -599,6 +599,7 @@
     "makeup-professor-help": "Erlauben Sie einer Klasse, ausgewählte Quizze zu wiederholen.",
     "makeup-create": "Neue Nachprüfung",
     "makeup-authorized-quizzes": "Erlaubte Quizze und Dauer",
+    "makeup-no-eligible-quizzes": "Diese Klasse hat noch kein Quiz absolviert, daher ist kein Nachholen möglich.",
     "makeup-launch": "Sitzung erstellen",
     "makeup-load-error": "Nachprüfungen konnten nicht geladen werden.",
     "makeup-create-error": "Nachprüfung konnte nicht erstellt werden.",

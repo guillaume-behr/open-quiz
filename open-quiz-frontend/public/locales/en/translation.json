@@ -599,6 +599,7 @@
     "makeup-professor-help": "Allow a class to retake selected quizzes they have already taken.",
     "makeup-create": "New retake session",
     "makeup-authorized-quizzes": "Allowed quizzes and durations",
+    "makeup-no-eligible-quizzes": "No quiz has been taken by this class yet, so none can be retaken.",
     "makeup-launch": "Create session",
     "makeup-load-error": "Unable to load retake sessions.",
     "makeup-create-error": "Unable to create the retake session.",

@@ -603,6 +603,7 @@
     "makeup-professor-help": "Autorisez une classe à retenter certains quiz déjà passés.",
     "makeup-create": "Nouvelle session de rattrapage",
     "makeup-authorized-quizzes": "Quiz autorisés et durées",
+    "makeup-no-eligible-quizzes": "Aucun quiz n’a encore été passé par cette classe, rien ne peut être rattrapé.",
     "makeup-launch": "Créer la session",
     "makeup-load-error": "Impossible de charger les rattrapages.",
     "makeup-create-error": "Impossible de créer le rattrapage.",
