@@ -57,7 +57,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [activeSection, setActiveSection] =
-        useState<DashboardSection>("classes")
+        useState<DashboardSection>("students")
     const [isQuestionBankCreationOpen, setIsQuestionBankCreationOpen] =
         useState(false)
     const [isQuizCreationOpen, setIsQuizCreationOpen] = useState(false)
