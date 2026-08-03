@@ -8,19 +8,24 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
+import { Pagination } from "@/components/ui/pagination"
 import { Switch } from "@/components/ui/switch"
 import { LoaderCircle, Pencil, Plus } from "lucide-react"
-import type { FormEvent } from "react"
+import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 const difficultyKeys = ["easy", "medium", "hard"] as const
 type Difficulty = (typeof difficultyKeys)[number]
 type DifficultyValues = Record<Difficulty, number>
+const BANK_PAGE_SIZE = 6
 
 type QuizFormDialogProps = {
     open: boolean
     editingQuiz: Quiz | null
     banks: QuestionBank[]
+    gradeLevels: string[]
+    quizGradeLevel: string
     title: string
     durationMinutes: number
     selectedBankIds: number[]
@@ -32,6 +37,7 @@ type QuizFormDialogProps = {
     error: string | null
     onTitleChange: (value: string) => void
     onDurationChange: (value: number) => void
+    onQuizGradeLevelChange: (value: string) => void
     onSelectedBankIdsChange: (ids: number[]) => void
     onAllowPreviousQuestionsChange: (value: boolean) => void
     onDifficultyCountsChange: (values: DifficultyValues) => void
@@ -44,6 +50,8 @@ export function QuizFormDialog({
     open,
     editingQuiz,
     banks,
+    gradeLevels,
+    quizGradeLevel,
     title,
     durationMinutes,
     selectedBankIds,
@@ -55,6 +63,7 @@ export function QuizFormDialog({
     error,
     onTitleChange,
     onDurationChange,
+    onQuizGradeLevelChange,
     onSelectedBankIdsChange,
     onAllowPreviousQuestionsChange,
     onDifficultyCountsChange,
@@ -94,6 +103,29 @@ export function QuizFormDialog({
                         />
                     </Field>
                     <Field>
+                        <FieldLabel htmlFor="quiz-grade-level">
+                            {t("grade-level")}
+                        </FieldLabel>
+                        <select
+                            id="quiz-grade-level"
+                            className={NATIVE_SELECT_CLASS_NAME}
+                            value={quizGradeLevel}
+                            onChange={(event) =>
+                                onQuizGradeLevelChange(event.target.value)
+                            }
+                            required
+                        >
+                            <option value="" disabled>
+                                {t("choose-grade-level")}
+                            </option>
+                            {gradeLevels.map((level) => (
+                                <option key={level} value={level}>
+                                    {level}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field>
                         <FieldLabel htmlFor="quiz-duration">
                             {t("quiz-duration")}
                         </FieldLabel>
@@ -117,11 +149,14 @@ export function QuizFormDialog({
                             {t("quiz-duration-help")}
                         </p>
                     </Field>
-                    <QuestionBankPicker
-                        banks={banks}
-                        selectedIds={selectedBankIds}
-                        onSelectedIdsChange={onSelectedBankIdsChange}
-                    />
+                    {quizGradeLevel && (
+                        <QuestionBankPicker
+                            banks={banks}
+                            gradeLevel={quizGradeLevel}
+                            selectedIds={selectedBankIds}
+                            onSelectedIdsChange={onSelectedBankIdsChange}
+                        />
+                    )}
                     <Field>
                         <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
                             <span>
@@ -161,6 +196,7 @@ export function QuizFormDialog({
                             type="submit"
                             disabled={
                                 isBusy ||
+                                !quizGradeLevel ||
                                 selectedBankIds.length === 0 ||
                                 questionCount === 0
                             }
@@ -183,63 +219,100 @@ export function QuizFormDialog({
 
 function QuestionBankPicker({
     banks,
+    gradeLevel,
     selectedIds,
     onSelectedIdsChange,
 }: {
     banks: QuestionBank[]
+    gradeLevel: string
     selectedIds: number[]
     onSelectedIdsChange: (ids: number[]) => void
 }) {
     const { t } = useTranslation()
+    const [search, setSearch] = useState("")
+    const [page, setPage] = useState(1)
+
+    const trimmedSearch = search.trim().toLowerCase()
+    const filtered = banks.filter(
+        (bank) =>
+            bank.grade_level === gradeLevel &&
+            (trimmedSearch === "" ||
+                bank.chapter.toLowerCase().includes(trimmedSearch))
+    )
+    const totalPages = Math.max(1, Math.ceil(filtered.length / BANK_PAGE_SIZE))
+    const safePage = Math.min(page, totalPages)
+    const visible = filtered.slice(
+        (safePage - 1) * BANK_PAGE_SIZE,
+        safePage * BANK_PAGE_SIZE
+    )
+
+    function toggle(bankId: number) {
+        onSelectedIdsChange(
+            selectedIds.includes(bankId)
+                ? selectedIds.filter((id) => id !== bankId)
+                : [...selectedIds, bankId]
+        )
+    }
+
     return (
         <Field>
-            <FieldLabel>{t("quiz-question-banks")}</FieldLabel>
-            {banks.length === 0 ? (
+            <FieldLabel htmlFor="quiz-bank-search">
+                {t("quiz-question-banks")}
+            </FieldLabel>
+            <Input
+                id="quiz-bank-search"
+                value={search}
+                placeholder={t("search-question-bank")}
+                aria-label={t("search-question-bank")}
+                onChange={(event) => {
+                    setSearch(event.target.value)
+                    setPage(1)
+                }}
+            />
+            {filtered.length === 0 ? (
                 <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                     {t("quiz-needs-question-bank")}
                 </p>
             ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                    {banks.map((bank) => {
-                        const selected = selectedIds.includes(bank.id)
-                        return (
-                            <label
-                                key={bank.id}
-                                className={`flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 ${
-                                    selected
-                                        ? "border-primary bg-primary/5"
-                                        : ""
-                                }`}
-                            >
-                                <input
-                                    type="checkbox"
-                                    className="mt-1 accent-primary"
-                                    checked={selected}
-                                    onChange={() =>
-                                        onSelectedIdsChange(
-                                            selected
-                                                ? selectedIds.filter(
-                                                      (id) => id !== bank.id
-                                                  )
-                                                : [...selectedIds, bank.id]
-                                        )
-                                    }
-                                />
-                                <span className="min-w-0">
-                                    <span className="block font-medium">
-                                        {bank.chapter}
+                <>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {visible.map((bank) => {
+                            const selected = selectedIds.includes(bank.id)
+                            return (
+                                <label
+                                    key={bank.id}
+                                    className={`flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 ${
+                                        selected
+                                            ? "border-primary bg-primary/5"
+                                            : ""
+                                    }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        className="mt-1 accent-primary"
+                                        checked={selected}
+                                        onChange={() => toggle(bank.id)}
+                                    />
+                                    <span className="min-w-0">
+                                        <span className="block font-medium">
+                                            {bank.chapter}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {t("question-count", {
+                                                count: bank.question_count,
+                                            })}
+                                        </span>
                                     </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {bank.grade_level} ·{" "}
-                                        {t("question-count", {
-                                            count: bank.question_count,
-                                        })}
-                                    </span>
-                                </span>
-                            </label>
-                        )
-                    })}
-                </div>
+                                </label>
+                            )
+                        })}
+                    </div>
+                    <Pagination
+                        currentPage={safePage}
+                        totalPages={totalPages}
+                        onPageChange={setPage}
+                    />
+                </>
             )}
         </Field>
     )

@@ -69,6 +69,7 @@ export function QuizzesPanel({
     const [supportLoadFailed, setSupportLoadFailed] = useState(false)
     const [quizListLoadFailed, setQuizListLoadFailed] = useState(false)
     const [title, setTitle] = useState("")
+    const [quizGradeLevel, setQuizGradeLevel] = useState("")
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
     const [durationMinutes, setDurationMinutes] = useState(30)
     const [allowPreviousQuestions, setAllowPreviousQuestions] = useState(false)
@@ -273,6 +274,7 @@ export function QuizzesPanel({
 
     function resetCreationForm(): void {
         setTitle("")
+        setQuizGradeLevel("")
         setSelectedBankIds([])
         setDurationMinutes(30)
         setAllowPreviousQuestions(false)
@@ -282,9 +284,17 @@ export function QuizzesPanel({
         setEditingQuiz(null)
     }
 
+    function handleQuizGradeLevelChange(level: string): void {
+        setQuizGradeLevel(level)
+        setSelectedBankIds([])
+        setDifficultyCounts({ easy: 0, medium: 0, hard: 0 })
+        setDifficultyPoints({ easy: 0, medium: 0, hard: 0 })
+    }
+
     function openQuizEditor(quiz: Quiz): void {
         setEditingQuiz(quiz)
         setTitle(quiz.title)
+        setQuizGradeLevel(quiz.question_banks[0]?.grade_level ?? "")
         setSelectedBankIds(quiz.question_banks.map((bank) => bank.id))
         setDurationMinutes(quiz.duration_seconds / 60)
         setAllowPreviousQuestions(quiz.allow_previous_questions)
@@ -303,8 +313,8 @@ export function QuizzesPanel({
 
     async function handleCreate(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
-        if (questionCount === 0 || selectedBankIds.length === 0) return
-        setCreateError(null)
+        if (questionCount === 0 || selectedBankIds.length === 0)
+            return setCreateError(null)
         setIsCreating(true)
         try {
             const payload = {
@@ -527,6 +537,8 @@ export function QuizzesPanel({
                 open={isCreateDialogOpen || editingQuiz !== null}
                 editingQuiz={editingQuiz}
                 banks={banks}
+                gradeLevels={quizGradeLevels}
+                quizGradeLevel={quizGradeLevel}
                 title={title}
                 durationMinutes={durationMinutes}
                 selectedBankIds={selectedBankIds}
@@ -538,6 +550,7 @@ export function QuizzesPanel({
                 error={createError}
                 onTitleChange={setTitle}
                 onDurationChange={setDurationMinutes}
+                onQuizGradeLevelChange={handleQuizGradeLevelChange}
                 onSelectedBankIdsChange={handleSelectedBankIdsChange}
                 onAllowPreviousQuestionsChange={setAllowPreviousQuestions}
                 onDifficultyCountsChange={handleDifficultyCountsChange}
