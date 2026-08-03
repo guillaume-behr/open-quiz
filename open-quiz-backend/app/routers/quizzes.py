@@ -1077,7 +1077,7 @@ def student_state_response(
     if existing_answer is not None:
         try:
             saved_answer = json.loads(existing_answer.answer_data)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             saved_answer = {}
         if not isinstance(saved_answer, dict):
             saved_answer = {}
@@ -1385,7 +1385,7 @@ def answer_review(
 ) -> QuizAnswerReview:
     try:
         submitted = json.loads(answer.answer_data)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         submitted = {}
     if not isinstance(submitted, dict):
         submitted = {}
