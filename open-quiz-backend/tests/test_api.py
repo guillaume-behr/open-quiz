@@ -249,7 +249,8 @@ def test_question_draw_keeps_an_overshoot_within_point_tolerance() -> None:
 
     adjusted = adjust_last_question_for_points(selected, candidates, target=5)
 
-    assert [question.id for question in adjusted] == [1, 2]
+    assert list(adjusted) == [1, 2]
+    assert sum(adjusted.values()) == 5.5
 
 
 def test_question_draw_never_goes_below_the_point_target() -> None:
@@ -258,16 +259,18 @@ def test_question_draw_never_goes_below_the_point_target() -> None:
 
     adjusted = adjust_last_question_for_points(selected, candidates, target=5)
 
-    assert [question.id for question in adjusted] == [1, 3]
-    assert sum(question.points for question in adjusted) == 6
-    assert sum(question.points for question in adjusted) >= 5
+    assert list(adjusted) == [1, 3]
+    assert sum(adjusted.values()) == 6
+    assert sum(adjusted.values()) >= 5
 
     too_small = [Question(id=1, points=2), Question(id=2, points=1)]
     small_candidates = [*too_small, Question(id=3, points=2.5)]
-    with pytest.raises(ValueError):
-        # No replacement reaches the target: the draw is refused rather than
-        # producing a total below it.
-        adjust_last_question_for_points(too_small, small_candidates, target=5)
+    # No replacement reaches the target, so the last question's points are
+    # adjusted to hit the configured total exactly instead of refusing it.
+    adjusted_small = adjust_last_question_for_points(
+        too_small, small_candidates, target=5
+    )
+    assert sum(adjusted_small.values()) == 5
 
 
 def test_question_draw_never_exceeds_two_bonus_points() -> None:
@@ -276,10 +279,97 @@ def test_question_draw_never_exceeds_two_bonus_points() -> None:
 
     adjusted = adjust_last_question_for_points(selected, candidates, target=5)
 
-    assert [question.id for question in adjusted] == [1, 3]
-    assert sum(question.points for question in adjusted) == 7
+    assert list(adjusted) == [1, 3]
+    assert sum(adjusted.values()) == 7
     assert selected[0].points == 3
     assert selected[1].points == 5
+
+
+def test_quiz_launches_when_question_points_cannot_reach_the_target(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "point-fallback.db")) as client:
+        admin_headers = login_admin(client)
+        teacher = client.post(
+            "/api/admin/users",
+            headers=admin_headers,
+            json={
+                "username": "fallback.teacher",
+                "display_name": "Fallback Teacher",
+                "password": "a-secure-teacher-password",
+            },
+        )
+        assert teacher.status_code == 201
+        teacher_headers, _ = complete_first_login(
+            client, "fallback.teacher", "a-secure-teacher-password"
+        )
+        student_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "6e B", "grade_level": "6e"},
+        ).json()
+        student = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Emma", "last_name": "Martin"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/classes/{student_class['id']}/accounts/{student['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "6e", "chapter": "Fallback"},
+        ).json()
+        for index in range(2):
+            question = client.post(
+                f"/api/question-banks/{bank['id']}/questions",
+                headers=teacher_headers,
+                data={
+                    "payload": json.dumps(
+                        {
+                            "prompt": f"Fallback question {index}",
+                            "points": 1,
+                            "difficulty": "easy",
+                            "answer_mode": "single",
+                            "answer_mode_disclosed": True,
+                            "choices": [
+                                {"label": "Correct", "is_correct": True},
+                                {"label": "Wrong", "is_correct": False},
+                            ],
+                        }
+                    )
+                },
+            )
+            assert question.status_code == 201
+
+        quiz = client.post(
+            "/api/quizzes",
+            headers=teacher_headers,
+            json={
+                "title": "Points inatteignables",
+                "question_bank_ids": [bank["id"]],
+                "easy_question_count": 2,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+                "easy_points": 3,
+                "medium_points": 0,
+                "hard_points": 0,
+            },
+        )
+        assert quiz.status_code == 201
+
+        launched = client.post(
+            f"/api/quizzes/{quiz.json()['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        )
+        assert launched.status_code == 201
 
 
 def test_login_rate_limit_buckets_use_a_secret_key() -> None:

@@ -27,6 +27,16 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
     audience: Literal["professor", "admin"] | None = None
 
+    @field_validator("username")
+    @classmethod
+    def trim_login_username(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("password")
+    @classmethod
+    def trim_login_password(cls, value: str) -> str:
+        return value.strip()
+
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -44,6 +54,11 @@ class LoginResponse(BaseModel):
 class TwoFactorVerifyRequest(BaseModel):
     challenge_token: str = Field(min_length=1, max_length=2048)
     code: str = Field(pattern=r"^\d{6}$")
+
+    @field_validator("code")
+    @classmethod
+    def trim_verify_code(cls, value: str) -> str:
+        return value.strip()
 
 
 class UserCreate(BaseModel):
@@ -181,6 +196,11 @@ class StudentLoginRequest(BaseModel):
     @classmethod
     def normalize_login_identifier(cls, value: str) -> str:
         return value.strip().lower()
+
+    @field_validator("password")
+    @classmethod
+    def trim_login_password(cls, value: str) -> str:
+        return value.strip()
 
 
 class StudentLoginResponse(BaseModel):

@@ -153,18 +153,6 @@ def difficulty_points(quiz: Quiz) -> dict[str, float]:
     }
 
 
-def points_for_drawn_questions(
-    quiz: Quiz,
-    question_ids: list[int],
-    session: DbSession,
-) -> dict[int, float]:
-    return dict(
-        session.execute(
-            select(Question.id, Question.points).where(Question.id.in_(question_ids))
-        ).all()
-    )
-
-
 # A small shortfall keeps a quiz launchable when the configured target cannot
 # be represented exactly by the available per-question point values.
 # The drawn total is never below the configured target and may exceed it by
@@ -176,33 +164,48 @@ def adjust_last_question_for_points(
     selected: list[Question],
     candidates: list[Question],
     target: float,
-) -> list[Question]:
+) -> dict[int, float]:
+    """Choose the per-question points for a draw so the total reaches the target.
+
+    Returns an ordered mapping of ``question_id -> points``. When no available
+    question lets the total land within the tolerance, the points attributed to
+    the last drawn question are adjusted to reach the target, so a quiz stays
+    launchable even when the configured point values cannot be represented
+    exactly by the available questions.
+    """
     if not selected or target <= 0:
-        return selected
+        return {question.id: question.points for question in selected}
     total = sum(question.points for question in selected)
     maximum = target + MAX_QUIZ_BONUS_POINTS
     if target <= total <= maximum:
-        return selected
+        return {question.id: question.points for question in selected}
     fixed_total = total - selected[-1].points
     fixed_ids = {question.id for question in selected[:-1]}
+    fixed_points = {
+        question.id: question.points for question in selected[:-1]
+    }
     replacements = [question for question in candidates if question.id not in fixed_ids]
-    if not replacements:
-        return selected
     valid_replacements = [
         question
         for question in replacements
         if target <= fixed_total + question.points <= maximum
     ]
-    if not valid_replacements:
-        raise ValueError("Aucun remplacement ne respecte la limite de points")
-    replacement = min(
-        valid_replacements,
-        key=lambda question: (
-            abs(target - (fixed_total + question.points)),
-            randomizer.random(),
-        ),
-    )
-    return [*selected[:-1], replacement]
+    if valid_replacements:
+        replacement = min(
+            valid_replacements,
+            key=lambda question: (
+                abs(target - (fixed_total + question.points)),
+                randomizer.random(),
+            ),
+        )
+        return {**fixed_points, replacement.id: replacement.points}
+    # No available question produces an acceptable total: adjust the points
+    # attributed to the last drawn question so the quiz remains launchable
+    # at exactly the configured target.
+    adjusted_last = target - fixed_total
+    if adjusted_last <= 0:
+        raise ValueError("Impossible d'ajuster les points de la dernière question")
+    return {**fixed_points, selected[-1].id: adjusted_last}
 
 
 def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Quiz:
@@ -286,7 +289,7 @@ def difficulty_counts_for_banks(
     return requested
 
 
-def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
+def draw_question_ids(quiz: Quiz, session: DbSession) -> dict[int, float]:
     bank_ids = quiz_bank_ids(quiz.id, session)
     requested = difficulty_counts_for_banks(quiz, bank_ids, session)
     candidates_by_difficulty = {
@@ -302,19 +305,20 @@ def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
         if count > 0
     }
     target = sum(difficulty_points(quiz).values())
-    selected: list[Question] = []
+    points: dict[int, float] = {}
     for _ in range(100):
-        selected = []
+        selected: list[Question] = []
         for difficulty, count in requested.items():
             if count > 0:
                 selected.extend(
                     randomizer.sample(candidates_by_difficulty[difficulty], count)
                 )
         if target <= 0:
+            points = {question.id: question.points for question in selected}
             break
         last_difficulty = selected[-1].difficulty
         try:
-            selected = adjust_last_question_for_points(
+            points = adjust_last_question_for_points(
                 selected,
                 candidates_by_difficulty[last_difficulty],
                 target,
@@ -326,20 +330,20 @@ def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Les questions disponibles ne permettent pas de respecter "
-                "la limite totale de points"
+                "Les points attribués aux questions disponibles ne permettent "
+                "pas d’atteindre le total du quiz"
             ),
         )
-    selected_ids = [question.id for question in selected]
-    randomizer.shuffle(selected_ids)
-    return selected_ids
+    question_ids = list(points)
+    randomizer.shuffle(question_ids)
+    return {question_id: points[question_id] for question_id in question_ids}
 
 
 def draw_unique_question_ids(
     quiz: Quiz,
     session: DbSession,
     used_draws: set[tuple[int, ...]],
-) -> list[int]:
+) -> dict[int, float]:
     if used_draws:
         bank_ids = quiz_bank_ids(quiz.id, session)
         requested = difficulty_counts_for_banks(quiz, bank_ids, session)
@@ -351,11 +355,11 @@ def draw_unique_question_ids(
             return draw_question_ids(quiz, session)
 
     for _ in range(200):
-        question_ids = draw_question_ids(quiz, session)
-        signature = tuple(sorted(question_ids))
+        points = draw_question_ids(quiz, session)
+        signature = tuple(sorted(points))
         if signature not in used_draws:
             used_draws.add(signature)
-            return question_ids
+            return points
     # If the banks contain only one possible combination, every student still
     # receives an independent draw even though the resulting sets must match.
     return draw_question_ids(quiz, session)
@@ -2454,7 +2458,6 @@ def select_makeup_quiz(
         tuple(sorted(question_ids)) for question_ids in questions_by_session.values()
     }
     question_ids = draw_unique_question_ids(quiz, session, used_draws)
-    points = points_for_drawn_questions(quiz, question_ids, session)
     session.add_all(
         QuizSessionStudentQuestion(
             session_id=child.id,
@@ -2462,9 +2465,9 @@ def select_makeup_quiz(
             student_identifier=membership.identifier,
             question_id=question_id,
             position=position,
-            points=points[question_id],
+            points=points,
         )
-        for position, question_id in enumerate(question_ids)
+        for position, (question_id, points) in enumerate(question_ids.items())
     )
     token = token_urlsafe(32)
     participant = QuizParticipant(
@@ -2492,7 +2495,7 @@ def preview_quiz(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Quiz introuvable",
         )
-    return load_question_responses(draw_question_ids(quiz, session), session)
+    return load_question_responses(list(draw_question_ids(quiz, session)), session)
 
 
 @router.post(
@@ -2606,8 +2609,7 @@ def launch_quiz(
     assignments: list[QuizSessionStudentQuestion] = []
     used_draws: set[tuple[int, ...]] = set()
     for student in students:
-        question_ids = draw_unique_question_ids(quiz, session, used_draws)
-        assigned_points = points_for_drawn_questions(quiz, question_ids, session)
+        assigned_points = draw_unique_question_ids(quiz, session, used_draws)
         assignments.extend(
             QuizSessionStudentQuestion(
                 session_id=quiz_session.id,
@@ -2615,9 +2617,9 @@ def launch_quiz(
                 student_identifier=student.identifier,
                 question_id=question_id,
                 position=position,
-                points=assigned_points[question_id],
+                points=points,
             )
-            for position, question_id in enumerate(question_ids)
+            for position, (question_id, points) in enumerate(assigned_points.items())
         )
     session.add_all(assignments)
     session.commit()
