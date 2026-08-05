@@ -11,7 +11,7 @@ export function QuizTimer({ endsAt }: { endsAt: string | null }) {
             setRemaining(
                 Math.max(
                     0,
-                    Math.ceil((new Date(endsAt).getTime() - Date.now()) / 1000)
+                    Math.floor((new Date(endsAt).getTime() - Date.now()) / 1000)
                 )
             )
         update()

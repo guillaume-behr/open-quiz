@@ -13,6 +13,7 @@ type StudentQuestionFormProps = {
     session: StudentQuizSession
     question: StudentQuizQuestion
     participantToken: string
+    contentDirection: "ltr" | "rtl"
     selectedChoiceIds: number[]
     writtenAnswer: string
     isBusy: boolean
@@ -27,6 +28,7 @@ export function StudentQuestionForm({
     session,
     question,
     participantToken,
+    contentDirection,
     selectedChoiceIds,
     writtenAnswer,
     isBusy,
@@ -74,7 +76,9 @@ export function StudentQuestionForm({
                     total: session.total_questions,
                 })}
             </p>
-            <h2 className="text-xl font-bold">{question.prompt}</h2>
+            <h2 className="text-xl font-bold" dir={contentDirection}>
+                {question.prompt}
+            </h2>
             {question.has_image && (
                 <ProtectedQuizImage
                     path="questions"
@@ -101,6 +105,7 @@ export function StudentQuestionForm({
                     question={question}
                     joinCode={session.join_code}
                     participantToken={participantToken}
+                    contentDirection={contentDirection}
                     selectedChoiceIds={selectedChoiceIds}
                     onSelectedChoiceIdsChange={onSelectedChoiceIdsChange}
                 />
@@ -188,12 +193,14 @@ function ChoiceAnswers({
     question,
     joinCode,
     participantToken,
+    contentDirection,
     selectedChoiceIds,
     onSelectedChoiceIdsChange,
 }: {
     question: StudentQuizQuestion
     joinCode: string
     participantToken: string
+    contentDirection: "ltr" | "rtl"
     selectedChoiceIds: number[]
     onSelectedChoiceIdsChange: (choiceIds: number[]) => void
 }) {
@@ -232,7 +239,10 @@ function ChoiceAnswers({
                             checked={checked}
                             onChange={() => toggleChoice(choice.id)}
                         />
-                        <span className="min-w-0 flex-1">
+                        <span
+                            className="min-w-0 flex-1"
+                            dir={contentDirection}
+                        >
                             {choice.label}
                             {choice.has_image && (
                                 <ProtectedQuizImage

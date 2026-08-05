@@ -936,6 +936,7 @@ def purge_expired_quiz_results(
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 Quiz.owner_id == professor.id,
+                Quiz.mode == "exam",
                 QuizSession.status == "finished",
                 QuizSession.started_at.is_not(None),
                 QuizSession.started_at <= cutoff,
@@ -1250,7 +1251,7 @@ def list_active_sessions(
         .where(
             Quiz.owner_id == professor.id,
             Quiz.mode == "exam",
-            QuizSession.status.in_(["waiting", "in_progress", "paused", "cancelled"]),
+            QuizSession.status.in_(["waiting", "in_progress", "paused"]),
         )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
         .limit(20)

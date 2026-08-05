@@ -1,4 +1,5 @@
 import { ApiError } from "@/api/client"
+import { isRtlLanguage } from "@/lib/utils"
 import {
     getStudentQuizSession,
     joinQuiz,
@@ -45,6 +46,15 @@ export function StudentQuiz({
         isLeavingQuiz
     )
     const translation = useQuizTranslation(session, i18n)
+
+    const contentDirection =
+        session == null || translation.viewState.active
+            ? isRtlLanguage(i18n.resolvedLanguage)
+                ? "rtl"
+                : "ltr"
+            : isRtlLanguage(session.source_language)
+              ? "rtl"
+              : "ltr"
 
     const applySession = useCallback((updated: StudentQuizSession) => {
         setSession(updated)
@@ -262,7 +272,7 @@ export function StudentQuiz({
         )
     }
 
-    if (!isFullscreen && !["finished", "cancelled"].includes(session.status)) {
+    if (!isFullscreen && session.status === "in_progress") {
         return (
             <FullscreenPrompt
                 studentName={session.student_name}
@@ -283,6 +293,7 @@ export function StudentQuiz({
             question={translation.question}
             participantToken={participantToken}
             title={translation.title}
+            contentDirection={contentDirection}
             selectedChoiceIds={selectedChoiceIds}
             writtenAnswer={writtenAnswer}
             isBusy={isBusy}

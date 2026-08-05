@@ -20,6 +20,7 @@ type StudentQuizPageProps = {
     question: StudentQuizQuestion | null
     participantToken: string
     title: string
+    contentDirection: "ltr" | "rtl"
     selectedChoiceIds: number[]
     writtenAnswer: string
     isBusy: boolean
@@ -38,6 +39,7 @@ export function StudentQuizPage({
     question,
     participantToken,
     title,
+    contentDirection,
     selectedChoiceIds,
     writtenAnswer,
     isBusy,
@@ -66,7 +68,11 @@ export function StudentQuizPage({
                 <LogOut />
                 {t("leave-quiz")}
             </Button>
-            <QuizHeader session={session} title={title} />
+            <QuizHeader
+                session={session}
+                title={title}
+                contentDirection={contentDirection}
+            />
             {translation.offered && (
                 <TranslationNotice
                     translation={translation}
@@ -79,6 +85,7 @@ export function StudentQuizPage({
                     session={session}
                     question={question}
                     participantToken={participantToken}
+                    contentDirection={contentDirection}
                     selectedChoiceIds={selectedChoiceIds}
                     writtenAnswer={writtenAnswer}
                     isBusy={isBusy}
@@ -96,13 +103,17 @@ export function StudentQuizPage({
 function QuizHeader({
     session,
     title,
+    contentDirection,
 }: {
     session: StudentQuizSession
     title: string
+    contentDirection: "ltr" | "rtl"
 }) {
     return (
         <div className="text-center">
-            <h1 className="text-3xl font-extrabold">{title}</h1>
+            <h1 className="text-3xl font-extrabold" dir={contentDirection}>
+                {title}
+            </h1>
             <p className="text-muted-foreground">{session.class_name}</p>
             {session.status === "in_progress" && (
                 <div className="mt-3">

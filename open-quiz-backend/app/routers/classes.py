@@ -9,6 +9,7 @@ from app.grade_levels import ensure_grade_level
 from app.models import (
     ClassTrainingQuestionBank,
     MakeupSession,
+    QuestionBank,
     Quiz,
     QuizParticipant,
     QuizSession,
@@ -350,6 +351,20 @@ def update_class(
     session: DbSession,
 ) -> StudentClassResponse:
     student_class = owned_class(class_id, professor, session)
+    if student_class.grade_level != payload.grade_level:
+        mismatched_bank_ids = select(QuestionBank.id).join(
+            ClassTrainingQuestionBank,
+            ClassTrainingQuestionBank.question_bank_id == QuestionBank.id,
+        ).where(
+            ClassTrainingQuestionBank.class_id == student_class.id,
+            QuestionBank.grade_level != payload.grade_level,
+        )
+        session.execute(
+            delete(ClassTrainingQuestionBank).where(
+                ClassTrainingQuestionBank.class_id == student_class.id,
+                ClassTrainingQuestionBank.question_bank_id.in_(mismatched_bank_ids),
+            )
+        )
     student_class.name = payload.name
     student_class.grade_level = payload.grade_level
     ensure_grade_level(professor.id, payload.grade_level, session)

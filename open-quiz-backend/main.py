@@ -18,6 +18,7 @@ from app.models import (
     AuthenticationChallenge,
     LoginRateLimit,
     ProblemReport,
+    Quiz,
     QuizSession,
     RefreshSession,
     RefreshSessionFamily,
@@ -194,7 +195,10 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
     with session_factory() as session:
         expired_quiz_session_ids = list(
             session.scalars(
-                select(QuizSession.id).where(
+                select(QuizSession.id)
+                .join(Quiz, Quiz.id == QuizSession.quiz_id)
+                .where(
+                    Quiz.mode == "exam",
                     QuizSession.status == "finished",
                     QuizSession.started_at.is_not(None),
                     QuizSession.started_at <= quiz_cutoff,
