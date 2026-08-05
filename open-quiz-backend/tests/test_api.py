@@ -285,6 +285,107 @@ def test_question_draw_never_exceeds_two_bonus_points() -> None:
     assert selected[1].points == 5
 
 
+def test_question_draw_scales_down_when_a_question_overshoots_the_target() -> None:
+    # Two questions each worth far more than the configured target: no single
+    # replacement of the last question can land within the tolerance band, so
+    # the draw must scale the whole set down to the target instead of refusing.
+    selected = [Question(id=1, points=10), Question(id=2, points=10)]
+    candidates = [*selected, Question(id=3, points=10)]
+
+    adjusted = adjust_last_question_for_points(selected, candidates, target=2)
+
+    assert len(adjusted) == 2
+    assert sum(adjusted.values()) == 2
+    assert all(value >= 0 for value in adjusted.values())
+
+
+def test_quiz_launches_when_question_points_overshoot_the_target(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "point-overshoot.db")) as client:
+        admin_headers = login_admin(client)
+        teacher = client.post(
+            "/api/admin/users",
+            headers=admin_headers,
+            json={
+                "username": "overshoot.teacher",
+                "display_name": "Overshoot Teacher",
+                "password": "a-secure-teacher-password",
+            },
+        )
+        assert teacher.status_code == 201
+        teacher_headers, _ = complete_first_login(
+            client, "overshoot.teacher", "a-secure-teacher-password"
+        )
+        student_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "6e C", "grade_level": "6e"},
+        ).json()
+        student = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Lucas", "last_name": "Durand"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/classes/{student_class['id']}/accounts/{student['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "6e", "chapter": "Overshoot"},
+        ).json()
+        for index in range(2):
+            question = client.post(
+                f"/api/question-banks/{bank['id']}/questions",
+                headers=teacher_headers,
+                data={
+                    "payload": json.dumps(
+                        {
+                            "prompt": f"Overshoot question {index}",
+                            "points": 10,
+                            "difficulty": "easy",
+                            "answer_mode": "single",
+                            "answer_mode_disclosed": True,
+                            "choices": [
+                                {"label": "Correct", "is_correct": True},
+                                {"label": "Wrong", "is_correct": False},
+                            ],
+                        }
+                    )
+                },
+            )
+            assert question.status_code == 201
+
+        quiz = client.post(
+            "/api/quizzes",
+            headers=teacher_headers,
+            json={
+                "title": "Points trop élevés",
+                "question_bank_ids": [bank["id"]],
+                "easy_question_count": 2,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+                "easy_points": 2,
+                "medium_points": 0,
+                "hard_points": 0,
+            },
+        )
+        assert quiz.status_code == 201
+
+        launched = client.post(
+            f"/api/quizzes/{quiz.json()['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        )
+        assert launched.status_code == 201
+
+
 def test_quiz_launches_when_question_points_cannot_reach_the_target(
     tmp_path: Path,
 ) -> None:

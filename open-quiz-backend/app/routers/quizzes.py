@@ -204,7 +204,26 @@ def adjust_last_question_for_points(
     # at exactly the configured target.
     adjusted_last = target - fixed_total
     if adjusted_last <= 0:
-        raise ValueError("Impossible d'ajuster les points de la dernière question")
+        # The fixed questions alone already reach or exceed the target, so no
+        # single replacement of the last question can bring the total into the
+        # tolerance band. Scale every drawn question proportionally (folding the
+        # rounding error into the largest share) so the draw lands exactly on
+        # the configured target and the quiz stays launchable.
+        raw_total = sum(question.points for question in selected)
+        if raw_total <= 0:
+            raise ValueError("Impossible d'ajuster les points des questions")
+        factor = target / raw_total
+        result = {
+            question.id: round(question.points * factor, 2)
+            for question in selected
+        }
+        scaling_reference = max(result, key=result.get)
+        result[scaling_reference] = round(
+            target
+            - (sum(result.values()) - result[scaling_reference]),
+            2,
+        )
+        return result
     return {**fixed_points, selected[-1].id: adjusted_last}
 
 
