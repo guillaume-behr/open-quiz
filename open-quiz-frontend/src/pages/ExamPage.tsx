@@ -59,8 +59,15 @@ export function ExamPage() {
 
     if (isLoading || !student || !token) {
         return (
-            <div className="flex flex-1 items-center justify-center">
-                <LoaderCircle className="size-9 animate-spin text-primary" />
+            <div
+                className="flex flex-1 items-center justify-center"
+                role="status"
+                aria-label={t("page-loading")}
+            >
+                <LoaderCircle
+                    className="size-9 animate-spin text-primary motion-reduce:animate-none"
+                    aria-hidden="true"
+                />
             </div>
         )
     }

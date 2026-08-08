@@ -88,7 +88,7 @@ class UserCredentialReset(BaseModel):
 
 class ProblemReportCreate(BaseModel):
     message: str = Field(min_length=5, max_length=2000)
-    page_path: str = Field(min_length=1, max_length=500, pattern=r"^/")
+    page_path: str = Field(min_length=1, max_length=500)
 
     @field_validator("message")
     @classmethod
@@ -97,6 +97,18 @@ class ProblemReportCreate(BaseModel):
         if len(normalized) < 5:
             raise ValueError("Le message doit contenir au moins 5 caractères")
         return normalized
+
+    @field_validator("page_path")
+    @classmethod
+    def validate_page_path(cls, value: str) -> str:
+        """Accept only local application paths, never network-path references."""
+        if (
+            not value.startswith("/")
+            or value.startswith("//")
+            or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        ):
+            raise ValueError("Le chemin de la page doit être un chemin local valide")
+        return value
 
 
 class ProblemReportResponse(BaseModel):

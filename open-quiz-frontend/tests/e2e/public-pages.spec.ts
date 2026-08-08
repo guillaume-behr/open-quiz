@@ -58,6 +58,8 @@ test("legal notice reports unavailable instance information", async ({
 test("footer links open each public information page", async ({ page }) => {
     await page.goto("/student/login")
 
+    await expect(page.locator("footer")).toContainText("0.2.0")
+
     const destinations = [
         ["Personal data", "/privacy"],
         ["Accessibility statement", "/accessibility"],
@@ -70,6 +72,16 @@ test("footer links open each public information page", async ({ page }) => {
         await expect(page).toHaveURL(new RegExp(`${path}$`))
         await expect(page.getByRole("heading", { name: heading })).toBeVisible()
     }
+})
+
+test("problem report ignores a network-path source", async ({ page }) => {
+    await page.goto("/report-a-problem")
+    await page.evaluate(() => {
+        history.replaceState({ usr: { from: "//example.test/phishing" } }, "")
+        dispatchEvent(new PopStateEvent("popstate", { state: history.state }))
+    })
+
+    await expect(page.getByText("/", { exact: true })).toBeVisible()
 })
 
 test("unsafe configured external URLs are not rendered as links", async ({

@@ -33,7 +33,7 @@ export function MainLayout() {
             >
                 {t("skip-to-content")}
             </a>
-            <header className="flex w-full shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
+            <header className="flex w-full min-w-0 shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
                 {!isExamRoute ? (
                     <Link
                         to="/student/login"
@@ -48,7 +48,7 @@ export function MainLayout() {
                     {!hasRouteAction && (
                         <Link
                             to={link.url}
-                            className="max-w-[60%] text-end text-sm leading-tight font-bold text-primary underline underline-offset-4 sm:text-base"
+                            className="block max-w-[60vw] truncate text-end text-sm leading-tight font-bold text-primary underline underline-offset-4 sm:text-base"
                         >
                             {t(link.text)}
                         </Link>
@@ -70,7 +70,7 @@ export function MainLayout() {
                 <footer className="mt-3 flex w-full shrink-0 flex-wrap items-center justify-center gap-x-5 gap-y-3 bg-sidebar-primary px-4 py-3 text-sidebar-foreground sm:justify-between sm:px-10">
                     <div className="flex shrink-0 items-center gap-3">
                         <p className="text-sm whitespace-nowrap">
-                            {t("app-version", { version: "2026.01" })}
+                            {t("app-version", { version: "0.2.0" })}
                         </p>
                         <LanguageSelector />
                         <ThemeSelector />

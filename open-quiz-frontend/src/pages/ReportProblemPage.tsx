@@ -14,7 +14,12 @@ function sourcePath(state: unknown): string {
         state !== null &&
         "from" in state &&
         typeof state.from === "string" &&
-        state.from.startsWith("/")
+        state.from.startsWith("/") &&
+        !state.from.startsWith("//") &&
+        !Array.from(state.from).some((character) => {
+            const code = character.charCodeAt(0)
+            return code < 32 || code === 127
+        })
     ) {
         return state.from
     }

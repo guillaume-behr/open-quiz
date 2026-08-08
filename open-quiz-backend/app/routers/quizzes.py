@@ -613,14 +613,10 @@ def session_response(
         QuizParticipant.session_id == quiz_session.id
     )
     if quiz_session.status in {"waiting", "in_progress", "paused"}:
-        participant_query = participant_query.where(
-            QuizParticipant.left_at.is_(None)
-        )
+        participant_query = participant_query.where(QuizParticipant.left_at.is_(None))
     participants = list(
         session.scalars(
-            participant_query.order_by(
-                QuizParticipant.joined_at, QuizParticipant.id
-            )
+            participant_query.order_by(QuizParticipant.joined_at, QuizParticipant.id)
         )
     )
     answer_rows = list(

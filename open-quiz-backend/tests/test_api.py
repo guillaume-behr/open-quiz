@@ -559,6 +559,22 @@ def test_problem_reports_are_rate_limited(tmp_path: Path) -> None:
         assert int(limited.headers["retry-after"]) > 0
 
 
+@pytest.mark.parametrize(
+    "page_path",
+    ["https://example.test/page", "//example.test/page", "/valid\nspoofed"],
+)
+def test_problem_reports_reject_non_local_page_paths(
+    tmp_path: Path, page_path: str
+) -> None:
+    with make_client(settings_for(tmp_path / "problem-report-path.db")) as client:
+        response = client.post(
+            "/api/problem-reports",
+            json={"message": "A sufficiently detailed problem", "page_path": page_path},
+        )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
 def test_production_allows_missing_public_information(tmp_path: Path) -> None:
     settings = settings_for(
         tmp_path / "missing-public-information.db",
@@ -2031,10 +2047,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert rejoined.json()["participant_token"] != participant_token
         participant_token = rejoined.json()["participant_token"]
         student_headers = {"X-Quiz-Token": participant_token}
-        assert client.get(
-            f"/api/quizzes/sessions/{quiz_session['id']}",
-            headers=teacher_headers,
-        ).json()["participant_count"] == 1
+        assert (
+            client.get(
+                f"/api/quizzes/sessions/{quiz_session['id']}",
+                headers=teacher_headers,
+            ).json()["participant_count"]
+            == 1
+        )
         assert (
             client.get(student_state_url, headers=student_headers).json()[
                 "source_language"
