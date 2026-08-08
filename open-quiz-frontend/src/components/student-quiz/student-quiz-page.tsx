@@ -1,7 +1,7 @@
 import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { Button } from "@/components/ui/button"
-import { Languages, LoaderCircle, LogOut, TriangleAlert } from "lucide-react"
+import { Languages, LoaderCircle, TriangleAlert } from "lucide-react"
 import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { StudentNameBadge } from "./fullscreen-prompt"
@@ -31,7 +31,6 @@ type StudentQuizPageProps = {
     onWrittenAnswerChange: (answer: string) => void
     onPrevious: () => void
     onSubmitAnswer: (event: FormEvent<HTMLFormElement>) => void
-    onLeave: () => void
 }
 
 export function StudentQuizPage({
@@ -50,24 +49,10 @@ export function StudentQuizPage({
     onWrittenAnswerChange,
     onPrevious,
     onSubmitAnswer,
-    onLeave,
 }: StudentQuizPageProps) {
-    const { t } = useTranslation()
-
     return (
         <div className="flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 py-8 shadow-lg sm:px-10">
             <StudentNameBadge name={session.student_name} />
-            <Button
-                className="fixed top-4 right-4 z-50"
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={isBusy}
-                onClick={onLeave}
-            >
-                <LogOut />
-                {t("leave-quiz")}
-            </Button>
             <QuizHeader
                 session={session}
                 title={title}
@@ -79,7 +64,7 @@ export function StudentQuizPage({
                     onToggle={onToggleTranslation}
                 />
             )}
-            <QuizStatus session={session} onLeave={onLeave} />
+            <QuizStatus session={session} />
             {session.status === "in_progress" && question && (
                 <StudentQuestionForm
                     session={session}
@@ -178,13 +163,7 @@ function TranslationNotice({
     )
 }
 
-function QuizStatus({
-    session,
-    onLeave,
-}: {
-    session: StudentQuizSession
-    onLeave: () => void
-}) {
+function QuizStatus({ session }: { session: StudentQuizSession }) {
     const { t } = useTranslation()
 
     if (session.status === "waiting") {
@@ -229,9 +208,6 @@ function QuizStatus({
                             : "student-quiz-finished"
                     )}
                 </p>
-                <Button className="mt-5" variant="outline" onClick={onLeave}>
-                    {t("join-another-quiz")}
-                </Button>
             </div>
         )
     }

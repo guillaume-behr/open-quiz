@@ -7,6 +7,7 @@ import type {
 } from "@/api/types"
 import { StudentQuestionForm } from "@/components/student-quiz/student-question-form"
 import { Button } from "@/components/ui/button"
+import { NavbarAction } from "@/components/navigation/navbar-action"
 import { isRtlLanguage } from "@/lib/utils"
 import { ArrowLeft, CheckCircle2, LoaderCircle, XCircle } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
@@ -125,7 +126,7 @@ export function TrainingPage() {
 
     return (
         <div className="flex flex-1 flex-col px-4 py-2">
-            <div className="mx-auto mb-4 flex w-full max-w-2xl justify-start">
+            <NavbarAction>
                 <Button
                     variant="outline"
                     size="sm"
@@ -134,7 +135,7 @@ export function TrainingPage() {
                     <ArrowLeft />
                     {t("student-dashboard")}
                 </Button>
-            </div>
+            </NavbarAction>
             <main className="mx-auto w-full max-w-2xl rounded-2xl border bg-secondary p-6 shadow-lg sm:p-10">
                 <div className="mb-6 text-center">
                     <p className="text-sm font-semibold text-primary">
@@ -159,12 +160,6 @@ export function TrainingPage() {
                         <p className="mt-2 text-muted-foreground">
                             {t("training-finished-help")}
                         </p>
-                        <Button
-                            className="mt-5"
-                            onClick={() => navigate("/student/dashboard")}
-                        >
-                            {t("back-to-training-list")}
-                        </Button>
                     </div>
                 ) : session.question ? (
                     <StudentQuestionForm

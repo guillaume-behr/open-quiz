@@ -2,12 +2,17 @@ import { LanguageSelector } from "@/components/language/language-selector"
 import { PageTransition } from "@/components/navigation/page-transition"
 import { ThemeSelector } from "@/components/theme/theme-selector"
 import { useTranslation } from "react-i18next"
+import { useState } from "react"
 import { Link, Outlet, useLocation } from "react-router"
 
 export function MainLayout() {
     const { t } = useTranslation()
     const location = useLocation()
     const isExamRoute = location.pathname === "/student/exam"
+    const hasRouteAction =
+        isExamRoute || location.pathname === "/student/training"
+    const [navbarActionTarget, setNavbarActionTarget] =
+        useState<HTMLDivElement | null>(null)
 
     const link = location.pathname.startsWith("/teacher")
         ? { text: "homepage", url: "/student/login" }
@@ -23,22 +28,28 @@ export function MainLayout() {
             >
                 {t("skip-to-content")}
             </a>
-            {!isExamRoute && (
-                <header className="flex w-full shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
+            <header className="flex w-full shrink-0 items-center justify-between gap-4 px-4 py-4 sm:px-10">
+                {!isExamRoute ? (
                     <Link
                         to="/student/login"
                         className="shrink-0 text-2xl font-extrabold text-primary transition-opacity hover:opacity-80 focus-visible:rounded focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:text-3xl"
                     >
                         {t("app-name")}
                     </Link>
-                    <Link
-                        to={link.url}
-                        className="max-w-[60%] text-end text-sm leading-tight font-bold text-primary underline underline-offset-4 sm:text-base"
-                    >
-                        {t(link.text)}
-                    </Link>
-                </header>
-            )}
+                ) : (
+                    <span aria-hidden="true" />
+                )}
+                <div ref={setNavbarActionTarget} className="shrink-0">
+                    {!hasRouteAction && (
+                        <Link
+                            to={link.url}
+                            className="max-w-[60%] text-end text-sm leading-tight font-bold text-primary underline underline-offset-4 sm:text-base"
+                        >
+                            {t(link.text)}
+                        </Link>
+                    )}
+                </div>
+            </header>
 
             <main
                 id="contenu"
@@ -46,7 +57,7 @@ export function MainLayout() {
                 className="flex min-h-0 w-full flex-1"
             >
                 <PageTransition>
-                    <Outlet />
+                    <Outlet context={{ navbarActionTarget }} />
                 </PageTransition>
             </main>
 

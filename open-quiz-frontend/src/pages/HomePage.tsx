@@ -282,7 +282,7 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
                         </div>
                     </div>
                     {activeTab === "exam" ? (
-                        <div className="mt-6">
+                        <div className="mt-6 flex justify-center">
                             {storedExam ? (
                                 <div className="w-full max-w-md rounded-xl border bg-background p-5">
                                     <Button
@@ -319,7 +319,7 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
                             />
                         </div>
                     ) : activeTab === "makeup" ? (
-                        <div className="mt-6">
+                        <div className="mt-6 flex justify-center">
                             <StudentMakeupPanel token={token} />
                         </div>
                     ) : (

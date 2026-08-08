@@ -208,6 +208,14 @@ test("a student launches training and sees the correct answer", async ({
     await expect(page.getByText("Practice science")).toBeVisible()
     await page.getByRole("button", { name: "Start training" }).click()
     await expect(page).toHaveURL(/\/student\/training$/)
+    await expect(
+        page
+            .locator("header")
+            .getByRole("button", { name: "Student dashboard" })
+    ).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("link", { name: "Professor space" })
+    ).toHaveCount(0)
     await page.getByLabel("Mars").check()
     await page.getByRole("button", { name: "Submit my answer" }).click()
 

@@ -82,6 +82,12 @@ test("joining an active quiz stores the session and requests full screen", async
     await joinExamViaDashboard(page, "abcd")
 
     await expect(page.getByText("Alex Example", { exact: true })).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("button", { name: "Leave quiz" })
+    ).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("link", { name: "Professor space" })
+    ).toHaveCount(0)
     await expect(page.getByText("Signed in as Alex Example")).toHaveCount(0)
     await expect(page.getByText("Alex Example", { exact: true })).toHaveCount(1)
     await expect(page.getByText("Full-screen mode is required")).toBeVisible()
@@ -626,5 +632,10 @@ test("student can submit a written answer", async ({ page }) => {
     ).toBeVisible()
     await expect(
         page.getByRole("button", { name: "Join another quiz" })
+    ).toBeVisible()
+    await expect(
+        page
+            .locator("header")
+            .getByRole("button", { name: "Join another quiz" })
     ).toBeVisible()
 })

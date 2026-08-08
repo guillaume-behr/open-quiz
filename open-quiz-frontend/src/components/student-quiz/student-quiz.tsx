@@ -9,6 +9,9 @@ import {
 } from "@/api/quizzes"
 import type { StudentQuizSession } from "@/api/types"
 import { JoinQuizForm } from "@/components/forms/join-quiz-form"
+import { NavbarAction } from "@/components/navigation/navbar-action"
+import { Button } from "@/components/ui/button"
+import { LogOut } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { FullscreenPrompt } from "./fullscreen-prompt"
@@ -287,37 +290,75 @@ export function StudentQuiz({
 
     if (!isFullscreen && session.status === "in_progress") {
         return (
-            <FullscreenPrompt
-                studentName={session.student_name}
-                error={error}
-                onEnterFullscreen={() => {
-                    void enterFullscreen().catch(() =>
-                        setError(t("student-session-error"))
-                    )
-                }}
-                onLeave={() => void leaveQuiz()}
-            />
+            <>
+                <QuizNavbarAction
+                    disabled={isBusy}
+                    finished={false}
+                    onLeave={() => void leaveQuiz()}
+                />
+                <FullscreenPrompt
+                    studentName={session.student_name}
+                    error={error}
+                    onEnterFullscreen={() => {
+                        void enterFullscreen().catch(() =>
+                            setError(t("student-session-error"))
+                        )
+                    }}
+                />
+            </>
         )
     }
 
     return (
-        <StudentQuizPage
-            session={session}
-            question={translation.question}
-            participantToken={participantToken}
-            title={translation.title}
-            contentDirection={contentDirection}
-            selectedChoiceIds={selectedChoiceIds}
-            writtenAnswer={writtenAnswer}
-            isBusy={isBusy}
-            error={error}
-            translation={translation.viewState}
-            onToggleTranslation={() => void translation.toggle()}
-            onSelectedChoiceIdsChange={setSelectedChoiceIds}
-            onWrittenAnswerChange={setWrittenAnswer}
-            onPrevious={() => void goToPreviousQuestion()}
-            onSubmitAnswer={handleAnswer}
-            onLeave={() => void leaveQuiz()}
-        />
+        <>
+            <QuizNavbarAction
+                disabled={isBusy}
+                finished={["cancelled", "finished"].includes(session.status)}
+                onLeave={() => void leaveQuiz()}
+            />
+            <StudentQuizPage
+                session={session}
+                question={translation.question}
+                participantToken={participantToken}
+                title={translation.title}
+                contentDirection={contentDirection}
+                selectedChoiceIds={selectedChoiceIds}
+                writtenAnswer={writtenAnswer}
+                isBusy={isBusy}
+                error={error}
+                translation={translation.viewState}
+                onToggleTranslation={() => void translation.toggle()}
+                onSelectedChoiceIdsChange={setSelectedChoiceIds}
+                onWrittenAnswerChange={setWrittenAnswer}
+                onPrevious={() => void goToPreviousQuestion()}
+                onSubmitAnswer={handleAnswer}
+            />
+        </>
+    )
+}
+
+function QuizNavbarAction({
+    disabled,
+    finished,
+    onLeave,
+}: {
+    disabled: boolean
+    finished: boolean
+    onLeave: () => void
+}) {
+    const { t } = useTranslation()
+    return (
+        <NavbarAction>
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={disabled}
+                onClick={onLeave}
+            >
+                <LogOut />
+                {t(finished ? "join-another-quiz" : "leave-quiz")}
+            </Button>
+        </NavbarAction>
     )
 }

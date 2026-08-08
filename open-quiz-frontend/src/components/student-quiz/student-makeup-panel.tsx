@@ -1,8 +1,9 @@
 import { joinMakeupSession, selectMakeupQuiz } from "@/api/quizzes"
 import type { MakeupJoin } from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { FieldLabel } from "@/components/ui/field"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { LoaderCircle } from "lucide-react"
 import { storeQuizSession } from "./student-quiz-session"
 import { useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
@@ -53,7 +54,7 @@ export function StudentMakeupPanel({ token }: { token: string }) {
 
     if (lobby)
         return (
-            <div className="grid gap-3">
+            <div className="grid w-full max-w-md gap-3">
                 <p className="text-sm text-muted-foreground">
                     {t("makeup-choose-help", { className: lobby.class_name })}
                 </p>
@@ -86,34 +87,39 @@ export function StudentMakeupPanel({ token }: { token: string }) {
         )
 
     return (
-        <form onSubmit={join} className="grid gap-3">
-            <p className="text-sm text-muted-foreground">
-                {t("makeup-code-help")}
-            </p>
-            <div className="flex gap-2">
-                <FieldLabel htmlFor="makeup-session-code" className="sr-only">
-                    {t("join-code")}
-                </FieldLabel>
-                <Input
-                    id="makeup-session-code"
-                    value={code}
-                    onChange={(event) => setCode(event.target.value)}
-                    placeholder={t("join-code")}
-                    maxLength={8}
-                    autoComplete="off"
-                    spellCheck={false}
-                    aria-invalid={Boolean(error)}
-                    required
-                />
-                <Button type="submit" disabled={busy}>
+        <form
+            onSubmit={join}
+            className="flex w-full max-w-md flex-col gap-5 rounded-xl border bg-background p-5"
+        >
+            <FieldGroup className="gap-4">
+                <Field>
+                    <FieldLabel htmlFor="makeup-session-code">
+                        {t("join-code")}
+                    </FieldLabel>
+                    <Input
+                        className="py-6 font-mono tracking-[0.2em] uppercase"
+                        id="makeup-session-code"
+                        value={code}
+                        onChange={(event) =>
+                            setCode(event.target.value.toUpperCase())
+                        }
+                        maxLength={8}
+                        autoComplete="off"
+                        spellCheck={false}
+                        aria-invalid={Boolean(error)}
+                        required
+                    />
+                </Field>
+                {error && (
+                    <p className="text-sm text-destructive" role="alert">
+                        {error}
+                    </p>
+                )}
+                <Button className="w-full" type="submit" disabled={busy}>
+                    {busy && <LoaderCircle className="animate-spin" />}
                     {t("join-quiz")}
                 </Button>
-            </div>
-            {error && (
-                <p className="text-sm text-destructive" role="alert">
-                    {error}
-                </p>
-            )}
+            </FieldGroup>
         </form>
     )
 }
