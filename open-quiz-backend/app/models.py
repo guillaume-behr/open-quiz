@@ -380,6 +380,9 @@ class QuizParticipant(Base):
     last_violation_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    left_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )

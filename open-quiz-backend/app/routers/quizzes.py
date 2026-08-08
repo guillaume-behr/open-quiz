@@ -611,11 +611,18 @@ def session_response(
     session: DbSession,
 ) -> QuizSessionResponse:
     expire_quiz_session(quiz_session, quiz, session)
+    participant_query = select(QuizParticipant).where(
+        QuizParticipant.session_id == quiz_session.id
+    )
+    if quiz_session.status in {"waiting", "in_progress", "paused"}:
+        participant_query = participant_query.where(
+            QuizParticipant.left_at.is_(None)
+        )
     participants = list(
         session.scalars(
-            select(QuizParticipant)
-            .where(QuizParticipant.session_id == quiz_session.id)
-            .order_by(QuizParticipant.joined_at, QuizParticipant.id)
+            participant_query.order_by(
+                QuizParticipant.joined_at, QuizParticipant.id
+            )
         )
     )
     answer_rows = list(
@@ -914,6 +921,7 @@ def authenticated_participant(
         .where(
             QuizSession.join_code == join_code.strip().upper(),
             QuizParticipant.access_token_hash == participant_token_hash(token),
+            QuizParticipant.left_at.is_(None),
         )
     ).first()
     if row is None:
@@ -1652,7 +1660,8 @@ def start_quiz_session(
         participants = list(
             session.scalars(
                 select(QuizParticipant).where(
-                    QuizParticipant.session_id == quiz_session.id
+                    QuizParticipant.session_id == quiz_session.id,
+                    QuizParticipant.left_at.is_(None),
                 )
             )
         )
@@ -2646,8 +2655,6 @@ def join_quiz(
         reject_quiz_join(request, session, f"join:unknown:{account.id}")
     quiz_session, quiz = row
     join_subject = f"join:session:{quiz_session.id}"
-    if quiz_session.status != "waiting":
-        reject_quiz_join(request, session, join_subject)
     if quiz_session.class_id is None:
         reject_quiz_join(request, session, join_subject)
     student = session.scalar(
@@ -2677,6 +2684,57 @@ def join_quiz(
             )
             .values(student_identifier=student.identifier)
         )
+    existing = session.scalar(
+        select(QuizParticipant).where(
+            QuizParticipant.session_id == quiz_session.id,
+            QuizParticipant.student_id == student.id,
+        )
+    )
+    if existing is not None:
+        if existing.left_at is None or quiz_session.status not in {
+            "waiting",
+            "in_progress",
+            "paused",
+        }:
+            reject_quiz_join(request, session, join_subject)
+        participant_token = token_urlsafe(32)
+        active_session = session.execute(
+            update(QuizSession)
+            .where(
+                QuizSession.id == quiz_session.id,
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            )
+            .values(status=QuizSession.status)
+            .execution_options(synchronize_session=False)
+        )
+        if active_session.rowcount != 1:
+            session.rollback()
+            reject_quiz_join(request, session, join_subject)
+        reconnected = session.execute(
+            update(QuizParticipant)
+            .where(
+                QuizParticipant.id == existing.id,
+                QuizParticipant.left_at.is_not(None),
+            )
+            .values(
+                access_token_hash=participant_token_hash(participant_token),
+                left_at=None,
+                student_identifier=student.identifier,
+                student_display_name=student.display_name,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if reconnected.rowcount != 1:
+            session.rollback()
+            reject_quiz_join(request, session, join_subject)
+        session.commit()
+        session.refresh(existing)
+        state = student_state_response(quiz_session, quiz, existing, session)
+        return StudentQuizJoinResponse(
+            **state.model_dump(), participant_token=participant_token
+        )
+    if quiz_session.status != "waiting":
+        reject_quiz_join(request, session, join_subject)
     waiting = session.execute(
         update(QuizSession)
         .where(
@@ -2688,14 +2746,6 @@ def join_quiz(
     )
     if waiting.rowcount != 1:
         session.rollback()
-        reject_quiz_join(request, session, join_subject)
-    existing = session.scalar(
-        select(QuizParticipant).where(
-            QuizParticipant.session_id == quiz_session.id,
-            QuizParticipant.student_id == student.id,
-        )
-    )
-    if existing is not None:
         reject_quiz_join(request, session, join_subject)
     participant_token = token_urlsafe(32)
     participant = QuizParticipant(
@@ -2716,6 +2766,31 @@ def join_quiz(
         **state.model_dump(),
         participant_token=participant_token,
     )
+
+
+@router.post(
+    "/student/sessions/{join_code}/leave",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def leave_student_quiz(
+    join_code: str,
+    request: Request,
+    session: DbSession,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
+) -> Response:
+    _, _, participant = authenticated_participant(
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_participant_rate_limiter",
+        f"participant:{participant.id}",
+    )
+    participant.left_at = datetime.now(UTC)
+    participant.access_token_hash = None
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

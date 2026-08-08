@@ -286,6 +286,20 @@ export function getStudentQuizSession(
     )
 }
 
+export function leaveStudentQuiz(
+    joinCode: string,
+    participantToken: string
+): Promise<void> {
+    return request<void>(
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/leave`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+        },
+        false
+    )
+}
+
 export function submitStudentQuizAnswer(
     joinCode: string,
     participantToken: string,

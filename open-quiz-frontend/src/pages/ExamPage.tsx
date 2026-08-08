@@ -67,11 +67,6 @@ export function ExamPage() {
 
     return (
         <div className="flex flex-1 flex-col px-4">
-            <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 py-2">
-                <p className="text-sm text-muted-foreground">
-                    {t("signed-in-as", { name: student.display_name })}
-                </p>
-            </div>
             <div className="flex flex-1 items-center justify-center">
                 <StudentQuiz
                     studentToken={token}

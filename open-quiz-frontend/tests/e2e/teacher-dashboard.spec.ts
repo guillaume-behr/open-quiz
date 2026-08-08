@@ -1319,7 +1319,11 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     const resultDialog = page.getByRole("dialog", {
         name: "Science checkpoint",
     })
+    await expect(resultDialog.getByText("Class 8B")).toHaveCount(1)
     await expect(resultDialog.getByText("Alex Example")).toBeVisible()
+    await expect(
+        resultDialog.getByText("alex-8b", { exact: true })
+    ).toHaveCount(1)
     await expect(resultDialog.getByText("1 to grade")).toBeVisible()
     await resultDialog.getByRole("button", { name: "View answers" }).click()
 

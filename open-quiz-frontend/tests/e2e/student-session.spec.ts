@@ -82,6 +82,8 @@ test("joining an active quiz stores the session and requests full screen", async
     await joinExamViaDashboard(page, "abcd")
 
     await expect(page.getByText("Alex Example", { exact: true })).toBeVisible()
+    await expect(page.getByText("Signed in as Alex Example")).toHaveCount(0)
+    await expect(page.getByText("Alex Example", { exact: true })).toHaveCount(1)
     await expect(page.getByText("Full-screen mode is required")).toBeVisible()
     await expect
         .poll(() =>
@@ -101,7 +103,9 @@ test("joining an active quiz stores the session and requests full screen", async
 test("student can leave a quiz before entering full screen", async ({
     page,
 }) => {
+    let joinCount = 0
     await page.route("**/api/quizzes/join", async (route) => {
+        joinCount += 1
         await route.fulfill({
             status: 200,
             contentType: "application/json",
@@ -122,10 +126,23 @@ test("student can leave a quiz before entering full screen", async ({
             }),
         })
     })
+    let leaveRequested = false
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/leave",
+        async (route) => {
+            leaveRequested = true
+            expect(route.request().method()).toBe("POST")
+            expect(route.request().headers()["x-quiz-token"]).toBe(
+                "participant-token"
+            )
+            await route.fulfill({ status: 204, body: "" })
+        }
+    )
     await joinExamViaDashboard(page, "ABCD")
     await page.getByRole("button", { name: "Leave quiz" }).click()
 
     await expect(page).toHaveURL(/\/student\/dashboard$/)
+    expect(leaveRequested).toBe(true)
     await expect
         .poll(() =>
             page.evaluate(() =>
@@ -133,6 +150,10 @@ test("student can leave a quiz before entering full screen", async ({
             )
         )
         .toBeNull()
+
+    await joinExamViaDashboard(page, "ABCD")
+    await expect(page.getByText("Alex Example", { exact: true })).toBeVisible()
+    expect(joinCount).toBe(2)
 })
 
 test("student stays on a usable join screen when session storage is unavailable", async ({

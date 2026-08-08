@@ -2024,6 +2024,30 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             == "Martin Giraud"
         )
         student_state_url = f"/api/quizzes/student/sessions/{quiz_session['join_code']}"
+        left = client.post(f"{student_state_url}/leave", headers=student_headers)
+        assert left.status_code == 204
+        assert client.get(student_state_url, headers=student_headers).status_code == 401
+        waiting_room_after_leave = client.get(
+            f"/api/quizzes/sessions/{quiz_session['id']}",
+            headers=teacher_headers,
+        )
+        assert waiting_room_after_leave.status_code == 200
+        assert waiting_room_after_leave.json()["participant_count"] == 0
+        assert waiting_room_after_leave.json()["participants"] == []
+
+        rejoined = client.post(
+            "/api/quizzes/join",
+            headers=exam_account_headers,
+            json={"join_code": quiz_session["join_code"]},
+        )
+        assert rejoined.status_code == 201
+        assert rejoined.json()["participant_token"] != participant_token
+        participant_token = rejoined.json()["participant_token"]
+        student_headers = {"X-Quiz-Token": participant_token}
+        assert client.get(
+            f"/api/quizzes/sessions/{quiz_session['id']}",
+            headers=teacher_headers,
+        ).json()["participant_count"] == 1
         assert (
             client.get(student_state_url, headers=student_headers).json()[
                 "source_language"
@@ -2919,7 +2943,9 @@ def test_existing_quiz_sessions_gain_class_and_student_links(
         "duration_seconds",
         "allow_previous_questions",
     }.issubset(session_columns)
-    assert {"student_id", "student_display_name"}.issubset(participant_columns)
+    assert {"student_id", "student_display_name", "left_at"}.issubset(
+        participant_columns
+    )
 
 
 def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:

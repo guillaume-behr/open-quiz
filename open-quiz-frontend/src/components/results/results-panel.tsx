@@ -536,15 +536,7 @@ export function ResultsPanel({
             >
                 {selectedResult && (
                     <div className="space-y-4">
-                        <div className="grid gap-3 sm:grid-cols-3">
-                            <div className="rounded-xl bg-muted p-4">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                    {t("class-name")}
-                                </p>
-                                <p className="mt-1 font-semibold">
-                                    {selectedResult.class_name}
-                                </p>
-                            </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
                             <div className="rounded-xl bg-muted p-4">
                                 <p className="text-xs font-medium text-muted-foreground">
                                     {t("result-participants")}
@@ -586,11 +578,15 @@ export function ResultsPanel({
                                                         {participant.student_display_name ??
                                                             participant.student_identifier}
                                                     </p>
-                                                    <p className="truncate text-xs text-muted-foreground">
-                                                        {
-                                                            participant.student_identifier
-                                                        }
-                                                    </p>
+                                                    {participant.student_display_name &&
+                                                        participant.student_display_name !==
+                                                            participant.student_identifier && (
+                                                            <p className="truncate text-xs text-muted-foreground">
+                                                                {
+                                                                    participant.student_identifier
+                                                                }
+                                                            </p>
+                                                        )}
                                                 </div>
                                             </div>
                                             <p className="text-sm">

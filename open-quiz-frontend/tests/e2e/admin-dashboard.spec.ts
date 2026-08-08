@@ -192,6 +192,9 @@ test("administrator manages teachers and problem reports", async ({ page }) => {
 
     await page.getByRole("button", { name: /Problem reports/ }).click()
     await expect(
+        page.getByRole("heading", { name: "Problem reports", exact: true })
+    ).toHaveCount(1)
+    await expect(
         page.getByText("The results table is difficult to read on a phone.")
     ).toBeVisible()
     page.once("dialog", (dialog) => dialog.accept())

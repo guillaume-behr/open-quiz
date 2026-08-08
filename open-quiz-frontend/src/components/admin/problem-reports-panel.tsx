@@ -60,11 +60,8 @@ export function ProblemReportsPanel({
     }
 
     return (
-        <section aria-labelledby="problem-reports-heading">
+        <section aria-label={t("problem-reports")}>
             <div className="mb-4">
-                <h2 id="problem-reports-heading" className="text-xl font-bold">
-                    {t("problem-reports")}
-                </h2>
                 <p className="text-sm text-muted-foreground">
                     {t("problem-report-count", { count: total })}
                 </p>

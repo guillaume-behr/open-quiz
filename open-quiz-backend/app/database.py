@@ -488,6 +488,10 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "ALTER TABLE quiz_participants ADD COLUMN current_position INTEGER"
                 )
             )
+        if "left_at" not in participant_columns:
+            connection.execute(
+                text("ALTER TABLE quiz_participants ADD COLUMN left_at DATETIME")
+            )
         for column_name, column_type, suffix in (
             ("violation_count", Integer(), " NOT NULL DEFAULT 0"),
             ("last_violation_type", String(40), ""),

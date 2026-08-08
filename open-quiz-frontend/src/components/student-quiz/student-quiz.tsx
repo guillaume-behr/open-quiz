@@ -3,6 +3,7 @@ import { isRtlLanguage } from "@/lib/utils"
 import {
     getStudentQuizSession,
     joinQuiz,
+    leaveStudentQuiz,
     navigateStudentQuiz,
     submitStudentQuizAnswer,
 } from "@/api/quizzes"
@@ -170,9 +171,20 @@ export function StudentQuiz({
         }
     }
 
-    function leaveQuiz() {
+    async function leaveQuiz() {
+        if (!session || !participantToken) return
         isLeavingQuiz.current = true
         sessionRequestVersion.current += 1
+        setIsBusy(true)
+        setError(null)
+        try {
+            await leaveStudentQuiz(session.join_code, participantToken)
+        } catch {
+            isLeavingQuiz.current = false
+            setIsBusy(false)
+            setError(t("student-session-error"))
+            return
+        }
         clearStoredQuizSession()
         setSession(null)
         setParticipantToken(null)
@@ -180,6 +192,7 @@ export function StudentQuiz({
         setSelectedChoiceIds([])
         setWrittenAnswer("")
         setError(null)
+        setIsBusy(false)
         translation.reset()
         onSessionCleared?.()
 
@@ -282,7 +295,7 @@ export function StudentQuiz({
                         setError(t("student-session-error"))
                     )
                 }}
-                onLeave={leaveQuiz}
+                onLeave={() => void leaveQuiz()}
             />
         )
     }
@@ -304,7 +317,7 @@ export function StudentQuiz({
             onWrittenAnswerChange={setWrittenAnswer}
             onPrevious={() => void goToPreviousQuestion()}
             onSubmitAnswer={handleAnswer}
-            onLeave={leaveQuiz}
+            onLeave={() => void leaveQuiz()}
         />
     )
 }
