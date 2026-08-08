@@ -68,7 +68,7 @@ principale.
 Le tableau de bord enseignant sépare les comptes **Élèves**, leur affectation
 aux **Classes**, les **Examens** et les **Entraînements**. Le formulaire d’examen
 demande des quantités faciles, moyennes et difficiles plafonnées par les banques
-sélectionnées, ainsi que le total de points de chaque difficulté. Dans l’onglet
+sélectionnées. Dans l’onglet
 **Entraînements**, l’enseignant choisit une classe puis les banques que ses élèves
 pourront utiliser.
 
@@ -78,8 +78,8 @@ Le tableau de bord élève propose deux activités :
 - relancer à volonté un entraînement disponible, sans points ni note, avec la
   bonne réponse affichée après chaque question.
 
-Un tirage commun présente le même ensemble de questions à tous les élèves, mais
-le backend fournit à chacun un ordre aléatoire stable pour sa session.
+Le backend fournit à chaque élève un tirage individuel et un ordre stable pour
+sa session.
 
 Les jetons d’accès élève et les jetons de participation au quiz sont conservés
 dans `sessionStorage` pour permettre un rafraîchissement de l’onglet. Les jetons

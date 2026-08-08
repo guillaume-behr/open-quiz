@@ -79,11 +79,6 @@ export function QuizzesPanel({
         medium: 0,
         hard: 0,
     })
-    const [difficultyPoints, setDifficultyPoints] = useState({
-        easy: 0,
-        medium: 0,
-        hard: 0,
-    })
     const [isCreating, setIsCreating] = useState(false)
     const [createError, setCreateError] = useState<string | null>(null)
     const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null)
@@ -255,22 +250,12 @@ export function QuizzesPanel({
             medium: Math.min(current.medium, available.medium),
             hard: Math.min(current.hard, available.hard),
         }))
-        setDifficultyPoints((current) => ({
-            easy: available.easy > 0 ? current.easy : 0,
-            medium: available.medium > 0 ? current.medium : 0,
-            hard: available.hard > 0 ? current.hard : 0,
-        }))
     }
 
     function handleDifficultyCountsChange(
         values: Record<Difficulty, number>
     ): void {
         setDifficultyCounts(values)
-        setDifficultyPoints((current) => ({
-            easy: values.easy > 0 ? current.easy : 0,
-            medium: values.medium > 0 ? current.medium : 0,
-            hard: values.hard > 0 ? current.hard : 0,
-        }))
     }
 
     function resetCreationForm(): void {
@@ -281,7 +266,6 @@ export function QuizzesPanel({
         setAllowPreviousQuestions(false)
         setAllowNegativePoints(false)
         setDifficultyCounts({ easy: 0, medium: 0, hard: 0 })
-        setDifficultyPoints({ easy: 0, medium: 0, hard: 0 })
         setCreateError(null)
         setEditingQuiz(null)
     }
@@ -290,7 +274,6 @@ export function QuizzesPanel({
         setQuizGradeLevel(level)
         setSelectedBankIds([])
         setDifficultyCounts({ easy: 0, medium: 0, hard: 0 })
-        setDifficultyPoints({ easy: 0, medium: 0, hard: 0 })
     }
 
     function openQuizEditor(quiz: Quiz): void {
@@ -305,11 +288,6 @@ export function QuizzesPanel({
             easy: quiz.easy_question_count,
             medium: quiz.medium_question_count,
             hard: quiz.hard_question_count,
-        })
-        setDifficultyPoints({
-            easy: quiz.easy_points,
-            medium: quiz.medium_points,
-            hard: quiz.hard_points,
         })
         setCreateError(null)
     }
@@ -335,9 +313,11 @@ export function QuizzesPanel({
                 easy_question_count: difficultyCounts.easy,
                 medium_question_count: difficultyCounts.medium,
                 hard_question_count: difficultyCounts.hard,
-                easy_points: difficultyPoints.easy,
-                medium_points: difficultyPoints.medium,
-                hard_points: difficultyPoints.hard,
+                // Retain legacy metadata when editing; answer choices now own
+                // the effective score values used for new quiz sessions.
+                easy_points: editingQuiz?.easy_points ?? 0,
+                medium_points: editingQuiz?.medium_points ?? 0,
+                hard_points: editingQuiz?.hard_points ?? 0,
             }
             const isEditing = editingQuiz !== null
             const quiz = isEditing

@@ -31,17 +31,17 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - gestion indépendante des élèves et des classes ;
 - examens créés séparément et banques d’entraînement affectées par classe ;
 - entraînements relançables librement avec correction immédiate ;
-- tirage commun ou individuel des questions au lancement d’un examen ;
-- ordre aléatoire propre à chaque élève, y compris avec un tirage commun ;
+- tirage individuel des questions au lancement pour chaque élève ;
+- ordre aléatoire propre à chaque élève ;
 - quantités explicites de questions par difficulté, limitées par les banques ;
-- barème défini par difficulté dans le quiz et réparti entre les questions.
+- barème défini sur chaque proposition de réponse.
 
 ### Modifications incompatibles
 
 - l’entrée en examen nécessite désormais un compte élève authentifié ;
 - les anciens élèves sans compte sont supprimés lors de la migration ;
 - les pourcentages de difficulté sont remplacés par des quantités ;
-- les points ne sont plus définis sur les propositions des banques de questions ;
+- les points sont désormais définis sur les propositions des banques de questions ;
 - l’ancien écran public permettant de rejoindre un quiz est remplacé par la
   connexion élève.
 

@@ -192,7 +192,10 @@ export function MakeupSessionsPanel() {
                             ))
                         )}
                     </fieldset>
-                    <Button disabled={busy || !classId || !quizIds.length}>
+                    <Button
+                        type="submit"
+                        disabled={busy || !classId || !quizIds.length}
+                    >
                         {t("makeup-launch")}
                     </Button>
                 </div>

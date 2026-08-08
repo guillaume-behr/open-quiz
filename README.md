@@ -90,11 +90,10 @@ Pour la première configuration, utilisez directement l’espace adapté :
 7. L’enseignant démarre la session, consulte les résultats, corrige les réponses
    rédactionnelles et peut exporter les notes au format CSV.
 
-Les questions sont tirées au lancement, jamais lors de la création du quiz. Un
-tirage commun utilise le même ensemble de questions et le même barème pour tous,
-mais l’ordre est mélangé et mémorisé séparément pour chaque élève. Un tirage
-individuel sélectionne un ensemble distinct pour chaque élève affecté à la
-classe.
+Les questions sont tirées au lancement, jamais lors de la création du quiz.
+Chaque élève reçoit un tirage individuel ; l’ensemble choisi, l’ordre et le
+barème sont mémorisés dans la session afin de préserver la correction
+historique.
 
 Une banque autorisée est disponible à tout moment dans le tableau de bord des
 élèves de la classe. Un nouveau tirage est effectué à chaque démarrage, sans
@@ -132,7 +131,7 @@ absente ou expirée.
   plafonnement selon la disponibilité des banques sélectionnées ;
 - barème défini réponse par réponse ; les réponses sélectionnées sont
   additionnées et les valeurs négatives sont activées par quiz ;
-- tirage effectué au lancement, commun ou individuel selon la configuration ;
+- tirage individuel effectué au lancement pour chaque élève ;
 - sessions chronométrées avec pause, reprise et retour optionnel aux questions ;
 - notation automatique et correction manuelle des réponses rédactionnelles ;
 - export CSV des résultats d’une classe, pour un quiz précis ou pour tous ses

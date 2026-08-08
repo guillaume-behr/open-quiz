@@ -54,8 +54,7 @@ la rotation des sessions d’authentification.
   par l’élève ;
 - chaque proposition porte son propre nombre de points. Un quiz choisit si les
   points négatifs sont appliqués ou ramenés à zéro lors de la correction ;
-- les questions sont tirées au lancement. Un tirage commun conserve le même
-  ensemble pour tous, avec un ordre aléatoire propre à chaque élève ;
+- les questions sont tirées individuellement au lancement pour chaque élève ;
 - le tirage, l’ordre et le réglage des points négatifs sont enregistrés dans la
   session pour préserver la notation historique.
 

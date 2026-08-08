@@ -147,84 +147,6 @@ def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
     }
 
 
-def difficulty_points(quiz: Quiz) -> dict[str, float]:
-    return {
-        "easy": quiz.easy_points,
-        "medium": quiz.medium_points,
-        "hard": quiz.hard_points,
-    }
-
-
-# A small shortfall keeps a quiz launchable when the configured target cannot
-# be represented exactly by the available per-question point values.
-# The drawn total is never below the configured target and may exceed it by
-# at most the per-quiz bonus allowance.
-MAX_QUIZ_BONUS_POINTS = 2.0
-
-
-def adjust_last_question_for_points(
-    selected: list[Question],
-    candidates: list[Question],
-    target: float,
-) -> dict[int, float]:
-    """Choose the per-question points for a draw so the total reaches the target.
-
-    Returns an ordered mapping of ``question_id -> points``. When no available
-    question lets the total land within the tolerance, the points attributed to
-    the last drawn question are adjusted to reach the target, so a quiz stays
-    launchable even when the configured point values cannot be represented
-    exactly by the available questions.
-    """
-    if not selected or target <= 0:
-        return {question.id: question.points for question in selected}
-    total = sum(question.points for question in selected)
-    maximum = target + MAX_QUIZ_BONUS_POINTS
-    if target <= total <= maximum:
-        return {question.id: question.points for question in selected}
-    fixed_total = total - selected[-1].points
-    fixed_ids = {question.id for question in selected[:-1]}
-    fixed_points = {question.id: question.points for question in selected[:-1]}
-    replacements = [question for question in candidates if question.id not in fixed_ids]
-    valid_replacements = [
-        question
-        for question in replacements
-        if target <= fixed_total + question.points <= maximum
-    ]
-    if valid_replacements:
-        replacement = min(
-            valid_replacements,
-            key=lambda question: (
-                abs(target - (fixed_total + question.points)),
-                randomizer.random(),
-            ),
-        )
-        return {**fixed_points, replacement.id: replacement.points}
-    # No available question produces an acceptable total: adjust the points
-    # attributed to the last drawn question so the quiz remains launchable
-    # at exactly the configured target.
-    adjusted_last = target - fixed_total
-    if adjusted_last <= 0:
-        # The fixed questions alone already reach or exceed the target, so no
-        # single replacement of the last question can bring the total into the
-        # tolerance band. Scale every drawn question proportionally (folding the
-        # rounding error into the largest share) so the draw lands exactly on
-        # the configured target and the quiz stays launchable.
-        raw_total = sum(question.points for question in selected)
-        if raw_total <= 0:
-            raise ValueError("Impossible d'ajuster les points des questions")
-        factor = target / raw_total
-        result = {
-            question.id: round(question.points * factor, 2) for question in selected
-        }
-        scaling_reference = max(result, key=result.get)
-        result[scaling_reference] = round(
-            target - (sum(result.values()) - result[scaling_reference]),
-            2,
-        )
-        return result
-    return {**fixed_points, selected[-1].id: adjusted_last}
-
-
 def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Quiz:
     quiz = session.scalar(
         select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
@@ -1713,6 +1635,20 @@ def start_quiz_session(
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
     if quiz_session.status == "waiting":
+        started_at = datetime.now(UTC)
+        transition = session.execute(
+            update(QuizSession)
+            .where(
+                QuizSession.id == quiz_session.id,
+                QuizSession.status == "waiting",
+            )
+            .values(status="in_progress", started_at=started_at)
+            .execution_options(synchronize_session=False)
+        )
+        if transition.rowcount != 1:
+            session.rollback()
+            session.refresh(quiz_session)
+            return session_response(quiz_session, quiz, session)
         participants = list(
             session.scalars(
                 select(QuizParticipant).where(
@@ -1721,12 +1657,13 @@ def start_quiz_session(
             )
         )
         if not participants:
+            session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Au moins un élève doit rejoindre le quiz avant son démarrage",
             )
         quiz_session.status = "in_progress"
-        quiz_session.started_at = datetime.now(UTC)
+        quiz_session.started_at = started_at
         for participant in participants:
             participant.current_position = 0
         session.commit()
@@ -2243,12 +2180,28 @@ def control_makeup_session(
         raise HTTPException(
             status_code=409, detail="Action impossible pour cette session"
         )
+    transition = session.execute(
+        update(MakeupSession)
+        .where(
+            MakeupSession.id == makeup.id,
+            MakeupSession.status == expected,
+        )
+        .values(status=target)
+        .execution_options(synchronize_session=False)
+    )
+    if transition.rowcount != 1:
+        session.rollback()
+        raise HTTPException(
+            status_code=409, detail="Action impossible pour cette session"
+        )
+    makeup.status = target
     children = list(
         session.scalars(
             select(QuizSession).where(QuizSession.makeup_session_id == makeup.id)
         )
     )
     if action == "start" and not children:
+        session.rollback()
         raise HTTPException(
             status_code=409,
             detail="Au moins un élève doit choisir un quiz avant le démarrage",
@@ -2295,7 +2248,6 @@ def control_makeup_session(
             if child.status in {"finished", "cancelled"}:
                 continue
             child.status = "cancelled"
-    makeup.status = target
     session.commit()
     return makeup_session_response(makeup, session)
 
@@ -2438,6 +2390,20 @@ def select_makeup_quiz(
     )
     if membership is None or quiz is None or not passed or existing is not None:
         raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
+    waiting = session.execute(
+        update(MakeupSession)
+        .where(
+            MakeupSession.id == makeup.id,
+            MakeupSession.status == "waiting",
+        )
+        .values(status="waiting")
+        .execution_options(synchronize_session=False)
+    )
+    if waiting.rowcount != 1:
+        session.rollback()
+        raise HTTPException(
+            status_code=409, detail="Ce rattrapage n’accepte plus de choix"
+        )
     claimed = session.execute(
         sqlite_insert(MakeupSessionSelection)
         .values(session_id=makeup.id, student_id=membership.id)
@@ -2711,6 +2677,18 @@ def join_quiz(
             )
             .values(student_identifier=student.identifier)
         )
+    waiting = session.execute(
+        update(QuizSession)
+        .where(
+            QuizSession.id == quiz_session.id,
+            QuizSession.status == "waiting",
+        )
+        .values(status="waiting")
+        .execution_options(synchronize_session=False)
+    )
+    if waiting.rowcount != 1:
+        session.rollback()
+        reject_quiz_join(request, session, join_subject)
     existing = session.scalar(
         select(QuizParticipant).where(
             QuizParticipant.session_id == quiz_session.id,

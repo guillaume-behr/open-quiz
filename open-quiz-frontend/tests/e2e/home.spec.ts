@@ -48,9 +48,7 @@ test("a signed-in student enters exam mode from the dashboard", async ({
     ).toBeVisible()
     await page.getByRole("button", { name: "Exams", exact: true }).click()
 
-    await expect(
-        page.getByRole("heading", { name: "Exams" })
-    ).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Exams" })).toBeVisible()
     await expect(page.getByLabel("Quiz code")).toBeVisible()
 })
 
@@ -88,9 +86,7 @@ test("student authentication clears activity sessions between users", async ({
     await expect(page).toHaveURL(/\/student\/login$/)
     expect(
         await page.evaluate(() => ({
-            account: sessionStorage.getItem(
-                "open-quiz-student-access-token"
-            ),
+            account: sessionStorage.getItem("open-quiz-student-access-token"),
             exam: sessionStorage.getItem("open-quiz-student-session"),
             training: sessionStorage.getItem("open-quiz-training-session"),
         }))
@@ -201,7 +197,9 @@ test("a student launches training and sees the correct answer", async ({
         name: "Student space",
     })
     const studentSignInButton = page.getByRole("button", { name: "Sign in" })
-    await expect(studentLoginHeading.locator("..").locator("svg")).toHaveCount(0)
+    await expect(studentLoginHeading.locator("..").locator("svg")).toHaveCount(
+        0
+    )
     await expect(studentSignInButton.locator("svg")).toHaveCount(0)
     await page.getByLabel("Student ID").fill("alex-8b")
     await page.getByLabel("Password").fill("student-password")
@@ -218,6 +216,149 @@ test("a student launches training and sees the correct answer", async ({
     ).toBeVisible()
     await expect(page.getByText("Mars", { exact: true })).toBeVisible()
     await expect(page.getByText(/score/i)).toHaveCount(0)
+})
+
+test("a student joins a retake room and selects an eligible quiz", async ({
+    page,
+}) => {
+    await page.route("**/api/student-auth/login", async (route) => {
+        await route.fulfill({
+            json: { access_token: "student-token", student },
+        })
+    })
+    await page.route("**/api/quizzes/makeup/join", async (route) => {
+        expect(route.request().postDataJSON()).toEqual({ join_code: "RETAKE1" })
+        await route.fulfill({
+            json: {
+                join_code: "RETAKE1",
+                class_name: "Class 8B",
+                status: "waiting",
+                quizzes: [
+                    {
+                        id: 31,
+                        title: "Science checkpoint",
+                        duration_seconds: 1800,
+                    },
+                ],
+            },
+        })
+    })
+    await page.route("**/api/quizzes/makeup/RETAKE1/select", async (route) => {
+        expect(route.request().postDataJSON()).toEqual({ quiz_id: 31 })
+        await route.fulfill({
+            json: {
+                quiz_title: "Science checkpoint",
+                source_language: "en",
+                class_name: "Class 8B",
+                student_name: "Alex Example",
+                join_code: "CHILD31",
+                status: "waiting",
+                ends_at: null,
+                question_number: null,
+                total_questions: 10,
+                has_answered: false,
+                answered_count: 0,
+                allow_previous_questions: false,
+                selected_choice_ids: null,
+                written_answer: null,
+                question: null,
+                training_feedback: null,
+                participant_token: "retake-participant-token",
+            },
+        })
+    })
+    await page.route(
+        "**/api/quizzes/student/sessions/CHILD31",
+        async (route) => {
+            await route.fulfill({
+                json: {
+                    quiz_title: "Science checkpoint",
+                    source_language: "en",
+                    class_name: "Class 8B",
+                    student_name: "Alex Example",
+                    join_code: "CHILD31",
+                    status: "waiting",
+                    ends_at: null,
+                    question_number: null,
+                    total_questions: 10,
+                    has_answered: false,
+                    answered_count: 0,
+                    allow_previous_questions: false,
+                    selected_choice_ids: null,
+                    written_answer: null,
+                    question: null,
+                    training_feedback: null,
+                },
+            })
+        }
+    )
+
+    await page.goto("/student/login")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Password").fill("student-password")
+    await page.getByRole("button", { name: "Sign in" }).click()
+    await page.getByRole("button", { name: "Retake", exact: true }).click()
+    await page.getByLabel("Session code").fill("retake1")
+    await page.getByRole("button", { name: "Join" }).click()
+
+    await expect(page.getByText("Science checkpoint")).toBeVisible()
+    await page.getByRole("button", { name: /Science checkpoint/ }).click()
+    await expect(page).toHaveURL(/\/student\/exam$/)
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                JSON.parse(
+                    sessionStorage.getItem("open-quiz-student-session") ??
+                        "null"
+                )
+            )
+        )
+        .toEqual({
+            joinCode: "CHILD31",
+            participantToken: "retake-participant-token",
+        })
+})
+
+test("a student reviews the correction history", async ({ page }) => {
+    await page.route("**/api/student-auth/login", async (route) => {
+        await route.fulfill({
+            json: { access_token: "student-token", student },
+        })
+    })
+    await page.route("**/api/quizzes/student/history", async (route) => {
+        await route.fulfill({
+            json: [
+                {
+                    session_id: 90,
+                    quiz_title: "Science checkpoint",
+                    class_name: "Class 8B",
+                    started_at: "2026-01-06T10:01:00Z",
+                    answers: [
+                        {
+                            question_id: 93,
+                            position: 1,
+                            prompt: "Which planet is red?",
+                            difficulty: "easy",
+                            answer_mode: "single",
+                            submitted_answers: ["Venus"],
+                            expected_answers: ["Mars"],
+                        },
+                    ],
+                },
+            ],
+        })
+    })
+
+    await page.goto("/student/login")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Password").fill("student-password")
+    await page.getByRole("button", { name: "Sign in" }).click()
+    await page.getByRole("button", { name: "History", exact: true }).click()
+
+    await page.getByText("Science checkpoint").click()
+    await expect(page.getByText("Which planet is red?")).toBeVisible()
+    await expect(page.getByText("Venus", { exact: true })).toBeVisible()
+    await expect(page.getByText("Mars", { exact: true })).toBeVisible()
 })
 
 test("teacher area navigation works without a page reload", async ({

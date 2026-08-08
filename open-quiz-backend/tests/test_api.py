@@ -15,7 +15,7 @@ from typing import Any
 
 import pyotp
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -26,7 +26,6 @@ from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
     ProblemReport,
-    Question,
     Quiz,
     QuizParticipant,
     QuizSession,
@@ -37,11 +36,15 @@ from app.models import (
 from app.rate_limit import LoginRateLimiter
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.routers.quizzes import (
-    adjust_last_question_for_points,
     generate_join_code,
     safe_spreadsheet_cell,
 )
-from app.schemas import QuestionBatchImport, StudentQuizAnswer
+from app.schemas import (
+    LoginRequest,
+    QuestionBatchImport,
+    StudentLoginRequest,
+    StudentQuizAnswer,
+)
 from app.security import DUMMY_PASSWORD_HASH, refresh_request_proof
 from main import create_app
 from scripts.reset_two_factor import reset
@@ -233,6 +236,46 @@ def test_question_batch_import_has_a_fixed_question_limit() -> None:
 
 
 @pytest.mark.parametrize(
+    ("schema", "identity_field"),
+    [
+        (LoginRequest, "username"),
+        (StudentLoginRequest, "identifier"),
+    ],
+)
+def test_login_schemas_preserve_password_characters(
+    schema, identity_field: str
+) -> None:
+    password = "  exact password value  "
+
+    payload = schema.model_validate({identity_field: "account", "password": password})
+
+    assert payload.password == password
+
+
+def test_login_accepts_the_exact_configured_password_with_spaces(
+    tmp_path: Path,
+) -> None:
+    exact_password = "  strong admin password 2026  "
+    with make_client(
+        settings_for(
+            tmp_path / "password-characters.db",
+            admin_password=exact_password,
+        )
+    ) as client:
+        altered = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": exact_password.strip()},
+        )
+        accepted = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": exact_password},
+        )
+
+    assert altered.status_code == status.HTTP_401_UNAUTHORIZED
+    assert accepted.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.parametrize(
     "value",
     [
         '=HYPERLINK("https://attacker.example")',
@@ -246,62 +289,6 @@ def test_question_batch_import_has_a_fixed_question_limit() -> None:
 )
 def test_csv_cells_neutralize_spreadsheet_formulas(value: str) -> None:
     assert safe_spreadsheet_cell(value) == f"'{value}"
-
-
-def test_question_draw_keeps_an_overshoot_within_point_tolerance() -> None:
-    selected = [Question(id=1, points=2), Question(id=2, points=3.5)]
-    candidates = [*selected, Question(id=3, points=3)]
-
-    adjusted = adjust_last_question_for_points(selected, candidates, target=5)
-
-    assert list(adjusted) == [1, 2]
-    assert sum(adjusted.values()) == 5.5
-
-
-def test_question_draw_never_goes_below_the_point_target() -> None:
-    selected = [Question(id=1, points=2), Question(id=2, points=1)]
-    candidates = [*selected, Question(id=3, points=4)]
-
-    adjusted = adjust_last_question_for_points(selected, candidates, target=5)
-
-    assert list(adjusted) == [1, 3]
-    assert sum(adjusted.values()) == 6
-    assert sum(adjusted.values()) >= 5
-
-    too_small = [Question(id=1, points=2), Question(id=2, points=1)]
-    small_candidates = [*too_small, Question(id=3, points=2.5)]
-    # No replacement reaches the target, so the last question's points are
-    # adjusted to hit the configured total exactly instead of refusing it.
-    adjusted_small = adjust_last_question_for_points(
-        too_small, small_candidates, target=5
-    )
-    assert sum(adjusted_small.values()) == 5
-
-
-def test_question_draw_never_exceeds_two_bonus_points() -> None:
-    selected = [Question(id=1, points=3), Question(id=2, points=5)]
-    candidates = [*selected, Question(id=3, points=4)]
-
-    adjusted = adjust_last_question_for_points(selected, candidates, target=5)
-
-    assert list(adjusted) == [1, 3]
-    assert sum(adjusted.values()) == 7
-    assert selected[0].points == 3
-    assert selected[1].points == 5
-
-
-def test_question_draw_scales_down_when_a_question_overshoots_the_target() -> None:
-    # Two questions each worth far more than the configured target: no single
-    # replacement of the last question can land within the tolerance band, so
-    # the draw must scale the whole set down to the target instead of refusing.
-    selected = [Question(id=1, points=10), Question(id=2, points=10)]
-    candidates = [*selected, Question(id=3, points=10)]
-
-    adjusted = adjust_last_question_for_points(selected, candidates, target=2)
-
-    assert len(adjusted) == 2
-    assert sum(adjusted.values()) == 2
-    assert all(value >= 0 for value in adjusted.values())
 
 
 def test_quiz_launches_when_question_points_overshoot_the_target(
@@ -3765,6 +3752,59 @@ def launch_and_join(
     assert joined.status_code == 201
     participant_headers = {"X-Quiz-Token": joined.json()["participant_token"]}
     return launched.json(), participant_headers
+
+
+def test_join_and_start_race_never_strands_a_participant(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "join-start-race.db")) as client:
+        environment = exam_environment(client)
+        launched = client.post(
+            f"/api/quizzes/{environment['quiz']['id']}/launch",
+            headers=environment["teacher_headers"],
+            json={"class_id": environment["student_class"]["id"]},
+        ).json()
+        barrier = Barrier(2)
+        responses: dict[str, Any] = {}
+
+        def join() -> int:
+            barrier.wait()
+            response = client.post(
+                "/api/quizzes/join",
+                headers=environment["student_headers"],
+                json={"join_code": launched["join_code"]},
+            )
+            responses["join"] = response
+            return response.status_code
+
+        def start() -> int:
+            barrier.wait()
+            response = client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            )
+            responses["start"] = response
+            return response.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            join_status = pool.submit(join)
+            start_status = pool.submit(start)
+            assert join_status.result() == status.HTTP_201_CREATED
+            assert start_status.result() in {
+                status.HTTP_200_OK,
+                status.HTTP_409_CONFLICT,
+            }
+
+        joined = responses["join"].json()
+        state = client.get(
+            f"/api/quizzes/student/sessions/{launched['join_code']}",
+            headers={"X-Quiz-Token": joined["participant_token"]},
+        )
+        assert state.status_code == status.HTTP_200_OK
+        if responses["start"].status_code == status.HTTP_200_OK:
+            assert state.json()["status"] == "in_progress"
+            assert state.json()["question"] is not None
+        else:
+            assert state.json()["status"] == "waiting"
+            assert state.json()["question"] is None
 
 
 def correct_choice_id(question: dict[str, Any]) -> int:

@@ -32,11 +32,6 @@ class LoginRequest(BaseModel):
     def trim_login_username(cls, value: str) -> str:
         return value.strip()
 
-    @field_validator("password")
-    @classmethod
-    def trim_login_password(cls, value: str) -> str:
-        return value.strip()
-
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -196,11 +191,6 @@ class StudentLoginRequest(BaseModel):
     @classmethod
     def normalize_login_identifier(cls, value: str) -> str:
         return value.strip().lower()
-
-    @field_validator("password")
-    @classmethod
-    def trim_login_password(cls, value: str) -> str:
-        return value.strip()
 
 
 class StudentLoginResponse(BaseModel):

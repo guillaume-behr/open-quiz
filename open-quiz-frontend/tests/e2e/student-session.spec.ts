@@ -75,7 +75,7 @@ test("joining an active quiz stores the session and requests full screen", async
             contentType: "application/json",
             body: JSON.stringify({
                 ...baseSession,
-                status: "waiting",
+                status: "in_progress",
             }),
         })
     })
@@ -292,6 +292,105 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
     await page.getByLabel("Mars").check()
     await page.getByRole("button", { name: "Submit my answer" }).click()
     await expect(page.getByText("Response recorded")).toBeVisible()
+})
+
+test("student translates a quiz and monitoring reports leaving the viewport", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+        Object.defineProperty(globalThis, "Translator", {
+            configurable: true,
+            value: {
+                availability: async () => "available" as const,
+                create: async () => ({
+                    translate: async (text: string) =>
+                        ({
+                            "Révision scientifique": "Science review",
+                            "Quelle planète est rouge ?":
+                                "Which planet is red?",
+                            Mars: "Mars",
+                            Vénus: "Venus",
+                        })[text] ?? text,
+                    destroy: () => undefined,
+                }),
+            },
+        })
+    })
+    const question = {
+        id: 141,
+        prompt: "Quelle planète est rouge ?",
+        difficulty: "easy",
+        answer_mode: "single",
+        answer_mode_disclosed: true,
+        response_language: null,
+        has_image: false,
+        code_language: null,
+        code_content: null,
+        choices: [
+            {
+                id: 201,
+                label: "Mars",
+                position: 0,
+                has_image: false,
+                code_language: null,
+                code_content: null,
+            },
+            {
+                id: 202,
+                label: "Vénus",
+                position: 1,
+                has_image: false,
+                code_language: null,
+                code_content: null,
+            },
+        ],
+    }
+    const translatedSession = {
+        ...baseSession,
+        quiz_title: "Révision scientifique",
+        source_language: "fr",
+        status: "in_progress",
+        question_number: 1,
+        question,
+    }
+    const violations: unknown[] = []
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            json: {
+                ...translatedSession,
+                participant_token: "participant-token",
+            },
+        })
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({ json: translatedSession })
+    })
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/violation",
+        async (route) => {
+            violations.push(route.request().postDataJSON())
+            await route.fulfill({ status: 204 })
+        }
+    )
+
+    await joinExamViaDashboard(page, "ABCD")
+    await expect(page.getByText("Révision scientifique")).toBeVisible()
+    await page.getByRole("button", { name: "Translate the quiz" }).click()
+    await expect(page.getByText("Science review")).toBeVisible()
+    await expect(page.getByText("Which planet is red?")).toBeVisible()
+    await expect(page.getByLabel("Venus")).toBeVisible()
+    await page.getByRole("button", { name: "Show original text" }).click()
+    await expect(page.getByText("Quelle planète est rouge ?")).toBeVisible()
+
+    await page.waitForTimeout(1600)
+    await page.locator("html").dispatchEvent("mouseleave")
+    await expect
+        .poll(() => violations)
+        .toEqual([{ event_type: "pointer_exit" }])
 })
 
 test("a delayed poll cannot restore a question after submission", async ({

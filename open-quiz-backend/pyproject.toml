@@ -11,7 +11,7 @@ authors = [
 ]
 dependencies = [
     "argon2-cffi>=25.1.0",
-    "cryptography>=49.0.0",
+    "cryptography>=50.0.0",
     "fastapi[standard]>=0.139.2",
     "pillow>=12.1.0",
     "pwdlib>=0.3.0",
