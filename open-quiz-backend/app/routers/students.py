@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
 from app.models import (
+    MakeupSessionSelection,
     Quiz,
     QuizParticipant,
     QuizSession,
@@ -262,6 +263,11 @@ def delete_student_account(
             update(QuizParticipant)
             .where(QuizParticipant.student_id == membership.id)
             .values(student_id=None)
+        )
+        session.execute(
+            delete(MakeupSessionSelection).where(
+                MakeupSessionSelection.student_id == membership.id
+            )
         )
         session.execute(delete(Student).where(Student.id == membership.id))
     session.execute(delete(StudentAccount).where(StudentAccount.id == account.id))

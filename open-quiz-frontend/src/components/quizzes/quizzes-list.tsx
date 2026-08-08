@@ -292,14 +292,6 @@ function QuizCard({
                         {quiz[`${difficulty}_question_count`]}
                     </span>
                 ))}
-                <span className="font-semibold text-foreground">
-                    {t("quiz-total-points", {
-                        count:
-                            quiz.easy_points +
-                            quiz.medium_points +
-                            quiz.hard_points,
-                    })}
-                </span>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
                 {quiz.question_banks

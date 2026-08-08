@@ -22,9 +22,24 @@ test("teacher sees a login error returned by the API", async ({ page }) => {
 
     await page.getByLabel("Username").fill("teacher")
     await page.getByLabel("Password").fill("incorrect")
+    await page.evaluate(() =>
+        sessionStorage.setItem("open-quiz-refresh-proof", "existing-proof")
+    )
+    expect(
+        await page.evaluate(() =>
+            sessionStorage.getItem("open-quiz-refresh-proof")
+        )
+    ).toBe("existing-proof")
     await page.getByRole("button", { name: "Sign in" }).click()
 
     await expect(page.getByRole("alert")).toHaveText("Unable to sign in.")
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                sessionStorage.getItem("open-quiz-refresh-proof")
+            )
+        )
+        .toBe("existing-proof")
 })
 
 test("successful credentials advance to two-factor authentication", async ({

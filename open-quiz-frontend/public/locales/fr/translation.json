@@ -505,6 +505,7 @@
     "same-questions-for-all": "Mêmes questions pour tous les élèves",
     "same-questions-for-all-help": "Si cette option est désactivée, un tirage distinct est effectué pour chaque élève au lancement de la session d’examen.",
     "allow-previous-questions": "Autoriser le retour aux questions précédentes",
+    "allow-negative-points": "Activer les points négatifs des réponses",
     "allow-previous-questions-help": "Les élèves pourront revoir et modifier leurs réponses déjà enregistrées.",
     "previous-question": "Question précédente",
     "student-navigation-error": "Impossible de revenir à cette question.",

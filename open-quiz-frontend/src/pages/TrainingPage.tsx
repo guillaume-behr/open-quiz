@@ -7,6 +7,7 @@ import type {
 } from "@/api/types"
 import { StudentQuestionForm } from "@/components/student-quiz/student-question-form"
 import { Button } from "@/components/ui/button"
+import { isRtlLanguage } from "@/lib/utils"
 import { ArrowLeft, CheckCircle2, LoaderCircle, XCircle } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -170,6 +171,11 @@ export function TrainingPage() {
                         session={session}
                         question={session.question}
                         participantToken={participantToken}
+                        contentDirection={
+                            isRtlLanguage(session.source_language)
+                                ? "rtl"
+                                : "ltr"
+                        }
                         selectedChoiceIds={selectedChoiceIds}
                         writtenAnswer={writtenAnswer}
                         isBusy={isBusy}

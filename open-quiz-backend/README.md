@@ -52,12 +52,12 @@ la rotation des sessions d’authentification.
 - les quiz `exam` sont notés et lancés par l’enseignant, tandis que les banques
   d’entraînement sont autorisées par classe puis tirées et démarrées librement
   par l’élève ;
-- un quiz stocke un nombre de questions et un total de points pour chaque
-  difficulté, pas des pourcentages ni des points sur les propositions ;
+- chaque proposition porte son propre nombre de points. Un quiz choisit si les
+  points négatifs sont appliqués ou ramenés à zéro lors de la correction ;
 - les questions sont tirées au lancement. Un tirage commun conserve le même
   ensemble pour tous, avec un ordre aléatoire propre à chaque élève ;
-- le tirage, l’ordre et les points par question sont enregistrés dans la session
-  pour préserver la notation historique.
+- le tirage, l’ordre et le réglage des points négatifs sont enregistrés dans la
+  session pour préserver la notation historique.
 
 Chaque quiz conserve dans `source_language` la langue d’interface utilisée lors
 de sa création. Cette valeur est renvoyée dans les réponses destinées à l’élève
@@ -138,9 +138,9 @@ persistant et être sauvegardé avec un outil compatible SQLite WAL ou pendant u
 arrêt contrôlé.
 
 Lors du premier démarrage en `0.2.0`, la migration supprime les anciens élèves
-sans compte, convertit les répartitions en pourcentages vers des quantités par
-difficulté et neutralise les anciens points portés par les propositions.
-Sauvegardez la base avant cette migration.
+sans compte et convertit les répartitions en pourcentages vers des quantités par
+difficulté. Une migration ultérieure reporte le barème historique de chaque
+question sur ses bonnes réponses. Sauvegardez la base avant toute migration.
 
 Les images de questions sont décodées, limitées en dimensions puis réencodées
 avant stockage. Les métadonnées et les trames d'animation ne sont pas

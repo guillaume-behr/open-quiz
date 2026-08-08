@@ -201,6 +201,7 @@ class Quiz(Base):
     question_count: Mapped[int] = mapped_column(Integer)
     duration_seconds: Mapped[int] = mapped_column(Integer, default=1800)
     allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
+    allow_negative_points: Mapped[bool] = mapped_column(Boolean, default=False)
     same_questions_for_all: Mapped[bool] = mapped_column(Boolean, default=True)
     easy_question_count: Mapped[int] = mapped_column(Integer, default=0)
     medium_question_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -247,6 +248,7 @@ class QuizSession(Base):
     allow_previous_questions: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True
     )
+    allow_negative_points: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     same_questions_for_all: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     class_id: Mapped[int | None] = mapped_column(
         ForeignKey("student_classes.id"), nullable=True, index=True
@@ -292,6 +294,21 @@ class MakeupSessionQuiz(Base):
         ForeignKey("makeup_sessions.id"), primary_key=True
     )
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), primary_key=True)
+
+
+class MakeupSessionSelection(Base):
+    __tablename__ = "makeup_session_selections"
+
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("makeup_sessions.id"), primary_key=True
+    )
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), primary_key=True)
+
+
+class QuizJoinCode(Base):
+    __tablename__ = "quiz_join_codes"
+
+    code: Mapped[str] = mapped_column(String(8), primary_key=True)
 
 
 class QuizSessionQuestion(Base):

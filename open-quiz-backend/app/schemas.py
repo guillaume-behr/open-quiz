@@ -299,6 +299,7 @@ class QuestionChoiceCreate(BaseModel):
     id: int | None = None
     label: str = Field(min_length=1, max_length=4000)
     is_correct: bool = False
+    points: float | None = Field(default=None, ge=-10000, le=10000)
     image: QuestionImportImage | None = None
     remove_image: bool = False
     code_language: CodeLanguage | None = None
@@ -394,6 +395,7 @@ class QuestionChoiceResponse(BaseModel):
     id: int
     label: str
     is_correct: bool
+    points: float
     position: int
     has_image: bool
     code_language: str | None
@@ -448,6 +450,7 @@ class QuizCreate(BaseModel):
     question_bank_ids: list[int] = Field(min_length=1, max_length=100)
     duration_seconds: int = Field(default=1800, ge=60, le=28800)
     allow_previous_questions: bool = False
+    allow_negative_points: bool = False
     same_questions_for_all: bool = False
     easy_question_count: int = Field(ge=0, le=200)
     medium_question_count: int = Field(ge=0, le=200)
@@ -512,6 +515,7 @@ class QuizResponse(BaseModel):
     question_count: int
     duration_seconds: int
     allow_previous_questions: bool
+    allow_negative_points: bool
     same_questions_for_all: bool
     easy_question_count: int
     medium_question_count: int

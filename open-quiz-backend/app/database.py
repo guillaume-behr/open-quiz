@@ -118,6 +118,18 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
     with engine.begin() as connection:
         connection.execute(
             text(
+                "INSERT OR IGNORE INTO quiz_join_codes (code) "
+                "SELECT join_code FROM quiz_sessions"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT OR IGNORE INTO quiz_join_codes (code) "
+                "SELECT join_code FROM makeup_sessions"
+            )
+        )
+        connection.execute(
+            text(
                 "INSERT INTO grade_levels (owner_id, name, created_at) "
                 "SELECT DISTINCT owner_id, grade_level, CURRENT_TIMESTAMP "
                 "FROM student_classes "
@@ -185,6 +197,13 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                 text(
                     "ALTER TABLE quizzes ADD COLUMN "
                     "allow_previous_questions BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            )
+        if "allow_negative_points" not in quiz_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quizzes ADD COLUMN "
+                    "allow_negative_points BOOLEAN NOT NULL DEFAULT FALSE"
                 )
             )
         if "same_questions_for_all" not in quiz_columns:
@@ -300,6 +319,11 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                 "allow_previous_questions",
             ),
             (
+                "allow_negative_points",
+                "BOOLEAN",
+                "allow_negative_points",
+            ),
+            (
                 "same_questions_for_all",
                 "BOOLEAN",
                 "same_questions_for_all",
@@ -327,6 +351,29 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                 )
             )
             connection.execute(text("UPDATE question_choices SET points = 0"))
+        points_migrated = connection.execute(
+            text("SELECT 1 FROM security_state WHERE key = 'answer_points_migrated'")
+        ).first()
+        if points_migrated is None:
+            connection.execute(
+                text(
+                    "UPDATE question_choices SET points = ("
+                    "SELECT questions.points / ("
+                    "SELECT COUNT(*) FROM question_choices AS correct_choices "
+                    "WHERE correct_choices.question_id = questions.id "
+                    "AND correct_choices.is_correct = TRUE) "
+                    "FROM questions WHERE questions.id = question_choices.question_id"
+                    ") WHERE question_choices.is_correct = TRUE "
+                    "AND EXISTS (SELECT 1 FROM questions "
+                    "WHERE questions.id = question_choices.question_id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO security_state (key, value) "
+                    "VALUES ('answer_points_migrated', '1')"
+                )
+            )
         for column_name, column_type in (
             ("image_data", LargeBinary()),
             ("image_content_type", String(80)),
@@ -454,6 +501,18 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                         f"ADD COLUMN {column_name} {compiled_type}{suffix}"
                     )
                 )
+        connection.execute(
+            text(
+                "INSERT OR IGNORE INTO makeup_session_selections "
+                "(session_id, student_id) "
+                "SELECT quiz_sessions.makeup_session_id, quiz_participants.student_id "
+                "FROM quiz_sessions "
+                "JOIN quiz_participants ON "
+                "quiz_participants.session_id = quiz_sessions.id "
+                "WHERE quiz_sessions.makeup_session_id IS NOT NULL "
+                "AND quiz_participants.student_id IS NOT NULL"
+            )
+        )
     if database_path is not None:
         secure_sqlite_files(database_path)
     return sessionmaker(bind=engine, expire_on_commit=False)

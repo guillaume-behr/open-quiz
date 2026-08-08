@@ -33,12 +33,14 @@ from app.models import (
     ClassTrainingQuestionBank,
     MakeupSession,
     MakeupSessionQuiz,
+    MakeupSessionSelection,
     Question,
     QuestionBank,
     QuestionChoice,
     QuestionCode,
     Quiz,
     QuizAnswer,
+    QuizJoinCode,
     QuizParticipant,
     QuizQuestionBank,
     QuizSession,
@@ -181,9 +183,7 @@ def adjust_last_question_for_points(
         return {question.id: question.points for question in selected}
     fixed_total = total - selected[-1].points
     fixed_ids = {question.id for question in selected[:-1]}
-    fixed_points = {
-        question.id: question.points for question in selected[:-1]
-    }
+    fixed_points = {question.id: question.points for question in selected[:-1]}
     replacements = [question for question in candidates if question.id not in fixed_ids]
     valid_replacements = [
         question
@@ -214,13 +214,11 @@ def adjust_last_question_for_points(
             raise ValueError("Impossible d'ajuster les points des questions")
         factor = target / raw_total
         result = {
-            question.id: round(question.points * factor, 2)
-            for question in selected
+            question.id: round(question.points * factor, 2) for question in selected
         }
         scaling_reference = max(result, key=result.get)
         result[scaling_reference] = round(
-            target
-            - (sum(result.values()) - result[scaling_reference]),
+            target - (sum(result.values()) - result[scaling_reference]),
             2,
         )
         return result
@@ -323,36 +321,27 @@ def draw_question_ids(quiz: Quiz, session: DbSession) -> dict[int, float]:
         for difficulty, count in requested.items()
         if count > 0
     }
-    target = sum(difficulty_points(quiz).values())
-    points: dict[int, float] = {}
-    for _ in range(100):
-        selected: list[Question] = []
-        for difficulty, count in requested.items():
-            if count > 0:
-                selected.extend(
-                    randomizer.sample(candidates_by_difficulty[difficulty], count)
-                )
-        if target <= 0:
-            points = {question.id: question.points for question in selected}
-            break
-        last_difficulty = selected[-1].difficulty
-        try:
-            points = adjust_last_question_for_points(
-                selected,
-                candidates_by_difficulty[last_difficulty],
-                target,
+    selected: list[Question] = []
+    for difficulty, count in requested.items():
+        if count > 0:
+            selected.extend(
+                randomizer.sample(candidates_by_difficulty[difficulty], count)
             )
-            break
-        except ValueError:
-            continue
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                "Les points attribués aux questions disponibles ne permettent "
-                "pas d’atteindre le total du quiz"
-            ),
+    selected_ids = [question.id for question in selected]
+    maximums = {
+        question_id: total or 0.0
+        for question_id, total in session.execute(
+            select(
+                QuestionChoice.question_id,
+                func.sum(
+                    case((QuestionChoice.points > 0, QuestionChoice.points), else_=0)
+                ),
+            )
+            .where(QuestionChoice.question_id.in_(selected_ids))
+            .group_by(QuestionChoice.question_id)
         )
+    }
+    points = {question.id: maximums.get(question.id, 0.0) for question in selected}
     question_ids = list(points)
     randomizer.shuffle(question_ids)
     return {question_id: points[question_id] for question_id in question_ids}
@@ -448,6 +437,7 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
         question_count=quiz.question_count,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
+        allow_negative_points=quiz.allow_negative_points,
         same_questions_for_all=quiz.same_questions_for_all,
         easy_question_count=quiz.easy_question_count,
         medium_question_count=quiz.medium_question_count,
@@ -519,6 +509,7 @@ def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
         question_count=0,
         duration_seconds=28800,
         allow_previous_questions=False,
+        allow_negative_points=False,
         same_questions_for_all=False,
         easy_question_count=0,
         medium_question_count=0,
@@ -1101,7 +1092,7 @@ def student_state_response(
     if existing_answer is not None:
         try:
             saved_answer = json.loads(existing_answer.answer_data)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             saved_answer = {}
         if not isinstance(saved_answer, dict):
             saved_answer = {}
@@ -1147,14 +1138,12 @@ def student_state_response(
 def generate_join_code(session: DbSession) -> str:
     for _ in range(20):
         code = "".join(randomizer.choice(JOIN_CODE_ALPHABET) for _ in range(6))
-        if (
-            session.scalar(select(QuizSession.id).where(QuizSession.join_code == code))
-            is None
-            and session.scalar(
-                select(MakeupSession.id).where(MakeupSession.join_code == code)
-            )
-            is None
-        ):
+        reserved = session.execute(
+            sqlite_insert(QuizJoinCode)
+            .values(code=code)
+            .on_conflict_do_nothing(index_elements=[QuizJoinCode.code])
+        )
+        if reserved.rowcount == 1:
             return code
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1220,6 +1209,7 @@ def create_quiz(
         question_count=payload.question_count,
         duration_seconds=payload.duration_seconds,
         allow_previous_questions=payload.allow_previous_questions,
+        allow_negative_points=payload.allow_negative_points,
         same_questions_for_all=False,
         easy_question_count=payload.easy_question_count,
         medium_question_count=payload.medium_question_count,
@@ -1251,7 +1241,7 @@ def list_active_sessions(
         .where(
             Quiz.owner_id == professor.id,
             Quiz.mode == "exam",
-            QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            QuizSession.status.in_(["waiting", "in_progress", "paused", "cancelled"]),
         )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
         .limit(20)
@@ -1409,7 +1399,7 @@ def answer_review(
 ) -> QuizAnswerReview:
     try:
         submitted = json.loads(answer.answer_data)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         submitted = {}
     if not isinstance(submitted, dict):
         submitted = {}
@@ -2031,6 +2021,7 @@ def start_training_quiz(
         source_language=quiz.source_language,
         duration_seconds=28800,
         allow_previous_questions=False,
+        allow_negative_points=False,
         same_questions_for_all=False,
         class_id=student_class.id,
         class_name=student_class.name,
@@ -2284,9 +2275,9 @@ def control_makeup_session(
             paused_at = child.paused_at
             if paused_at.tzinfo is None:
                 paused_at = paused_at.replace(tzinfo=UTC)
-            child.paused_duration_seconds = (
-                child.paused_duration_seconds or 0
-            ) + ceil(max(0, (now - paused_at).total_seconds()))
+            child.paused_duration_seconds = (child.paused_duration_seconds or 0) + ceil(
+                max(0, (now - paused_at).total_seconds())
+            )
             child.paused_at = None
             child.status = "in_progress"
         elif action == "finish":
@@ -2447,12 +2438,25 @@ def select_makeup_quiz(
     )
     if membership is None or quiz is None or not passed or existing is not None:
         raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
+    claimed = session.execute(
+        sqlite_insert(MakeupSessionSelection)
+        .values(session_id=makeup.id, student_id=membership.id)
+        .on_conflict_do_nothing(
+            index_elements=[
+                MakeupSessionSelection.session_id,
+                MakeupSessionSelection.student_id,
+            ]
+        )
+    )
+    if claimed.rowcount != 1:
+        raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
     child = QuizSession(
         quiz_id=quiz.id,
         quiz_title=quiz.title,
         source_language=quiz.source_language,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
+        allow_negative_points=quiz.allow_negative_points,
         same_questions_for_all=False,
         class_id=makeup.class_id,
         class_name=makeup.class_name,
@@ -2561,6 +2565,7 @@ def update_quiz(
     quiz.question_count = payload.question_count
     quiz.duration_seconds = payload.duration_seconds
     quiz.allow_previous_questions = payload.allow_previous_questions
+    quiz.allow_negative_points = payload.allow_negative_points
     quiz.same_questions_for_all = False
     quiz.easy_question_count = payload.easy_question_count
     quiz.medium_question_count = payload.medium_question_count
@@ -2625,6 +2630,7 @@ def launch_quiz(
         source_language=quiz.source_language,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
+        allow_negative_points=quiz.allow_negative_points,
         same_questions_for_all=False,
         class_id=student_class.id,
         class_name=student_class.name,

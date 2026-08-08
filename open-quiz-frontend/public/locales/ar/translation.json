@@ -549,6 +549,7 @@
     "same-questions-for-all": "نفس الأسئلة لجميع الطلاب",
     "same-questions-for-all-help": "عند تعطيل هذا الخيار، تُسحب مجموعة أسئلة منفصلة لكل طالب عند بدء جلسة الاختبار.",
     "allow-previous-questions": "السماح بالعودة إلى الأسئلة السابقة",
+    "allow-negative-points": "تفعيل النقاط السلبية للإجابات",
     "allow-previous-questions-help": "سيتمكن الطلاب من مراجعة وتعديل إجاباتهم المسجلة بالفعل.",
     "previous-question": "السؤال السابق",
     "student-navigation-error": "لا يمكن العودة إلى هذا السؤال.",

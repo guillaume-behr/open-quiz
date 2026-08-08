@@ -78,12 +78,14 @@ Pour la première configuration, utilisez directement l’espace adapté :
 2. L’enseignant configure TOTP, crée les comptes dans l’onglet **Élèves**, puis
    les affecte depuis l’onglet **Classes**.
 3. Il alimente ses banques avec des questions faciles, moyennes ou difficiles.
-   Les banques définissent les bonnes réponses, mais ne portent aucun point.
+   Il attribue les points directement à chaque réponse, y compris des valeurs
+   négatives si nécessaire.
 4. Il crée les examens en indiquant le nombre de questions voulu pour chaque
    difficulté et choisit, pour chaque classe, les banques accessibles en
    entraînement.
-5. Pour un examen, il attribue un total de points par difficulté, choisit si le
-   tirage doit être commun, sélectionne une classe et ouvre la salle d’attente.
+5. Pour un examen, il choisit si les points négatifs doivent être pris en
+   compte, configure le tirage, sélectionne une classe et ouvre la salle
+   d’attente.
 6. L’élève se connecte à son compte et saisit uniquement le code de l’examen.
 7. L’enseignant démarre la session, consulte les résultats, corrige les réponses
    rédactionnelles et peut exporter les notes au format CSV.
@@ -128,8 +130,8 @@ absente ou expirée.
 - examens créés dans leur onglet et banques d’entraînement affectées par classe ;
 - composition par quantité de questions faciles, moyennes et difficiles, avec
   plafonnement selon la disponibilité des banques sélectionnées ;
-- barème d’examen défini par difficulté et réparti également entre les questions
-  tirées de cette difficulté ;
+- barème défini réponse par réponse ; les réponses sélectionnées sont
+  additionnées et les valeurs négatives sont activées par quiz ;
 - tirage effectué au lancement, commun ou individuel selon la configuration ;
 - sessions chronométrées avec pause, reprise et retour optionnel aux questions ;
 - notation automatique et correction manuelle des réponses rédactionnelles ;
@@ -405,11 +407,12 @@ changements incompatibles avec l’ancien fonctionnement :
 - les anciens élèves dépourvus de compte sont supprimés ;
 - les répartitions de quiz en pourcentages sont converties en nombres de
   questions par difficulté ;
-- les points autrefois portés par les propositions sont neutralisés ; le nouveau
-  barème est défini lors de la création ou de la modification d’un examen.
+- le barème historique d’une question est reporté sur ses bonnes réponses lors
+  de la migration vers la notation réponse par réponse.
 
 Les nouvelles sessions utilisent des instantanés du tirage, de l’ordre et du
-barème afin qu’une modification ultérieure du quiz ne change pas leurs notes.
+réglage des points négatifs afin qu’une modification ultérieure du quiz ne
+change pas leurs notes.
 
 - surveillez `/api/health`, l’espace disque et le certificat TLS ;
 - sauvegardez régulièrement le volume `open-quiz-data` avec un outil compatible

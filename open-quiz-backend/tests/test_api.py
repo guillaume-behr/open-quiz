@@ -15,6 +15,7 @@ from typing import Any
 
 import pyotp
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -35,7 +36,11 @@ from app.models import (
 )
 from app.rate_limit import LoginRateLimiter
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
-from app.routers.quizzes import adjust_last_question_for_points, safe_spreadsheet_cell
+from app.routers.quizzes import (
+    adjust_last_question_for_points,
+    generate_join_code,
+    safe_spreadsheet_cell,
+)
 from app.schemas import QuestionBatchImport, StudentQuizAnswer
 from app.security import DUMMY_PASSWORD_HASH, refresh_request_proof
 from main import create_app
@@ -1534,7 +1539,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             True,
             False,
         ]
-        assert all("points" not in choice for choice in question["choices"])
+        assert [choice["points"] for choice in question["choices"]] == [1, 0]
         assert question["choices"][0]["has_image"] is True
         assert question["choices"][0]["code_language"] == "python"
         assert question["choices"][0]["code_content"] == "print(1 / 2)"
@@ -1658,10 +1663,9 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert exported_batch["questions"][0]["image"]["content_type"] == "image/png"
         assert "correction_mode" not in exported_batch["questions"][0]
         assert exported_batch["questions"][0]["code_language"] == "python"
-        assert all(
-            "points" not in choice
-            for choice in exported_batch["questions"][0]["choices"]
-        )
+        assert [
+            choice["points"] for choice in exported_batch["questions"][0]["choices"]
+        ] == [1, 0]
         assert exported_batch["questions"][0]["choices"][0]["image"] is not None
         assert (
             exported_batch["questions"][0]["choices"][0]["code_content"]
@@ -1749,7 +1753,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             for choice in item["choices"]
         )
         assert all(
-            "points" not in choice
+            "points" in choice
             for item in example_batch["questions"]
             for choice in item["choices"]
         )
@@ -3714,8 +3718,8 @@ def exam_environment(client: TestClient) -> dict[str, Any]:
                     "answer_mode": "single",
                     "answer_mode_disclosed": True,
                     "choices": [
-                        {"label": "Two", "is_correct": True},
-                        {"label": "Three", "is_correct": False},
+                        {"label": "Two", "is_correct": True, "points": 2},
+                        {"label": "Three", "is_correct": False, "points": -3},
                     ],
                 }
             )
@@ -3765,6 +3769,57 @@ def launch_and_join(
 
 def correct_choice_id(question: dict[str, Any]) -> int:
     return next(choice["id"] for choice in question["choices"] if choice["is_correct"])
+
+
+def test_answer_points_are_summed_and_negative_points_follow_quiz_setting(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "answer-points.db")) as client:
+        environment = exam_environment(client)
+        wrong_choice_id = next(
+            choice["id"]
+            for choice in environment["question"]["choices"]
+            if not choice["is_correct"]
+        )
+
+        def complete_with_wrong_answer() -> float:
+            quiz_session, participant_headers = launch_and_join(client, environment)
+            assert (
+                client.post(
+                    f"/api/quizzes/sessions/{quiz_session['id']}/start",
+                    headers=environment["teacher_headers"],
+                ).status_code
+                == 200
+            )
+            assert (
+                client.post(
+                    f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+                    headers=participant_headers,
+                    json={"selected_choice_ids": [wrong_choice_id]},
+                ).status_code
+                == 200
+            )
+            return client.get(
+                f"/api/quizzes/sessions/{quiz_session['id']}",
+                headers=environment["teacher_headers"],
+            ).json()["participants"][0]["score"]
+
+        assert complete_with_wrong_answer() == 0
+        updated = client.post(
+            f"/api/quizzes/{environment['quiz']['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "title": environment["quiz"]["title"],
+                "question_bank_ids": [environment["question"]["question_bank_id"]],
+                "allow_negative_points": True,
+                "easy_question_count": 1,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        )
+        assert updated.status_code == 200
+        environment["quiz"] = updated.json()
+        assert complete_with_wrong_answer() == -3
 
 
 def test_student_login_verifies_password_for_unknown_accounts(
@@ -4038,6 +4093,50 @@ def test_makeup_session_requires_quizzes_taken_by_the_class(
         assert allowed.status_code == 201
         assert allowed.json()["status"] == "waiting"
 
+        barrier = Barrier(2)
+
+        def select_makeup() -> int:
+            barrier.wait()
+            return client.post(
+                f"/api/quizzes/makeup/{allowed.json()['join_code']}/select",
+                headers=environment["student_headers"],
+                json={"quiz_id": environment["quiz"]["id"]},
+            ).status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            statuses = sorted(
+                future.result()
+                for future in (pool.submit(select_makeup), pool.submit(select_makeup))
+            )
+        assert statuses == [201, 409]
+
+        with sqlite3.connect(tmp_path / "makeup-eligibility.db") as connection:
+            child_count = connection.execute(
+                "SELECT COUNT(*) FROM quiz_sessions WHERE makeup_session_id = ?",
+                (allowed.json()["id"],),
+            ).fetchone()[0]
+        assert child_count == 1
+
+
+def test_join_code_reservations_prevent_reuse(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings_for(tmp_path / "join-code-reservations.db")
+    app = create_app(app_settings)
+    monkeypatch.setattr("app.routers.quizzes.randomizer.choice", lambda _: "A")
+
+    with app.state.session_factory() as session:
+        assert generate_join_code(session) == "AAAAAA"
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(HTTPException) as error,
+    ):
+        generate_join_code(session)
+    assert error.value.status_code == 503
+
 
 def test_makeup_pause_resume_leaves_finished_child_alone(
     tmp_path: Path,
@@ -4059,16 +4158,14 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
                 f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
                 headers=participant_headers,
                 json={
-                    "selected_choice_ids": [
-                        correct_choice_id(environment["question"])
-                    ]
+                    "selected_choice_ids": [correct_choice_id(environment["question"])]
                 },
             )
             assert answered.status_code == 200
             assert answered.json()["status"] == "finished"
             return {"participant_headers": participant_headers}
 
-        class_exam = run_exam()
+        run_exam()
         makeup = client.post(
             "/api/quizzes/makeup/sessions",
             headers=environment["teacher_headers"],
@@ -4092,9 +4189,7 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
         )
         assert selected.status_code == 201
         child_headers = {"X-Quiz-Token": selected.json()["participant_token"]}
-        child_url = (
-            f"/api/quizzes/student/sessions/{selected.json()['join_code']}"
-        )
+        child_url = f"/api/quizzes/student/sessions/{selected.json()['join_code']}"
         assert (
             client.post(
                 f"/api/quizzes/makeup/sessions/{makeup['id']}/start",
@@ -4120,7 +4215,9 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
             ).status_code
             == 200
         )
-        assert client.get(child_url, headers=child_headers).json()["status"] == "finished"
+        assert (
+            client.get(child_url, headers=child_headers).json()["status"] == "finished"
+        )
         assert (
             client.post(
                 f"/api/quizzes/makeup/sessions/{makeup['id']}/resume",
@@ -4128,4 +4225,6 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
             ).status_code
             == 200
         )
-        assert client.get(child_url, headers=child_headers).json()["status"] == "finished"
+        assert (
+            client.get(child_url, headers=child_headers).json()["status"] == "finished"
+        )

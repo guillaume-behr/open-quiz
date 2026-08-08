@@ -501,6 +501,7 @@
     "same-questions-for-all": "Same questions for every student",
     "same-questions-for-all-help": "When disabled, a separate question set is drawn for each student when the exam session is launched.",
     "allow-previous-questions": "Allow return to previous questions",
+    "allow-negative-points": "Enable negative answer points",
     "allow-previous-questions-help": "Students will be able to review and modify their already recorded answers.",
     "previous-question": "Previous question",
     "student-navigation-error": "Cannot return to this question.",

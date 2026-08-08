@@ -9,6 +9,7 @@ from app.grade_levels import ensure_grade_level
 from app.models import (
     ClassTrainingQuestionBank,
     MakeupSession,
+    MakeupSessionSelection,
     QuestionBank,
     Quiz,
     QuizParticipant,
@@ -230,6 +231,11 @@ def delete_class(
             ClassTrainingQuestionBank.class_id == class_id
         )
     )
+    session.execute(
+        delete(MakeupSessionSelection).where(
+            MakeupSessionSelection.student_id.in_(student_ids)
+        )
+    )
     session.execute(delete(Student).where(Student.class_id == class_id))
     session.execute(delete(StudentClass).where(StudentClass.id == class_id))
     session.commit()
@@ -336,6 +342,11 @@ def unassign_student_account(
         .where(QuizParticipant.student_id == membership.id)
         .values(student_id=None)
     )
+    session.execute(
+        delete(MakeupSessionSelection).where(
+            MakeupSessionSelection.student_id == membership.id
+        )
+    )
     session.execute(delete(Student).where(Student.id == membership.id))
     session.commit()
 
@@ -352,12 +363,16 @@ def update_class(
 ) -> StudentClassResponse:
     student_class = owned_class(class_id, professor, session)
     if student_class.grade_level != payload.grade_level:
-        mismatched_bank_ids = select(QuestionBank.id).join(
-            ClassTrainingQuestionBank,
-            ClassTrainingQuestionBank.question_bank_id == QuestionBank.id,
-        ).where(
-            ClassTrainingQuestionBank.class_id == student_class.id,
-            QuestionBank.grade_level != payload.grade_level,
+        mismatched_bank_ids = (
+            select(QuestionBank.id)
+            .join(
+                ClassTrainingQuestionBank,
+                ClassTrainingQuestionBank.question_bank_id == QuestionBank.id,
+            )
+            .where(
+                ClassTrainingQuestionBank.class_id == student_class.id,
+                QuestionBank.grade_level != payload.grade_level,
+            )
         )
         session.execute(
             delete(ClassTrainingQuestionBank).where(

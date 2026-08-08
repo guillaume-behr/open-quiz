@@ -57,6 +57,21 @@ export function QuestionChoiceEditor({
                     responseLanguage={responseLanguage}
                     onUpdate={onUpdate}
                 />
+                <Input
+                    className="w-28"
+                    type="number"
+                    min={-10000}
+                    max={10000}
+                    step="0.25"
+                    value={choice.points}
+                    aria-label={t("answer-points-number", {
+                        number: index + 1,
+                    })}
+                    onChange={(event) =>
+                        onUpdate({ points: Number(event.target.value) })
+                    }
+                    required
+                />
                 {answerMode !== "written" && (
                     <>
                         <Button

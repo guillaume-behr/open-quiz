@@ -501,6 +501,7 @@
     "same-questions-for-all": "所有学生使用相同题目",
     "same-questions-for-all-help": "关闭后，考试场次启动时会为每位学生分别抽取一套题目。",
     "allow-previous-questions": "允许返回之前的问题",
+    "allow-negative-points": "启用答案负分",
     "allow-previous-questions-help": "学生将能够查看和修改他们已经记录的答案。",
     "previous-question": "上一个问题",
     "student-navigation-error": "无法返回此问题。",

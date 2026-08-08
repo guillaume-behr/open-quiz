@@ -63,6 +63,7 @@ function initialChoices(question?: Question): EditableChoice[] {
             id: choice.id,
             label: choice.label,
             is_correct: choice.is_correct,
+            points: choice.points,
             has_image: choice.has_image,
             remove_image: false,
             hasCode: Boolean(choice.code_content),
@@ -76,6 +77,7 @@ function createEmptyChoice(isCorrect: boolean): EditableChoice {
     return {
         label: "",
         is_correct: isCorrect,
+        points: isCorrect ? 1 : 0,
         has_image: false,
         remove_image: false,
         hasCode: false,
@@ -92,7 +94,7 @@ export function QuestionForm({
 }: QuestionFormProps) {
     const { t } = useTranslation()
     const [prompt, setPrompt] = useState(question?.prompt ?? "")
-    const [points, setPoints] = useState(question?.points ?? 1)
+    const [points] = useState(question?.points ?? 1)
     const [difficulty, setDifficulty] = useState<QuestionDifficulty>(
         question?.difficulty ?? "medium"
     )
@@ -222,6 +224,7 @@ export function QuestionForm({
                     id: choice.id,
                     label: choice.label.trim(),
                     is_correct: choice.is_correct,
+                    points: choice.points,
                     image: choice.image
                         ? await encodeImage(choice.image)
                         : null,
@@ -280,13 +283,11 @@ export function QuestionForm({
                     onCodeContentChange={setCodeContent}
                 />
                 <QuestionSettingsFields
-                    points={points}
                     difficulty={difficulty}
                     answerMode={answerMode}
                     answerModeDisclosed={answerModeDisclosed}
                     responseLanguage={responseLanguage}
                     onDifficultyChange={setDifficulty}
-                    onPointsChange={setPoints}
                     onAnswerModeChange={changeAnswerMode}
                     onAnswerModeDisclosedChange={setAnswerModeDisclosed}
                     onResponseLanguageChange={setResponseLanguage}

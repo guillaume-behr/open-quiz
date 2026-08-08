@@ -17,7 +17,6 @@ export async function login(
     password: string,
     audience: "professor" | "admin"
 ): Promise<TwoFactorChallenge> {
-    clearSessionTokens()
     return request<TwoFactorChallenge>(
         "/api/auth/login",
         {

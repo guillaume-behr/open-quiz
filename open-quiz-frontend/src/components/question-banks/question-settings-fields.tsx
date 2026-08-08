@@ -3,30 +3,25 @@ import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { CODE_LANGUAGES } from "./code-languages"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Switch } from "@/components/ui/switch"
-import { Input } from "@/components/ui/input"
 import { useTranslation } from "react-i18next"
 
 type QuestionSettingsFieldsProps = {
-    points: number
     difficulty: QuestionDifficulty
     answerMode: AnswerMode
     answerModeDisclosed: boolean
     responseLanguage: CodeLanguage | null
     onDifficultyChange: (difficulty: QuestionDifficulty) => void
-    onPointsChange: (points: number) => void
     onAnswerModeChange: (mode: AnswerMode) => void
     onAnswerModeDisclosedChange: (disclosed: boolean) => void
     onResponseLanguageChange: (language: CodeLanguage | null) => void
 }
 
 export function QuestionSettingsFields({
-    points,
     difficulty,
     answerMode,
     answerModeDisclosed,
     responseLanguage,
     onDifficultyChange,
-    onPointsChange,
     onAnswerModeChange,
     onAnswerModeDisclosedChange,
     onResponseLanguageChange,
@@ -35,7 +30,7 @@ export function QuestionSettingsFields({
 
     return (
         <>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
                     <FieldLabel htmlFor="question-difficulty">
                         {t("difficulty")}
@@ -54,23 +49,6 @@ export function QuestionSettingsFields({
                         <option value="medium">{t("difficulty-medium")}</option>
                         <option value="hard">{t("difficulty-hard")}</option>
                     </select>
-                </Field>
-                <Field>
-                    <FieldLabel htmlFor="question-points">
-                        {t("question-points")}
-                    </FieldLabel>
-                    <Input
-                        id="question-points"
-                        type="number"
-                        min="0.01"
-                        max="10000"
-                        step="any"
-                        value={points}
-                        onChange={(event) =>
-                            onPointsChange(Number(event.target.value))
-                        }
-                        required
-                    />
                 </Field>
                 <Field>
                     <FieldLabel htmlFor="question-answer-mode">

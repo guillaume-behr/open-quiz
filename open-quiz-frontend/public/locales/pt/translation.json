@@ -501,6 +501,7 @@
     "same-questions-for-all": "As mesmas perguntas para todos os alunos",
     "same-questions-for-all-help": "Quando desativado, é sorteado um conjunto de perguntas distinto para cada aluno ao iniciar a sessão de exame.",
     "allow-previous-questions": "Permitir retorno às perguntas anteriores",
+    "allow-negative-points": "Ativar pontos negativos por resposta",
     "allow-previous-questions-help": "Os alunos poderão revisar e modificar suas respostas já gravadas.",
     "previous-question": "Pergunta anterior",
     "student-navigation-error": "Não é possível retornar a esta pergunta.",

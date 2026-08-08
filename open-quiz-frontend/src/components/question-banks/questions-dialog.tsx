@@ -107,7 +107,13 @@ function QuestionCard({
                         {t(`difficulty-${question.difficulty}`)}
                     </span>
                     <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold whitespace-nowrap text-primary">
-                        {t("points-count", { count: question.points })}
+                        {t("points-count", {
+                            count: question.choices.reduce(
+                                (total, choice) =>
+                                    total + Math.max(0, choice.points),
+                                0
+                            ),
+                        })}
                     </span>
                     <Button
                         type="button"
@@ -179,6 +185,9 @@ function QuestionCard({
                                     </span>
                                 )}
                                 {choice.label}
+                            </span>
+                            <span className="font-semibold">
+                                {t("points-count", { count: choice.points })}
                             </span>
                         </div>
                         {choice.has_image && (

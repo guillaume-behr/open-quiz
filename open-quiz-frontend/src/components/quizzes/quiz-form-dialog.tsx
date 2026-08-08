@@ -30,8 +30,8 @@ type QuizFormDialogProps = {
     durationMinutes: number
     selectedBankIds: number[]
     allowPreviousQuestions: boolean
+    allowNegativePoints: boolean
     difficultyCounts: DifficultyValues
-    difficultyPoints: DifficultyValues
     availableByDifficulty: DifficultyValues
     isBusy: boolean
     error: string | null
@@ -40,8 +40,8 @@ type QuizFormDialogProps = {
     onQuizGradeLevelChange: (value: string) => void
     onSelectedBankIdsChange: (ids: number[]) => void
     onAllowPreviousQuestionsChange: (value: boolean) => void
+    onAllowNegativePointsChange: (value: boolean) => void
     onDifficultyCountsChange: (values: DifficultyValues) => void
-    onDifficultyPointsChange: (values: DifficultyValues) => void
     onClose: () => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
@@ -56,8 +56,8 @@ export function QuizFormDialog({
     durationMinutes,
     selectedBankIds,
     allowPreviousQuestions,
+    allowNegativePoints,
     difficultyCounts,
-    difficultyPoints,
     availableByDifficulty,
     isBusy,
     error,
@@ -66,8 +66,8 @@ export function QuizFormDialog({
     onQuizGradeLevelChange,
     onSelectedBankIdsChange,
     onAllowPreviousQuestionsChange,
+    onAllowNegativePointsChange,
     onDifficultyCountsChange,
-    onDifficultyPointsChange,
     onClose,
     onSubmit,
 }: QuizFormDialogProps) {
@@ -101,6 +101,18 @@ export function QuizFormDialog({
                             maxLength={160}
                             required
                         />
+                    </Field>
+                    <Field>
+                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
+                            <span className="font-medium">
+                                {t("allow-negative-points")}
+                            </span>
+                            <Switch
+                                checked={allowNegativePoints}
+                                onCheckedChange={onAllowNegativePointsChange}
+                                aria-label={t("allow-negative-points")}
+                            />
+                        </label>
                     </Field>
                     <Field>
                         <FieldLabel htmlFor="quiz-grade-level">
@@ -176,11 +188,9 @@ export function QuizFormDialog({
                     </Field>
                     <DifficultyQuestionCounts
                         counts={difficultyCounts}
-                        points={difficultyPoints}
                         available={availableByDifficulty}
                         hasSelectedBanks={selectedBankIds.length > 0}
                         onChange={onDifficultyCountsChange}
-                        onPointsChange={onDifficultyPointsChange}
                     />
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2 border-t pt-4">
@@ -320,22 +330,17 @@ function QuestionBankPicker({
 
 function DifficultyQuestionCounts({
     counts,
-    points,
     available,
     hasSelectedBanks,
     onChange,
-    onPointsChange,
 }: {
     counts: DifficultyValues
-    points: DifficultyValues
     available: DifficultyValues
     hasSelectedBanks: boolean
     onChange: (values: DifficultyValues) => void
-    onPointsChange: (values: DifficultyValues) => void
 }) {
     const { t } = useTranslation()
     const total = counts.easy + counts.medium + counts.hard
-    const totalPoints = points.easy + points.medium + points.hard
     const maximumFor = (difficulty: Difficulty) =>
         Math.min(available[difficulty], 200 - total + counts[difficulty])
 
@@ -374,46 +379,11 @@ function DifficultyQuestionCounts({
                                 count: available[difficulty],
                             })}
                         </p>
-                        <div className="mt-3">
-                            <FieldLabel htmlFor={`quiz-${difficulty}-points`}>
-                                {t("quiz-difficulty-points", {
-                                    difficulty: t(`difficulty-${difficulty}`),
-                                })}
-                            </FieldLabel>
-                            <Input
-                                id={`quiz-${difficulty}-points`}
-                                type="number"
-                                min={0}
-                                max={10000}
-                                step="0.25"
-                                value={points[difficulty]}
-                                disabled={counts[difficulty] === 0}
-                                onChange={(event) =>
-                                    onPointsChange({
-                                        ...points,
-                                        [difficulty]: Math.min(
-                                            10000,
-                                            Math.max(
-                                                0,
-                                                Number(event.target.value)
-                                            )
-                                        ),
-                                    })
-                                }
-                                required
-                            />
-                            {counts[difficulty] > 0 && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    {t("quiz-points-target-help")}
-                                </p>
-                            )}
-                        </div>
                     </div>
                 ))}
             </div>
             <p className="mt-3 text-sm font-semibold text-primary">
-                {t("quiz-total-questions", { count: total })} ·{" "}
-                {t("quiz-total-points", { count: totalPoints })}
+                {t("quiz-total-questions", { count: total })}
             </p>
             {hasSelectedBanks && total === 0 && (
                 <FieldError>{t("quiz-needs-question")}</FieldError>

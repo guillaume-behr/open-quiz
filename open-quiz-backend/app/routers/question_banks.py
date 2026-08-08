@@ -341,6 +341,7 @@ def question_response(
                 "id": choice.id,
                 "label": choice.label,
                 "is_correct": choice.is_correct,
+                "points": choice.points,
                 "position": choice.position,
                 "has_image": choice.image_content_type is not None,
                 "code_language": choice.code_language,
@@ -384,7 +385,13 @@ def add_question(
             question_id=question.id,
             label=choice.label,
             is_correct=choice.is_correct,
-            points=0,
+            points=(
+                choice.points
+                if choice.points is not None
+                else payload.points / sum(item.is_correct for item in payload.choices)
+                if choice.is_correct
+                else 0
+            ),
             image_data=choice_image_data,
             image_content_type=choice_image_content_type,
             code_language=choice.code_language,
@@ -476,6 +483,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "Paris",
                         "is_correct": True,
+                        "points": 3,
                         "image": None,
                         "code_language": None,
                         "code_content": None,
@@ -483,6 +491,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "Lyon",
                         "is_correct": False,
+                        "points": 0,
                         "image": None,
                         "code_language": None,
                         "code_content": None,
@@ -502,6 +511,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "2",
                         "is_correct": True,
+                        "points": 3,
                         "image": None,
                         "code_language": "python",
                         "code_content": "print(2)",
@@ -509,6 +519,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "3",
                         "is_correct": True,
+                        "points": 3,
                         "image": {
                             "content_type": "image/png",
                             "data_base64": (
@@ -522,6 +533,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "4",
                         "is_correct": False,
+                        "points": -1,
                         "image": {
                             "content_type": "image/png",
                             "data_base64": (
@@ -554,6 +566,7 @@ def download_import_example(_: ProfessorUser) -> Response:
                     {
                         "label": "La gravitation maintient la Terre en orbite autour du Soleil.",
                         "is_correct": True,
+                        "points": 9,
                         "image": None,
                         "code_language": None,
                         "code_content": None,
@@ -622,6 +635,7 @@ def export_questions(
                         {
                             "label": choice.label,
                             "is_correct": choice.is_correct,
+                            "points": choice.points,
                             "image": (
                                 {
                                     "content_type": choice.image_content_type,
@@ -675,7 +689,7 @@ def decode_image_payload(
         return None, None
     try:
         image_data = b64decode(image.data_base64, validate=True)
-    except (Base64Error, ValueError):
+    except Base64Error, ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Une image importée n’est pas encodée correctement",
@@ -812,7 +826,7 @@ async def create_question(
         )
     try:
         question_payload = QuestionCreate.model_validate(json.loads(payload))
-    except (json.JSONDecodeError, ValidationError):
+    except json.JSONDecodeError, ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Question invalide",
@@ -891,7 +905,7 @@ async def update_question(
         )
     try:
         question_payload = QuestionUpdate.model_validate(json.loads(payload))
-    except (json.JSONDecodeError, ValidationError):
+    except json.JSONDecodeError, ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Question invalide",
@@ -1015,7 +1029,14 @@ async def update_question(
         )
         choice.label = choice_payload.label
         choice.is_correct = choice_payload.is_correct
-        choice.points = 0
+        choice.points = (
+            choice_payload.points
+            if choice_payload.points is not None
+            else question.points
+            / sum(item.is_correct for item in question_payload.choices)
+            if choice_payload.is_correct
+            else 0
+        )
         choice.image_data = choice_image_data
         choice.image_content_type = choice_image_content_type
         choice.code_language = choice_payload.code_language

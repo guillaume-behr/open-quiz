@@ -108,6 +108,7 @@ export type QuestionChoice = {
     id: number
     label: string
     is_correct: boolean
+    points: number
     position: number
     has_image: boolean
     code_language: CodeLanguage | null
@@ -148,6 +149,7 @@ export type NewQuestion = {
         id?: number
         label: string
         is_correct: boolean
+        points: number
         image?: EncodedImage | null
         remove_image?: boolean
         code_language: CodeLanguage | null
@@ -167,6 +169,7 @@ export type Quiz = {
     question_count: number
     duration_seconds: number
     allow_previous_questions: boolean
+    allow_negative_points: boolean
     same_questions_for_all: boolean
     easy_question_count: number
     medium_question_count: number
@@ -193,6 +196,7 @@ export type NewQuiz = {
     question_bank_ids: number[]
     duration_seconds: number
     allow_previous_questions: boolean
+    allow_negative_points: boolean
     same_questions_for_all: boolean
     easy_question_count: number
     medium_question_count: number

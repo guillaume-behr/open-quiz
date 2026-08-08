@@ -74,6 +74,10 @@ export function QuizPreviewDialog({
                                     >
                                         {choice.is_correct ? "✓ " : "○ "}
                                         {choice.label}
+                                        {" · "}
+                                        {t("points-count", {
+                                            count: choice.points,
+                                        })}
                                     </li>
                                 ))}
                             </ul>

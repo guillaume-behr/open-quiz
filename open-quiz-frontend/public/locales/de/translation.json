@@ -501,6 +501,7 @@
     "same-questions-for-all": "Gleiche Fragen für alle Schüler",
     "same-questions-for-all-help": "Wenn diese Option deaktiviert ist, wird beim Start der Prüfung für jeden Schüler ein eigener Fragensatz gezogen.",
     "allow-previous-questions": "Ermöglicht die Rückkehr zu vorherigen Fragen",
+    "allow-negative-points": "Negative Antwortpunkte aktivieren",
     "allow-previous-questions-help": "Die Studierenden können ihre bereits aufgezeichneten Antworten überprüfen und ändern.",
     "previous-question": "Vorherige Frage",
     "student-navigation-error": "Ich kann nicht zu dieser Frage zurückkehren.",

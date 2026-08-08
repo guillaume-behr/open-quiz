@@ -239,10 +239,7 @@ function ChoiceAnswers({
                             checked={checked}
                             onChange={() => toggleChoice(choice.id)}
                         />
-                        <span
-                            className="min-w-0 flex-1"
-                            dir={contentDirection}
-                        >
+                        <span className="min-w-0 flex-1" dir={contentDirection}>
                             {choice.label}
                             {choice.has_image && (
                                 <ProtectedQuizImage

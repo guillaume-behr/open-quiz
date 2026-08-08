@@ -73,6 +73,7 @@ export function QuizzesPanel({
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
     const [durationMinutes, setDurationMinutes] = useState(30)
     const [allowPreviousQuestions, setAllowPreviousQuestions] = useState(false)
+    const [allowNegativePoints, setAllowNegativePoints] = useState(false)
     const [difficultyCounts, setDifficultyCounts] = useState({
         easy: 0,
         medium: 0,
@@ -278,6 +279,7 @@ export function QuizzesPanel({
         setSelectedBankIds([])
         setDurationMinutes(30)
         setAllowPreviousQuestions(false)
+        setAllowNegativePoints(false)
         setDifficultyCounts({ easy: 0, medium: 0, hard: 0 })
         setDifficultyPoints({ easy: 0, medium: 0, hard: 0 })
         setCreateError(null)
@@ -298,6 +300,7 @@ export function QuizzesPanel({
         setSelectedBankIds(quiz.question_banks.map((bank) => bank.id))
         setDurationMinutes(quiz.duration_seconds / 60)
         setAllowPreviousQuestions(quiz.allow_previous_questions)
+        setAllowNegativePoints(quiz.allow_negative_points)
         setDifficultyCounts({
             easy: quiz.easy_question_count,
             medium: quiz.medium_question_count,
@@ -327,6 +330,7 @@ export function QuizzesPanel({
                 question_bank_ids: selectedBankIds,
                 duration_seconds: durationMinutes * 60,
                 allow_previous_questions: allowPreviousQuestions,
+                allow_negative_points: allowNegativePoints,
                 same_questions_for_all: false,
                 easy_question_count: difficultyCounts.easy,
                 medium_question_count: difficultyCounts.medium,
@@ -543,8 +547,8 @@ export function QuizzesPanel({
                 durationMinutes={durationMinutes}
                 selectedBankIds={selectedBankIds}
                 allowPreviousQuestions={allowPreviousQuestions}
+                allowNegativePoints={allowNegativePoints}
                 difficultyCounts={difficultyCounts}
-                difficultyPoints={difficultyPoints}
                 availableByDifficulty={availableByDifficulty}
                 isBusy={isCreating}
                 error={createError}
@@ -553,8 +557,8 @@ export function QuizzesPanel({
                 onQuizGradeLevelChange={handleQuizGradeLevelChange}
                 onSelectedBankIdsChange={handleSelectedBankIdsChange}
                 onAllowPreviousQuestionsChange={setAllowPreviousQuestions}
+                onAllowNegativePointsChange={setAllowNegativePoints}
                 onDifficultyCountsChange={handleDifficultyCountsChange}
-                onDifficultyPointsChange={setDifficultyPoints}
                 onClose={() => {
                     onCreateDialogOpenChange(false)
                     resetCreationForm()
