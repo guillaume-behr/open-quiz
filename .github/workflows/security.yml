@@ -32,6 +32,7 @@ jobs:
           APP_ENV: test
           JWT_SECRET: ci-test-jwt-secret-with-enough-variety-2026
           TOTP_ENCRYPTION_KEY: ci-test-totp-key-with-different-variety-2026
+          STUDENT_CREDENTIAL_ENCRYPTION_KEY: ci-test-student-credential-key-with-variety-2026
           ADMIN_USERNAME: ci-admin
           ADMIN_PASSWORD: ci-test-admin-password-2026
         run: uv run --frozen pytest -q
