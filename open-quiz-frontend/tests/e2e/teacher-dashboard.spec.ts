@@ -1360,6 +1360,19 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
         hasText: "Science checkpoint",
     })
     await expect(resultCard.getByText("Class 8B")).toBeVisible()
+    await page.getByRole("button", { name: "Schedule" }).click()
+    await expect(page.getByText(/\d{1,2}:00/).first()).toBeVisible()
+    await page
+        .getByRole("button", { name: "Grade quiz — Science checkpoint" })
+        .click()
+    await expect(
+        page.getByRole("dialog", { name: "Science checkpoint" })
+    ).toBeVisible()
+    await page
+        .getByRole("dialog", { name: "Science checkpoint" })
+        .getByRole("button", { name: "Close" })
+        .click()
+    await page.getByRole("button", { name: "Cards" }).click()
     await resultCard.getByRole("button", { name: "Grade quiz" }).click()
 
     const resultDialog = page.getByRole("dialog", {
