@@ -43,6 +43,7 @@ async function mockTeacherApi(page: Page) {
             join_code: "DONE90",
             status: "finished",
             participant_count: 1,
+            median_maximum_score: 5,
             participants: [
                 {
                     id: 91,
@@ -50,6 +51,7 @@ async function mockTeacherApi(page: Page) {
                     student_display_name: "Alex Example",
                     answered_count: 10,
                     score: 2,
+                    maximum_score: 10,
                     pending_manual_grading_count: 1,
                     violation_count: 1,
                     last_violation_type: "fullscreen_exit",
@@ -145,9 +147,6 @@ async function mockTeacherApi(page: Page) {
             easy_question_count: 3,
             medium_question_count: 4,
             hard_question_count: 3,
-            easy_points: 6,
-            medium_points: 10,
-            hard_points: 12,
             question_banks: [bank],
             created_at: "2026-01-04T00:00:00Z",
         },
@@ -1328,6 +1327,15 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await expect(resultDialog.getByText("Class 8B")).toHaveCount(1)
     await expect(resultDialog.getByText("Alex Example")).toBeVisible()
     await expect(
+        resultDialog.getByText("Median available points")
+    ).toBeVisible()
+    await expect(
+        resultDialog.locator("p").filter({ hasText: /2\s*\/\s*10\s*pts?/ })
+    ).toBeVisible()
+    await expect(
+        resultDialog.getByText("Available points above the median")
+    ).toBeVisible()
+    await expect(
         resultDialog.getByText("alex-8b", { exact: true })
     ).toHaveCount(1)
     await expect(resultDialog.getByText("1 to grade")).toBeVisible()
@@ -1409,8 +1417,5 @@ test("teacher can create a quiz from a question bank", async ({ page }) => {
         easy_question_count: 10,
         medium_question_count: 0,
         hard_question_count: 0,
-        easy_points: 0,
-        medium_points: 0,
-        hard_points: 0,
     })
 })

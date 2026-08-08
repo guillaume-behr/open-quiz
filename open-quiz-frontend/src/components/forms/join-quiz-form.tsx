@@ -34,16 +34,22 @@ export function JoinQuizForm({
             className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-14"
             onSubmit={onSubmit}
         >
-            {!embedded && (
-                <div className="flex flex-col gap-2">
-                    <h1 className="text-center text-4xl font-extrabold">
+            <div className="flex flex-col items-center gap-2 text-center">
+                {embedded ? (
+                    <h3 className="text-xl font-bold">
+                        {t("join-quiz-title")}
+                    </h3>
+                ) : (
+                    <h1 className="text-4xl font-extrabold">
                         {t("join-quiz-title")}
                     </h1>
+                )}
+                {!embedded && (
                     <p className="text-center font-light">
                         {t("join-quiz-instructions")}
                     </p>
-                </div>
-            )}
+                )}
+            </div>
             <FieldGroup className="gap-4">
                 <Field>
                     <FieldLabel htmlFor="quiz-id">{t("quiz-id")}</FieldLabel>

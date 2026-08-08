@@ -528,6 +528,8 @@
     "result-participants": "参与者",
     "result-progress": "问题解答",
     "result-score": "分数",
+    "result-median-maximum": "可用分数中位数",
+    "result-maximum-above-median": "可用分数高于中位数",
     "result-no-participants": "没有学生参加此测验。",
     "quiz-paused": "测验已暂停",
     "quiz-cancelled": "测验已取消",

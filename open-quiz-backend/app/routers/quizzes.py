@@ -7,6 +7,7 @@ from hashlib import sha256
 from math import ceil, comb
 from random import SystemRandom
 from secrets import token_urlsafe
+from statistics import median
 from string import ascii_uppercase, digits
 from typing import Annotated
 
@@ -364,9 +365,6 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
         easy_question_count=quiz.easy_question_count,
         medium_question_count=quiz.medium_question_count,
         hard_question_count=quiz.hard_question_count,
-        easy_points=quiz.easy_points,
-        medium_points=quiz.medium_points,
-        hard_points=quiz.hard_points,
         question_banks=[
             QuizBankSummary(
                 id=bank.id,
@@ -641,6 +639,16 @@ def session_response(
         participant_id: (answered_count, float(score), pending_count or 0)
         for participant_id, answered_count, score, pending_count in answer_rows
     }
+    maximum_scores = {
+        participant.id: round(
+            sum(session_question_points(quiz_session, session, participant).values()),
+            2,
+        )
+        for participant in participants
+    }
+    median_maximum_score = (
+        float(median(maximum_scores.values())) if maximum_scores else 0
+    )
     student_ids = [
         participant.student_id
         for participant in participants
@@ -665,6 +673,7 @@ def session_response(
         join_code=quiz_session.join_code,
         status=quiz_session.status,
         participant_count=len(participants),
+        median_maximum_score=median_maximum_score,
         participants=[
             QuizParticipantResponse(
                 id=participant.id,
@@ -680,6 +689,7 @@ def session_response(
                     if quiz_session.status == "finished"
                     else 0
                 ),
+                maximum_score=maximum_scores[participant.id],
                 pending_manual_grading_count=(
                     answers_by_student.get(participant.id, (0, 0, 0))[2]
                     if quiz_session.status == "finished"
@@ -1144,9 +1154,9 @@ def create_quiz(
         easy_question_count=payload.easy_question_count,
         medium_question_count=payload.medium_question_count,
         hard_question_count=payload.hard_question_count,
-        easy_points=payload.easy_points,
-        medium_points=payload.medium_points,
-        hard_points=payload.hard_points,
+        easy_points=0,
+        medium_points=0,
+        hard_points=0,
     )
     session.add(quiz)
     session.flush()
@@ -2545,9 +2555,9 @@ def update_quiz(
     quiz.easy_question_count = payload.easy_question_count
     quiz.medium_question_count = payload.medium_question_count
     quiz.hard_question_count = payload.hard_question_count
-    quiz.easy_points = payload.easy_points
-    quiz.medium_points = payload.medium_points
-    quiz.hard_points = payload.hard_points
+    quiz.easy_points = 0
+    quiz.medium_points = 0
+    quiz.hard_points = 0
     session.execute(delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz.id))
     session.add_all(
         QuizQuestionBank(quiz_id=quiz.id, question_bank_id=bank_id)

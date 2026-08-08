@@ -558,6 +558,8 @@
     "result-participants": "Учасники",
     "result-progress": "Відповіді на запитання",
     "result-score": "Оцінка",
+    "result-median-maximum": "Медіана доступних балів",
+    "result-maximum-above-median": "Доступні бали вище медіани",
     "result-no-participants": "Жоден студент не брав участі в цьому тесті.",
     "quiz-paused": "Вікторину призупинено",
     "quiz-cancelled": "Вікторину скасовано",

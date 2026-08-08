@@ -313,11 +313,6 @@ export function QuizzesPanel({
                 easy_question_count: difficultyCounts.easy,
                 medium_question_count: difficultyCounts.medium,
                 hard_question_count: difficultyCounts.hard,
-                // Retain legacy metadata when editing; answer choices now own
-                // the effective score values used for new quiz sessions.
-                easy_points: editingQuiz?.easy_points ?? 0,
-                medium_points: editingQuiz?.medium_points ?? 0,
-                hard_points: editingQuiz?.hard_points ?? 0,
             }
             const isEditing = editingQuiz !== null
             const quiz = isEditing

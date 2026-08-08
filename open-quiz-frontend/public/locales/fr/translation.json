@@ -532,6 +532,8 @@
     "result-participants": "Participants",
     "result-progress": "Questions répondues",
     "result-score": "Score",
+    "result-median-maximum": "Médiane des points disponibles",
+    "result-maximum-above-median": "Barème supérieur à la médiane",
     "result-no-participants": "Aucun élève n’a participé à ce quiz.",
     "quiz-paused": "Quiz en pause",
     "quiz-cancelled": "Quiz annulé",

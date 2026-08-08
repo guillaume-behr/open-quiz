@@ -96,6 +96,9 @@ export function StudentMakeupPanel({ token }: { token: string }) {
             onSubmit={join}
             className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-14"
         >
+            <h3 className="text-center text-xl font-bold">
+                {t("join-quiz-title")}
+            </h3>
             <FieldGroup className="gap-4">
                 <Field>
                     <FieldLabel htmlFor="makeup-session-code">

@@ -528,6 +528,8 @@
     "result-participants": "Participantes",
     "result-progress": "Preguntas respondidas",
     "result-score": "Puntuación",
+    "result-median-maximum": "Mediana de puntos disponibles",
+    "result-maximum-above-median": "Puntos disponibles por encima de la mediana",
     "result-no-participants": "Ningún estudiante participó en este cuestionario.",
     "quiz-paused": "Cuestionario en pausa",
     "quiz-cancelled": "Cuestionario cancelado",

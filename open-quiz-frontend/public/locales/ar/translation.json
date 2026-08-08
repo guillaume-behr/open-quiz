@@ -588,6 +588,8 @@
     "result-participants": "المشاركون",
     "result-progress": "تمت الإجابة على الأسئلة",
     "result-score": "النتيجة",
+    "result-median-maximum": "وسيط النقاط المتاحة",
+    "result-maximum-above-median": "النقاط المتاحة أعلى من الوسيط",
     "result-no-participants": "لم يشارك أي طالب في هذا الاختبار.",
     "quiz-paused": "الاختبار متوقف مؤقتًا",
     "quiz-cancelled": "تم إلغاء الاختبار",

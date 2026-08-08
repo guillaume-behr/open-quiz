@@ -363,9 +363,6 @@ def test_quiz_launches_when_question_points_overshoot_the_target(
                 "easy_question_count": 2,
                 "medium_question_count": 0,
                 "hard_question_count": 0,
-                "easy_points": 2,
-                "medium_points": 0,
-                "hard_points": 0,
             },
         )
         assert quiz.status_code == 201
@@ -450,9 +447,6 @@ def test_quiz_launches_when_question_points_cannot_reach_the_target(
                 "easy_question_count": 2,
                 "medium_question_count": 0,
                 "hard_question_count": 0,
-                "easy_points": 3,
-                "medium_points": 0,
-                "hard_points": 0,
             },
         )
         assert quiz.status_code == 201
@@ -1158,9 +1152,6 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                 "easy_question_count": 2,
                 "medium_question_count": 0,
                 "hard_question_count": 0,
-                "easy_points": 15,
-                "medium_points": 0,
-                "hard_points": 0,
             },
         )
         assert exam.status_code == 201
@@ -1792,9 +1783,6 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 "easy_question_count": 1,
                 "medium_question_count": 1,
                 "hard_question_count": 1,
-                "easy_points": 3,
-                "medium_points": 6,
-                "hard_points": 9,
             },
         )
         assert created_quiz.status_code == 201
@@ -1805,9 +1793,11 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert quiz["easy_question_count"] == 1
         assert quiz["medium_question_count"] == 1
         assert quiz["hard_question_count"] == 1
-        assert quiz["easy_points"] == 3
-        assert quiz["medium_points"] == 6
-        assert quiz["hard_points"] == 9
+        assert {
+            "easy_points",
+            "medium_points",
+            "hard_points",
+        }.isdisjoint(quiz)
         assert quiz["duration_seconds"] == 1800
         assert quiz["allow_previous_questions"] is False
         assert quiz["same_questions_for_all"] is False
@@ -1832,9 +1822,6 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 "easy_question_count": 1,
                 "medium_question_count": 1,
                 "hard_question_count": 1,
-                "easy_points": 3,
-                "medium_points": 6,
-                "hard_points": 9,
             },
         )
         assert updated_quiz.status_code == 200
@@ -2333,6 +2320,9 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert results.json()[0]["quiz_title"] == quiz["title"]
         assert results.json()[0]["class_name"] == "5e B"
         assert results.json()[0]["participants"][0]["score"] > 0
+        maximum_score = results.json()[0]["participants"][0]["maximum_score"]
+        assert maximum_score > 0
+        assert results.json()[0]["median_maximum_score"] == maximum_score
         assert results.json()[0]["participants"][0]["pending_manual_grading_count"] == 1
         original_ends_at = results.json()[0]["ends_at"]
 

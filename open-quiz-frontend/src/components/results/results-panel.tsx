@@ -30,6 +30,7 @@ import {
     LoaderCircle,
     School,
     Trash2,
+    TriangleAlert,
     UserRound,
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -536,13 +537,25 @@ export function ResultsPanel({
             >
                 {selectedResult && (
                     <div className="space-y-4">
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-3">
                             <div className="rounded-xl bg-muted p-4">
                                 <p className="text-xs font-medium text-muted-foreground">
                                     {t("result-participants")}
                                 </p>
                                 <p className="mt-1 font-semibold">
                                     {selectedResult.participant_count}
+                                </p>
+                            </div>
+                            <div className="rounded-xl bg-muted p-4">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                    {t("result-median-maximum")}
+                                </p>
+                                <p className="mt-1 font-semibold">
+                                    {formatScore(
+                                        selectedResult.median_maximum_score,
+                                        i18n.language
+                                    )}{" "}
+                                    {t("points-short")}
                                 </p>
                             </div>
                             <div className="rounded-xl bg-muted p-4">
@@ -567,7 +580,7 @@ export function ResultsPanel({
                                     (participant) => (
                                         <div
                                             key={participant.id}
-                                            className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_140px_120px_auto] sm:items-center sm:gap-4"
+                                            className={`grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_140px_120px_auto] sm:items-center sm:gap-4 ${participant.maximum_score > selectedResult.median_maximum_score ? "bg-amber-500/10" : ""}`}
                                         >
                                             <div className="flex min-w-0 items-center gap-3">
                                                 <div className="rounded-full bg-primary/10 p-2 text-primary">
@@ -605,7 +618,21 @@ export function ResultsPanel({
                                                     participant.score,
                                                     i18n.language
                                                 )}{" "}
+                                                /{" "}
+                                                {formatScore(
+                                                    participant.maximum_score,
+                                                    i18n.language
+                                                )}{" "}
                                                 {t("points-short")}
+                                                {participant.maximum_score >
+                                                    selectedResult.median_maximum_score && (
+                                                    <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                                        <TriangleAlert className="size-4 shrink-0" />
+                                                        {t(
+                                                            "result-maximum-above-median"
+                                                        )}
+                                                    </span>
+                                                )}
                                             </p>
                                             <div>
                                                 {participant.pending_manual_grading_count >

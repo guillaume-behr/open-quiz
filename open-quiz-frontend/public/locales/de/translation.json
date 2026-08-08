@@ -528,6 +528,8 @@
     "result-participants": "Teilnehmer",
     "result-progress": "Fragen beantwortet",
     "result-score": "Punktzahl",
+    "result-median-maximum": "Median der verfügbaren Punkte",
+    "result-maximum-above-median": "Verfügbare Punkte über dem Median",
     "result-no-participants": "An diesem Quiz haben keine Schüler teilgenommen.",
     "quiz-paused": "Quiz pausiert",
     "quiz-cancelled": "Quiz abgebrochen",

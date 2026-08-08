@@ -445,9 +445,6 @@ class QuizCreate(BaseModel):
     easy_question_count: int = Field(ge=0, le=200)
     medium_question_count: int = Field(ge=0, le=200)
     hard_question_count: int = Field(ge=0, le=200)
-    easy_points: float = Field(default=0, ge=0, le=10000)
-    medium_points: float = Field(default=0, ge=0, le=10000)
-    hard_points: float = Field(default=0, ge=0, le=10000)
 
     @property
     def question_count(self) -> int:
@@ -472,14 +469,6 @@ class QuizCreate(BaseModel):
             raise ValueError("Le quiz doit contenir au moins une question")
         if self.question_count > 200:
             raise ValueError("Le quiz ne peut pas contenir plus de 200 questions")
-        for difficulty in ("easy", "medium", "hard"):
-            if (
-                getattr(self, f"{difficulty}_question_count") == 0
-                and getattr(self, f"{difficulty}_points") != 0
-            ):
-                raise ValueError(
-                    "Des points ne peuvent être attribués à une difficulté sans question"
-                )
         if len(set(self.question_bank_ids)) != len(self.question_bank_ids):
             raise ValueError(
                 "Chaque banque de questions ne peut être sélectionnée qu’une fois"
@@ -510,9 +499,6 @@ class QuizResponse(BaseModel):
     easy_question_count: int
     medium_question_count: int
     hard_question_count: int
-    easy_points: float
-    medium_points: float
-    hard_points: float
     question_banks: list[QuizBankSummary]
     created_at: datetime
 
@@ -560,6 +546,7 @@ class QuizParticipantResponse(BaseModel):
     student_display_name: str | None
     answered_count: int = 0
     score: float = 0
+    maximum_score: float = 0
     pending_manual_grading_count: int = 0
     violation_count: int = 0
     last_violation_type: str | None = None
@@ -577,6 +564,7 @@ class QuizSessionResponse(BaseModel):
     status: Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
     participant_count: int
     participants: list[QuizParticipantResponse]
+    median_maximum_score: float = 0
     current_question_number: int | None
     total_questions: int
     current_submission_count: int

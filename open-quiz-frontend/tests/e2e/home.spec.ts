@@ -55,6 +55,9 @@ test("a signed-in student enters exam mode from the dashboard", async ({
     await page.getByRole("button", { name: "Exams", exact: true }).click()
 
     await expect(page.getByRole("heading", { name: "Exams" })).toBeVisible()
+    await expect(
+        page.getByRole("heading", { name: "Join a quiz", exact: true })
+    ).toBeVisible()
     await expect(page.getByLabel("Quiz code")).toBeVisible()
 })
 
@@ -312,6 +315,9 @@ test("a student joins a retake room and selects an eligible quiz", async ({
     await page.getByLabel("Password").fill("student-password")
     await page.getByRole("button", { name: "Sign in" }).click()
     await page.getByRole("button", { name: "Retake", exact: true }).click()
+    await expect(
+        page.getByRole("heading", { name: "Join a quiz", exact: true })
+    ).toBeVisible()
     await page.getByLabel("Session code").fill("retake1")
     await page.getByRole("button", { name: "Join" }).click()
 

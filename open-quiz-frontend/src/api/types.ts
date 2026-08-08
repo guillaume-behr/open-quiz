@@ -174,9 +174,6 @@ export type Quiz = {
     easy_question_count: number
     medium_question_count: number
     hard_question_count: number
-    easy_points: number
-    medium_points: number
-    hard_points: number
     question_banks: Array<{
         id: number
         grade_level: string
@@ -201,9 +198,6 @@ export type NewQuiz = {
     easy_question_count: number
     medium_question_count: number
     hard_question_count: number
-    easy_points: number
-    medium_points: number
-    hard_points: number
 }
 
 export type QuizParticipant = {
@@ -212,6 +206,7 @@ export type QuizParticipant = {
     student_display_name: string | null
     answered_count: number
     score: number
+    maximum_score: number
     pending_manual_grading_count: number
     violation_count: number
     last_violation_type: string | null
@@ -256,6 +251,7 @@ export type QuizSession = {
     status: "waiting" | "in_progress" | "paused" | "finished" | "cancelled"
     participant_count: number
     participants: QuizParticipant[]
+    median_maximum_score: number
     current_question_number: number | null
     total_questions: number
     current_submission_count: number
