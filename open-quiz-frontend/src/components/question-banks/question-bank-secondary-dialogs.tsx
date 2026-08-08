@@ -71,7 +71,7 @@ export function ImportQuestionBankDialog({
                         </Button>
                         <Button type="submit" disabled={isBusy || !file}>
                             {isBusy ? (
-                                <LoaderCircle className="animate-spin" />
+                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                             ) : (
                                 <Upload />
                             )}
@@ -133,7 +133,9 @@ export function DeleteEntityDialog({
                         disabled={isBusy}
                         onClick={onConfirm}
                     >
-                        {isBusy && <LoaderCircle className="animate-spin" />}
+                        {isBusy && (
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                        )}
                         {t(titleKey)}
                     </Button>
                 </div>

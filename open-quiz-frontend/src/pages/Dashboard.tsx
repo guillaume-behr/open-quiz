@@ -200,7 +200,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                 role="status"
                 aria-label={t("page-loading")}
             >
-                <LoaderCircle className="size-9 animate-spin text-primary" />
+                <LoaderCircle className="size-9 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
     }
@@ -282,7 +282,8 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                 </aside>
 
                 <section
-                    className="min-h-72 min-w-0 overflow-hidden rounded-2xl border bg-card p-4 shadow-sm sm:p-5"
+                    key={activeSection}
+                    className="min-h-72 min-w-0 animate-in overflow-hidden rounded-2xl border bg-card p-4 shadow-sm duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:p-5"
                     aria-labelledby={`${activeEntry.id}-title`}
                 >
                     <div className="flex flex-wrap items-start justify-between gap-4">

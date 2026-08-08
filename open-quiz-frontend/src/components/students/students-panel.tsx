@@ -244,7 +244,7 @@ export function StudentsPanel({
                 <div className="min-w-0">
                     {isLoading ? (
                         <div className="flex min-h-40 items-center justify-center">
-                            <LoaderCircle className="size-7 animate-spin text-primary" />
+                            <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                         </div>
                     ) : loadError ? (
                         <p role="alert" className="text-sm text-destructive">
@@ -261,7 +261,12 @@ export function StudentsPanel({
                             </p>
                         </div>
                     ) : (
-                        <div className="grid gap-3 lg:grid-cols-2">
+                        <div
+                            key={students
+                                .map((student) => student.id)
+                                .join(",")}
+                            className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                        >
                             {students.map((student) => (
                                 <article
                                     key={student.id}
@@ -435,7 +440,7 @@ export function StudentsPanel({
                             </Button>
                             <Button type="submit" disabled={isBusy}>
                                 {isBusy ? (
-                                    <LoaderCircle className="animate-spin" />
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 ) : (
                                     <UserRoundPlus />
                                 )}
@@ -500,7 +505,9 @@ export function StudentsPanel({
                         onClick={() => void confirmDelete()}
                         disabled={isBusy}
                     >
-                        {isBusy && <LoaderCircle className="animate-spin" />}
+                        {isBusy && (
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                        )}
                         {t("delete")}
                     </Button>
                 </div>

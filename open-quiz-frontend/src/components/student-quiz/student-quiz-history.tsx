@@ -20,7 +20,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
     if (isLoading)
         return (
             <div className="flex justify-center py-10">
-                <LoaderCircle className="size-7 animate-spin text-primary" />
+                <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
 
@@ -41,7 +41,10 @@ export function StudentQuizHistory({ token }: { token: string }) {
         )
 
     return (
-        <div className="grid gap-3">
+        <div
+            key={items.map((item) => item.session_id).join(",")}
+            className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+        >
             {items.map((item) => (
                 <details
                     key={item.session_id}

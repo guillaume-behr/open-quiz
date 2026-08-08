@@ -205,7 +205,10 @@ export function MakeupSessionsPanel() {
                     {error}
                 </p>
             )}
-            <div className="grid gap-3">
+            <div
+                key={sessions.map((session) => session.id).join(",")}
+                className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+            >
                 {sessions.map((item) => (
                     <article
                         key={item.id}

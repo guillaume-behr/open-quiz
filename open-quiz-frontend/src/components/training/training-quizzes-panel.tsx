@@ -63,7 +63,7 @@ export function TrainingQuizzesPanel({
     if (isLoading) {
         return (
             <div className="flex min-h-48 items-center justify-center">
-                <LoaderCircle className="size-8 animate-spin text-primary" />
+                <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
     }
@@ -82,7 +82,10 @@ export function TrainingQuizzesPanel({
                     <p className="mt-1 text-sm">{t("no-training-quiz-help")}</p>
                 </div>
             ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div
+                    key={banks.map((bank) => bank.id).join(",")}
+                    className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:grid-cols-2"
+                >
                     {banks.map((bank) => (
                         <article
                             key={bank.id}
@@ -110,7 +113,7 @@ export function TrainingQuizzesPanel({
                                 }
                             >
                                 {startingId === bank.id ? (
-                                    <LoaderCircle className="animate-spin" />
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 ) : (
                                     <Play />
                                 )}

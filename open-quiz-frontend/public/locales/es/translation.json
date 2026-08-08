@@ -522,6 +522,8 @@
     "results-view": "Vista de resultados",
     "results-card-view": "Tarjetas",
     "results-schedule-view": "Horario",
+    "results-previous-week": "Semana anterior",
+    "results-next-week": "Semana siguiente",
     "result-students_one": "{{count}} estudiante",
     "result-students_other": "{{count}} estudiantes",
     "view-results": "Corregir cuestionario",

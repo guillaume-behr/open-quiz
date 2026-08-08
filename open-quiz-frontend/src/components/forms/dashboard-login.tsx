@@ -94,7 +94,9 @@ export function DashboardLogin({
                     type="submit"
                     disabled={isSubmitting}
                 >
-                    {isSubmitting && <LoaderCircle className="animate-spin" />}
+                    {isSubmitting && (
+                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                    )}
                     {isSubmitting ? t("signing-in") : t("sign-in")}
                 </Button>
             </FieldGroup>

@@ -212,7 +212,7 @@ export function QuizFormDialog({
                             }
                         >
                             {isBusy ? (
-                                <LoaderCircle className="animate-spin" />
+                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                             ) : editingQuiz ? (
                                 <Pencil />
                             ) : (

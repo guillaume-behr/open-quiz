@@ -86,7 +86,7 @@ export function ActiveQuizSessionDialog({
                                 onClick={onStart}
                             >
                                 {isStarting ? (
-                                    <LoaderCircle className="animate-spin" />
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 ) : (
                                     <Play />
                                 )}
@@ -101,7 +101,7 @@ export function ActiveQuizSessionDialog({
                                 onClick={onPause}
                             >
                                 {action === "pause" ? (
-                                    <LoaderCircle className="animate-spin" />
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 ) : (
                                     <Pause />
                                 )}
@@ -115,7 +115,7 @@ export function ActiveQuizSessionDialog({
                                 onClick={onResume}
                             >
                                 {action === "resume" ? (
-                                    <LoaderCircle className="animate-spin" />
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 ) : (
                                     <RotateCcw />
                                 )}
@@ -191,7 +191,7 @@ function Participants({ session }: { session: QuizSession }) {
                 </h4>
                 {session.status === "waiting" && (
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
+                        <span className="size-2 animate-pulse rounded-full bg-emerald-500 motion-reduce:animate-none" />
                         {t("live-updates")}
                     </span>
                 )}

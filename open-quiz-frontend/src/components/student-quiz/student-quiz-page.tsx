@@ -147,7 +147,10 @@ function TranslationNotice({
                 onClick={onToggle}
             >
                 {translation.isTranslating ? (
-                    <LoaderCircle className="animate-spin" aria-hidden="true" />
+                    <LoaderCircle
+                        className="animate-spin motion-reduce:animate-none"
+                        aria-hidden="true"
+                    />
                 ) : (
                     <Languages aria-hidden="true" />
                 )}
@@ -169,7 +172,7 @@ function QuizStatus({ session }: { session: StudentQuizSession }) {
     if (session.status === "waiting") {
         return (
             <div className="text-center">
-                <LoaderCircle className="mx-auto size-10 animate-spin text-primary" />
+                <LoaderCircle className="mx-auto size-10 animate-spin text-primary motion-reduce:animate-none" />
                 <p className="mt-3 font-semibold">
                     {t("student-waiting-for-start")}
                 </p>
@@ -180,7 +183,7 @@ function QuizStatus({ session }: { session: StudentQuizSession }) {
     if (session.status === "paused") {
         return (
             <div className="rounded-xl border border-dashed p-8 text-center">
-                <LoaderCircle className="mx-auto size-8 animate-spin text-primary" />
+                <LoaderCircle className="mx-auto size-8 animate-spin text-primary motion-reduce:animate-none" />
                 <p className="mt-3 text-xl font-bold">
                     {t("student-quiz-paused")}
                 </p>
@@ -215,7 +218,7 @@ function QuizStatus({ session }: { session: StudentQuizSession }) {
     if (session.has_answered && !session.question) {
         return (
             <div className="rounded-xl border border-dashed p-8 text-center">
-                <LoaderCircle className="mx-auto size-8 animate-spin text-primary" />
+                <LoaderCircle className="mx-auto size-8 animate-spin text-primary motion-reduce:animate-none" />
                 <p className="mt-3 font-semibold">
                     {t("student-answer-recorded")}
                 </p>

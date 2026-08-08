@@ -526,6 +526,8 @@
     "results-view": "Affichage des résultats",
     "results-card-view": "Cartes",
     "results-schedule-view": "Emploi du temps",
+    "results-previous-week": "Semaine précédente",
+    "results-next-week": "Semaine suivante",
     "result-students_one": "{{count}} élève",
     "result-students_other": "{{count}} élèves",
     "view-results": "Corriger le quiz",

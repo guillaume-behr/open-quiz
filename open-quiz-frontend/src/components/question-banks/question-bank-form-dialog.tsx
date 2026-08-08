@@ -145,7 +145,7 @@ export function QuestionBankFormDialog({
                         </Button>
                         <Button type="submit" disabled={isBusy}>
                             {isBusy ? (
-                                <LoaderCircle className="animate-spin" />
+                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                             ) : (
                                 <Plus />
                             )}

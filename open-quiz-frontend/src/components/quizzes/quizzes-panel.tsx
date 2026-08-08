@@ -624,7 +624,7 @@ export function QuizzesPanel({
                         onClick={() => void handleDeleteQuiz()}
                     >
                         {isDeleting ? (
-                            <LoaderCircle className="animate-spin" />
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                         ) : (
                             <Trash2 />
                         )}

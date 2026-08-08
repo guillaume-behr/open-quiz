@@ -53,7 +53,7 @@ export function ParticipantAnswersDialog({
         >
             {isLoading ? (
                 <div className="flex min-h-40 items-center justify-center">
-                    <LoaderCircle className="size-7 animate-spin text-primary" />
+                    <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -155,7 +155,7 @@ function AnswerReview({
                         onClick={onGrade}
                     >
                         {isGrading ? (
-                            <LoaderCircle className="animate-spin" />
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                         ) : (
                             <Save />
                         )}

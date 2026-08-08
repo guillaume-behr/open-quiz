@@ -131,7 +131,7 @@ export function ReportProblemPage() {
                         <Button type="submit" disabled={isSending}>
                             {isSending ? (
                                 <LoaderCircle
-                                    className="animate-spin"
+                                    className="animate-spin motion-reduce:animate-none"
                                     aria-hidden="true"
                                 />
                             ) : (

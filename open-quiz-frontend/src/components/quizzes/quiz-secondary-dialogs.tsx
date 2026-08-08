@@ -50,7 +50,7 @@ export function QuizPreviewDialog({
             </div>
             {isLoading ? (
                 <div className="flex min-h-40 items-center justify-center">
-                    <LoaderCircle className="size-7 animate-spin text-primary" />
+                    <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                 </div>
             ) : error ? (
                 <FieldError>{error}</FieldError>
@@ -167,7 +167,7 @@ export function LaunchQuizDialog({
                             disabled={isBusy || !selectedClassId}
                         >
                             {isBusy ? (
-                                <LoaderCircle className="animate-spin" />
+                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                             ) : (
                                 <Play />
                             )}
@@ -226,7 +226,7 @@ export function SessionActionDialog({
                     }
                 >
                     {currentAction !== null ? (
-                        <LoaderCircle className="animate-spin" />
+                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                     ) : isDelete ? (
                         <Trash2 />
                     ) : (

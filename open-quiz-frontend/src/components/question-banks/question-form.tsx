@@ -307,7 +307,7 @@ export function QuestionForm({
                     </Button>
                     <Button type="submit" disabled={isCreating}>
                         {isCreating && (
-                            <LoaderCircle className="animate-spin" />
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                         )}
                         {isCreating
                             ? t("creating-question")

@@ -326,7 +326,7 @@ export function ResultsPanel({
     if (isLoading) {
         return (
             <div className="flex min-h-64 items-center justify-center">
-                <LoaderCircle className="size-8 animate-spin text-primary" />
+                <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
     }
@@ -402,124 +402,144 @@ export function ResultsPanel({
                         )}
                     </FieldGroup>
                 </aside>
-                {results.length === 0 ? (
-                    <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center">
-                        <ChartColumn className="size-12 text-muted-foreground/60" />
-                        <h3 className="mt-4 text-lg font-semibold">
-                            {t("results-empty")}
+                <div className="min-w-0">
+                    <div className="mb-4 flex min-h-8 items-center justify-between gap-3">
+                        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                            {t("results")}
                         </h3>
-                        <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                            {t("results-empty-help")}
-                        </p>
-                    </div>
-                ) : (
-                    <div>
-                        <div
-                            className="mb-4 flex justify-end gap-1"
-                            role="group"
-                            aria-label={t("results-view")}
-                        >
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant={
-                                    viewMode === "cards" ? "default" : "outline"
-                                }
-                                aria-pressed={viewMode === "cards"}
-                                onClick={() => setViewMode("cards")}
-                            >
-                                <LayoutGrid />
-                                {t("results-card-view")}
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant={
-                                    viewMode === "schedule"
-                                        ? "default"
-                                        : "outline"
-                                }
-                                aria-pressed={viewMode === "schedule"}
-                                onClick={() => setViewMode("schedule")}
-                            >
-                                <CalendarRange />
-                                {t("results-schedule-view")}
-                            </Button>
-                        </div>
-                        {viewMode === "schedule" ? (
-                            <ResultsSchedule
-                                results={results}
-                                locale={i18n.language}
-                                onSelect={setSelectedResult}
-                            />
-                        ) : (
+                        {results.length > 0 && (
                             <div
-                                key={results
-                                    .map((result) => result.id)
-                                    .join(",")}
-                                className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none md:grid-cols-2 xl:grid-cols-3"
+                                className="flex gap-1"
+                                role="group"
+                                aria-label={t("results-view")}
                             >
-                                {results.map((result) => (
-                                    <article
-                                        key={result.id}
-                                        className="flex flex-col rounded-2xl border bg-background p-5 shadow-sm transition-shadow hover:shadow-md"
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                                                <CheckCircle2 className="size-5" />
-                                            </div>
-                                            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                                                {t("result-students", {
-                                                    count: result.participant_count,
-                                                })}
-                                            </span>
-                                        </div>
-                                        <h3 className="mt-4 text-lg font-bold">
-                                            {result.quiz_title}
-                                        </h3>
-                                        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                                            <p className="flex items-center gap-2">
-                                                <CalendarDays className="size-4 shrink-0" />
-                                                {resultDate(result)}
-                                            </p>
-                                            <p className="flex items-center gap-2">
-                                                <School className="size-4 shrink-0" />
-                                                {result.class_name}
-                                            </p>
-                                        </div>
-                                        <div className="mt-5 flex gap-2">
-                                            <Button
-                                                className="flex-1"
-                                                variant="outline"
-                                                onClick={() =>
-                                                    setSelectedResult(result)
-                                                }
-                                            >
-                                                <Eye />
-                                                {t("view-results")}
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                aria-label={t("delete-result")}
-                                                onClick={() => {
-                                                    setDeleteError(false)
-                                                    setResultToDelete(result)
-                                                }}
-                                            >
-                                                <Trash2 />
-                                            </Button>
-                                        </div>
-                                    </article>
-                                ))}
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={
+                                        viewMode === "cards"
+                                            ? "default"
+                                            : "outline"
+                                    }
+                                    aria-pressed={viewMode === "cards"}
+                                    onClick={() => setViewMode("cards")}
+                                >
+                                    <LayoutGrid />
+                                    {t("results-card-view")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={
+                                        viewMode === "schedule"
+                                            ? "default"
+                                            : "outline"
+                                    }
+                                    aria-pressed={viewMode === "schedule"}
+                                    onClick={() => setViewMode("schedule")}
+                                >
+                                    <CalendarRange />
+                                    {t("results-schedule-view")}
+                                </Button>
                             </div>
                         )}
-                        <Pagination
-                            currentPage={page}
-                            totalPages={totalPages}
-                            onPageChange={setPage}
-                        />
                     </div>
-                )}
+                    {results.length === 0 ? (
+                        <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center">
+                            <ChartColumn className="size-12 text-muted-foreground/60" />
+                            <h3 className="mt-4 text-lg font-semibold">
+                                {t("results-empty")}
+                            </h3>
+                            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                                {t("results-empty-help")}
+                            </p>
+                        </div>
+                    ) : (
+                        <>
+                            {viewMode === "schedule" ? (
+                                <ResultsSchedule
+                                    key={results
+                                        .map((result) => result.id)
+                                        .join(",")}
+                                    results={results}
+                                    locale={i18n.language}
+                                    onSelect={setSelectedResult}
+                                />
+                            ) : (
+                                <div
+                                    key={results
+                                        .map((result) => result.id)
+                                        .join(",")}
+                                    className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none md:grid-cols-2 xl:grid-cols-3"
+                                >
+                                    {results.map((result) => (
+                                        <article
+                                            key={result.id}
+                                            className="flex flex-col rounded-2xl border bg-background p-5 shadow-sm transition-shadow hover:shadow-md"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="rounded-xl bg-primary/10 p-3 text-primary">
+                                                    <CheckCircle2 className="size-5" />
+                                                </div>
+                                                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                                                    {t("result-students", {
+                                                        count: result.participant_count,
+                                                    })}
+                                                </span>
+                                            </div>
+                                            <h3 className="mt-4 text-lg font-bold">
+                                                {result.quiz_title}
+                                            </h3>
+                                            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                                                <p className="flex items-center gap-2">
+                                                    <CalendarDays className="size-4 shrink-0" />
+                                                    {resultDate(result)}
+                                                </p>
+                                                <p className="flex items-center gap-2">
+                                                    <School className="size-4 shrink-0" />
+                                                    {result.class_name}
+                                                </p>
+                                            </div>
+                                            <div className="mt-5 flex gap-2">
+                                                <Button
+                                                    className="flex-1"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        setSelectedResult(
+                                                            result
+                                                        )
+                                                    }
+                                                >
+                                                    <Eye />
+                                                    {t("view-results")}
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    aria-label={t(
+                                                        "delete-result"
+                                                    )}
+                                                    onClick={() => {
+                                                        setDeleteError(false)
+                                                        setResultToDelete(
+                                                            result
+                                                        )
+                                                    }}
+                                                >
+                                                    <Trash2 />
+                                                </Button>
+                                            </div>
+                                        </article>
+                                    ))}
+                                </div>
+                            )}
+                            <Pagination
+                                currentPage={page}
+                                totalPages={totalPages}
+                                onPageChange={setPage}
+                            />
+                        </>
+                    )}
+                </div>
             </div>
 
             <Dialog
@@ -532,7 +552,7 @@ export function ResultsPanel({
             >
                 {isExportLoading || areClassesLoading ? (
                     <div className="flex min-h-32 items-center justify-center">
-                        <LoaderCircle className="size-7 animate-spin text-primary" />
+                        <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                     </div>
                 ) : (
                     <FieldGroup>
@@ -611,7 +631,7 @@ export function ResultsPanel({
                                 onClick={handleExport}
                             >
                                 {isExporting ? (
-                                    <LoaderCircle className="animate-spin" />
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 ) : (
                                     <Download />
                                 )}
@@ -665,7 +685,7 @@ export function ResultsPanel({
                                 onClick={() => void handlePublishGrades()}
                             >
                                 {publishingSessionId === selectedResult.id && (
-                                    <LoaderCircle className="animate-spin" />
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 )}
                                 {t(
                                     selectedResult.grades_published_at
@@ -874,7 +894,7 @@ export function ResultsPanel({
                             disabled={isDeleting}
                         >
                             {isDeleting ? (
-                                <LoaderCircle className="animate-spin" />
+                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                             ) : (
                                 <Trash2 />
                             )}

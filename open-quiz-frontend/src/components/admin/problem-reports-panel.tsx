@@ -109,7 +109,7 @@ export function ProblemReportsPanel({
                             >
                                 {deletingId === report.id ? (
                                     <LoaderCircle
-                                        className="animate-spin"
+                                        className="animate-spin motion-reduce:animate-none"
                                         aria-hidden="true"
                                     />
                                 ) : (

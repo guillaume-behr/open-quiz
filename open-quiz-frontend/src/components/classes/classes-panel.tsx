@@ -267,7 +267,7 @@ export function ClassesPanel({
                 <div className="min-w-0">
                     {isLoading ? (
                         <div className="flex min-h-40 items-center justify-center">
-                            <LoaderCircle className="size-7 animate-spin text-primary" />
+                            <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                         </div>
                     ) : classes.length === 0 ? (
                         <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground">
@@ -275,7 +275,12 @@ export function ClassesPanel({
                             <p>{t("no-class")}</p>
                         </div>
                     ) : (
-                        <div className="grid gap-4 lg:grid-cols-2">
+                        <div
+                            key={classes
+                                .map((studentClass) => studentClass.id)
+                                .join(",")}
+                            className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                        >
                             {classes.map((studentClass) => (
                                 <article
                                     key={studentClass.id}
@@ -480,7 +485,9 @@ export function ClassesPanel({
                         onClick={() => void assign()}
                         disabled={isBusy || selectedAccountId === null}
                     >
-                        {isBusy && <LoaderCircle className="animate-spin" />}
+                        {isBusy && (
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                        )}
                         {t("assign")}
                     </Button>
                 </div>
@@ -502,7 +509,9 @@ export function ClassesPanel({
                         disabled={isBusy}
                         onClick={() => void removeClass()}
                     >
-                        {isBusy && <LoaderCircle className="animate-spin" />}
+                        {isBusy && (
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                        )}
                         {t("delete")}
                     </Button>
                 </div>

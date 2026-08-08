@@ -123,7 +123,9 @@ export function StudentQuestionForm({
                             : selectedChoiceIds.length === 0)
                     }
                 >
-                    {isBusy && <LoaderCircle className="animate-spin" />}
+                    {isBusy && (
+                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                    )}
                     {t("student-submit-answer")}
                 </Button>
             </div>

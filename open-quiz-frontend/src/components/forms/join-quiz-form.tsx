@@ -75,7 +75,9 @@ export function JoinQuizForm({
                     type="submit"
                     disabled={isBusy}
                 >
-                    {isBusy && <LoaderCircle className="animate-spin" />}
+                    {isBusy && (
+                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                    )}
                     {t(isBusy ? "joining-quiz" : "join-quiz-button")}
                 </Button>
             </FieldGroup>

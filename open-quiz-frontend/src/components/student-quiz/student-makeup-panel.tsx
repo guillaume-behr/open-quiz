@@ -124,7 +124,9 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                     type="submit"
                     disabled={busy}
                 >
-                    {busy && <LoaderCircle className="animate-spin" />}
+                    {busy && (
+                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                    )}
                     {t("join-quiz")}
                 </Button>
             </FieldGroup>

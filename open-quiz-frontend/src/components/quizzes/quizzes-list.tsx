@@ -81,7 +81,7 @@ export function QuizzesList({
             )}
             {isLoading ? (
                 <div className="flex min-h-40 items-center justify-center">
-                    <LoaderCircle className="size-7 animate-spin text-primary" />
+                    <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                 </div>
             ) : loadError ? (
                 <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">

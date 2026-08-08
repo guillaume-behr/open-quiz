@@ -122,7 +122,7 @@ export function CodeBlock({
                                 disabled={isRunning}
                             >
                                 {isRunning ? (
-                                    <LoaderCircle className="animate-spin" />
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 ) : (
                                     <Play />
                                 )}

@@ -751,7 +751,11 @@ test("teacher can switch between all dashboard sections", async ({ page }) => {
     ] as const) {
         await page.getByRole("button", { name: section, exact: true }).click()
         await expect(
-            page.getByRole("heading", { name: section, exact: true })
+            page.getByRole("heading", {
+                name: section,
+                exact: true,
+                level: 2,
+            })
         ).toBeVisible()
         await expect(
             page.getByRole("button", { name: section, exact: true })
@@ -1341,6 +1345,9 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     const requests = await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Results", exact: true }).click()
+    await expect(
+        page.getByRole("heading", { name: "Results", level: 3 })
+    ).toBeVisible()
     await page
         .getByRole("combobox", { name: "Class", exact: true })
         .selectOption("Class 8B")
@@ -1361,6 +1368,10 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     })
     await expect(resultCard.getByText("Class 8B")).toBeVisible()
     await page.getByRole("button", { name: "Schedule" }).click()
+    await expect(
+        page.getByRole("button", { name: "Previous week" })
+    ).toBeVisible()
+    await expect(page.getByRole("button", { name: "Next week" })).toBeVisible()
     await expect(page.getByText(/\d{1,2}:00/).first()).toBeVisible()
     await page
         .getByRole("button", { name: "Grade quiz — Science checkpoint" })

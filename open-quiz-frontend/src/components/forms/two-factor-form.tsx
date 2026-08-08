@@ -112,7 +112,9 @@ export function TwoFactorForm({
                     type="submit"
                     disabled={isSubmitting}
                 >
-                    {isSubmitting && <LoaderCircle className="animate-spin" />}
+                    {isSubmitting && (
+                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                    )}
                     {isSubmitting
                         ? t("two-factor-verifying")
                         : t("two-factor-continue")}

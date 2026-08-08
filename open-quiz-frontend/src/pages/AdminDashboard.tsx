@@ -220,7 +220,7 @@ export function AdminDashboard() {
     if (isLoading) {
         return (
             <div className="flex flex-1 items-center justify-center">
-                <LoaderCircle className="size-9 animate-spin text-primary" />
+                <LoaderCircle className="size-9 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
     }
@@ -387,7 +387,7 @@ export function AdminDashboard() {
 
                                 <Button type="submit" disabled={isCreating}>
                                     {isCreating ? (
-                                        <LoaderCircle className="animate-spin" />
+                                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                     ) : (
                                         <UserPlus />
                                     )}
@@ -549,7 +549,7 @@ export function AdminDashboard() {
                                 </Button>
                                 <Button type="submit" disabled={isUpdatingUser}>
                                     {isUpdatingUser ? (
-                                        <LoaderCircle className="animate-spin" />
+                                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                     ) : (
                                         <KeyRound />
                                     )}

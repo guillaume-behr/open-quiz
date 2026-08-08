@@ -56,7 +56,7 @@ export function QuestionsDialog({
                 <h4 className="font-semibold">{t("bank-questions")}</h4>
                 {isLoading ? (
                     <div className="flex min-h-24 items-center justify-center">
-                        <LoaderCircle className="size-6 animate-spin text-primary" />
+                        <LoaderCircle className="size-6 animate-spin text-primary motion-reduce:animate-none" />
                     </div>
                 ) : error ? (
                     <p role="alert" className="mt-3 text-sm text-destructive">

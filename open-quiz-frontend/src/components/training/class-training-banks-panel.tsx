@@ -104,7 +104,7 @@ export function ClassTrainingBanksPanel() {
     if (isLoading) {
         return (
             <div className="flex min-h-48 items-center justify-center">
-                <LoaderCircle className="size-8 animate-spin text-primary" />
+                <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
     }
@@ -174,7 +174,7 @@ export function ClassTrainingBanksPanel() {
                         }
                     >
                         {isSaving ? (
-                            <LoaderCircle className="animate-spin" />
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                         ) : (
                             <Save />
                         )}
@@ -207,7 +207,7 @@ export function ClassTrainingBanksPanel() {
                     />
                 ) : isClassLoading ? (
                     <div className="flex min-h-40 items-center justify-center">
-                        <LoaderCircle className="size-7 animate-spin text-primary" />
+                        <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                     </div>
                 ) : eligibleBanks.length === 0 ? (
                     <EmptyState
@@ -217,7 +217,10 @@ export function ClassTrainingBanksPanel() {
                         })}
                     />
                 ) : (
-                    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div
+                        key={eligibleBanks.map((bank) => bank.id).join(",")}
+                        className="mt-4 grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                    >
                         {eligibleBanks.map((bank) => {
                             const selected = selectedBankIds.includes(bank.id)
                             return (
