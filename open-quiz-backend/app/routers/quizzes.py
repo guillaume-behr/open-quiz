@@ -334,9 +334,13 @@ def load_question_responses(
     ]
 
 
-def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
+def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:
+    if not quizzes:
+        return []
+    banks_by_quiz: dict[int, list[QuizBankSummary]] = {quiz.id: [] for quiz in quizzes}
     rows = session.execute(
         select(
+            QuizQuestionBank.quiz_id,
             QuestionBank,
             func.count(Question.id),
             func.sum(case((Question.difficulty == "easy", 1), else_=0)),
@@ -348,24 +352,16 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
             QuizQuestionBank.question_bank_id == QuestionBank.id,
         )
         .outerjoin(Question, Question.question_bank_id == QuestionBank.id)
-        .where(QuizQuestionBank.quiz_id == quiz.id)
-        .group_by(QuestionBank.id)
-        .order_by(QuestionBank.grade_level, QuestionBank.chapter)
+        .where(QuizQuestionBank.quiz_id.in_(banks_by_quiz))
+        .group_by(QuizQuestionBank.quiz_id, QuestionBank.id)
+        .order_by(
+            QuizQuestionBank.quiz_id,
+            QuestionBank.grade_level,
+            QuestionBank.chapter,
+        )
     )
-    return QuizResponse(
-        id=quiz.id,
-        mode=quiz.mode,
-        title=quiz.title,
-        source_language=quiz.source_language,
-        question_count=quiz.question_count,
-        duration_seconds=quiz.duration_seconds,
-        allow_previous_questions=quiz.allow_previous_questions,
-        allow_negative_points=quiz.allow_negative_points,
-        same_questions_for_all=quiz.same_questions_for_all,
-        easy_question_count=quiz.easy_question_count,
-        medium_question_count=quiz.medium_question_count,
-        hard_question_count=quiz.hard_question_count,
-        question_banks=[
+    for quiz_id, bank, count, easy_count, medium_count, hard_count in rows:
+        banks_by_quiz[quiz_id].append(
             QuizBankSummary(
                 id=bank.id,
                 grade_level=bank.grade_level,
@@ -375,10 +371,30 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
                 medium_question_count=medium_count or 0,
                 hard_question_count=hard_count or 0,
             )
-            for bank, count, easy_count, medium_count, hard_count in rows
-        ],
-        created_at=quiz.created_at,
-    )
+        )
+    return [
+        QuizResponse(
+            id=quiz.id,
+            mode=quiz.mode,
+            title=quiz.title,
+            source_language=quiz.source_language,
+            question_count=quiz.question_count,
+            duration_seconds=quiz.duration_seconds,
+            allow_previous_questions=quiz.allow_previous_questions,
+            allow_negative_points=quiz.allow_negative_points,
+            same_questions_for_all=quiz.same_questions_for_all,
+            easy_question_count=quiz.easy_question_count,
+            medium_question_count=quiz.medium_question_count,
+            hard_question_count=quiz.hard_question_count,
+            question_banks=banks_by_quiz[quiz.id],
+            created_at=quiz.created_at,
+        )
+        for quiz in quizzes
+    ]
+
+
+def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
+    return quiz_responses([quiz], session)[0]
 
 
 def question_bank_responses(
@@ -603,6 +619,55 @@ def session_question_count(quiz_session: QuizSession, session: DbSession) -> int
     return personalized_count or 0
 
 
+def participant_maximum_scores(
+    quiz_session: QuizSession,
+    participants: list[QuizParticipant],
+    session: DbSession,
+) -> dict[int, float]:
+    common_maximum = float(
+        session.scalar(
+            select(func.coalesce(func.sum(QuizSessionQuestion.points), 0)).where(
+                QuizSessionQuestion.session_id == quiz_session.id
+            )
+        )
+        or 0
+    )
+    personalized_by_student: dict[int, float] = {}
+    personalized_by_identifier: dict[str, float] = {}
+    personalized_students: set[int] = set()
+    personalized_identifiers: set[str] = set()
+    for student_id, identifier, points in session.execute(
+        select(
+            QuizSessionStudentQuestion.student_id,
+            QuizSessionStudentQuestion.student_identifier,
+            QuizSessionStudentQuestion.points,
+        ).where(QuizSessionStudentQuestion.session_id == quiz_session.id)
+    ):
+        if student_id is not None:
+            personalized_students.add(student_id)
+            personalized_by_student[student_id] = (
+                personalized_by_student.get(student_id, 0) + points
+            )
+        personalized_identifiers.add(identifier)
+        personalized_by_identifier[identifier] = (
+            personalized_by_identifier.get(identifier, 0) + points
+        )
+
+    maximums: dict[int, float] = {}
+    for participant in participants:
+        if (
+            participant.student_id is not None
+            and participant.student_id in personalized_students
+        ):
+            maximum = personalized_by_student[participant.student_id]
+        elif participant.student_identifier in personalized_identifiers:
+            maximum = personalized_by_identifier[participant.student_identifier]
+        else:
+            maximum = common_maximum
+        maximums[participant.id] = round(maximum, 2)
+    return maximums
+
+
 def session_response(
     quiz_session: QuizSession,
     quiz: Quiz,
@@ -635,13 +700,7 @@ def session_response(
         participant_id: (answered_count, float(score), pending_count or 0)
         for participant_id, answered_count, score, pending_count in answer_rows
     }
-    maximum_scores = {
-        participant.id: round(
-            sum(session_question_points(quiz_session, session, participant).values()),
-            2,
-        )
-        for participant in participants
-    }
+    maximum_scores = participant_maximum_scores(quiz_session, participants, session)
     median_maximum_score = (
         float(median(maximum_scores.values())) if maximum_scores else 0
     )
@@ -1131,7 +1190,7 @@ def list_quizzes(
             .limit(page_size)
         )
     )
-    return [quiz_response(quiz, session) for quiz in quizzes]
+    return quiz_responses(quizzes, session)
 
 
 @router.post(
@@ -2230,7 +2289,7 @@ def makeup_quiz_options(
             .order_by(Quiz.title, Quiz.id)
         )
     )
-    return [quiz_response(quiz, session) for quiz in quizzes]
+    return quiz_responses(quizzes, session)
 
 
 @router.post(

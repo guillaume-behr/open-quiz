@@ -63,16 +63,25 @@ export function MakeupSessionsPanel() {
     useEffect(() => {
         if (!hasActiveSession) return
         let isActive = true
-        const interval = window.setInterval(() => {
+        let refreshInFlight = false
+        const refresh = () => {
+            if (document.hidden || refreshInFlight) return
+            refreshInFlight = true
             void getMakeupSessions()
                 .then((loaded) => {
                     if (isActive) setSessions(loaded)
                 })
                 .catch(() => undefined)
-        }, 2000)
+                .finally(() => {
+                    refreshInFlight = false
+                })
+        }
+        const interval = window.setInterval(refresh, 2000)
+        document.addEventListener("visibilitychange", refresh)
         return () => {
             isActive = false
             window.clearInterval(interval)
+            document.removeEventListener("visibilitychange", refresh)
         }
     }, [hasActiveSession])
 

@@ -2,12 +2,13 @@ import { LanguageSelector } from "@/components/language/language-selector"
 import { PageTransition } from "@/components/navigation/page-transition"
 import { ThemeSelector } from "@/components/theme/theme-selector"
 import { useTranslation } from "react-i18next"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, Outlet, useLocation } from "react-router"
 
 export function MainLayout() {
     const { t } = useTranslation()
     const location = useLocation()
+    const mainRef = useRef<HTMLElement>(null)
     const isExamRoute = location.pathname === "/student/exam"
     const hasRouteAction = [
         "/student/dashboard",
@@ -19,6 +20,15 @@ export function MainLayout() {
     ].includes(location.pathname)
     const [navbarActionTarget, setNavbarActionTarget] =
         useState<HTMLDivElement | null>(null)
+
+    useEffect(() => {
+        if (location.key === "default") return
+        const focusTimeout = window.setTimeout(
+            () => mainRef.current?.focus({ preventScroll: true }),
+            250
+        )
+        return () => window.clearTimeout(focusTimeout)
+    }, [location.key])
 
     const link = location.pathname.startsWith("/teacher")
         ? { text: "homepage", url: "/student/login" }
@@ -58,6 +68,7 @@ export function MainLayout() {
             </header>
 
             <main
+                ref={mainRef}
                 id="contenu"
                 tabIndex={-1}
                 className="flex min-h-0 w-full flex-1"
@@ -76,7 +87,10 @@ export function MainLayout() {
                         <LanguageSelector />
                         <ThemeSelector />
                     </div>
-                    <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+                    <nav
+                        className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2"
+                        aria-label={t("footer-navigation")}
+                    >
                         <Link className="text-sm underline" to="/legal-notice">
                             {t("legal")}
                         </Link>

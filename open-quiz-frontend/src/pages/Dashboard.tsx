@@ -8,13 +8,6 @@ import type { GradeLevel, TwoFactorChallenge, User } from "@/api/types"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
 import { NavbarAction } from "@/components/navigation/navbar-action"
-import { ClassesPanel } from "@/components/classes/classes-panel"
-import { QuestionBanksPanel } from "@/components/question-banks/question-banks-panel"
-import { QuizzesPanel } from "@/components/quizzes/quizzes-panel"
-import { MakeupSessionsPanel } from "@/components/quizzes/makeup-sessions-panel"
-import { ResultsPanel } from "@/components/results/results-panel"
-import { StudentsPanel } from "@/components/students/students-panel"
-import { ClassTrainingBanksPanel } from "@/components/training/class-training-banks-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -31,7 +24,7 @@ import {
     UsersRound,
     type LucideIcon,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 
@@ -43,6 +36,42 @@ type DashboardSection =
     | "training-quizzes"
     | "question-banks"
     | "results"
+
+const ClassesPanel = lazy(() =>
+    import("@/components/classes/classes-panel").then((module) => ({
+        default: module.ClassesPanel,
+    }))
+)
+const QuestionBanksPanel = lazy(() =>
+    import("@/components/question-banks/question-banks-panel").then(
+        (module) => ({ default: module.QuestionBanksPanel })
+    )
+)
+const QuizzesPanel = lazy(() =>
+    import("@/components/quizzes/quizzes-panel").then((module) => ({
+        default: module.QuizzesPanel,
+    }))
+)
+const MakeupSessionsPanel = lazy(() =>
+    import("@/components/quizzes/makeup-sessions-panel").then((module) => ({
+        default: module.MakeupSessionsPanel,
+    }))
+)
+const ResultsPanel = lazy(() =>
+    import("@/components/results/results-panel").then((module) => ({
+        default: module.ResultsPanel,
+    }))
+)
+const StudentsPanel = lazy(() =>
+    import("@/components/students/students-panel").then((module) => ({
+        default: module.StudentsPanel,
+    }))
+)
+const ClassTrainingBanksPanel = lazy(() =>
+    import("@/components/training/class-training-banks-panel").then(
+        (module) => ({ default: module.ClassTrainingBanksPanel })
+    )
+)
 
 type DashboardEntry = {
     id: DashboardSection
@@ -351,48 +380,66 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                             </Button>
                         )}
                     </div>
-                    {activeSection === "question-banks" && (
-                        <QuestionBanksPanel
-                            gradeLevels={gradeLevels}
-                            onCreateGradeLevel={handleCreateGradeLevel}
-                            onDeleteGradeLevel={handleDeleteGradeLevel}
-                            isCreateDialogOpen={isQuestionBankCreationOpen}
-                            onCreateDialogOpenChange={
-                                setIsQuestionBankCreationOpen
-                            }
-                        />
-                    )}
-                    {activeSection === "students" && (
-                        <StudentsPanel
-                            isCreateDialogOpen={isStudentCreationOpen}
-                            onCreateDialogOpenChange={setIsStudentCreationOpen}
-                        />
-                    )}
-                    {activeSection === "classes" && (
-                        <ClassesPanel
-                            gradeLevels={gradeLevels}
-                            onCreateGradeLevel={handleCreateGradeLevel}
-                            onDeleteGradeLevel={handleDeleteGradeLevel}
-                            isCreateDialogOpen={isClassCreationOpen}
-                            onCreateDialogOpenChange={setIsClassCreationOpen}
-                        />
-                    )}
-                    {activeSection === "exam-quizzes" && (
-                        <QuizzesPanel
-                            isCreateDialogOpen={isQuizCreationOpen}
-                            onCreateDialogOpenChange={setIsQuizCreationOpen}
-                        />
-                    )}
-                    {activeSection === "makeup" && <MakeupSessionsPanel />}
-                    {activeSection === "training-quizzes" && (
-                        <ClassTrainingBanksPanel />
-                    )}
-                    {activeSection === "results" && (
-                        <ResultsPanel
-                            isExportDialogOpen={isResultsExportOpen}
-                            onExportDialogOpenChange={setIsResultsExportOpen}
-                        />
-                    )}
+                    <Suspense
+                        fallback={
+                            <div
+                                className="flex min-h-64 items-center justify-center"
+                                role="status"
+                                aria-label={t("page-loading")}
+                            >
+                                <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
+                            </div>
+                        }
+                    >
+                        {activeSection === "question-banks" && (
+                            <QuestionBanksPanel
+                                gradeLevels={gradeLevels}
+                                onCreateGradeLevel={handleCreateGradeLevel}
+                                onDeleteGradeLevel={handleDeleteGradeLevel}
+                                isCreateDialogOpen={isQuestionBankCreationOpen}
+                                onCreateDialogOpenChange={
+                                    setIsQuestionBankCreationOpen
+                                }
+                            />
+                        )}
+                        {activeSection === "students" && (
+                            <StudentsPanel
+                                isCreateDialogOpen={isStudentCreationOpen}
+                                onCreateDialogOpenChange={
+                                    setIsStudentCreationOpen
+                                }
+                            />
+                        )}
+                        {activeSection === "classes" && (
+                            <ClassesPanel
+                                gradeLevels={gradeLevels}
+                                onCreateGradeLevel={handleCreateGradeLevel}
+                                onDeleteGradeLevel={handleDeleteGradeLevel}
+                                isCreateDialogOpen={isClassCreationOpen}
+                                onCreateDialogOpenChange={
+                                    setIsClassCreationOpen
+                                }
+                            />
+                        )}
+                        {activeSection === "exam-quizzes" && (
+                            <QuizzesPanel
+                                isCreateDialogOpen={isQuizCreationOpen}
+                                onCreateDialogOpenChange={setIsQuizCreationOpen}
+                            />
+                        )}
+                        {activeSection === "makeup" && <MakeupSessionsPanel />}
+                        {activeSection === "training-quizzes" && (
+                            <ClassTrainingBanksPanel />
+                        )}
+                        {activeSection === "results" && (
+                            <ResultsPanel
+                                isExportDialogOpen={isResultsExportOpen}
+                                onExportDialogOpenChange={
+                                    setIsResultsExportOpen
+                                }
+                            />
+                        )}
+                    </Suspense>
                 </section>
             </div>
         </div>

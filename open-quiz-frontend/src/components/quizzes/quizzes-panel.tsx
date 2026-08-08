@@ -170,7 +170,7 @@ export function QuizzesPanel({
         let isActive = true
         let refreshInFlight = false
         const refresh = () => {
-            if (refreshInFlight) return
+            if (document.hidden || refreshInFlight) return
             refreshInFlight = true
             const requestVersion = sessionRequestVersion.current
             void getQuizSession(activeSessionId)
@@ -201,9 +201,11 @@ export function QuizzesPanel({
                 })
         }
         const interval = window.setInterval(refresh, 1500)
+        document.addEventListener("visibilitychange", refresh)
         return () => {
             isActive = false
             window.clearInterval(interval)
+            document.removeEventListener("visibilitychange", refresh)
         }
     }, [activeSessionId, activeSessionStatus, isSessionMutating, t])
 

@@ -26,7 +26,11 @@ export function StudentQuizHistory({ token }: { token: string }) {
 
     if (isLoading)
         return (
-            <div className="flex justify-center py-10">
+            <div
+                className="flex justify-center py-10"
+                role="status"
+                aria-label={t("page-loading")}
+            >
                 <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
@@ -57,7 +61,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
                     key={item.session_id}
                     className="group rounded-xl border bg-background"
                 >
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl p-4 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
                         <span>
                             <span className="block font-semibold">
                                 {item.quiz_title}

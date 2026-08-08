@@ -52,6 +52,10 @@ export function StudentLogin({
                             onIdentifierChange(event.target.value)
                         }
                         required
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={
+                            error ? "student-login-error" : undefined
+                        }
                     />
                 </Field>
                 <Field>
@@ -68,9 +72,15 @@ export function StudentLogin({
                             onPasswordChange(event.target.value)
                         }
                         required
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={
+                            error ? "student-login-error" : undefined
+                        }
                     />
                 </Field>
-                {error && <FieldError>{error}</FieldError>}
+                {error && (
+                    <FieldError id="student-login-error">{error}</FieldError>
+                )}
                 <Button
                     className="py-7 text-base"
                     type="submit"

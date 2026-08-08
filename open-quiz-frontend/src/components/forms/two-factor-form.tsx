@@ -61,7 +61,7 @@ export function TwoFactorForm({
 
             {isSetup && challenge.provisioning_uri && challenge.secret && (
                 <div className="flex flex-col items-center gap-3">
-                    <div className="rounded-xl bg-white p-3">
+                    <div className="rounded-xl bg-white p-3" aria-hidden="true">
                         <QRCodeSVG
                             value={challenge.provisioning_uri}
                             size={180}
@@ -96,13 +96,20 @@ export function TwoFactorForm({
                         className="py-6 text-center text-xl tracking-[0.35em]"
                         autoFocus
                         aria-invalid={Boolean(error)}
+                        aria-describedby={
+                            error ? "two-factor-error" : undefined
+                        }
                         onChange={() => setError("")}
                         required
                     />
                 </Field>
 
                 {error && (
-                    <p className="text-sm text-destructive" role="alert">
+                    <p
+                        id="two-factor-error"
+                        className="text-sm text-destructive"
+                        role="alert"
+                    >
                         {error}
                     </p>
                 )}

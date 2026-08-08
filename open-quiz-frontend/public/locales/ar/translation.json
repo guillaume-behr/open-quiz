@@ -580,6 +580,7 @@
     "results-schedule-view": "جدول زمني",
     "results-previous-week": "الأسبوع السابق",
     "results-next-week": "الأسبوع التالي",
+    "footer-navigation": "التنقل القانوني والدعم",
     "result-students_one": "{{count}} طالب",
     "result-students_other": "{{count}} الطلاب",
     "result-students_zero": "{{count}} الطلاب",

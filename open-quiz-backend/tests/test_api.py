@@ -18,7 +18,7 @@ import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from app.config import Settings, secure_private_file
 from app.database import legacy_difficulty_counts
@@ -26,8 +26,10 @@ from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
     ProblemReport,
+    QuestionBank,
     Quiz,
     QuizParticipant,
+    QuizQuestionBank,
     QuizSession,
     RefreshSession,
     RefreshSessionFamily,
@@ -684,6 +686,107 @@ def complete_first_login(
 def login_admin(client: TestClient) -> dict[str, str]:
     headers, _ = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
     return headers
+
+
+def test_teacher_lists_use_constant_query_counts(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "list-performance.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "performance.teacher",
+                    "display_name": "Performance Teacher",
+                    "password": "a-secure-performance-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client,
+            "performance.teacher",
+            "a-secure-performance-password",
+        )
+        for index in range(6):
+            student_class = client.post(
+                "/api/classes",
+                headers=teacher_headers,
+                json={"name": f"Class {index}", "grade_level": "6e"},
+            ).json()
+            account = client.post(
+                "/api/students",
+                headers=teacher_headers,
+                json={"first_name": "Student", "last_name": str(index)},
+            ).json()
+            assert (
+                client.post(
+                    f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+                    headers=teacher_headers,
+                ).status_code
+                == 200
+            )
+
+        with client.app.state.session_factory() as session:
+            professor_id = session.scalar(
+                select(User.id).where(User.username == "performance.teacher")
+            )
+            assert professor_id is not None
+            bank = QuestionBank(
+                owner_id=professor_id,
+                grade_level="6e",
+                chapter="Performance",
+            )
+            session.add(bank)
+            session.flush()
+            quizzes = [
+                Quiz(
+                    owner_id=professor_id,
+                    mode="exam",
+                    title=f"Quiz {index}",
+                    question_count=0,
+                )
+                for index in range(6)
+            ]
+            session.add_all(quizzes)
+            session.flush()
+            session.add_all(
+                QuizQuestionBank(quiz_id=quiz.id, question_bank_id=bank.id)
+                for quiz in quizzes
+            )
+            session.commit()
+
+        engine = client.app.state.session_factory.kw["bind"]
+        statements: list[str] = []
+
+        def record_statement(
+            _connection, _cursor, statement, _parameters, _context, _executemany
+        ) -> None:
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record_statement)
+        try:
+            assert (
+                client.get("/api/students", headers=teacher_headers).status_code == 200
+            )
+            student_query_count = len(statements)
+            statements.clear()
+            assert (
+                client.get("/api/classes", headers=teacher_headers).status_code == 200
+            )
+            class_query_count = len(statements)
+            statements.clear()
+            assert (
+                client.get("/api/quizzes", headers=teacher_headers).status_code == 200
+            )
+            quiz_query_count = len(statements)
+        finally:
+            event.remove(engine, "before_cursor_execute", record_statement)
+
+        assert student_query_count <= 4
+        assert class_query_count <= 7
+        assert quiz_query_count <= 5
 
 
 def test_professor_manages_student_accounts_and_class_assignments(

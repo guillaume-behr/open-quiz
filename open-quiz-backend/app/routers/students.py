@@ -79,6 +79,16 @@ def account_response(
         .join(StudentClass, StudentClass.id == Student.class_id)
         .where(Student.account_id == account.id)
     ).first()
+    return account_response_from_membership(
+        account,
+        (membership[0], membership[1]) if membership else None,
+    )
+
+
+def account_response_from_membership(
+    account: StudentAccount,
+    membership: tuple[int, str] | None,
+) -> StudentAccountResponse:
     return StudentAccountResponse(
         id=account.id,
         identifier=account.identifier,
@@ -158,14 +168,24 @@ def list_student_accounts(
         or 0
     )
     set_pagination_headers(response, page=page, page_size=page_size, total=total)
-    accounts = session.scalars(
-        select(StudentAccount)
+    rows = session.execute(
+        select(StudentAccount, Student.class_id, StudentClass.name)
+        .outerjoin(Student, Student.account_id == StudentAccount.id)
+        .outerjoin(StudentClass, StudentClass.id == Student.class_id)
         .where(*filters)
         .order_by(StudentAccount.display_name, StudentAccount.identifier)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
-    return [account_response(account, session) for account in accounts]
+    return [
+        account_response_from_membership(
+            account,
+            (class_id, class_name)
+            if class_id is not None and class_name is not None
+            else None,
+        )
+        for account, class_id, class_name in rows
+    ]
 
 
 @router.post("", response_model=StudentAccountCreatedResponse, status_code=201)

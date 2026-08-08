@@ -32,7 +32,11 @@ export function Pagination({
             >
                 <ChevronLeft aria-hidden="true" />
             </Button>
-            <p className="min-w-28 text-center text-sm text-muted-foreground">
+            <p
+                className="min-w-28 text-center text-sm text-muted-foreground"
+                aria-live="polite"
+                aria-atomic="true"
+            >
                 {t("pagination-status", {
                     current: currentPage,
                     total: totalPages,

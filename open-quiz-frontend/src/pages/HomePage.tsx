@@ -9,9 +9,6 @@ import type { StudentAccount } from "@/api/types"
 import { StudentLogin } from "@/components/forms/student-login"
 import { JoinQuizForm } from "@/components/forms/join-quiz-form"
 import { NavbarAction } from "@/components/navigation/navbar-action"
-import { TrainingQuizzesPanel } from "@/components/training/training-quizzes-panel"
-import { StudentQuizHistory } from "@/components/student-quiz/student-quiz-history"
-import { StudentMakeupPanel } from "@/components/student-quiz/student-makeup-panel"
 import {
     readStoredQuizSession,
     storeQuizSession,
@@ -27,7 +24,7 @@ import {
     RotateCcw,
     type LucideIcon,
 } from "lucide-react"
-import { type FormEvent, useEffect, useState } from "react"
+import { lazy, Suspense, type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router"
 
@@ -36,6 +33,22 @@ type StudentRouteState = {
     token?: string
     section?: StudentSection
 }
+
+const TrainingQuizzesPanel = lazy(() =>
+    import("@/components/training/training-quizzes-panel").then((module) => ({
+        default: module.TrainingQuizzesPanel,
+    }))
+)
+const StudentQuizHistory = lazy(() =>
+    import("@/components/student-quiz/student-quiz-history").then((module) => ({
+        default: module.StudentQuizHistory,
+    }))
+)
+const StudentMakeupPanel = lazy(() =>
+    import("@/components/student-quiz/student-makeup-panel").then((module) => ({
+        default: module.StudentMakeupPanel,
+    }))
+)
 
 type StudentSection = "exam" | "training" | "makeup" | "results"
 
@@ -306,52 +319,64 @@ export function HomePage({
                             </p>
                         </div>
                     </div>
-                    {activeTab === "exam" ? (
-                        <div className="mt-6 flex justify-center">
-                            {storedExam ? (
-                                <div className="w-full max-w-md rounded-xl border bg-background p-5">
-                                    <Button
-                                        className="w-full"
-                                        onClick={() =>
-                                            navigate("/student/exam", {
-                                                state: { student, token },
-                                            })
-                                        }
-                                    >
-                                        <ClipboardPenLine />
-                                        {t("resume-quiz")}
-                                    </Button>
-                                </div>
-                            ) : (
-                                <JoinQuizForm
-                                    embedded
-                                    joinCode={joinCode}
-                                    isBusy={isJoining}
-                                    error={joinError}
-                                    onJoinCodeChange={(value) => {
-                                        setJoinCode(value)
-                                        setJoinError(null)
-                                    }}
-                                    onSubmit={joinExam}
+                    <Suspense
+                        fallback={
+                            <div
+                                className="flex min-h-64 items-center justify-center"
+                                role="status"
+                                aria-label={t("page-loading")}
+                            >
+                                <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
+                            </div>
+                        }
+                    >
+                        {activeTab === "exam" ? (
+                            <div className="mt-6 flex justify-center">
+                                {storedExam ? (
+                                    <div className="w-full max-w-md rounded-xl border bg-background p-5">
+                                        <Button
+                                            className="w-full"
+                                            onClick={() =>
+                                                navigate("/student/exam", {
+                                                    state: { student, token },
+                                                })
+                                            }
+                                        >
+                                            <ClipboardPenLine />
+                                            {t("resume-quiz")}
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <JoinQuizForm
+                                        embedded
+                                        joinCode={joinCode}
+                                        isBusy={isJoining}
+                                        error={joinError}
+                                        onJoinCodeChange={(value) => {
+                                            setJoinCode(value)
+                                            setJoinError(null)
+                                        }}
+                                        onSubmit={joinExam}
+                                    />
+                                )}
+                            </div>
+                        ) : activeTab === "training" ? (
+                            <div className="mt-6">
+                                <TrainingQuizzesPanel
+                                    student={student}
+                                    token={token}
                                 />
-                            )}
-                        </div>
-                    ) : activeTab === "training" ? (
-                        <div className="mt-6">
-                            <TrainingQuizzesPanel
-                                student={student}
-                                token={token}
-                            />
-                        </div>
-                    ) : activeTab === "makeup" ? (
-                        <div className="mt-6 flex justify-center">
-                            <StudentMakeupPanel token={token} />
-                        </div>
-                    ) : (
-                        <div className="mt-6">
-                            <StudentQuizHistory token={token} />
-                        </div>
-                    )}
+                            </div>
+                        ) : activeTab === "makeup" ? (
+                            <div className="mt-6 flex justify-center">
+                                <StudentMakeupPanel token={token} />
+                            </div>
+                        ) : (
+                            <div className="mt-6">
+                                <StudentQuizHistory token={token} />
+                            </div>
+                        )}
+                    </Suspense>
                 </section>
             </div>
         </div>

@@ -189,7 +189,12 @@ export function CodeBlock({
                 )}
             </Highlight>
             {result !== null && (
-                <div className="border-t bg-muted/40 p-3">
+                <div
+                    className="border-t bg-muted/40 p-3"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                >
                     <p className="mb-1 text-xs font-semibold text-muted-foreground">
                         {t("execution-result")}
                     </p>

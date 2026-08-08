@@ -63,6 +63,7 @@ export function DashboardLogin({
                         spellCheck={false}
                         required
                         aria-invalid={Boolean(error)}
+                        aria-describedby={error ? "login-error" : undefined}
                         onChange={() => setError("")}
                     />
                 </Field>
@@ -79,12 +80,17 @@ export function DashboardLogin({
                         type="password"
                         required
                         aria-invalid={Boolean(error)}
+                        aria-describedby={error ? "login-error" : undefined}
                         onChange={() => setError("")}
                     />
                 </Field>
 
                 {error && (
-                    <p className="text-sm text-destructive" role="alert">
+                    <p
+                        id="login-error"
+                        className="text-sm text-destructive"
+                        role="alert"
+                    >
                         {error}
                     </p>
                 )}

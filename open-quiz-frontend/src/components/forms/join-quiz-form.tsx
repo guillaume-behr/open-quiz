@@ -66,10 +66,11 @@ export function JoinQuizForm({
                             onJoinCodeChange(event.target.value.toUpperCase())
                         }
                         aria-invalid={Boolean(error)}
+                        aria-describedby={error ? "join-quiz-error" : undefined}
                         required
                     />
                 </Field>
-                {error && <FieldError>{error}</FieldError>}
+                {error && <FieldError id="join-quiz-error">{error}</FieldError>}
                 <Button
                     className="py-7 text-base"
                     type="submit"

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -86,14 +87,32 @@ def class_response(
         )
         .limit(1)
     ).first()
+    return class_response_from_details(
+        student_class,
+        students,
+        completed_quiz_count or 0,
+        (
+            (latest_quiz[0] or latest_quiz[1], latest_quiz[2] or latest_quiz[3])
+            if latest_quiz
+            else None
+        ),
+    )
+
+
+def class_response_from_details(
+    student_class: StudentClass,
+    students: list[Student],
+    completed_quiz_count: int,
+    latest_quiz: tuple[str, datetime] | None,
+) -> StudentClassResponse:
     return StudentClassResponse(
         id=student_class.id,
         name=student_class.name,
         grade_level=student_class.grade_level,
         student_count=len(students),
-        completed_quiz_count=completed_quiz_count or 0,
-        latest_quiz_title=(latest_quiz[0] or latest_quiz[1]) if latest_quiz else None,
-        latest_quiz_at=(latest_quiz[2] or latest_quiz[3]) if latest_quiz else None,
+        completed_quiz_count=completed_quiz_count,
+        latest_quiz_title=latest_quiz[0] if latest_quiz else None,
+        latest_quiz_at=latest_quiz[1] if latest_quiz else None,
         students=[
             StudentResponse(
                 id=student.id,
@@ -142,7 +161,83 @@ def list_classes(
             .limit(page_size)
         )
     )
-    return [class_response(student_class, session) for student_class in classes]
+    if not classes:
+        return []
+
+    class_ids = [student_class.id for student_class in classes]
+    students_by_class: dict[int, list[Student]] = {
+        class_id: [] for class_id in class_ids
+    }
+    for student in session.scalars(
+        select(Student)
+        .where(
+            Student.class_id.in_(class_ids),
+            Student.account_id.is_not(None),
+        )
+        .order_by(Student.display_name, Student.identifier, Student.id)
+    ):
+        students_by_class[student.class_id].append(student)
+
+    completed_counts = {
+        class_id: count
+        for class_id, count in session.execute(
+            select(QuizSession.class_id, func.count(QuizSession.id))
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                QuizSession.class_id.in_(class_ids),
+                QuizSession.status == "finished",
+                Quiz.mode == "exam",
+            )
+            .group_by(QuizSession.class_id)
+        )
+        if class_id is not None
+    }
+    latest_ranked = (
+        select(
+            QuizSession.class_id.label("class_id"),
+            func.coalesce(QuizSession.quiz_title, Quiz.title).label("title"),
+            func.coalesce(QuizSession.started_at, QuizSession.created_at).label(
+                "occurred_at"
+            ),
+            func.row_number()
+            .over(
+                partition_by=QuizSession.class_id,
+                order_by=(
+                    QuizSession.started_at.desc(),
+                    QuizSession.created_at.desc(),
+                    QuizSession.id.desc(),
+                ),
+            )
+            .label("position"),
+        )
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(
+            QuizSession.class_id.in_(class_ids),
+            QuizSession.status == "finished",
+            Quiz.mode == "exam",
+        )
+        .subquery()
+    )
+    latest_quizzes = {
+        class_id: (title, occurred_at)
+        for class_id, title, occurred_at in session.execute(
+            select(
+                latest_ranked.c.class_id,
+                latest_ranked.c.title,
+                latest_ranked.c.occurred_at,
+            ).where(latest_ranked.c.position == 1)
+        )
+        if class_id is not None
+    }
+    return [
+        class_response_from_details(
+            student_class,
+            students_by_class[student_class.id],
+            completed_counts.get(student_class.id, 0),
+            latest_quizzes.get(student_class.id),
+        )
+        for student_class in classes
+    ]
 
 
 @router.post(

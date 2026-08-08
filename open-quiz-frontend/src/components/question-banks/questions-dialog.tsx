@@ -55,7 +55,11 @@ export function QuestionsDialog({
             <div className="mt-5">
                 <h4 className="font-semibold">{t("bank-questions")}</h4>
                 {isLoading ? (
-                    <div className="flex min-h-24 items-center justify-center">
+                    <div
+                        className="flex min-h-24 items-center justify-center"
+                        role="status"
+                        aria-label={t("page-loading")}
+                    >
                         <LoaderCircle className="size-6 animate-spin text-primary motion-reduce:animate-none" />
                     </div>
                 ) : error ? (

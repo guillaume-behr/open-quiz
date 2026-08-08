@@ -103,7 +103,11 @@ export function ClassTrainingBanksPanel() {
 
     if (isLoading) {
         return (
-            <div className="flex min-h-48 items-center justify-center">
+            <div
+                className="flex min-h-48 items-center justify-center"
+                role="status"
+                aria-label={t("page-loading")}
+            >
                 <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
@@ -206,7 +210,11 @@ export function ClassTrainingBanksPanel() {
                         help={t("training-needs-class")}
                     />
                 ) : isClassLoading ? (
-                    <div className="flex min-h-40 items-center justify-center">
+                    <div
+                        className="flex min-h-40 items-center justify-center"
+                        role="status"
+                        aria-label={t("page-loading")}
+                    >
                         <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                     </div>
                 ) : eligibleBanks.length === 0 ? (

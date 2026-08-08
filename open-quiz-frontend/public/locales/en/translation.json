@@ -524,6 +524,7 @@
     "results-schedule-view": "Schedule",
     "results-previous-week": "Previous week",
     "results-next-week": "Next week",
+    "footer-navigation": "Legal and support navigation",
     "result-students_one": "{{count}} student",
     "result-students_other": "{{count}} students",
     "view-results": "Grade quiz",

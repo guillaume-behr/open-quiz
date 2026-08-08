@@ -243,7 +243,11 @@ export function StudentsPanel({
                 </aside>
                 <div className="min-w-0">
                     {isLoading ? (
-                        <div className="flex min-h-40 items-center justify-center">
+                        <div
+                            className="flex min-h-40 items-center justify-center"
+                            role="status"
+                            aria-label={t("page-loading")}
+                        >
                             <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                         </div>
                     ) : loadError ? (

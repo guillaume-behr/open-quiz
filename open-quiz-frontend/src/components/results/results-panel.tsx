@@ -318,7 +318,11 @@ export function ResultsPanel({
 
     if (isLoading) {
         return (
-            <div className="flex min-h-64 items-center justify-center">
+            <div
+                className="flex min-h-64 items-center justify-center"
+                role="status"
+                aria-label={t("page-loading")}
+            >
                 <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
             </div>
         )
@@ -544,7 +548,11 @@ export function ResultsPanel({
                 description={t("export-results-help")}
             >
                 {isExportLoading || areClassesLoading ? (
-                    <div className="flex min-h-32 items-center justify-center">
+                    <div
+                        className="flex min-h-32 items-center justify-center"
+                        role="status"
+                        aria-label={t("page-loading")}
+                    >
                         <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                     </div>
                 ) : (
