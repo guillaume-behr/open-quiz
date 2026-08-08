@@ -365,7 +365,7 @@ test("a student reviews the correction history", async ({ page }) => {
             json: { access_token: "student-token", student },
         })
     })
-    await page.route("**/api/quizzes/student/history", async (route) => {
+    await page.route("**/api/quizzes/student/results", async (route) => {
         await route.fulfill({
             json: [
                 {
@@ -396,7 +396,8 @@ test("a student reviews the correction history", async ({ page }) => {
     await page.getByLabel("Student ID").fill("alex-8b")
     await page.getByLabel("Password").fill("student-password")
     await page.getByRole("button", { name: "Sign in" }).click()
-    await page.getByRole("button", { name: "History", exact: true }).click()
+    await page.getByRole("button", { name: "Results", exact: true }).click()
+    await expect(page).toHaveURL(/\/student\/results$/)
 
     await page.getByText("Science checkpoint").click()
     await expect(page.getByText("Grade: 7 / 10")).toBeVisible()

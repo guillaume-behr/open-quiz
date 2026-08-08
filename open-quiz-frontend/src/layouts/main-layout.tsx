@@ -11,6 +11,7 @@ export function MainLayout() {
     const isExamRoute = location.pathname === "/student/exam"
     const hasRouteAction = [
         "/student/dashboard",
+        "/student/results",
         "/student/exam",
         "/student/training",
         "/teacher/dashboard",

@@ -80,6 +80,7 @@ async function mockTeacherApi(page: Page) {
         score: 0,
         max_score: 5,
         is_graded: false,
+        is_correct: null as boolean | null,
     }
     let makeupSessions = [
         {
@@ -487,7 +488,12 @@ async function mockTeacherApi(page: Page) {
         }
         if (url.pathname === "/api/quizzes/sessions/90/answers/92/grade") {
             const { score } = request.postDataJSON() as { score: number }
-            writtenAnswer = { ...writtenAnswer, score, is_graded: true }
+            writtenAnswer = {
+                ...writtenAnswer,
+                score,
+                is_graded: true,
+                is_correct: score >= writtenAnswer.max_score,
+            }
             resultSessions = resultSessions.map((result) => ({
                 ...result,
                 participants: (
@@ -1335,12 +1341,26 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     const requests = await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Results", exact: true }).click()
+    await page
+        .getByRole("combobox", { name: "Class", exact: true })
+        .selectOption("Class 8B")
+    await expect
+        .poll(() =>
+            requests.some((request) => {
+                const url = new URL(request.url())
+                return (
+                    url.pathname === "/api/quizzes/sessions/results" &&
+                    url.searchParams.get("class_search") === "Class 8B"
+                )
+            })
+        )
+        .toBe(true)
 
     const resultCard = page.getByRole("article").filter({
         hasText: "Science checkpoint",
     })
     await expect(resultCard.getByText("Class 8B")).toBeVisible()
-    await resultCard.getByRole("button", { name: "View results" }).click()
+    await resultCard.getByRole("button", { name: "Grade quiz" }).click()
 
     const resultDialog = page.getByRole("dialog", {
         name: "Science checkpoint",
@@ -1380,6 +1400,9 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await answersDialog.getByLabel("Awarded score").fill("3.5")
     await answersDialog.getByRole("button", { name: "Confirm grade" }).click()
     await expect(answersDialog.getByText("3.5 / 5")).toBeVisible()
+    await expect(
+        answersDialog.getByText("Energy moves between systems.").locator("..")
+    ).toHaveClass(/text-destructive/)
     expect(
         requests
             .find((request) =>

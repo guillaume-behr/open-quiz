@@ -52,7 +52,22 @@ createRoot(document.getElementById("root")!).render(
                                 />
                                 <Route
                                     path="student/dashboard"
-                                    element={<HomePage page="dashboard" />}
+                                    element={
+                                        <HomePage
+                                            key="student-dashboard"
+                                            page="dashboard"
+                                        />
+                                    }
+                                />
+                                <Route
+                                    path="student/results"
+                                    element={
+                                        <HomePage
+                                            key="student-results"
+                                            page="dashboard"
+                                            initialSection="results"
+                                        />
+                                    }
                                 />
                                 <Route
                                     path="student/exam"

@@ -99,8 +99,8 @@ function AnswerReview({
     const { t } = useTranslation()
     return (
         <article className="rounded-xl border p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <div className="min-w-0">
                     <p className="text-xs font-semibold text-muted-foreground">
                         {t("question-number", { number: answer.position })} ·{" "}
                         {t(`difficulty-${answer.difficulty}`)}
@@ -118,6 +118,7 @@ function AnswerReview({
                     value={
                         answer.submitted_answers.join(", ") || t("no-answer")
                     }
+                    correctness={answer.is_correct}
                 />
                 <AnswerText
                     label={t("expected-answer-help")}
@@ -170,20 +171,34 @@ function AnswerText({
     label,
     value,
     highlighted = false,
+    correctness,
 }: {
     label: string
     value: string
     highlighted?: boolean
+    correctness?: boolean | null
 }) {
+    const { t } = useTranslation()
     return (
         <div
             className={
                 highlighted
                     ? "rounded-lg bg-primary/5 p-3"
-                    : "rounded-lg bg-muted/60 p-3"
+                    : correctness === true
+                      ? "rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-200"
+                      : correctness === false
+                        ? "rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive"
+                        : "rounded-lg bg-muted/60 p-3"
             }
         >
-            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="text-xs font-medium">
+                {label}
+                {correctness !== undefined && correctness !== null && (
+                    <span className="sr-only">
+                        {` — ${t(correctness ? "training-correct" : "training-incorrect")}`}
+                    </span>
+                )}
+            </p>
             <p className="mt-1 text-sm whitespace-pre-wrap">{value}</p>
         </div>
     )

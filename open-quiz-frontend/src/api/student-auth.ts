@@ -60,7 +60,7 @@ export function getStudentQuizHistory(
     token: string
 ): Promise<StudentQuizHistoryItem[]> {
     return request<StudentQuizHistoryItem[]>(
-        "/api/quizzes/student/history",
+        "/api/quizzes/student/results",
         { headers: { Authorization: `Bearer ${token}` } },
         false
     )

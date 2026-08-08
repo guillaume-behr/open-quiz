@@ -665,6 +665,7 @@ class QuizAnswerReview(BaseModel):
     score: float
     max_score: float
     is_graded: bool
+    is_correct: bool | None
 
 
 class StudentQuizHistoryAnswer(BaseModel):

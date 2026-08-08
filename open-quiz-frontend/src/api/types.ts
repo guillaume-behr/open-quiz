@@ -226,11 +226,12 @@ export type QuizAnswerReview = {
     score: number
     max_score: number
     is_graded: boolean
+    is_correct: boolean | null
 }
 
 export type StudentQuizHistoryAnswer = Omit<
     QuizAnswerReview,
-    "id" | "score" | "max_score" | "is_graded"
+    "id" | "score" | "max_score" | "is_graded" | "is_correct"
 > & { is_correct: boolean }
 
 export type StudentQuizHistoryItem = {

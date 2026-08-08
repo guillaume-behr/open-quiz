@@ -86,6 +86,7 @@ export function ResultsPanel({
     >(null)
     const [publishError, setPublishError] = useState(false)
     const [exportClasses, setExportClasses] = useState<StudentClass[]>([])
+    const [areClassesLoading, setAreClassesLoading] = useState(true)
     const [exportQuizzes, setExportQuizzes] = useState<Quiz[]>([])
     const [exportClassId, setExportClassId] = useState<number | null>(null)
     const [exportQuizId, setExportQuizId] = useState<number | null>(null)
@@ -114,20 +115,37 @@ export function ResultsPanel({
     }, [classFilter, page, quizFilter, reloadKey])
 
     useEffect(() => {
-        if (!isExportDialogOpen || exportClasses.length > 0) return
+        let isActive = true
+        getAllStudentClasses()
+            .then((classes) => {
+                if (!isActive) return
+                setExportClasses(classes)
+                setExportClassId(classes[0]?.id ?? null)
+            })
+            .catch(() => {
+                if (isActive) setExportError(true)
+            })
+            .finally(() => {
+                if (isActive) setAreClassesLoading(false)
+            })
+        return () => {
+            isActive = false
+        }
+    }, [])
+
+    useEffect(() => {
+        if (!isExportDialogOpen || exportQuizzes.length > 0) return
         let isActive = true
         Promise.resolve()
             .then(() => {
                 if (!isActive) return Promise.reject(new Error("cancelled"))
                 setExportError(false)
                 setIsExportLoading(true)
-                return Promise.all([getAllStudentClasses(), getAllQuizzes()])
+                return getAllQuizzes()
             })
-            .then(([classes, quizzes]) => {
+            .then((quizzes) => {
                 if (!isActive) return
-                setExportClasses(classes)
                 setExportQuizzes(quizzes)
-                setExportClassId(classes[0]?.id ?? null)
             })
             .catch(() => {
                 if (isActive) setExportError(true)
@@ -138,7 +156,7 @@ export function ResultsPanel({
         return () => {
             isActive = false
         }
-    }, [exportClasses.length, isExportDialogOpen])
+    }, [exportQuizzes.length, isExportDialogOpen])
 
     async function handleExport(): Promise<void> {
         if (exportClassId === null) return
@@ -344,15 +362,26 @@ export function ResultsPanel({
                             <FieldLabel htmlFor="result-class-filter">
                                 {t("class-name")}
                             </FieldLabel>
-                            <Input
+                            <select
                                 id="result-class-filter"
+                                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                                 value={classFilter}
-                                placeholder={t("search-class")}
+                                disabled={areClassesLoading}
                                 onChange={(event) => {
                                     setClassFilter(event.target.value)
                                     setPage(1)
                                 }}
-                            />
+                            >
+                                <option value="">{t("all-classes")}</option>
+                                {exportClasses.map((studentClass) => (
+                                    <option
+                                        key={studentClass.id}
+                                        value={studentClass.name}
+                                    >
+                                        {studentClass.name}
+                                    </option>
+                                ))}
+                            </select>
                         </Field>
                         {(quizFilter || classFilter) && (
                             <Button
@@ -455,7 +484,7 @@ export function ResultsPanel({
                 title={t("export-results-csv")}
                 description={t("export-results-help")}
             >
-                {isExportLoading ? (
+                {isExportLoading || areClassesLoading ? (
                     <div className="flex min-h-32 items-center justify-center">
                         <LoaderCircle className="size-7 animate-spin text-primary" />
                     </div>

@@ -1350,12 +1350,24 @@ def answer_review(
     choices_by_id = {choice.id: choice for choice in choices}
     if question.answer_mode == "written":
         submitted_answers = [str(submitted.get("written_answer", ""))]
+        is_correct = (
+            answer.score >= max_score if answer.is_graded and max_score > 0 else None
+        )
     else:
+        selected_choice_ids = submitted.get("selected_choice_ids", [])
+        if not isinstance(selected_choice_ids, list):
+            selected_choice_ids = []
+        selected_choice_ids = [
+            choice_id for choice_id in selected_choice_ids if type(choice_id) is int
+        ]
         submitted_answers = [
             choices_by_id[choice_id].label
-            for choice_id in submitted.get("selected_choice_ids", [])
+            for choice_id in selected_choice_ids
             if choice_id in choices_by_id
         ]
+        is_correct = set(selected_choice_ids) == {
+            choice.id for choice in choices if choice.is_correct
+        }
     expected_answers = [choice.label for choice in choices if choice.is_correct]
     return QuizAnswerReview(
         id=answer.id,
@@ -1369,6 +1381,7 @@ def answer_review(
         score=answer.score,
         max_score=max_score,
         is_graded=answer.is_graded,
+        is_correct=is_correct,
     )
 
 
@@ -1440,6 +1453,12 @@ def list_participant_answers(
 
 @router.get(
     "/student/history",
+    response_model=list[StudentQuizHistoryItem],
+    include_in_schema=False,
+    deprecated=True,
+)
+@router.get(
+    "/student/results",
     response_model=list[StudentQuizHistoryItem],
 )
 def list_student_quiz_history(

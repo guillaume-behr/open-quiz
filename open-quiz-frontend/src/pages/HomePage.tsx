@@ -34,9 +34,10 @@ import { useLocation, useNavigate } from "react-router"
 type StudentRouteState = {
     student?: StudentAccount
     token?: string
+    section?: StudentSection
 }
 
-type StudentSection = "exam" | "training" | "makeup" | "history"
+type StudentSection = "exam" | "training" | "makeup" | "results"
 
 type StudentDashboardEntry = {
     id: StudentSection
@@ -45,7 +46,13 @@ type StudentDashboardEntry = {
     description: string
 }
 
-export function HomePage({ page }: { page: "login" | "dashboard" }) {
+export function HomePage({
+    page,
+    initialSection = "exam",
+}: {
+    page: "login" | "dashboard"
+    initialSection?: StudentSection
+}) {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const location = useLocation()
@@ -65,7 +72,9 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
     const [joinError, setJoinError] = useState<string | null>(null)
     const [isJoining, setIsJoining] = useState(false)
     const [storedExam] = useState(readStoredQuizSession)
-    const [activeTab, setActiveTab] = useState<StudentSection>("exam")
+    const [activeTab, setActiveTab] = useState<StudentSection>(
+        routeState?.section ?? initialSection
+    )
     const dashboardEntries: StudentDashboardEntry[] = [
         {
             id: "exam",
@@ -86,15 +95,27 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
             description: t("makeup-code-help"),
         },
         {
-            id: "history",
+            id: "results",
             icon: History,
-            label: t("history-tab"),
+            label: t("results"),
             description: t("quiz-history-empty-help"),
         },
     ]
     const activeEntry =
         dashboardEntries.find((entry) => entry.id === activeTab) ??
         dashboardEntries[0]
+
+    function selectSection(section: StudentSection) {
+        setActiveTab(section)
+        const destination =
+            section === "results" ? "/student/results" : "/student/dashboard"
+        if (location.pathname !== destination) {
+            navigate(destination, {
+                replace: true,
+                state: { student, token, section },
+            })
+        }
+    }
 
     useEffect(() => {
         if (!token) {
@@ -247,7 +268,7 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
                                 <button
                                     key={entry.id}
                                     type="button"
-                                    onClick={() => setActiveTab(entry.id)}
+                                    onClick={() => selectSection(entry.id)}
                                     aria-current={isActive ? "page" : undefined}
                                     className={cn(
                                         "flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:w-full lg:min-w-0",

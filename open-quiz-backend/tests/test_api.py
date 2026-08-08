@@ -2323,7 +2323,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
 
         assert teacher_state["status"] == "finished"
         student_history = client.get(
-            "/api/quizzes/student/history",
+            "/api/quizzes/student/results",
             headers=exam_account_headers,
         )
         assert student_history.status_code == 200
@@ -2426,6 +2426,11 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert reviewed_answers.status_code == 200
         assert len(reviewed_answers.json()) == 3
+        assert all(
+            answer["is_correct"] is True
+            for answer in reviewed_answers.json()
+            if answer["answer_mode"] != "written"
+        )
         written_review = next(
             answer
             for answer in reviewed_answers.json()
@@ -2436,6 +2441,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert written_review["expected_answers"]
         assert written_review["score"] == 0
         assert written_review["is_graded"] is False
+        assert written_review["is_correct"] is None
         unpublished = client.post(
             f"/api/quizzes/sessions/{quiz_session['id']}/publish-grades",
             headers=teacher_headers,
@@ -2450,6 +2456,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert manually_graded.status_code == 200
         assert manually_graded.json()["is_graded"] is True
         assert manually_graded.json()["score"] == written_review["max_score"]
+        assert manually_graded.json()["is_correct"] is True
         graded_results = client.get(
             "/api/quizzes/sessions/results",
             headers=teacher_headers,
@@ -2466,7 +2473,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
         ).json()
         published_history = client.get(
-            "/api/quizzes/student/history",
+            "/api/quizzes/student/results",
             headers=exam_account_headers,
         ).json()[0]
         assert published_history["session_id"] == quiz_session["id"]
