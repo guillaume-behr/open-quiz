@@ -1,7 +1,12 @@
 import { joinMakeupSession, selectMakeupQuiz } from "@/api/quizzes"
 import type { MakeupJoin } from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { LoaderCircle } from "lucide-react"
 import { storeQuizSession } from "./student-quiz-session"
@@ -89,7 +94,7 @@ export function StudentMakeupPanel({ token }: { token: string }) {
     return (
         <form
             onSubmit={join}
-            className="flex w-full max-w-md flex-col gap-5 rounded-xl border bg-background p-5"
+            className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-14"
         >
             <FieldGroup className="gap-4">
                 <Field>
@@ -110,12 +115,12 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                         required
                     />
                 </Field>
-                {error && (
-                    <p className="text-sm text-destructive" role="alert">
-                        {error}
-                    </p>
-                )}
-                <Button className="w-full" type="submit" disabled={busy}>
+                {error && <FieldError>{error}</FieldError>}
+                <Button
+                    className="py-7 text-base"
+                    type="submit"
+                    disabled={busy}
+                >
                     {busy && <LoaderCircle className="animate-spin" />}
                     {t("join-quiz")}
                 </Button>

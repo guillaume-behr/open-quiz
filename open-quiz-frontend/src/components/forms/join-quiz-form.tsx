@@ -1,5 +1,10 @@
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { LoaderCircle } from "lucide-react"
 import type { FormEvent } from "react"
@@ -26,11 +31,7 @@ export function JoinQuizForm({
 
     return (
         <form
-            className={
-                embedded
-                    ? "flex w-full max-w-md flex-col gap-5 rounded-xl border bg-background p-5"
-                    : "flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-15"
-            }
+            className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-14"
             onSubmit={onSubmit}
         >
             {!embedded && (
@@ -62,13 +63,9 @@ export function JoinQuizForm({
                         required
                     />
                 </Field>
-                {error && (
-                    <p className="text-sm text-destructive" role="alert">
-                        {error}
-                    </p>
-                )}
+                {error && <FieldError>{error}</FieldError>}
                 <Button
-                    className={embedded ? "w-full" : "text-md py-7 shadow"}
+                    className="py-7 text-base"
                     type="submit"
                     disabled={isBusy}
                 >
