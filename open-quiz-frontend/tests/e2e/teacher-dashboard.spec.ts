@@ -673,6 +673,12 @@ test("restores a teacher session and displays their classes", async ({
     await expect(
         page.getByRole("heading", { name: "Welcome, Ada Lovelace" })
     ).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("button", { name: "Log out" })
+    ).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("link", { name: "Homepage" })
+    ).toHaveCount(0)
     await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
     await expect(page.getByText(/Grade 8/).last()).toBeVisible()
     await expect

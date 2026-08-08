@@ -46,6 +46,12 @@ test("a signed-in student enters exam mode from the dashboard", async ({
     await expect(
         page.getByRole("heading", { name: "Welcome, Alex Example" })
     ).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("button", { name: "Log out" })
+    ).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("link", { name: "Professor space" })
+    ).toHaveCount(0)
     await page.getByRole("button", { name: "Exams", exact: true }).click()
 
     await expect(page.getByRole("heading", { name: "Exams" })).toBeVisible()

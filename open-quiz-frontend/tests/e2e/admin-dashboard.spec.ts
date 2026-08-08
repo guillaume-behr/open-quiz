@@ -134,6 +134,12 @@ test("administrator manages teachers and problem reports", async ({ page }) => {
     await expect(
         page.getByText("Logged in as Site administrator")
     ).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("button", { name: "Log out" })
+    ).toBeVisible()
+    await expect(
+        page.locator("header").getByRole("link", { name: "Homepage" })
+    ).toHaveCount(0)
     await expect(page.getByText("Grace Hopper")).toBeVisible()
 
     await page.getByLabel("Display name").fill("Katherine Johnson")

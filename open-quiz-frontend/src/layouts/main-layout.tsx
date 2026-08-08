@@ -9,8 +9,13 @@ export function MainLayout() {
     const { t } = useTranslation()
     const location = useLocation()
     const isExamRoute = location.pathname === "/student/exam"
-    const hasRouteAction =
-        isExamRoute || location.pathname === "/student/training"
+    const hasRouteAction = [
+        "/student/dashboard",
+        "/student/exam",
+        "/student/training",
+        "/teacher/dashboard",
+        "/admin/dashboard",
+    ].includes(location.pathname)
     const [navbarActionTarget, setNavbarActionTarget] =
         useState<HTMLDivElement | null>(null)
 

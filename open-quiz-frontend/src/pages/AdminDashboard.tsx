@@ -15,6 +15,7 @@ import type {
 import { ProblemReportsPanel } from "@/components/admin/problem-reports-panel"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
+import { NavbarAction } from "@/components/navigation/navbar-action"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -246,6 +247,12 @@ export function AdminDashboard() {
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
+            <NavbarAction>
+                <Button variant="outline" onClick={handleLogout}>
+                    <LogOut />
+                    {t("sign-out")}
+                </Button>
+            </NavbarAction>
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <p className="text-sm font-medium text-primary">
@@ -262,10 +269,6 @@ export function AdminDashboard() {
                         {t("signed-in-as", { name: currentUser.display_name })}
                     </p>
                 </div>
-                <Button variant="outline" onClick={handleLogout}>
-                    <LogOut />
-                    {t("sign-out")}
-                </Button>
             </div>
 
             <nav

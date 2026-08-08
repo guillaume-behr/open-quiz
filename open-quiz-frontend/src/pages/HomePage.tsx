@@ -8,6 +8,7 @@ import { joinQuiz } from "@/api/quizzes"
 import type { StudentAccount } from "@/api/types"
 import { StudentLogin } from "@/components/forms/student-login"
 import { JoinQuizForm } from "@/components/forms/join-quiz-form"
+import { NavbarAction } from "@/components/navigation/navbar-action"
 import { TrainingQuizzesPanel } from "@/components/training/training-quizzes-panel"
 import { StudentQuizHistory } from "@/components/student-quiz/student-quiz-history"
 import { StudentMakeupPanel } from "@/components/student-quiz/student-makeup-panel"
@@ -211,6 +212,12 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
 
     return (
         <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
+            <NavbarAction>
+                <Button variant="outline" onClick={logout}>
+                    <LogOut />
+                    {t("sign-out")}
+                </Button>
+            </NavbarAction>
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold">
@@ -222,10 +229,6 @@ export function HomePage({ page }: { page: "login" | "dashboard" }) {
                         {t("student-dashboard-help")}
                     </p>
                 </div>
-                <Button variant="outline" onClick={logout}>
-                    <LogOut />
-                    {t("sign-out")}
-                </Button>
             </div>
 
             <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">

@@ -7,6 +7,7 @@ import {
 import type { GradeLevel, TwoFactorChallenge, User } from "@/api/types"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
+import { NavbarAction } from "@/components/navigation/navbar-action"
 import { ClassesPanel } from "@/components/classes/classes-panel"
 import { QuestionBanksPanel } from "@/components/question-banks/question-banks-panel"
 import { QuizzesPanel } from "@/components/quizzes/quizzes-panel"
@@ -227,6 +228,12 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
 
     return (
         <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
+            <NavbarAction>
+                <Button variant="outline" onClick={handleLogout}>
+                    <LogOut />
+                    {t("sign-out")}
+                </Button>
+            </NavbarAction>
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold">
@@ -238,10 +245,6 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                         {t("professor-dashboard-help")}
                     </p>
                 </div>
-                <Button variant="outline" onClick={handleLogout}>
-                    <LogOut />
-                    {t("sign-out")}
-                </Button>
             </div>
 
             <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
