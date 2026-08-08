@@ -1,4 +1,5 @@
 import type { QuizSession } from "@/api/types"
+import { resultStart } from "@/components/results/results-utils"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight } from "lucide-react"
@@ -41,7 +42,7 @@ function positionSessions(results: QuizSession[]): PositionedSession[] {
     const laneEnds: number[] = []
     return results
         .map((result) => {
-            const start = new Date(result.started_at ?? result.created_at)
+            const start = resultStart(result)
             return { result, start, end: endDate(result, start) }
         })
         .sort((left, right) => left.start.getTime() - right.start.getTime())
@@ -67,7 +68,7 @@ export function ResultsSchedule({
     const { t } = useTranslation()
     const latestResultDate = useMemo(() => {
         const timestamps = results.map((result) =>
-            new Date(result.started_at ?? result.created_at).getTime()
+            resultStart(result).getTime()
         )
         return new Date(Math.max(...timestamps))
     }, [results])
@@ -79,9 +80,7 @@ export function ResultsSchedule({
     )
     const earliestWeekStart = useMemo(() => {
         const timestamps = results.map((result) =>
-            startOfWeek(
-                new Date(result.started_at ?? result.created_at)
-            ).getTime()
+            startOfWeek(resultStart(result)).getTime()
         )
         return new Date(Math.min(...timestamps))
     }, [results])
@@ -95,13 +94,13 @@ export function ResultsSchedule({
         addDays(weekStart, index)
     )
     const weekResults = results.filter((result) => {
-        const start = new Date(result.started_at ?? result.created_at)
+        const start = resultStart(result)
         return start >= weekStart && start < weekEnd
     })
     const resultsByDay = days.map((day) =>
         positionSessions(
             weekResults.filter((result) => {
-                const start = new Date(result.started_at ?? result.created_at)
+                const start = resultStart(result)
                 return (
                     start.getFullYear() === day.getFullYear() &&
                     start.getMonth() === day.getMonth() &&
@@ -110,9 +109,7 @@ export function ResultsSchedule({
             })
         )
     )
-    const allStarts = weekResults.map(
-        (result) => new Date(result.started_at ?? result.created_at)
-    )
+    const allStarts = weekResults.map((result) => resultStart(result))
     const dayStartHour =
         allStarts.length > 0
             ? Math.min(...allStarts.map((date) => date.getHours()))
@@ -135,20 +132,25 @@ export function ResultsSchedule({
         (_, index) => dayStartHour + index
     )
     const timelineHeight = (dayEndHour - dayStartHour) * HOUR_HEIGHT
-    const dayFormatter = new Intl.DateTimeFormat(locale, {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-    })
-    const rangeFormatter = new Intl.DateTimeFormat(locale, {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-    })
-    const timeFormatter = new Intl.DateTimeFormat(locale, {
-        hour: "2-digit",
-        minute: "2-digit",
-    })
+    const { dayFormatter, rangeFormatter, timeFormatter } = useMemo(
+        () => ({
+            dayFormatter: new Intl.DateTimeFormat(locale, {
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+            }),
+            rangeFormatter: new Intl.DateTimeFormat(locale, {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+            }),
+            timeFormatter: new Intl.DateTimeFormat(locale, {
+                hour: "2-digit",
+                minute: "2-digit",
+            }),
+        }),
+        [locale]
+    )
 
     return (
         <section className="overflow-hidden rounded-2xl border bg-background shadow-sm">

@@ -17,6 +17,7 @@ import type {
 } from "@/api/types"
 import { ParticipantAnswersDialog } from "@/components/results/participant-answers-dialog"
 import { ResultsSchedule } from "@/components/results/results-schedule"
+import { formatScore, resultStart } from "@/components/results/results-utils"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -39,12 +40,6 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-
-function formatScore(score: number, locale: string) {
-    return new Intl.NumberFormat(locale, {
-        maximumFractionDigits: 2,
-    }).format(score)
-}
 
 function roundScore(score: number): number {
     return Math.round((score + Number.EPSILON) * 100) / 100
@@ -194,9 +189,7 @@ export function ResultsPanel({
     )
 
     function resultDate(result: QuizSession) {
-        return dateFormatter.format(
-            new Date(result.started_at ?? result.created_at)
-        )
+        return dateFormatter.format(resultStart(result))
     }
 
     async function handleDeleteResult() {

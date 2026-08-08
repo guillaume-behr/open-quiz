@@ -1,4 +1,5 @@
 import type { QuizAnswerReview, QuizParticipant } from "@/api/types"
+import { formatScore } from "@/components/results/results-utils"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -16,12 +17,6 @@ type ParticipantAnswersDialogProps = {
     onClose: () => void
     onScoreDraftChange: (answerId: number, score: string) => void
     onGrade: (answer: QuizAnswerReview) => void
-}
-
-function formatScore(score: number, locale: string) {
-    return new Intl.NumberFormat(locale, {
-        maximumFractionDigits: 2,
-    }).format(score)
 }
 
 export function ParticipantAnswersDialog({

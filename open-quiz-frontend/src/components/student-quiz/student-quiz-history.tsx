@@ -1,7 +1,7 @@
 import { getStudentQuizHistory } from "@/api/student-auth"
 import type { StudentQuizHistoryItem } from "@/api/types"
 import { BookOpenCheck, LoaderCircle } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 export function StudentQuizHistory({ token }: { token: string }) {
@@ -9,6 +9,13 @@ export function StudentQuizHistory({ token }: { token: string }) {
     const [items, setItems] = useState<StudentQuizHistoryItem[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [hasError, setHasError] = useState(false)
+    const dateFormatter = useMemo(
+        () =>
+            new Intl.DateTimeFormat(i18n.language, {
+                dateStyle: "long",
+            }),
+        [i18n.language]
+    )
 
     useEffect(() => {
         getStudentQuizHistory(token)
@@ -57,9 +64,9 @@ export function StudentQuizHistory({ token }: { token: string }) {
                             </span>
                             <span className="mt-1 block text-xs text-muted-foreground">
                                 {item.class_name} ·{" "}
-                                {new Intl.DateTimeFormat(i18n.language, {
-                                    dateStyle: "long",
-                                }).format(new Date(item.started_at))}
+                                {dateFormatter.format(
+                                    new Date(item.started_at)
+                                )}
                             </span>
                             {item.score !== null &&
                                 item.maximum_score !== null && (
