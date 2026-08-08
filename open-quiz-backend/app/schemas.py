@@ -583,6 +583,7 @@ class QuizSessionResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     ends_at: datetime | None
+    grades_published_at: datetime | None
 
 
 class StudentQuizSessionResponse(BaseModel):
@@ -630,6 +631,7 @@ class StudentQuizStateResponse(StudentQuizSessionResponse):
     has_answered: bool
     answered_count: int
     allow_previous_questions: bool
+    accessible_question_numbers: list[int] = Field(default_factory=list)
     selected_choice_ids: list[int] | None = None
     written_answer: str | None = None
     question: StudentQuizQuestionResponse | None
@@ -673,6 +675,7 @@ class StudentQuizHistoryAnswer(BaseModel):
     answer_mode: Literal["single", "multiple", "written"]
     submitted_answers: list[str]
     expected_answers: list[str]
+    is_correct: bool
 
 
 class StudentQuizHistoryItem(BaseModel):
@@ -680,6 +683,8 @@ class StudentQuizHistoryItem(BaseModel):
     quiz_title: str
     class_name: str
     started_at: datetime
+    score: float | None = None
+    maximum_score: float | None = None
     answers: list[StudentQuizHistoryAnswer]
 
 

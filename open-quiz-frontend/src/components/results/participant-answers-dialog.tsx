@@ -107,9 +107,9 @@ function AnswerReview({
                     </p>
                     <h3 className="mt-1 font-semibold">{answer.prompt}</h3>
                 </div>
-                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium whitespace-nowrap tabular-nums">
                     {formatScore(answer.score, locale)} /{" "}
-                    {formatScore(answer.max_score, locale)}
+                    {formatScore(answer.max_score, locale)} {t("points-short")}
                 </span>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -141,8 +141,9 @@ function AnswerReview({
                                     onScoreDraftChange(event.target.value)
                                 }
                             />
-                            <span className="text-muted-foreground">
-                                / {answer.max_score}
+                            <span className="whitespace-nowrap text-muted-foreground tabular-nums">
+                                / {formatScore(answer.max_score, locale)}{" "}
+                                {t("points-short")}
                             </span>
                         </span>
                     </label>

@@ -231,13 +231,15 @@ export type QuizAnswerReview = {
 export type StudentQuizHistoryAnswer = Omit<
     QuizAnswerReview,
     "id" | "score" | "max_score" | "is_graded"
->
+> & { is_correct: boolean }
 
 export type StudentQuizHistoryItem = {
     session_id: number
     quiz_title: string
     class_name: string
     started_at: string
+    score: number | null
+    maximum_score: number | null
     answers: StudentQuizHistoryAnswer[]
 }
 
@@ -258,6 +260,7 @@ export type QuizSession = {
     created_at: string
     started_at: string | null
     ends_at: string | null
+    grades_published_at: string | null
 }
 
 export type MakeupQuizOption = {
@@ -319,6 +322,7 @@ export type StudentQuizSession = {
     has_answered: boolean
     answered_count: number
     allow_previous_questions: boolean
+    accessible_question_numbers: number[]
     selected_choice_ids: number[] | null
     written_answer: string | null
     question: StudentQuizQuestion | null

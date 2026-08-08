@@ -224,6 +224,13 @@ export function gradeWrittenAnswer(
     )
 }
 
+export function publishQuizGrades(sessionId: number): Promise<QuizSession> {
+    return request<QuizSession>(
+        `/api/quizzes/sessions/${sessionId}/publish-grades`,
+        { method: "POST" }
+    )
+}
+
 export function deleteQuizSession(sessionId: number): Promise<void> {
     return request<void>(`/api/quizzes/sessions/${sessionId}`, {
         method: "DELETE",

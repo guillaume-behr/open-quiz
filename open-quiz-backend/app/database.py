@@ -185,6 +185,12 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             connection.execute(
                 text("ALTER TABLE quiz_sessions ADD COLUMN makeup_session_id INTEGER")
             )
+        if "grades_published_at" not in quiz_session_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quiz_sessions ADD COLUMN grades_published_at DATETIME"
+                )
+            )
         if "duration_seconds" not in quiz_columns:
             connection.execute(
                 text(

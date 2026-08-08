@@ -29,7 +29,7 @@ type StudentQuizPageProps = {
     onToggleTranslation: () => void
     onSelectedChoiceIdsChange: (choiceIds: number[]) => void
     onWrittenAnswerChange: (answer: string) => void
-    onPrevious: () => void
+    onNavigate: (questionNumber: number) => void
     onSubmitAnswer: (event: FormEvent<HTMLFormElement>) => void
 }
 
@@ -47,7 +47,7 @@ export function StudentQuizPage({
     onToggleTranslation,
     onSelectedChoiceIdsChange,
     onWrittenAnswerChange,
-    onPrevious,
+    onNavigate,
     onSubmitAnswer,
 }: StudentQuizPageProps) {
     return (
@@ -77,7 +77,7 @@ export function StudentQuizPage({
                     error={error}
                     onSelectedChoiceIdsChange={onSelectedChoiceIdsChange}
                     onWrittenAnswerChange={onWrittenAnswerChange}
-                    onPrevious={onPrevious}
+                    onNavigate={onNavigate}
                     onSubmit={onSubmitAnswer}
                 />
             )}

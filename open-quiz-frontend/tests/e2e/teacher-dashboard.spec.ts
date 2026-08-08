@@ -65,6 +65,7 @@ async function mockTeacherApi(page: Page) {
             created_at: "2026-01-06T10:00:00Z",
             started_at: "2026-01-06T10:01:00Z",
             ends_at: "2026-01-06T10:31:00Z",
+            grades_published_at: null,
         },
     ]
     let writtenAnswer = {
@@ -487,7 +488,27 @@ async function mockTeacherApi(page: Page) {
         if (url.pathname === "/api/quizzes/sessions/90/answers/92/grade") {
             const { score } = request.postDataJSON() as { score: number }
             writtenAnswer = { ...writtenAnswer, score, is_graded: true }
+            resultSessions = resultSessions.map((result) => ({
+                ...result,
+                participants: (
+                    result.participants as Array<Record<string, unknown>>
+                ).map((participant) => ({
+                    ...participant,
+                    score: Number(participant.score) + score,
+                    pending_manual_grading_count: 0,
+                })),
+            }))
             return route.fulfill({ json: writtenAnswer })
+        }
+        if (
+            url.pathname === "/api/quizzes/sessions/90/publish-grades" &&
+            request.method() === "POST"
+        ) {
+            resultSessions = resultSessions.map((result) => ({
+                ...result,
+                grades_published_at: "2026-01-06T11:00:00Z",
+            }))
+            return route.fulfill({ json: resultSessions[0] })
         }
         if (url.pathname === "/api/quizzes/makeup/quiz-options") {
             return route.fulfill({ json: quizzes })
@@ -1329,9 +1350,20 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await expect(
         resultDialog.getByText("Median available points")
     ).toBeVisible()
-    await expect(
-        resultDialog.locator("p").filter({ hasText: /2\s*\/\s*10\s*pts?/ })
-    ).toBeVisible()
+    const scoreHeading = resultDialog.getByText("Points / possible total", {
+        exact: true,
+    })
+    const participantScore = resultDialog
+        .locator("p")
+        .filter({ hasText: /2\s*\/\s*10\s*pts?/ })
+    await expect(scoreHeading).toBeVisible()
+    await expect(participantScore).toBeVisible()
+    const scoreHeadingBox = await scoreHeading.boundingBox()
+    const participantScoreBox = await participantScore.boundingBox()
+    expect(scoreHeadingBox).not.toBeNull()
+    expect(participantScoreBox).not.toBeNull()
+    expect(participantScoreBox!.x).toBeCloseTo(scoreHeadingBox!.x, 0)
+    expect(participantScoreBox!.width).toBeCloseTo(scoreHeadingBox!.width, 0)
     await expect(
         resultDialog.getByText("Available points above the median")
     ).toBeVisible()
@@ -1356,6 +1388,18 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
             ?.postDataJSON()
     ).toEqual({ score: 3.5 })
     await answersDialog.getByRole("button", { name: "Close" }).click()
+    await resultDialog.getByRole("button", { name: "Publish grades" }).click()
+    await expect(
+        resultDialog.getByRole("button", { name: "Grades published" })
+    ).toBeDisabled()
+    expect(
+        requests.some(
+            (request) =>
+                new URL(request.url()).pathname ===
+                    "/api/quizzes/sessions/90/publish-grades" &&
+                request.method() === "POST"
+        )
+    ).toBe(true)
     await resultDialog.getByRole("button", { name: "Close" }).click()
 
     await page.getByRole("button", { name: "Export results" }).click()

@@ -214,12 +214,11 @@ export function StudentQuiz({
         }, 0)
     }
 
-    async function goToPreviousQuestion() {
+    async function goToQuestion(questionNumber: number) {
         if (
             !session ||
             !participantToken ||
-            !session.question_number ||
-            session.question_number <= 1
+            !session.accessible_question_numbers.includes(questionNumber)
         )
             return
 
@@ -229,7 +228,7 @@ export function StudentQuiz({
             const updated = await navigateStudentQuiz(
                 session.join_code,
                 participantToken,
-                session.question_number - 1
+                questionNumber
             )
             applySession(updated)
         } catch {
@@ -288,7 +287,11 @@ export function StudentQuiz({
         )
     }
 
-    if (!isFullscreen && session.status === "in_progress") {
+    const requiresFullscreen = ["waiting", "in_progress", "paused"].includes(
+        session.status
+    )
+
+    if (!isFullscreen && requiresFullscreen) {
         return (
             <>
                 <QuizNavbarAction
@@ -330,7 +333,9 @@ export function StudentQuiz({
                 onToggleTranslation={() => void translation.toggle()}
                 onSelectedChoiceIdsChange={setSelectedChoiceIds}
                 onWrittenAnswerChange={setWrittenAnswer}
-                onPrevious={() => void goToPreviousQuestion()}
+                onNavigate={(questionNumber) =>
+                    void goToQuestion(questionNumber)
+                }
                 onSubmitAnswer={handleAnswer}
             />
         </>

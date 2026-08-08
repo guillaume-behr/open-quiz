@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import { isRtlLanguage } from "@/lib/utils"
 import { ArrowLeft, CheckCircle2, LoaderCircle, XCircle } from "lucide-react"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router"
 
@@ -64,6 +64,10 @@ export function TrainingPage() {
     )
     const [isBusy, setIsBusy] = useState(Boolean(!session && stored))
     const [error, setError] = useState<string | null>(null)
+    const questionFormRef = useRef<HTMLDivElement>(null)
+    const [questionFormHeight, setQuestionFormHeight] = useState<number | null>(
+        null
+    )
 
     useEffect(() => {
         if (session || !stored || !participantToken) {
@@ -83,6 +87,9 @@ export function TrainingPage() {
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
         if (!session?.question || !participantToken) return
+        setQuestionFormHeight(
+            questionFormRef.current?.getBoundingClientRect().height ?? null
+        )
         setIsBusy(true)
         setError(null)
         try {
@@ -113,6 +120,7 @@ export function TrainingPage() {
         setAnsweredQuestion(null)
         setSelectedChoiceIds([])
         setWrittenAnswer("")
+        setQuestionFormHeight(null)
         if (nextSession.status === "finished") clearStoredTraining()
     }
 
@@ -156,6 +164,7 @@ export function TrainingPage() {
                     <TrainingCorrection
                         question={answeredQuestion}
                         feedback={feedback}
+                        questionFormHeight={questionFormHeight}
                         onContinue={continueTraining}
                     />
                 ) : session.status === "finished" ? (
@@ -169,24 +178,26 @@ export function TrainingPage() {
                         </p>
                     </div>
                 ) : session.question ? (
-                    <StudentQuestionForm
-                        session={session}
-                        question={session.question}
-                        participantToken={participantToken}
-                        contentDirection={
-                            isRtlLanguage(session.source_language)
-                                ? "rtl"
-                                : "ltr"
-                        }
-                        selectedChoiceIds={selectedChoiceIds}
-                        writtenAnswer={writtenAnswer}
-                        isBusy={isBusy}
-                        error={error}
-                        onSelectedChoiceIdsChange={setSelectedChoiceIds}
-                        onWrittenAnswerChange={setWrittenAnswer}
-                        onPrevious={() => undefined}
-                        onSubmit={submit}
-                    />
+                    <div ref={questionFormRef}>
+                        <StudentQuestionForm
+                            session={session}
+                            question={session.question}
+                            participantToken={participantToken}
+                            contentDirection={
+                                isRtlLanguage(session.source_language)
+                                    ? "rtl"
+                                    : "ltr"
+                            }
+                            selectedChoiceIds={selectedChoiceIds}
+                            writtenAnswer={writtenAnswer}
+                            isBusy={isBusy}
+                            error={error}
+                            onSelectedChoiceIdsChange={setSelectedChoiceIds}
+                            onWrittenAnswerChange={setWrittenAnswer}
+                            onNavigate={() => undefined}
+                            onSubmit={submit}
+                        />
+                    </div>
                 ) : null}
             </main>
         </div>
@@ -196,10 +207,12 @@ export function TrainingPage() {
 function TrainingCorrection({
     question,
     feedback,
+    questionFormHeight,
     onContinue,
 }: {
     question: StudentQuizQuestion
     feedback: TrainingFeedback
+    questionFormHeight: number | null
     onContinue: () => void
 }) {
     const { t } = useTranslation()
@@ -208,13 +221,18 @@ function TrainingCorrection({
         .map((choice) => choice.label)
     return (
         <section
-            className={`rounded-xl border p-6 ${feedback.is_correct ? "border-emerald-500/50 bg-emerald-500/10" : "border-amber-500/50 bg-amber-500/10"}`}
+            className={`flex flex-col rounded-xl border p-6 ${feedback.is_correct ? "border-emerald-500/50 bg-emerald-500/10" : "border-destructive/50 bg-destructive/10"}`}
+            style={
+                questionFormHeight
+                    ? { minHeight: `${questionFormHeight}px` }
+                    : undefined
+            }
         >
             <div className="flex items-center gap-3">
                 {feedback.is_correct ? (
                     <CheckCircle2 className="size-7 text-emerald-700 dark:text-emerald-300" />
                 ) : (
-                    <XCircle className="size-7 text-amber-700 dark:text-amber-300" />
+                    <XCircle className="size-7 text-destructive" />
                 )}
                 <h2 className="text-xl font-bold">
                     {t(
@@ -231,9 +249,11 @@ function TrainingCorrection({
                     {feedback.expected_answer ?? correctLabels.join(", ")}
                 </p>
             </div>
-            <Button className="mt-5 w-full" onClick={onContinue}>
-                {t("continue-training")}
-            </Button>
+            <div className="mt-auto pt-5">
+                <Button className="w-full" size="lg" onClick={onContinue}>
+                    {t("continue-training")}
+                </Button>
+            </div>
         </section>
     )
 }

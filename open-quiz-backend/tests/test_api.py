@@ -2255,6 +2255,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 )
                 assert previous.status_code == 200
                 assert previous.json()["question_number"] == 2
+                assert previous.json()["accessible_question_numbers"] == [1, 2, 3]
                 assert previous.json()["has_answered"] is True
                 assert (
                     previous.json()["selected_choice_ids"] is not None
@@ -2263,6 +2264,19 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 assert collect_keys(previous.json()).isdisjoint(
                     {"is_correct", "points", "correction_mode", "score"}
                 )
+                returned_to_current = client.post(
+                    f"{student_state_url}/navigate",
+                    headers=student_headers,
+                    json={"question_number": 3},
+                )
+                assert returned_to_current.status_code == 200
+                assert returned_to_current.json()["question_number"] == 3
+                previous = client.post(
+                    f"{student_state_url}/navigate",
+                    headers=student_headers,
+                    json={"question_number": 2},
+                )
+                assert previous.status_code == 200
                 paused_with_answer = client.post(
                     f"/api/quizzes/sessions/{quiz_session['id']}/pause",
                     headers=teacher_headers,
@@ -2313,15 +2327,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=exam_account_headers,
         )
         assert student_history.status_code == 200
-        assert len(student_history.json()) == 1
-        history_item = student_history.json()[0]
-        assert history_item["session_id"] == quiz_session["id"]
-        assert history_item["quiz_title"] == quiz["title"]
-        assert len(history_item["answers"]) == 3
-        assert all(
-            {"score", "max_score", "is_graded"}.isdisjoint(answer)
-            for answer in history_item["answers"]
-        )
+        assert student_history.json() == []
         assert teacher_state["participants"][0]["score"] > 0
         assert (
             client.get(
@@ -2430,6 +2436,11 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert written_review["expected_answers"]
         assert written_review["score"] == 0
         assert written_review["is_graded"] is False
+        unpublished = client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/publish-grades",
+            headers=teacher_headers,
+        )
+        assert unpublished.status_code == 409
         manually_graded = client.post(
             f"/api/quizzes/sessions/{quiz_session['id']}/answers/"
             f"{written_review['id']}/grade",
@@ -2444,6 +2455,41 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
         ).json()
         assert graded_results[0]["participants"][0]["pending_manual_grading_count"] == 0
+        published = client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/publish-grades",
+            headers=teacher_headers,
+        )
+        assert published.status_code == 200
+        assert published.json()["grades_published_at"] is not None
+        graded_results = client.get(
+            "/api/quizzes/sessions/results",
+            headers=teacher_headers,
+        ).json()
+        published_history = client.get(
+            "/api/quizzes/student/history",
+            headers=exam_account_headers,
+        ).json()[0]
+        assert published_history["session_id"] == quiz_session["id"]
+        assert published_history["quiz_title"] == quiz["title"]
+        assert (
+            published_history["score"] == published.json()["participants"][0]["score"]
+        )
+        assert published_history["maximum_score"] == maximum_score
+        assert len(published_history["answers"]) == 3
+        assert all(answer["is_correct"] for answer in published_history["answers"])
+        assert all(
+            {"score", "max_score", "is_graded"}.isdisjoint(answer)
+            for answer in published_history["answers"]
+        )
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{quiz_session['id']}/answers/"
+                f"{written_review['id']}/grade",
+                headers=teacher_headers,
+                json={"score": 0},
+            ).status_code
+            == 409
+        )
         regraded_question = next(
             question
             for question in preview.json()

@@ -266,6 +266,9 @@ class QuizSession(Base):
         DateTime(timezone=True), nullable=True
     )
     paused_duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    grades_published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     makeup_session_id: Mapped[int | None] = mapped_column(
         ForeignKey("makeup_sessions.id"), nullable=True, index=True
     )

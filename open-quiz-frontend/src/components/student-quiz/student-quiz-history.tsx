@@ -58,6 +58,15 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                     dateStyle: "long",
                                 }).format(new Date(item.started_at))}
                             </span>
+                            {item.score !== null &&
+                                item.maximum_score !== null && (
+                                    <span className="mt-2 block font-bold text-primary">
+                                        {t("published-grade", {
+                                            score: item.score,
+                                            maximum: item.maximum_score,
+                                        })}
+                                    </span>
+                                )}
                         </span>
                         <span className="text-sm font-medium text-primary">
                             {t("view-correction")}
@@ -78,11 +87,30 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                     {answer.prompt}
                                 </h3>
                                 <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-                                    <div>
-                                        <p className="font-medium text-muted-foreground">
+                                    <div
+                                        className={
+                                            answer.is_correct
+                                                ? "p-3"
+                                                : "rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive"
+                                        }
+                                    >
+                                        <p
+                                            className={
+                                                answer.is_correct
+                                                    ? "font-medium text-muted-foreground"
+                                                    : "font-medium"
+                                            }
+                                        >
                                             {t("student-answer")}
+                                            {!answer.is_correct && (
+                                                <span className="sr-only">
+                                                    {` — ${t("training-incorrect")}`}
+                                                </span>
+                                            )}
                                         </p>
-                                        <p className="mt-1 whitespace-pre-wrap">
+                                        <p
+                                            className={`mt-1 whitespace-pre-wrap ${answer.is_correct ? "" : "text-destructive"}`}
+                                        >
                                             {answer.submitted_answers.join(
                                                 ", "
                                             ) || t("no-answer")}

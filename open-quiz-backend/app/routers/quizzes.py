@@ -704,6 +704,7 @@ def session_response(
         created_at=quiz_session.created_at,
         started_at=quiz_session.started_at,
         ends_at=quiz_ends_at(quiz_session, quiz),
+        grades_published_at=quiz_session.grades_published_at,
     )
 
 
@@ -1003,17 +1004,15 @@ def student_state_response(
     expire_quiz_session(quiz_session, quiz, session)
     question_ids = session_question_ids(quiz_session, session, participant)
     question_id = current_question_id(quiz_session, participant, session)
-    has_answered = (
-        question_id is not None
-        and session.scalar(
-            select(QuizAnswer.id).where(
+    answered_question_ids = set(
+        session.scalars(
+            select(QuizAnswer.question_id).where(
                 QuizAnswer.session_id == quiz_session.id,
                 QuizAnswer.participant_id == participant.id,
-                QuizAnswer.question_id == question_id,
             )
         )
-        is not None
     )
+    has_answered = question_id is not None and question_id in answered_question_ids
     existing_answer = (
         session.scalar(
             select(QuizAnswer).where(
@@ -1034,12 +1033,18 @@ def student_state_response(
             saved_answer = {}
     else:
         saved_answer = {}
-    answered_count = session.scalar(
-        select(func.count(QuizAnswer.id)).where(
-            QuizAnswer.session_id == quiz_session.id,
-            QuizAnswer.participant_id == participant.id,
-        )
-    )
+    answered_count = len(answered_question_ids)
+    accessible_positions = {
+        position
+        for position, assigned_question_id in enumerate(question_ids)
+        if assigned_question_id in answered_question_ids
+    }
+    if accessible_positions:
+        next_position = max(accessible_positions) + 1
+        if next_position < len(question_ids):
+            accessible_positions.add(next_position)
+    if participant.current_position is not None:
+        accessible_positions.add(participant.current_position)
     return StudentQuizStateResponse(
         **student_session_response(quiz_session, quiz, participant).model_dump(),
         question_number=(
@@ -1050,12 +1055,15 @@ def student_state_response(
         ),
         total_questions=len(question_ids),
         has_answered=has_answered,
-        answered_count=answered_count or 0,
+        answered_count=answered_count,
         allow_previous_questions=(
             quiz_session.allow_previous_questions
             if quiz_session.allow_previous_questions is not None
             else quiz.allow_previous_questions
         ),
+        accessible_question_numbers=[
+            position + 1 for position in sorted(accessible_positions)
+        ],
         selected_choice_ids=saved_answer.get("selected_choice_ids"),
         written_answer=saved_answer.get("written_answer"),
         question=(
@@ -1454,6 +1462,7 @@ def list_student_quiz_history(
             .where(
                 QuizParticipant.student_id.in_(membership_ids),
                 QuizSession.status == "finished",
+                QuizSession.grades_published_at.is_not(None),
                 QuizSession.started_at.is_not(None),
                 Quiz.mode == "exam",
             )
@@ -1478,6 +1487,7 @@ def list_student_quiz_history(
                 )
             )
         }
+        question_points = session_question_points(quiz_session, session, participant)
         choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
         if question_ids:
             for choice in session.scalars(
@@ -1499,11 +1509,36 @@ def list_student_quiz_history(
                     question,
                     position,
                     question_choices,
-                    0,
+                    question_points.get(question.id, 0),
                 )
                 submitted_answers = review.submitted_answers
+                try:
+                    submitted_data = json.loads(answer.answer_data)
+                except TypeError, ValueError:
+                    submitted_data = {}
+                if not isinstance(submitted_data, dict):
+                    submitted_data = {}
+                if question.answer_mode == "written":
+                    is_correct = (
+                        answer.is_graded
+                        and review.max_score > 0
+                        and answer.score >= review.max_score
+                    )
+                else:
+                    selected_ids = set(
+                        submitted_data.get("selected_choice_ids", [])
+                        if isinstance(
+                            submitted_data.get("selected_choice_ids", []), list
+                        )
+                        else []
+                    )
+                    correct_ids = {
+                        choice.id for choice in question_choices if choice.is_correct
+                    }
+                    is_correct = selected_ids == correct_ids
             else:
                 submitted_answers = []
+                is_correct = False
             answers.append(
                 StudentQuizHistoryAnswer(
                     question_id=question.id,
@@ -1515,6 +1550,7 @@ def list_student_quiz_history(
                     expected_answers=[
                         choice.label for choice in question_choices if choice.is_correct
                     ],
+                    is_correct=is_correct,
                 )
             )
         history.append(
@@ -1523,10 +1559,63 @@ def list_student_quiz_history(
                 quiz_title=quiz_session.quiz_title or "Quiz",
                 class_name=quiz_session.class_name,
                 started_at=quiz_session.started_at,
+                score=(
+                    round(
+                        sum(answer.score for answer in answers_by_question.values()), 2
+                    )
+                    if quiz_session.grades_published_at is not None
+                    else None
+                ),
+                maximum_score=(
+                    round(
+                        sum(question_points.values()),
+                        2,
+                    )
+                    if quiz_session.grades_published_at is not None
+                    else None
+                ),
                 answers=answers,
             )
         )
     return history
+
+
+@router.post(
+    "/sessions/{session_id}/publish-grades",
+    response_model=QuizSessionResponse,
+)
+def publish_quiz_grades(
+    session_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> QuizSessionResponse:
+    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    if quiz_session.status != "finished":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Les notes ne peuvent être publiées qu'une fois le quiz terminé",
+        )
+    pending_count = session.scalar(
+        select(func.count(QuizAnswer.id)).where(
+            QuizAnswer.session_id == quiz_session.id,
+            QuizAnswer.is_graded.is_(False),
+        )
+    )
+    if pending_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Toutes les réponses doivent être corrigées avant publication",
+        )
+    if quiz_session.grades_published_at is None:
+        quiz_session.grades_published_at = datetime.now(UTC)
+        audit_event(
+            "quiz.grades_published",
+            professor_id=professor.id,
+            session_id=quiz_session.id,
+        )
+        session.commit()
+        session.refresh(quiz_session)
+    return session_response(quiz_session, quiz, session)
 
 
 @router.post(
@@ -1545,6 +1634,11 @@ def grade_written_answer(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="La correction est disponible une fois le quiz terminé",
+        )
+    if quiz_session.grades_published_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Les notes publiées ne peuvent plus être modifiées",
         )
     row = session.execute(
         select(QuizAnswer, Question)
@@ -3009,12 +3103,31 @@ def navigate_student_quiz(
     allow_previous_questions = quiz_session.allow_previous_questions
     if allow_previous_questions is None:
         allow_previous_questions = quiz.allow_previous_questions
+    question_ids = session_question_ids(quiz_session, session, participant)
+    answered_question_ids = set(
+        session.scalars(
+            select(QuizAnswer.question_id).where(
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == participant.id,
+            )
+        )
+    )
+    accessible_positions = {
+        position
+        for position, question_id in enumerate(question_ids)
+        if question_id in answered_question_ids
+    }
+    if accessible_positions:
+        next_position = max(accessible_positions) + 1
+        if next_position < len(question_ids):
+            accessible_positions.add(next_position)
+    if participant.current_position is not None:
+        accessible_positions.add(participant.current_position)
     if (
         quiz_session.status != "in_progress"
         or not allow_previous_questions
         or participant.current_position is None
-        or target_position >= participant.current_position
-        or target_position < 0
+        or target_position not in accessible_positions
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -20,7 +20,7 @@ type StudentQuestionFormProps = {
     error: string | null
     onSelectedChoiceIdsChange: (choiceIds: number[]) => void
     onWrittenAnswerChange: (answer: string) => void
-    onPrevious: () => void
+    onNavigate: (questionNumber: number) => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
 
@@ -35,7 +35,7 @@ export function StudentQuestionForm({
     error,
     onSelectedChoiceIdsChange,
     onWrittenAnswerChange,
-    onPrevious,
+    onNavigate,
     onSubmit,
 }: StudentQuestionFormProps) {
     const { t } = useTranslation()
@@ -112,17 +112,6 @@ export function StudentQuestionForm({
             )}
             {error && <FieldError>{error}</FieldError>}
             <div className="flex flex-col gap-3 sm:flex-row">
-                {session.allow_previous_questions &&
-                    (session.question_number ?? 1) > 1 && (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isBusy}
-                            onClick={onPrevious}
-                        >
-                            {t("previous-question")}
-                        </Button>
-                    )}
                 <Button
                     className="flex-1"
                     size="lg"
@@ -138,6 +127,36 @@ export function StudentQuestionForm({
                     {t("student-submit-answer")}
                 </Button>
             </div>
+            {session.allow_previous_questions && (
+                <nav
+                    className="flex flex-wrap justify-center gap-2 border-t pt-5"
+                    aria-label={t("student-question-progress", {
+                        current: session.question_number,
+                        total: session.total_questions,
+                    })}
+                >
+                    {session.accessible_question_numbers.map((number) => {
+                        const isCurrent = number === session.question_number
+                        return (
+                            <Button
+                                key={number}
+                                className="size-10 p-0"
+                                type="button"
+                                variant={isCurrent ? "default" : "outline"}
+                                aria-current={isCurrent ? "step" : undefined}
+                                aria-label={t("student-question-progress", {
+                                    current: number,
+                                    total: session.total_questions,
+                                })}
+                                disabled={isBusy || isCurrent}
+                                onClick={() => onNavigate(number)}
+                            >
+                                {number}
+                            </Button>
+                        )
+                    })}
+                </nav>
+            )}
         </form>
     )
 }

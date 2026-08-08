@@ -5,6 +5,7 @@ import {
     getParticipantAnswers,
     getQuizResults,
     gradeWrittenAnswer,
+    publishQuizGrades,
 } from "@/api/quizzes"
 import { getAllStudentClasses } from "@/api/classes"
 import type {
@@ -80,6 +81,10 @@ export function ResultsPanel({
     const [answersError, setAnswersError] = useState(false)
     const [scoreDrafts, setScoreDrafts] = useState<Record<number, string>>({})
     const [gradingAnswerId, setGradingAnswerId] = useState<number | null>(null)
+    const [publishingSessionId, setPublishingSessionId] = useState<
+        number | null
+    >(null)
+    const [publishError, setPublishError] = useState(false)
     const [exportClasses, setExportClasses] = useState<StudentClass[]>([])
     const [exportQuizzes, setExportQuizzes] = useState<Quiz[]>([])
     const [exportClassId, setExportClassId] = useState<number | null>(null)
@@ -274,6 +279,25 @@ export function ResultsPanel({
             setAnswersError(true)
         } finally {
             setGradingAnswerId(null)
+        }
+    }
+
+    async function handlePublishGrades(): Promise<void> {
+        if (!selectedResult) return
+        setPublishingSessionId(selectedResult.id)
+        setPublishError(false)
+        try {
+            const published = await publishQuizGrades(selectedResult.id)
+            setSelectedResult(published)
+            setResults((current) =>
+                current.map((result) =>
+                    result.id === published.id ? published : result
+                )
+            )
+        } catch {
+            setPublishError(true)
+        } finally {
+            setPublishingSessionId(null)
         }
     }
 
@@ -534,9 +558,55 @@ export function ResultsPanel({
                         ? `${selectedResult.class_name} · ${resultDate(selectedResult)}`
                         : undefined
                 }
+                className="max-w-5xl"
             >
                 {selectedResult && (
                     <div className="space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/40 p-4">
+                            <div>
+                                <p className="font-semibold">
+                                    {t(
+                                        selectedResult.grades_published_at
+                                            ? "grades-published"
+                                            : "grades-not-published"
+                                    )}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("publish-grades-help")}
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                disabled={
+                                    selectedResult.grades_published_at !==
+                                        null ||
+                                    selectedResult.participants.some(
+                                        (participant) =>
+                                            participant.pending_manual_grading_count >
+                                            0
+                                    ) ||
+                                    publishingSessionId === selectedResult.id
+                                }
+                                onClick={() => void handlePublishGrades()}
+                            >
+                                {publishingSessionId === selectedResult.id && (
+                                    <LoaderCircle className="animate-spin" />
+                                )}
+                                {t(
+                                    selectedResult.grades_published_at
+                                        ? "grades-published"
+                                        : "publish-grades"
+                                )}
+                            </Button>
+                            {publishError && (
+                                <p
+                                    className="w-full text-sm text-destructive"
+                                    role="alert"
+                                >
+                                    {t("publish-grades-error")}
+                                </p>
+                            )}
+                        </div>
                         <div className="grid gap-3 sm:grid-cols-3">
                             <div className="rounded-xl bg-muted p-4">
                                 <p className="text-xs font-medium text-muted-foreground">
@@ -569,10 +639,12 @@ export function ResultsPanel({
                         </div>
 
                         <div className="overflow-hidden rounded-xl border">
-                            <div className="hidden grid-cols-[minmax(0,1fr)_140px_120px_auto] gap-4 border-b bg-muted/60 px-4 py-3 text-xs font-semibold text-muted-foreground sm:grid">
+                            <div className="hidden grid-cols-[minmax(180px,1fr)_140px_180px_140px] items-center gap-4 border-b bg-muted/60 px-4 py-3 text-xs font-semibold text-muted-foreground md:grid">
                                 <span>{t("student-name")}</span>
                                 <span>{t("result-progress")}</span>
-                                <span>{t("result-score")}</span>
+                                <span className="text-right">
+                                    {t("result-score-total")}
+                                </span>
                                 <span>{t("answers")}</span>
                             </div>
                             <div className="divide-y">
@@ -580,7 +652,7 @@ export function ResultsPanel({
                                     (participant) => (
                                         <div
                                             key={participant.id}
-                                            className={`grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_140px_120px_auto] sm:items-center sm:gap-4 ${participant.maximum_score > selectedResult.median_maximum_score ? "bg-amber-500/10" : ""}`}
+                                            className={`grid gap-3 px-4 py-4 md:grid-cols-[minmax(180px,1fr)_140px_180px_140px] md:items-center md:gap-4 ${participant.maximum_score > selectedResult.median_maximum_score ? "bg-amber-500/10" : ""}`}
                                         >
                                             <div className="flex min-w-0 items-center gap-3">
                                                 <div className="rounded-full bg-primary/10 p-2 text-primary">
@@ -603,16 +675,17 @@ export function ResultsPanel({
                                                 </div>
                                             </div>
                                             <p className="text-sm">
-                                                <span className="sm:hidden">
+                                                <span className="md:hidden">
                                                     {t("result-progress")}{" "}
                                                     :{" "}
                                                 </span>
                                                 {participant.answered_count} /{" "}
                                                 {selectedResult.total_questions}
                                             </p>
-                                            <p className="font-bold text-primary">
-                                                <span className="font-normal text-foreground sm:hidden">
-                                                    {t("result-score")} :{" "}
+                                            <p className="text-right font-bold text-primary tabular-nums md:whitespace-nowrap">
+                                                <span className="font-normal text-foreground md:hidden">
+                                                    {t("result-score-total")}{" "}
+                                                    :{" "}
                                                 </span>
                                                 {formatScore(
                                                     participant.score,

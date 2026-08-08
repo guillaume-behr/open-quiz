@@ -226,13 +226,33 @@ test("a student launches training and sees the correct answer", async ({
         page.locator("header").getByRole("link", { name: "Professor space" })
     ).toHaveCount(0)
     await page.getByLabel("Mars").check()
-    await page.getByRole("button", { name: "Submit my answer" }).click()
+    const submitButton = page.getByRole("button", { name: "Submit my answer" })
+    const questionFormBox = await submitButton
+        .locator("xpath=ancestor::form")
+        .boundingBox()
+    const submitButtonBox = await submitButton.boundingBox()
+    await submitButton.click()
 
-    await expect(
-        page.getByRole("heading", { name: "Correct answer" })
-    ).toBeVisible()
+    const correctionHeading = page.getByRole("heading", {
+        name: "Correct answer",
+    })
+    await expect(correctionHeading).toBeVisible()
     await expect(page.getByText("Mars", { exact: true })).toBeVisible()
     await expect(page.getByText(/score/i)).toHaveCount(0)
+    const correctionBox = await correctionHeading
+        .locator("xpath=ancestor::section")
+        .boundingBox()
+    const continueButtonBox = await page
+        .getByRole("button", { name: "Continue" })
+        .boundingBox()
+    expect(questionFormBox).not.toBeNull()
+    expect(correctionBox).not.toBeNull()
+    expect(correctionBox!.height).toBeGreaterThanOrEqual(
+        questionFormBox!.height - 1
+    )
+    expect(
+        Math.abs(continueButtonBox!.y - submitButtonBox!.y)
+    ).toBeLessThanOrEqual(25)
 })
 
 test("a student joins a retake room and selects an eligible quiz", async ({
@@ -353,6 +373,8 @@ test("a student reviews the correction history", async ({ page }) => {
                     quiz_title: "Science checkpoint",
                     class_name: "Class 8B",
                     started_at: "2026-01-06T10:01:00Z",
+                    score: 7,
+                    maximum_score: 10,
                     answers: [
                         {
                             question_id: 93,
@@ -362,6 +384,7 @@ test("a student reviews the correction history", async ({ page }) => {
                             answer_mode: "single",
                             submitted_answers: ["Venus"],
                             expected_answers: ["Mars"],
+                            is_correct: false,
                         },
                     ],
                 },
@@ -376,8 +399,12 @@ test("a student reviews the correction history", async ({ page }) => {
     await page.getByRole("button", { name: "History", exact: true }).click()
 
     await page.getByText("Science checkpoint").click()
+    await expect(page.getByText("Grade: 7 / 10")).toBeVisible()
     await expect(page.getByText("Which planet is red?")).toBeVisible()
-    await expect(page.getByText("Venus", { exact: true })).toBeVisible()
+    await expect(page.getByText("Venus", { exact: true })).toHaveClass(
+        /text-destructive/
+    )
+    await expect(page.getByText("Review this answer")).toBeAttached()
     await expect(page.getByText("Mars", { exact: true })).toBeVisible()
 })
 

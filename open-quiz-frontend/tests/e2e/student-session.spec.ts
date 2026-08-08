@@ -12,6 +12,7 @@ const baseSession = {
     has_answered: false,
     answered_count: 0,
     allow_previous_questions: false,
+    accessible_question_numbers: [],
     selected_choice_ids: null,
     written_answer: null,
     question: null,
@@ -49,7 +50,7 @@ async function joinExamViaDashboard(page: Page, code: string): Promise<void> {
     await expect(page).toHaveURL(/\/student\/exam$/)
 }
 
-test("joining an active quiz stores the session and requests full screen", async ({
+test("joining a waiting quiz immediately requests full screen", async ({
     page,
 }) => {
     await page.route("**/api/quizzes/join", async (route) => {
@@ -75,7 +76,7 @@ test("joining an active quiz stores the session and requests full screen", async
             contentType: "application/json",
             body: JSON.stringify({
                 ...baseSession,
-                status: "in_progress",
+                status: "waiting",
             }),
         })
     })
@@ -160,6 +161,99 @@ test("student can leave a quiz before entering full screen", async ({
     await joinExamViaDashboard(page, "ABCD")
     await expect(page.getByText("Alex Example", { exact: true })).toBeVisible()
     expect(joinCount).toBe(2)
+})
+
+test("student uses the numbered progress bar to revisit a question", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+    })
+    const question = {
+        id: 202,
+        prompt: "Second question",
+        difficulty: "medium",
+        answer_mode: "single",
+        answer_mode_disclosed: true,
+        response_language: null,
+        has_image: false,
+        code_language: null,
+        code_content: null,
+        choices: [
+            {
+                id: 203,
+                label: "Second answer",
+                position: 0,
+                has_image: false,
+                code_language: null,
+                code_content: null,
+            },
+        ],
+    }
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            json: {
+                ...baseSession,
+                status: "in_progress",
+                question_number: 2,
+                allow_previous_questions: true,
+                accessible_question_numbers: [1, 2],
+                question,
+                participant_token: "participant-token",
+            },
+        })
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            json: {
+                ...baseSession,
+                status: "in_progress",
+                question_number: 2,
+                allow_previous_questions: true,
+                accessible_question_numbers: [1, 2],
+                question,
+            },
+        })
+    })
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/navigate",
+        async (route) => {
+            expect(route.request().postDataJSON()).toEqual({
+                question_number: 1,
+            })
+            await route.fulfill({
+                json: {
+                    ...baseSession,
+                    status: "in_progress",
+                    question_number: 1,
+                    answered_count: 1,
+                    allow_previous_questions: true,
+                    accessible_question_numbers: [1, 2],
+                    has_answered: true,
+                    selected_choice_ids: [201],
+                    question: {
+                        ...question,
+                        id: 200,
+                        prompt: "First question",
+                        choices: [{ ...question.choices[0], id: 201 }],
+                    },
+                },
+            })
+        }
+    )
+
+    await joinExamViaDashboard(page, "ABCD")
+
+    await page.getByRole("button", { name: "Question 1 on 3" }).click()
+    await expect(
+        page.getByRole("heading", { name: "First question" })
+    ).toBeVisible()
+    await expect(
+        page.getByRole("button", { name: "Question 1 on 3" })
+    ).toHaveAttribute("aria-current", "step")
 })
 
 test("student stays on a usable join screen when session storage is unavailable", async ({
