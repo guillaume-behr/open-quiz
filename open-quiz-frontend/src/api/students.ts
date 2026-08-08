@@ -1,5 +1,10 @@
-import { request, requestPage } from "./client"
-import type { CreatedStudentAccount, Page, StudentAccount } from "./types"
+import { request, requestBlob, requestPage } from "./client"
+import type {
+    CreatedStudentAccount,
+    Page,
+    StudentAccount,
+    StudentCredential,
+} from "./types"
 
 export function getStudents(
     page = 1,
@@ -56,4 +61,15 @@ export function updateStudentAccount(
 
 export function deleteStudentAccount(studentId: number): Promise<void> {
     return request<void>(`/api/students/${studentId}`, { method: "DELETE" })
+}
+
+export function getStudentCredentials(
+    classId?: number
+): Promise<StudentCredential[]> {
+    const query = classId === undefined ? "" : `?class_id=${classId}`
+    return request<StudentCredential[]>(`/api/students/credentials${query}`)
+}
+
+export function exportStudentCredentials(): Promise<Blob> {
+    return requestBlob("/api/students/credentials/export")
 }

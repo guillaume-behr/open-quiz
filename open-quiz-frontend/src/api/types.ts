@@ -51,6 +51,12 @@ export type CreatedStudentAccount = StudentAccount & {
     generated_password: string
 }
 
+export type StudentCredential = {
+    identifier: string
+    display_name: string
+    password: string | null
+}
+
 export type StudentClass = {
     id: number
     name: string

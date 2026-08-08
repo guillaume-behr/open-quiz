@@ -57,6 +57,7 @@ class Settings:
     database_url: str
     jwt_secret: str
     totp_encryption_key: str
+    student_credential_encryption_key: str
     admin_username: str
     admin_password: str
     frontend_origin: str
@@ -117,6 +118,26 @@ class Settings:
         )
         if self.jwt_secret == self.totp_encryption_key:
             raise ValueError("JWT_SECRET and TOTP_ENCRYPTION_KEY must be distinct")
+        if len(self.student_credential_encryption_key) < 32:
+            raise ValueError(
+                "STUDENT_CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters"
+            )
+        if self.student_credential_encryption_key.startswith("replace-with-"):
+            raise ValueError(
+                "STUDENT_CREDENTIAL_ENCRYPTION_KEY is still set to its example value"
+            )
+        reject_predictable_secret(
+            "STUDENT_CREDENTIAL_ENCRYPTION_KEY",
+            self.student_credential_encryption_key,
+            minimum_unique_characters=10,
+        )
+        if self.student_credential_encryption_key in {
+            self.jwt_secret,
+            self.totp_encryption_key,
+        }:
+            raise ValueError(
+                "STUDENT_CREDENTIAL_ENCRYPTION_KEY must be distinct from other secrets"
+            )
         if len(self.admin_password) < 16:
             raise ValueError("ADMIN_PASSWORD must contain at least 16 characters")
         if len(self.admin_password) > 256:
@@ -207,6 +228,9 @@ def get_settings() -> Settings:
         ),
         jwt_secret=required_environment("JWT_SECRET"),
         totp_encryption_key=required_environment("TOTP_ENCRYPTION_KEY"),
+        student_credential_encryption_key=required_environment(
+            "STUDENT_CREDENTIAL_ENCRYPTION_KEY"
+        ),
         admin_username=required_environment("ADMIN_USERNAME"),
         admin_password=required_environment("ADMIN_PASSWORD"),
         frontend_origin=os.getenv("FRONTEND_ORIGIN", "http://localhost:5173"),

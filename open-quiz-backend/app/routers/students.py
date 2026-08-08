@@ -4,7 +4,8 @@ from secrets import choice
 from string import digits
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -25,8 +26,13 @@ from app.schemas import (
     StudentAccountCreatedResponse,
     StudentAccountResponse,
     StudentAccountUpdate,
+    StudentCredentialResponse,
 )
-from app.security import hash_password
+from app.security import (
+    decrypt_student_password,
+    encrypt_student_password,
+    hash_password,
+)
 
 router = APIRouter(prefix="/api/students", tags=["student accounts"])
 
@@ -114,6 +120,24 @@ def owned_account(
     return account
 
 
+def credential_response(
+    account: StudentAccount, request: Request
+) -> StudentCredentialResponse:
+    password = (
+        decrypt_student_password(
+            account.encrypted_password,
+            request.app.state.settings.student_credential_encryption_key,
+        )
+        if account.encrypted_password
+        else None
+    )
+    return StudentCredentialResponse(
+        identifier=account.identifier,
+        display_name=account.display_name,
+        password=password,
+    )
+
+
 @router.get("", response_model=list[StudentAccountResponse])
 def list_student_accounts(
     professor: ProfessorUser,
@@ -188,11 +212,78 @@ def list_student_accounts(
     ]
 
 
+@router.get("/credentials", response_model=list[StudentCredentialResponse])
+def list_student_credentials(
+    professor: ProfessorUser,
+    session: DbSession,
+    request: Request,
+    response: Response,
+    class_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[StudentCredentialResponse]:
+    query = select(StudentAccount).where(StudentAccount.owner_id == professor.id)
+    if class_id is not None:
+        owned_class = session.scalar(
+            select(StudentClass.id).where(
+                StudentClass.id == class_id,
+                StudentClass.owner_id == professor.id,
+            )
+        )
+        if owned_class is None:
+            raise HTTPException(status_code=404, detail="Classe introuvable")
+        query = query.join(Student, Student.account_id == StudentAccount.id).where(
+            Student.class_id == class_id
+        )
+    accounts = session.scalars(
+        query.order_by(StudentAccount.display_name, StudentAccount.identifier)
+    ).all()
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    audit_event(
+        "students.credentials_viewed",
+        professor_id=professor.id,
+        account_count=len(accounts),
+        class_id=class_id,
+    )
+    return [credential_response(account, request) for account in accounts]
+
+
+@router.get("/credentials/export")
+def export_student_credentials(
+    professor: ProfessorUser,
+    session: DbSession,
+    request: Request,
+) -> JSONResponse:
+    accounts = session.scalars(
+        select(StudentAccount)
+        .where(StudentAccount.owner_id == professor.id)
+        .order_by(StudentAccount.display_name, StudentAccount.identifier)
+    ).all()
+    content = {
+        "students": [
+            credential_response(account, request).model_dump() for account in accounts
+        ]
+    }
+    audit_event(
+        "students.credentials_exported",
+        professor_id=professor.id,
+        account_count=len(accounts),
+    )
+    return JSONResponse(
+        content=content,
+        headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "Content-Disposition": 'attachment; filename="student-credentials.json"',
+        },
+    )
+
+
 @router.post("", response_model=StudentAccountCreatedResponse, status_code=201)
 def create_student_account(
     payload: StudentAccountCreate,
     professor: ProfessorUser,
     session: DbSession,
+    request: Request,
 ) -> StudentAccountCreatedResponse:
     identifier = generated_student_identifier(
         payload.first_name, payload.last_name, session
@@ -203,6 +294,10 @@ def create_student_account(
         identifier=identifier,
         display_name=f"{payload.first_name} {payload.last_name}",
         password_hash=hash_password(password),
+        encrypted_password=encrypt_student_password(
+            password,
+            request.app.state.settings.student_credential_encryption_key,
+        ),
     )
     session.add(account)
     try:
@@ -231,6 +326,7 @@ def update_student_account(
     payload: StudentAccountUpdate,
     professor: ProfessorUser,
     session: DbSession,
+    request: Request,
 ) -> StudentAccountResponse:
     account = owned_account(account_id, professor, session)
     account.identifier = payload.identifier
@@ -238,6 +334,10 @@ def update_student_account(
     account.is_active = payload.is_active
     if payload.password is not None:
         account.password_hash = hash_password(payload.password)
+        account.encrypted_password = encrypt_student_password(
+            payload.password,
+            request.app.state.settings.student_credential_encryption_key,
+        )
     membership = session.scalar(select(Student).where(Student.account_id == account.id))
     if membership is not None:
         membership.identifier = account.identifier

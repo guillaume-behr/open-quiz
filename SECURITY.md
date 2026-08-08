@@ -46,4 +46,6 @@ d’origine et de l’historique accessible, puis :
 - changez le mot de passe administrateur ;
 - ne changez `TOTP_ENCRYPTION_KEY` qu’en acceptant de réinscrire tous les
   comptes TOTP ;
+- ne changez `STUDENT_CREDENTIAL_ENCRYPTION_KEY` qu’en acceptant de
+  réinitialiser les mots de passe élèves pour les rendre à nouveau consultables ;
 - examinez les événements d’audit et les accès à la base.

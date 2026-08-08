@@ -116,6 +116,14 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
 
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
+        student_account_columns = {
+            column["name"]
+            for column in inspect(connection).get_columns("student_accounts")
+        }
+        if "encrypted_password" not in student_account_columns:
+            connection.execute(
+                text("ALTER TABLE student_accounts ADD COLUMN encrypted_password TEXT")
+            )
         connection.execute(
             text(
                 "INSERT OR IGNORE INTO quiz_join_codes (code) "

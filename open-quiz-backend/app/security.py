@@ -150,6 +150,14 @@ def decrypt_totp_secret(encrypted_secret: str, encryption_key: str) -> str:
     return _totp_cipher(encryption_key).decrypt(encrypted_secret.encode()).decode()
 
 
+def encrypt_student_password(password: str, encryption_key: str) -> str:
+    return _totp_cipher(encryption_key).encrypt(password.encode()).decode()
+
+
+def decrypt_student_password(encrypted_password: str, encryption_key: str) -> str:
+    return _totp_cipher(encryption_key).decrypt(encrypted_password.encode()).decode()
+
+
 def verify_totp_code(
     secret: str,
     code: str,

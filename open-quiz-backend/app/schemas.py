@@ -195,6 +195,12 @@ class StudentAccountCreatedResponse(StudentAccountResponse):
     generated_password: str
 
 
+class StudentCredentialResponse(BaseModel):
+    identifier: str
+    display_name: str
+    password: str | None
+
+
 class StudentLoginRequest(BaseModel):
     identifier: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=256)

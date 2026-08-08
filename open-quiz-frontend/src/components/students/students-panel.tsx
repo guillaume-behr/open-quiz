@@ -1,6 +1,8 @@
 import {
     createStudentAccount,
     deleteStudentAccount,
+    exportStudentCredentials,
+    getStudentCredentials,
     getStudents,
     updateStudentAccount,
 } from "@/api/students"
@@ -10,6 +12,7 @@ import type {
     CreatedStudentAccount,
     StudentAccount,
     StudentClass,
+    StudentCredential,
 } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -24,6 +27,8 @@ import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import {
     LoaderCircle,
+    Download,
+    KeyRound,
     Pencil,
     Trash2,
     UserRound,
@@ -62,6 +67,12 @@ export function StudentsPanel({
     const [formError, setFormError] = useState<string | null>(null)
     const [createdCredentials, setCreatedCredentials] =
         useState<CreatedStudentAccount | null>(null)
+    const [credentials, setCredentials] = useState<StudentCredential[] | null>(
+        null
+    )
+    const [credentialsError, setCredentialsError] = useState<string | null>(
+        null
+    )
 
     useEffect(() => {
         let active = true
@@ -160,8 +171,65 @@ export function StudentsPanel({
         }
     }
 
+    async function showCredentials() {
+        setIsBusy(true)
+        setCredentialsError(null)
+        try {
+            setCredentials(await getStudentCredentials())
+        } catch {
+            setCredentialsError(t("student-credentials-load-error"))
+        } finally {
+            setIsBusy(false)
+        }
+    }
+
+    async function exportCredentials() {
+        setIsBusy(true)
+        setCredentialsError(null)
+        try {
+            const blob = await exportStudentCredentials()
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement("a")
+            link.href = url
+            link.download = "student-credentials.json"
+            document.body.append(link)
+            link.click()
+            link.remove()
+            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+        } catch {
+            setCredentialsError(t("student-credentials-export-error"))
+        } finally {
+            setIsBusy(false)
+        }
+    }
+
     return (
         <div className="mt-6">
+            <div className="mb-4 flex flex-wrap justify-end gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void showCredentials()}
+                    disabled={isBusy}
+                >
+                    <KeyRound />
+                    {t("view-student-credentials")}
+                </Button>
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void exportCredentials()}
+                    disabled={isBusy}
+                >
+                    <Download />
+                    {t("export-student-credentials")}
+                </Button>
+            </div>
+            {credentialsError && (
+                <p role="alert" className="mb-4 text-sm text-destructive">
+                    {credentialsError}
+                </p>
+            )}
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
                 <aside className="h-fit rounded-xl border bg-background p-4">
                     <h3 className="font-semibold">{t("filters")}</h3>
@@ -453,6 +521,63 @@ export function StudentsPanel({
                         </div>
                     </FieldGroup>
                 </form>
+            </Dialog>
+
+            <Dialog
+                open={credentials !== null}
+                onOpenChange={(open) => !open && setCredentials(null)}
+                title={t("student-credentials")}
+                description={t("student-credentials-sensitive-help")}
+                className="max-w-2xl"
+            >
+                {credentials && (
+                    <div className="space-y-4">
+                        <div className="max-h-[55vh] overflow-auto rounded-lg border">
+                            <table className="w-full text-left text-sm">
+                                <thead className="sticky top-0 bg-muted">
+                                    <tr>
+                                        <th className="px-3 py-2">
+                                            {t("student-name")}
+                                        </th>
+                                        <th className="px-3 py-2">
+                                            {t("student-id")}
+                                        </th>
+                                        <th className="px-3 py-2">
+                                            {t("login-password")}
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {credentials.map((credential) => (
+                                        <tr
+                                            key={credential.identifier}
+                                            className="border-t"
+                                        >
+                                            <td className="px-3 py-2">
+                                                {credential.display_name}
+                                            </td>
+                                            <td className="px-3 py-2 font-mono">
+                                                {credential.identifier}
+                                            </td>
+                                            <td className="px-3 py-2 font-mono">
+                                                {credential.password ??
+                                                    t("password-unavailable")}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="flex justify-end">
+                            <Button
+                                type="button"
+                                onClick={() => setCredentials(null)}
+                            >
+                                {t("close")}
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Dialog>
 
             <Dialog

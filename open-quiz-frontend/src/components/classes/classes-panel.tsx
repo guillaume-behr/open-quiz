@@ -6,7 +6,7 @@ import {
     unassignStudentAccount,
     updateStudentClass,
 } from "@/api/classes"
-import { getAllStudents } from "@/api/students"
+import { getAllStudents, getStudentCredentials } from "@/api/students"
 import type { GradeLevel, StudentAccount, StudentClass } from "@/api/types"
 import { ClassFormDialog } from "@/components/classes/class-form-dialog"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,7 @@ import { Pagination } from "@/components/ui/pagination"
 import {
     LoaderCircle,
     Pencil,
+    Printer,
     Trash2,
     UserMinus,
     UserPlus,
@@ -44,7 +45,7 @@ export function ClassesPanel({
     isCreateDialogOpen: boolean
     onCreateDialogOpenChange: (open: boolean) => void
 }) {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const [classes, setClasses] = useState<StudentClass[]>([])
     const [search, setSearch] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
@@ -206,6 +207,83 @@ export function ClassesPanel({
         }
     }
 
+    async function printCredentials(studentClass: StudentClass) {
+        const printWindow = window.open("", "_blank")
+        if (!printWindow) {
+            setError(t("student-credentials-print-popup-error"))
+            return
+        }
+        printWindow.opener = null
+        setIsBusy(true)
+        setError(null)
+        try {
+            const credentials = await getStudentCredentials(studentClass.id)
+            const document = printWindow.document
+            document.title = t("student-credentials-print-title", {
+                className: studentClass.name,
+            })
+            document.documentElement.lang = i18n.resolvedLanguage ?? "fr"
+            document.documentElement.dir = i18n.dir()
+            const style = document.createElement("style")
+            style.textContent = `
+                @page { size: A4 portrait; margin: 7mm; }
+                * { box-sizing: border-box; }
+                body { margin: 0; color: #111; font-family: Arial, sans-serif; }
+                main { display: grid; grid-template-columns: repeat(2, 1fr); }
+                article { min-height: 39mm; padding: 5mm 6mm; border-right: 1px dashed #777; border-bottom: 1px dashed #777; break-inside: avoid; }
+                article:nth-child(2n) { border-right: 0; }
+                .class { margin: 0 0 2mm; color: #555; font-size: 9pt; }
+                .name { margin: 0 0 3mm; font-size: 13pt; font-weight: 700; }
+                dl { display: grid; grid-template-columns: auto 1fr; gap: 1.5mm 3mm; margin: 0; font-size: 10pt; }
+                dt { color: #555; }
+                dd { margin: 0; font-family: monospace; font-size: 11pt; font-weight: 700; overflow-wrap: anywhere; }
+                .empty { grid-column: 1 / -1; padding: 10mm; text-align: center; }
+            `
+            document.head.append(style)
+            const main = document.createElement("main")
+            if (credentials.length === 0) {
+                const empty = document.createElement("p")
+                empty.className = "empty"
+                empty.textContent = t("no-student-in-class")
+                main.append(empty)
+            }
+            for (const credential of credentials) {
+                const card = document.createElement("article")
+                const classLabel = document.createElement("p")
+                classLabel.className = "class"
+                classLabel.textContent = studentClass.name
+                const name = document.createElement("p")
+                name.className = "name"
+                name.textContent = credential.display_name
+                const details = document.createElement("dl")
+                for (const [label, value] of [
+                    [t("student-id"), credential.identifier],
+                    [
+                        t("login-password"),
+                        credential.password ?? t("password-unavailable"),
+                    ],
+                ]) {
+                    const term = document.createElement("dt")
+                    term.textContent = label
+                    const description = document.createElement("dd")
+                    description.textContent = value
+                    details.append(term, description)
+                }
+                card.append(classLabel, name, details)
+                main.append(card)
+            }
+            document.body.append(main)
+            printWindow.onafterprint = () => printWindow.close()
+            printWindow.focus()
+            printWindow.setTimeout(() => printWindow.print(), 100)
+        } catch {
+            printWindow.close()
+            setError(t("student-credentials-print-error"))
+        } finally {
+            setIsBusy(false)
+        }
+    }
+
     return (
         <div className="mt-6">
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
@@ -334,7 +412,7 @@ export function ClassesPanel({
                                                     })}
                                                 </span>
                                             </div>
-                                            <div className="mt-3">
+                                            <div className="mt-3 flex flex-wrap gap-2">
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
@@ -343,6 +421,21 @@ export function ClassesPanel({
                                                     }
                                                 >
                                                     {t("manage-students")}
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        void printCredentials(
+                                                            studentClass
+                                                        )
+                                                    }
+                                                    disabled={isBusy}
+                                                >
+                                                    <Printer />
+                                                    {t(
+                                                        "print-student-credentials"
+                                                    )}
                                                 </Button>
                                             </div>
                                         </div>

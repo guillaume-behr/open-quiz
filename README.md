@@ -194,6 +194,7 @@ fichiers d’exemple ne contiennent aucune vraie donnée sensible.
 | `DATABASE_URL` | URL SQLAlchemy de la base | `sqlite:///./open-quiz.db` |
 | `JWT_SECRET` | Signature des jetons, 32 caractères minimum | obligatoire |
 | `TOTP_ENCRYPTION_KEY` | Chiffrement TOTP, distinct du secret JWT | obligatoire |
+| `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | Chiffrement des mots de passe élèves récupérables, distinct des autres secrets | obligatoire |
 | `ADMIN_USERNAME` | Identifiant administrateur, 80 caractères maximum | `admin` |
 | `ADMIN_PASSWORD` | Mot de passe administrateur, 16 à 256 caractères | obligatoire |
 | `FRONTEND_ORIGIN` | Origine HTTP(S) exacte, sans `/` final | `http://localhost:5173` |
@@ -367,8 +368,8 @@ La compilation écrit les fichiers dans `open-quiz-frontend/dist`.
 
 1. Copiez `open-quiz-backend/.env.production.example` vers
    `open-quiz-backend/.env`.
-2. Configurez l’origine HTTPS et les trois secrets robustes.
-3. Sauvegardez `TOTP_ENCRYPTION_KEY` dans un gestionnaire de secrets.
+2. Configurez l’origine HTTPS et les quatre secrets robustes.
+3. Sauvegardez `TOTP_ENCRYPTION_KEY` et `STUDENT_CREDENTIAL_ENCRYPTION_KEY` dans un gestionnaire de secrets.
 4. Validez et démarrez les conteneurs.
 
 ```shell
@@ -418,6 +419,8 @@ change pas leurs notes.
   SQLite WAL, ou pendant un arrêt contrôlé ;
 - conservez `TOTP_ENCRYPTION_KEY` : sa perte impose une nouvelle inscription
   TOTP pour chaque compte ;
+- conservez `STUDENT_CREDENTIAL_ENCRYPTION_KEY` : sa perte rend les mots de
+  passe élèves enregistrés irrécupérables et impose leur réinitialisation ;
 - centralisez les événements JSON `security.*`, `auth.login_rate_limited` et
   `auth.refresh_reuse_detected` ;
 - testez une restauration avant de considérer une sauvegarde comme valide.

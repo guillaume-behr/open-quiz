@@ -41,6 +41,19 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+type ResultsViewMode = "cards" | "schedule"
+
+const RESULTS_VIEW_STORAGE_KEY = "open-quiz-teacher-results-view"
+
+function storedResultsView(): ResultsViewMode {
+    try {
+        const stored = localStorage.getItem(RESULTS_VIEW_STORAGE_KEY)
+        return stored === "schedule" ? "schedule" : "cards"
+    } catch {
+        return "cards"
+    }
+}
+
 function roundScore(score: number): number {
     return Math.round((score + Number.EPSILON) * 100) / 100
 }
@@ -62,7 +75,7 @@ export function ResultsPanel({
     const [reloadKey, setReloadKey] = useState(0)
     const [quizFilter, setQuizFilter] = useState("")
     const [classFilter, setClassFilter] = useState("")
-    const [viewMode, setViewMode] = useState<"cards" | "schedule">("cards")
+    const [viewMode, setViewMode] = useState<ResultsViewMode>(storedResultsView)
     const [selectedResult, setSelectedResult] = useState<QuizSession | null>(
         null
     )
@@ -92,6 +105,15 @@ export function ResultsPanel({
     const [isExportLoading, setIsExportLoading] = useState(false)
     const [isExporting, setIsExporting] = useState(false)
     const [exportError, setExportError] = useState(false)
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(RESULTS_VIEW_STORAGE_KEY, viewMode)
+        } catch {
+            // The preference remains valid for this session if storage is unavailable.
+        }
+    }, [viewMode])
+
     useEffect(() => {
         let isActive = true
         getQuizResults(page, quizFilter.trim(), classFilter.trim())

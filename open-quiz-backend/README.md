@@ -89,6 +89,12 @@ TOTP sont chiffrés dans SQLite avec `TOTP_ENCRYPTION_KEY`. Sauvegardez cette
 clé : si elle est perdue ou remplacée, chaque enseignant et administrateur devra
 réinitialiser son inscription 2FA.
 
+Les mots de passe élèves restent hachés pour l’authentification. Une copie
+récupérable est chiffrée avec `STUDENT_CREDENTIAL_ENCRYPTION_KEY` afin que seul
+le professeur propriétaire puisse les consulter ou les exporter. Les comptes
+créés avant cette fonctionnalité nécessitent une réinitialisation de mot de
+passe avant que celui-ci puisse être affiché.
+
 Si un utilisateur perd son authentificateur, réinitialisez son inscription 2FA
 et révoquez ses sessions actives depuis l'espace d'administration en utilisant
 « Récupérer l'accès ». Cette action définit un nouveau mot de passe, révoque les

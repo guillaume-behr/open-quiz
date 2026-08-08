@@ -33,6 +33,7 @@ from app.models import (
     QuizSession,
     RefreshSession,
     RefreshSessionFamily,
+    StudentAccount,
     User,
 )
 from app.rate_limit import LoginRateLimiter
@@ -53,6 +54,9 @@ from scripts.reset_two_factor import reset
 
 JWT_SECRET = "test-secret-that-is-at-least-32-bytes-long"
 TOTP_ENCRYPTION_KEY = "test-totp-key-that-is-at-least-32-bytes"
+STUDENT_CREDENTIAL_ENCRYPTION_KEY = (
+    "test-student-credential-key-with-enough-variety-4567"
+)
 ADMIN_PASSWORD = "a-strong-test-password"
 FRONTEND_ORIGIN = "http://localhost:5173"
 VALID_PNG = b64decode(
@@ -67,6 +71,7 @@ def settings_for(database: Path, **overrides: Any) -> Settings:
         "database_url": f"sqlite:///{database.as_posix()}",
         "jwt_secret": JWT_SECRET,
         "totp_encryption_key": TOTP_ENCRYPTION_KEY,
+        "student_credential_encryption_key": STUDENT_CREDENTIAL_ENCRYPTION_KEY,
         "admin_username": "root-admin",
         "admin_password": ADMIN_PASSWORD,
         "frontend_origin": FRONTEND_ORIGIN,
@@ -833,6 +838,58 @@ def test_professor_manages_student_accounts_and_class_assignments(
         assert generated_password[:8].isalpha()
         assert generated_password[:8].isupper()
         assert generated_password[8:].isdigit()
+        credentials_response = client.get(
+            "/api/students/credentials", headers=teacher_headers
+        )
+        assert credentials_response.status_code == 200
+        assert credentials_response.headers["cache-control"] == "no-store"
+        assert credentials_response.json() == [
+            {
+                "identifier": "lea.dupont",
+                "display_name": "Léa Dupont",
+                "password": generated_password,
+            }
+        ]
+        exported = client.get(
+            "/api/students/credentials/export", headers=teacher_headers
+        )
+        assert exported.status_code == 200
+        assert exported.headers["cache-control"] == "no-store"
+        assert exported.headers["content-disposition"] == (
+            'attachment; filename="student-credentials.json"'
+        )
+        assert exported.json() == {"students": credentials_response.json()}
+        assert client.get("/api/students/credentials").status_code == 401
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "other.account.teacher",
+                    "display_name": "Other Account Teacher",
+                    "password": "another-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        other_teacher_headers, _ = complete_first_login(
+            client,
+            "other.account.teacher",
+            "another-secure-teacher-password",
+        )
+        assert (
+            client.get(
+                "/api/students/credentials", headers=other_teacher_headers
+            ).json()
+            == []
+        )
+        with client.app.state.session_factory() as session:
+            stored_account = session.scalar(
+                select(StudentAccount).where(StudentAccount.id == account["id"])
+            )
+            assert stored_account is not None
+            assert stored_account.encrypted_password
+            assert generated_password not in stored_account.encrypted_password
         inactive_account = client.post(
             "/api/students",
             headers=teacher_headers,
@@ -878,7 +935,25 @@ def test_professor_manages_student_accounts_and_class_assignments(
         )
         assert assigned.status_code == 200
         assert assigned.json()["students"][0]["account_id"] == account["id"]
+        class_credentials = client.get(
+            "/api/students/credentials",
+            headers=teacher_headers,
+            params={"class_id": student_class["id"]},
+        )
+        assert class_credentials.status_code == 200
+        assert [item["identifier"] for item in class_credentials.json()] == [
+            account["identifier"]
+        ]
+        assert (
+            client.get(
+                "/api/students/credentials",
+                headers=other_teacher_headers,
+                params={"class_id": student_class["id"]},
+            ).status_code
+            == 404
+        )
         listed_accounts = client.get("/api/students", headers=teacher_headers).json()
+        assert all("password" not in item for item in listed_accounts)
         assert (
             next(item for item in listed_accounts if item["id"] == account["id"])[
                 "class_name"
