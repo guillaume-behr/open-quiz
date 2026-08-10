@@ -147,11 +147,11 @@ export function MakeupSessionsPanel() {
                             ))}
                         </select>
                     </label>
-                    <fieldset className="grid gap-2">
-                        <legend className="mb-2 text-sm font-medium">
-                            {t("makeup-authorized-quizzes")}
-                        </legend>
-                        {classId && (
+                    {classId && (
+                        <fieldset className="grid gap-2">
+                            <legend className="mb-2 text-sm font-medium">
+                                {t("makeup-authorized-quizzes")}
+                            </legend>
                             <label className="grid gap-1 text-sm">
                                 {t("search")}
                                 <Input
@@ -162,45 +162,53 @@ export function MakeupSessionsPanel() {
                                     }
                                 />
                             </label>
-                        )}
-                        {quizOptions.length === 0 && classId ? (
-                            <p className="text-sm text-muted-foreground">
-                                {t("makeup-no-eligible-quizzes")}
-                            </p>
-                        ) : (
-                            filteredQuizOptions.map((quiz) => (
-                                <label
-                                    key={quiz.id}
-                                    className="flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50"
-                                >
-                                    <span className="flex items-center gap-3">
-                                        <input
-                                            type="checkbox"
-                                            className="accent-primary"
-                                            checked={quizIds.includes(quiz.id)}
-                                            onChange={(event) =>
-                                                setQuizIds((current) =>
-                                                    event.target.checked
-                                                        ? [...current, quiz.id]
-                                                        : current.filter(
-                                                              (id) =>
-                                                                  id !== quiz.id
-                                                          )
-                                                )
-                                            }
-                                        />
-                                        <span className="font-medium">
-                                            {quiz.title}
+                            {quizOptions.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    {t("makeup-no-eligible-quizzes")}
+                                </p>
+                            ) : (
+                                filteredQuizOptions.map((quiz) => (
+                                    <label
+                                        key={quiz.id}
+                                        className="flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50"
+                                    >
+                                        <span className="flex items-center gap-3">
+                                            <input
+                                                type="checkbox"
+                                                className="accent-primary"
+                                                checked={quizIds.includes(
+                                                    quiz.id
+                                                )}
+                                                onChange={(event) =>
+                                                    setQuizIds((current) =>
+                                                        event.target.checked
+                                                            ? [
+                                                                  ...current,
+                                                                  quiz.id,
+                                                              ]
+                                                            : current.filter(
+                                                                  (id) =>
+                                                                      id !==
+                                                                      quiz.id
+                                                              )
+                                                    )
+                                                }
+                                            />
+                                            <span className="font-medium">
+                                                {quiz.title}
+                                            </span>
                                         </span>
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                        {Math.round(quiz.duration_seconds / 60)}{" "}
-                                        min
-                                    </span>
-                                </label>
-                            ))
-                        )}
-                    </fieldset>
+                                        <span className="text-muted-foreground">
+                                            {Math.round(
+                                                quiz.duration_seconds / 60
+                                            )}{" "}
+                                            min
+                                        </span>
+                                    </label>
+                                ))
+                            )}
+                        </fieldset>
+                    )}
                     <Button
                         type="submit"
                         disabled={busy || !classId || !quizIds.length}
