@@ -38,6 +38,7 @@ router = APIRouter(prefix="/api/students", tags=["student accounts"])
 
 READABLE_CONSONANTS = "BCDFGHJKMNPRSTVWXYZ"
 READABLE_VOWELS = "AEU"
+STUDENT_IDENTIFIER_MAX_LENGTH = 20
 
 
 def generated_student_password() -> str:
@@ -62,7 +63,7 @@ def generated_student_identifier(
 ) -> str:
     parts = [identifier_part(first_name), identifier_part(last_name)]
     base = ".".join(part for part in parts if part) or "eleve"
-    base = base[:80].rstrip(".")
+    base = base[:STUDENT_IDENTIFIER_MAX_LENGTH].rstrip(".") or "eleve"
     identifier = base
     suffix = 2
     while (
@@ -72,7 +73,8 @@ def generated_student_identifier(
         is not None
     ):
         suffix_text = str(suffix)
-        identifier = f"{base[: 79 - len(suffix_text)].rstrip('.')}.{suffix_text}"
+        base_length = STUDENT_IDENTIFIER_MAX_LENGTH - len(suffix_text) - 1
+        identifier = f"{base[:base_length].rstrip('.')}.{suffix_text}"
         suffix += 1
     return identifier
 
@@ -81,19 +83,19 @@ def account_response(
     account: StudentAccount, session: DbSession
 ) -> StudentAccountResponse:
     membership = session.execute(
-        select(Student.class_id, StudentClass.name)
+        select(Student.class_id, StudentClass.name, StudentClass.grade_level)
         .join(StudentClass, StudentClass.id == Student.class_id)
         .where(Student.account_id == account.id)
     ).first()
     return account_response_from_membership(
         account,
-        (membership[0], membership[1]) if membership else None,
+        (membership[0], membership[1], membership[2]) if membership else None,
     )
 
 
 def account_response_from_membership(
     account: StudentAccount,
-    membership: tuple[int, str] | None,
+    membership: tuple[int, str, str] | None,
 ) -> StudentAccountResponse:
     return StudentAccountResponse(
         id=account.id,
@@ -102,6 +104,7 @@ def account_response_from_membership(
         is_active=account.is_active,
         class_id=membership[0] if membership else None,
         class_name=membership[1] if membership else None,
+        grade_level=membership[2] if membership else None,
         created_at=account.created_at,
     )
 
@@ -193,7 +196,12 @@ def list_student_accounts(
     )
     set_pagination_headers(response, page=page, page_size=page_size, total=total)
     rows = session.execute(
-        select(StudentAccount, Student.class_id, StudentClass.name)
+        select(
+            StudentAccount,
+            Student.class_id,
+            StudentClass.name,
+            StudentClass.grade_level,
+        )
         .outerjoin(Student, Student.account_id == StudentAccount.id)
         .outerjoin(StudentClass, StudentClass.id == Student.class_id)
         .where(*filters)
@@ -204,11 +212,15 @@ def list_student_accounts(
     return [
         account_response_from_membership(
             account,
-            (class_id, class_name)
-            if class_id is not None and class_name is not None
+            (class_id, class_name, grade_level)
+            if (
+                class_id is not None
+                and class_name is not None
+                and grade_level is not None
+            )
             else None,
         )
-        for account, class_id, class_name in rows
+        for account, class_id, class_name, grade_level in rows
     ]
 
 

@@ -188,6 +188,7 @@ class StudentAccountResponse(BaseModel):
     is_active: bool
     class_id: int | None
     class_name: str | None
+    grade_level: str | None
     created_at: datetime
 
 
@@ -253,6 +254,10 @@ class QuestionBankCreate(BaseModel):
         if not normalized:
             raise ValueError("Ce champ ne peut pas être vide")
         return normalized
+
+
+class QuestionBankUpdate(QuestionBankCreate):
+    pass
 
 
 class QuestionBankResponse(BaseModel):

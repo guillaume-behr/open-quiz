@@ -31,6 +31,7 @@ from app.images import (
 )
 from app.models import (
     ClassTrainingQuestionBank,
+    GradeLevel,
     Question,
     QuestionBank,
     QuestionChoice,
@@ -48,6 +49,7 @@ from app.schemas import (
     MAX_QUESTIONS_PER_BANK,
     QuestionBankCreate,
     QuestionBankResponse,
+    QuestionBankUpdate,
     QuestionBatchImport,
     QuestionBatchImportResponse,
     QuestionCreate,
@@ -157,6 +159,45 @@ def create_question_bank(
         ) from None
     session.refresh(question_bank)
     return question_bank
+
+
+@router.post("/{question_bank_id}/update", response_model=QuestionBankResponse)
+def update_question_bank(
+    question_bank_id: int,
+    payload: QuestionBankUpdate,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> QuestionBankResponse:
+    """Update the title and grade level of a question bank."""
+    question_bank = owned_question_bank(question_bank_id, professor, session)
+    question_bank.grade_level = payload.grade_level
+    question_bank.chapter = payload.chapter
+    ensure_grade_level(professor.id, payload.grade_level, session)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Une banque existe déjà pour ce niveau et ce titre",
+        ) from None
+    session.refresh(question_bank)
+    question_count, easy_count, medium_count, hard_count = session.execute(
+        select(
+            func.count(Question.id),
+            func.sum(case((Question.difficulty == "easy", 1), else_=0)),
+            func.sum(case((Question.difficulty == "medium", 1), else_=0)),
+            func.sum(case((Question.difficulty == "hard", 1), else_=0)),
+        ).where(Question.question_bank_id == question_bank.id)
+    ).one()
+    return QuestionBankResponse.model_validate(question_bank).model_copy(
+        update={
+            "question_count": question_count,
+            "easy_question_count": easy_count or 0,
+            "medium_question_count": medium_count or 0,
+            "hard_question_count": hard_count or 0,
+        }
+    )
 
 
 @router.delete(
@@ -464,11 +505,27 @@ def list_questions(
 
 
 @router.get("/example")
-def download_import_example(_: ProfessorUser) -> Response:
+def download_import_example(
+    professor: ProfessorUser,
+    session: DbSession,
+) -> Response:
     """Download a complete versioned example of the question batch format."""
+    available_grade_levels = list(
+        session.scalars(
+            select(GradeLevel.name)
+            .where(GradeLevel.owner_id == professor.id)
+            .order_by(GradeLevel.name, GradeLevel.id)
+        )
+    )
+    grade_level_comment = (
+        f"Niveaux de classe disponibles : {', '.join(available_grade_levels)}."
+        if available_grade_levels
+        else "Aucun niveau de classe n’est encore défini."
+    )
     example = {
         "version": 1,
         "question_bank": {
+            "_comment_grade_level": grade_level_comment,
             "grade_level": "2de",
             "chapter": "Exemple complet",
         },

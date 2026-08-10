@@ -1555,6 +1555,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["latest_quiz_at"] is None
         grade_levels = client.get("/api/grade-levels", headers=teacher_headers).json()
         assert [level["name"] for level in grade_levels] == ["5e"]
+        duplicate_grade_level = client.post(
+            "/api/grade-levels",
+            headers=teacher_headers,
+            json={"name": " 5E "},
+        )
+        assert duplicate_grade_level.status_code == 201
+        assert duplicate_grade_level.json()["id"] == grade_levels[0]["id"]
         assert (
             client.delete(
                 f"/api/grade-levels/{grade_levels[0]['id']}",
@@ -1898,6 +1905,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert '"prompt": "Quelle est la capitale' in example.text
         example_batch = example.json()
         assert example_batch["version"] == 1
+        assert "Niveaux de classe disponibles" in example_batch["question_bank"][
+            "_comment_grade_level"
+        ]
+        assert "3e" in example_batch["question_bank"]["_comment_grade_level"]
         assert {item["answer_mode"] for item in example_batch["questions"]} == {
             "single",
             "multiple",

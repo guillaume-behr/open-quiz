@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
@@ -36,7 +36,7 @@ def create_grade_level(
     existing = session.scalar(
         select(GradeLevel).where(
             GradeLevel.owner_id == professor.id,
-            GradeLevel.name == payload.name,
+            func.lower(GradeLevel.name) == payload.name.lower(),
         )
     )
     if existing is not None:
@@ -50,7 +50,7 @@ def create_grade_level(
         existing = session.scalar(
             select(GradeLevel).where(
                 GradeLevel.owner_id == professor.id,
-                GradeLevel.name == payload.name,
+                func.lower(GradeLevel.name) == payload.name.lower(),
             )
         )
         if existing is None:
