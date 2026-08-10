@@ -16,7 +16,13 @@ def list_grade_levels(
     session: DbSession,
 ) -> list[GradeLevel]:
     ensure_default_grade_levels(professor.id, session)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Two initial dashboard requests can try to seed the same defaults.
+        # The unique constraint decides the winner; the loser can safely read
+        # the now-persisted rows instead of turning first login into a 500.
+        session.rollback()
     return list(
         session.scalars(
             select(GradeLevel)

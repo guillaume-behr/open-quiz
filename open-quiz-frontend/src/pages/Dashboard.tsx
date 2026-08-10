@@ -191,7 +191,13 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
             return
         }
         setCurrentUser(user)
-        setGradeLevels(await getGradeLevels())
+        try {
+            setGradeLevels(await getGradeLevels())
+        } catch {
+            // Authentication succeeded. A transient dashboard bootstrap failure
+            // must not invalidate the consumed two-factor challenge.
+            setGradeLevels([])
+        }
         navigate("/teacher/dashboard", { replace: true })
     }
 
