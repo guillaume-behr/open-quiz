@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
+import { naturalCompare } from "@/lib/utils"
 import {
     BookOpenText,
     Eye,
@@ -58,6 +59,9 @@ export function QuizzesList({
     onPageChange,
 }: QuizzesListProps) {
     const { t } = useTranslation()
+    const sortedQuizzes = [...quizzes].sort((first, second) =>
+        naturalCompare(first.title, second.title)
+    )
 
     return (
         <>
@@ -116,12 +120,12 @@ export function QuizzesList({
                         onGradeLevelFilterChange={onGradeLevelFilterChange}
                         onDeleteGradeLevel={onDeleteGradeLevel}
                     />
-                    {quizzes.length === 0 &&
+                    {sortedQuizzes.length === 0 &&
                     (quizFilter || gradeLevelFilter) ? (
                         <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                             {t("no-quiz-filtered")}
                         </p>
-                    ) : quizzes.length === 0 ? (
+                    ) : sortedQuizzes.length === 0 ? (
                         <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                             <BookOpenText className="mb-2 size-8" />
                             <p className="font-medium">{t("no-quiz")}</p>
@@ -130,10 +134,12 @@ export function QuizzesList({
                     ) : (
                         <div>
                             <ul
-                                key={quizzes.map((quiz) => quiz.id).join(",")}
+                                key={sortedQuizzes
+                                    .map((quiz) => quiz.id)
+                                    .join(",")}
                                 className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
                             >
-                                {quizzes.map((quiz) => (
+                                {sortedQuizzes.map((quiz) => (
                                     <QuizCard
                                         key={quiz.id}
                                         quiz={quiz}

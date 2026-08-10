@@ -369,11 +369,11 @@ def question_response(
         id=question.id,
         question_bank_id=question.question_bank_id,
         prompt=question.prompt,
-        points=question.points,
         difficulty=question.difficulty,
         answer_mode=question.answer_mode,
         answer_mode_disclosed=question.answer_mode_disclosed,
         response_language=question.response_language,
+        allow_code_execution=question.allow_code_execution,
         has_image=question.image_content_type is not None,
         code_language=code.language if code else None,
         code_content=code.content if code else None,
@@ -410,11 +410,11 @@ def add_question(
     question = Question(
         question_bank_id=question_bank_id,
         prompt=payload.prompt,
-        points=payload.points,
         difficulty=payload.difficulty,
         answer_mode=payload.answer_mode,
         answer_mode_disclosed=payload.answer_mode_disclosed,
         response_language=payload.response_language,
+        allow_code_execution=payload.allow_code_execution,
         correction_mode="automatic",
         image_data=image_data,
         image_content_type=image_content_type,
@@ -429,7 +429,7 @@ def add_question(
             points=(
                 choice.points
                 if choice.points is not None
-                else payload.points / sum(item.is_correct for item in payload.choices)
+                else 1 / sum(item.is_correct for item in payload.choices)
                 if choice.is_correct
                 else 0
             ),
@@ -472,7 +472,7 @@ def list_questions(
             select(Question)
             .options(defer(Question.image_data))
             .where(Question.question_bank_id == question_bank_id)
-            .order_by(Question.created_at.desc(), Question.id.desc())
+            .order_by(Question.prompt, Question.id)
         )
     )
     if not questions:
@@ -532,10 +532,10 @@ def download_import_example(
         "questions": [
             {
                 "prompt": "Quelle est la capitale de la France ?",
-                "points": 3,
                 "difficulty": "easy",
                 "answer_mode": "single",
                 "answer_mode_disclosed": True,
+                "allow_code_execution": False,
                 "choices": [
                     {
                         "label": "Paris",
@@ -560,10 +560,10 @@ def download_import_example(
             },
             {
                 "prompt": "Quels nombres sont premiers ?",
-                "points": 6,
                 "difficulty": "medium",
                 "answer_mode": "multiple",
                 "answer_mode_disclosed": False,
+                "allow_code_execution": False,
                 "choices": [
                     {
                         "label": "2",
@@ -614,11 +614,11 @@ def download_import_example(
             },
             {
                 "prompt": "Expliquez pourquoi la Terre tourne autour du Soleil.",
-                "points": 9,
                 "difficulty": "hard",
                 "answer_mode": "written",
                 "answer_mode_disclosed": True,
                 "response_language": "python",
+                "allow_code_execution": True,
                 "choices": [
                     {
                         "label": "La gravitation maintient la Terre en orbite autour du Soleil.",
@@ -683,11 +683,11 @@ def export_questions(
                 )
                 exported_question = {
                     "prompt": question.prompt,
-                    "points": question.points,
                     "difficulty": question.difficulty,
                     "answer_mode": question.answer_mode,
                     "answer_mode_disclosed": question.answer_mode_disclosed,
                     "response_language": question.response_language,
+                    "allow_code_execution": question.allow_code_execution,
                     "choices": [
                         {
                             "label": choice.label,
@@ -995,12 +995,11 @@ async def update_question(
                 ) from None
 
     question.prompt = question_payload.prompt
-    if question_payload.points is not None:
-        question.points = question_payload.points
     question.difficulty = question_payload.difficulty
     question.answer_mode = question_payload.answer_mode
     question.answer_mode_disclosed = question_payload.answer_mode_disclosed
     question.response_language = question_payload.response_language
+    question.allow_code_execution = question_payload.allow_code_execution
     question.correction_mode = "automatic"
     if image_data and image_content_type:
         question.image_data = image_data
@@ -1089,8 +1088,7 @@ async def update_question(
         choice.points = (
             choice_payload.points
             if choice_payload.points is not None
-            else question.points
-            / sum(item.is_correct for item in question_payload.choices)
+            else 1 / sum(item.is_correct for item in question_payload.choices)
             if choice_payload.is_correct
             else 0
         )

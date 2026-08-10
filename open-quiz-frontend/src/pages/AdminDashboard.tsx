@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Pagination } from "@/components/ui/pagination"
 import { errorMessage } from "@/lib/errors"
 import {
@@ -359,10 +360,9 @@ export function AdminDashboard() {
                                     <FieldLabel htmlFor="new-password">
                                         {t("login-password")}
                                     </FieldLabel>
-                                    <Input
+                                    <PasswordInput
                                         id="new-password"
                                         name="password"
-                                        type="password"
                                         required
                                         minLength={16}
                                         maxLength={256}
@@ -529,10 +529,9 @@ export function AdminDashboard() {
                                 <FieldLabel htmlFor="recovery-password">
                                     {t("new-password")}
                                 </FieldLabel>
-                                <Input
+                                <PasswordInput
                                     id="recovery-password"
                                     name="password"
-                                    type="password"
                                     required
                                     minLength={16}
                                     maxLength={256}

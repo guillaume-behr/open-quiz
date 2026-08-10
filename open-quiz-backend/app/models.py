@@ -150,8 +150,10 @@ class Question(Base):
     answer_mode: Mapped[str] = mapped_column(String(20))
     answer_mode_disclosed: Mapped[bool] = mapped_column(Boolean, default=True)
     response_language: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    allow_code_execution: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0"
+    )
     correction_mode: Mapped[str] = mapped_column(String(20))
-    points: Mapped[float] = mapped_column(Float, default=1.0, server_default="1")
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     image_content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -200,7 +202,7 @@ class Quiz(Base):
     title: Mapped[str] = mapped_column(String(160))
     source_language: Mapped[str] = mapped_column(String(35), default="fr")
     question_count: Mapped[int] = mapped_column(Integer)
-    duration_seconds: Mapped[int] = mapped_column(Integer, default=1800)
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=900)
     allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_negative_points: Mapped[bool] = mapped_column(Boolean, default=False)
     same_questions_for_all: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -273,6 +275,9 @@ class QuizSession(Base):
     makeup_session_id: Mapped[int | None] = mapped_column(
         ForeignKey("makeup_sessions.id"), nullable=True, index=True
     )
+    training_question_bank_id: Mapped[int | None] = mapped_column(
+        ForeignKey("question_banks.id"), nullable=True, index=True
+    )
 
 
 class MakeupSession(Base):
@@ -332,7 +337,6 @@ class QuizSessionQuestion(Base):
         ForeignKey("questions.id"), primary_key=True
     )
     position: Mapped[int] = mapped_column(Integer)
-    points: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class QuizSessionStudentQuestion(Base):
@@ -355,7 +359,6 @@ class QuizSessionStudentQuestion(Base):
         ForeignKey("questions.id"), primary_key=True
     )
     position: Mapped[int] = mapped_column(Integer)
-    points: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class QuizParticipant(Base):

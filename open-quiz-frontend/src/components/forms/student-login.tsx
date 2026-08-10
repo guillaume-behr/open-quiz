@@ -6,6 +6,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -62,10 +63,9 @@ export function StudentLogin({
                     <FieldLabel htmlFor="student-login-password">
                         {t("login-password")}
                     </FieldLabel>
-                    <Input
+                    <PasswordInput
                         id="student-login-password"
                         className="py-6"
-                        type="password"
                         autoComplete="current-password"
                         value={password}
                         onChange={(event) =>

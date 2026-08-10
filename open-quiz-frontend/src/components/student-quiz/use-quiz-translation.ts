@@ -38,6 +38,23 @@ export function useQuizTranslation(
     )
 
     useEffect(() => {
+        operationVersionRef.current += 1
+        translatorRef.current?.destroy()
+        translatorRef.current = null
+        translatorPairRef.current = null
+        const timeout = window.setTimeout(() => {
+            setEnabled(false)
+            setTranslatedPair(null)
+            setTranslatedTitle(null)
+            setTranslatedQuestion(null)
+            setErrorPair(null)
+            setIsTranslating(false)
+            setIsDownloading(false)
+        }, 0)
+        return () => window.clearTimeout(timeout)
+    }, [pair])
+
+    useEffect(() => {
         const question = session?.question
         const translator = translatorRef.current
         if (!active || !translator || !question) return

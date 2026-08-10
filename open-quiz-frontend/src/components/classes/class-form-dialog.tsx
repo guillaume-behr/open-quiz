@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { LoaderCircle, Plus } from "lucide-react"
 import type { FormEvent } from "react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 type ClassFormDialogProps = {
@@ -32,6 +33,7 @@ type ClassFormDialogProps = {
     onAddGradeLevel: () => void
     onClose: () => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
+    studentManagement?: ReactNode
 }
 
 export function ClassFormDialog({
@@ -53,6 +55,7 @@ export function ClassFormDialog({
     onAddGradeLevel,
     onClose,
     onSubmit,
+    studentManagement,
 }: ClassFormDialogProps) {
     const { t } = useTranslation()
 
@@ -64,7 +67,7 @@ export function ClassFormDialog({
             }}
             title={t(editingClass ? "edit-class" : "create-class")}
             description={t("create-class-help")}
-            className="max-w-lg"
+            className={editingClass ? "max-w-2xl" : "max-w-lg"}
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup>
@@ -92,6 +95,7 @@ export function ClassFormDialog({
                             ))}
                         </datalist>
                     </Field>
+                    {editingClass && studentManagement}
                     <Field>
                         <FieldLabel htmlFor="class-grade">
                             {t("grade-level")}

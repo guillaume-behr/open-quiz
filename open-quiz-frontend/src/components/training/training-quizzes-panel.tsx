@@ -1,7 +1,17 @@
-import { getTrainingQuestionBanks, startTrainingQuiz } from "@/api/quizzes"
-import type { QuestionBank, StudentAccount } from "@/api/types"
+import {
+    getTrainingHistory,
+    getTrainingQuestionBanks,
+    startTrainingQuiz,
+} from "@/api/quizzes"
+import type {
+    QuestionBank,
+    StudentAccount,
+    TrainingHistoryItem,
+} from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { Dumbbell, LoaderCircle, Play } from "lucide-react"
+import { Dialog } from "@/components/ui/dialog"
+import { naturalCompare } from "@/lib/utils"
+import { BarChart3, Dumbbell, LoaderCircle, Play } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
@@ -19,6 +29,13 @@ export function TrainingQuizzesPanel({
     const [isLoading, setIsLoading] = useState(true)
     const [startingId, setStartingId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [historyBank, setHistoryBank] = useState<QuestionBank | null>(null)
+    const [history, setHistory] = useState<TrainingHistoryItem[]>([])
+    const [historyLoading, setHistoryLoading] = useState(false)
+    const [historyError, setHistoryError] = useState<string | null>(null)
+    const sortedBanks = [...banks].sort((first, second) =>
+        naturalCompare(first.chapter, second.chapter)
+    )
 
     useEffect(() => {
         let active = true
@@ -60,6 +77,20 @@ export function TrainingQuizzesPanel({
         }
     }
 
+    async function openHistory(bank: QuestionBank) {
+        setHistoryBank(bank)
+        setHistory([])
+        setHistoryError(null)
+        setHistoryLoading(true)
+        try {
+            setHistory(await getTrainingHistory(bank.id, token))
+        } catch {
+            setHistoryError(t("training-history-error"))
+        } finally {
+            setHistoryLoading(false)
+        }
+    }
+
     if (isLoading) {
         return (
             <div
@@ -79,7 +110,7 @@ export function TrainingQuizzesPanel({
                     {error}
                 </p>
             )}
-            {banks.length === 0 ? (
+            {sortedBanks.length === 0 ? (
                 <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed text-center text-muted-foreground">
                     <Dumbbell className="mb-3 size-9" />
                     <p className="font-semibold">{t("no-training-quiz")}</p>
@@ -87,18 +118,20 @@ export function TrainingQuizzesPanel({
                 </div>
             ) : (
                 <div
-                    key={banks.map((bank) => bank.id).join(",")}
+                    key={sortedBanks.map((bank) => bank.id).join(",")}
                     className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:grid-cols-2"
                 >
-                    {banks.map((bank) => (
+                    {sortedBanks.map((bank) => (
                         <article
                             key={bank.id}
                             className="flex flex-col rounded-xl border bg-background p-5"
                         >
-                            <Dumbbell className="size-7 text-primary" />
-                            <h3 className="mt-4 text-lg font-bold">
-                                {bank.chapter}
-                            </h3>
+                            <div className="flex items-center gap-3">
+                                <Dumbbell className="size-7 shrink-0 text-primary" />
+                                <h3 className="text-lg font-bold">
+                                    {bank.chapter}
+                                </h3>
+                            </div>
                             <p className="mt-1 text-sm text-muted-foreground">
                                 {bank.grade_level} ·{" "}
                                 {t("training-quiz-summary", {
@@ -123,10 +156,133 @@ export function TrainingQuizzesPanel({
                                 )}
                                 {t("start-training")}
                             </Button>
+                            <Button
+                                className="mt-2"
+                                variant="outline"
+                                onClick={() => void openHistory(bank)}
+                            >
+                                <BarChart3 />
+                                {t("training-history")}
+                            </Button>
                         </article>
                     ))}
                 </div>
             )}
+            <Dialog
+                open={historyBank !== null}
+                onOpenChange={(open) => !open && setHistoryBank(null)}
+                title={t("training-history-title", {
+                    bank: historyBank?.chapter ?? "",
+                })}
+                description={t("training-history-help")}
+                className="max-w-2xl"
+            >
+                {historyLoading ? (
+                    <div className="flex min-h-40 items-center justify-center">
+                        <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
+                    </div>
+                ) : historyError ? (
+                    <p role="alert" className="text-sm text-destructive">
+                        {historyError}
+                    </p>
+                ) : history.length === 0 ? (
+                    <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                        {t("training-history-empty")}
+                    </p>
+                ) : (
+                    <TrainingHistoryChart items={history} />
+                )}
+            </Dialog>
+        </div>
+    )
+}
+
+function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
+    const { t, i18n } = useTranslation()
+    const percentages = items.map((item) =>
+        item.maximum_score > 0
+            ? Math.max(
+                  0,
+                  Math.min(100, (item.score / item.maximum_score) * 100)
+              )
+            : 0
+    )
+    const points = percentages
+        .map((value, index) => {
+            const x =
+                items.length === 1 ? 50 : (index / (items.length - 1)) * 100
+            return `${x},${100 - value}`
+        })
+        .join(" ")
+    return (
+        <div className="space-y-5">
+            <div className="rounded-xl border bg-muted/20 p-4">
+                <svg
+                    viewBox="-4 -8 108 116"
+                    className="h-56 w-full overflow-visible"
+                    role="img"
+                    aria-label={t("training-history-chart-label")}
+                >
+                    {[0, 25, 50, 75, 100].map((value) => (
+                        <line
+                            key={value}
+                            x1="0"
+                            x2="100"
+                            y1={100 - value}
+                            y2={100 - value}
+                            className="stroke-border"
+                            strokeWidth="0.5"
+                        />
+                    ))}
+                    <polyline
+                        points={points}
+                        fill="none"
+                        className="stroke-primary"
+                        strokeWidth="2"
+                        vectorEffect="non-scaling-stroke"
+                    />
+                    {percentages.map((value, index) => {
+                        const x =
+                            items.length === 1
+                                ? 50
+                                : (index / (items.length - 1)) * 100
+                        return (
+                            <circle
+                                key={items[index].session_id}
+                                cx={x}
+                                cy={100 - value}
+                                r="2.5"
+                                className="fill-primary"
+                            />
+                        )
+                    })}
+                </svg>
+            </div>
+            <ol
+                className="space-y-2"
+                aria-label={t("training-history-details")}
+            >
+                {items.map((item, index) => (
+                    <li
+                        key={item.session_id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                    >
+                        <time dateTime={item.started_at}>
+                            {new Intl.DateTimeFormat(i18n.resolvedLanguage, {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                            }).format(new Date(item.started_at))}
+                        </time>
+                        <span className="font-semibold">
+                            {t("training-history-score", {
+                                score: item.score,
+                                maximum: item.maximum_score,
+                                percent: Math.round(percentages[index]),
+                            })}
+                        </span>
+                    </li>
+                ))}
+            </ol>
         </div>
     )
 }

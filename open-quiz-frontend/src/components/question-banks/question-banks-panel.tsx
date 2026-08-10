@@ -10,6 +10,7 @@ import {
     importQuestionBatch,
     updateQuestionBank,
 } from "@/api/question-banks"
+import { naturalCompare } from "@/lib/utils"
 import { ApiError } from "@/api/client"
 import type { GradeLevel, Question, QuestionBank } from "@/api/types"
 import { QuestionBankFormDialog } from "@/components/question-banks/question-bank-form-dialog"
@@ -28,8 +29,8 @@ function compareQuestionBanks(
     second: QuestionBank
 ): number {
     return (
-        first.grade_level.localeCompare(second.grade_level, "fr") ||
-        first.chapter.localeCompare(second.chapter, "fr")
+        naturalCompare(first.grade_level, second.grade_level) ||
+        naturalCompare(first.chapter, second.chapter)
     )
 }
 

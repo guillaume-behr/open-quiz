@@ -6,7 +6,11 @@ import {
     unassignStudentAccount,
     updateStudentClass,
 } from "@/api/classes"
-import { getAllStudents, getStudentCredentials } from "@/api/students"
+import {
+    createStudentAccount,
+    getAllStudents,
+    getStudentCredentials,
+} from "@/api/students"
 import type { GradeLevel, StudentAccount, StudentClass } from "@/api/types"
 import { ClassFormDialog } from "@/components/classes/class-form-dialog"
 import { GradeLevelSelect } from "@/components/grade-level-select"
@@ -71,6 +75,8 @@ export function ClassesPanel({
     const [gradeLevel, setGradeLevel] = useState("")
     const [newGradeLevel, setNewGradeLevel] = useState("")
     const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
+    const [newStudentFirstName, setNewStudentFirstName] = useState("")
+    const [newStudentLastName, setNewStudentLastName] = useState("")
     const [isBusy, setIsBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -106,6 +112,7 @@ export function ClassesPanel({
         setGradeLevel("")
         setNewGradeLevel("")
         setIsAddingGradeLevel(false)
+        setManaged(null)
         setError(null)
         onCreateDialogOpenChange(false)
     }
@@ -180,6 +187,33 @@ export function ClassesPanel({
         } catch {
             setManaged(updated)
             setError(t("student-assignment-error"))
+        } finally {
+            setIsBusy(false)
+        }
+    }
+
+    async function createAndAssignStudent() {
+        if (
+            !managed ||
+            !newStudentFirstName.trim() ||
+            !newStudentLastName.trim()
+        )
+            return
+        setIsBusy(true)
+        setError(null)
+        try {
+            const account = await createStudentAccount({
+                first_name: newStudentFirstName.trim(),
+                last_name: newStudentLastName.trim(),
+            })
+            const updated = await assignStudentAccount(managed.id, account.id)
+            setManaged(updated)
+            setEditing(updated)
+            setNewStudentFirstName("")
+            setNewStudentLastName("")
+            setReloadKey((value) => value + 1)
+        } catch {
+            setError(t("student-account-save-error"))
         } finally {
             setIsBusy(false)
         }
@@ -425,6 +459,7 @@ export function ClassesPanel({
                                         className="absolute top-4 right-12"
                                         onClick={() => {
                                             setEditing(studentClass)
+                                            setManaged(studentClass)
                                             setClassName(studentClass.name)
                                             setGradeLevel(
                                                 studentClass.grade_level
@@ -467,9 +502,16 @@ export function ClassesPanel({
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    onClick={() =>
+                                                    onClick={() => {
                                                         setManaged(studentClass)
-                                                    }
+                                                        setEditing(studentClass)
+                                                        setClassName(
+                                                            studentClass.name
+                                                        )
+                                                        setGradeLevel(
+                                                            studentClass.grade_level
+                                                        )
+                                                    }}
                                                 >
                                                     {t("manage-students")}
                                                 </Button>
@@ -523,73 +565,113 @@ export function ClassesPanel({
                 onAddGradeLevel={() => void addGradeLevel()}
                 onClose={closeClassForm}
                 onSubmit={saveClass}
-            />
-
-            <Dialog
-                open={managed !== null}
-                onOpenChange={(open) => !open && setManaged(null)}
-                title={managed?.name ?? ""}
-                description={
-                    managed
-                        ? `${managed.grade_level} — ${t("student-count", { count: managed.student_count })}`
-                        : undefined
+                studentManagement={
+                    managed ? (
+                        <section className="space-y-4 border-t pt-5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 className="font-semibold">
+                                        {t("manage-students")}
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("student-count", {
+                                            count: managed.student_count,
+                                        })}
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void openAssignment()}
+                                    disabled={isBusy}
+                                >
+                                    <UserPlus />
+                                    {t("assign-student")}
+                                </Button>
+                            </div>
+                            <div className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[1fr_1fr_auto]">
+                                <Input
+                                    value={newStudentFirstName}
+                                    onChange={(event) =>
+                                        setNewStudentFirstName(
+                                            event.target.value
+                                        )
+                                    }
+                                    placeholder={t("first-name")}
+                                    aria-label={t("first-name")}
+                                />
+                                <Input
+                                    value={newStudentLastName}
+                                    onChange={(event) =>
+                                        setNewStudentLastName(
+                                            event.target.value
+                                        )
+                                    }
+                                    placeholder={t("last-name")}
+                                    aria-label={t("last-name")}
+                                />
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() =>
+                                        void createAndAssignStudent()
+                                    }
+                                    disabled={
+                                        isBusy ||
+                                        !newStudentFirstName.trim() ||
+                                        !newStudentLastName.trim()
+                                    }
+                                >
+                                    <UserPlus />
+                                    {t("create-student-account")}
+                                </Button>
+                            </div>
+                            {managed.students.length === 0 ? (
+                                <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+                                    {t("no-student")}
+                                </p>
+                            ) : (
+                                <ul className="max-h-56 divide-y overflow-auto rounded-lg border bg-background">
+                                    {managed.students.map((student) => (
+                                        <li
+                                            key={student.id}
+                                            className="flex items-center justify-between gap-3 px-4 py-3"
+                                        >
+                                            <div>
+                                                <p className="font-medium">
+                                                    {student.display_name}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {student.identifier}
+                                                </p>
+                                            </div>
+                                            {student.account_id !== null && (
+                                                <Button
+                                                    type="button"
+                                                    size="icon-sm"
+                                                    variant="ghost"
+                                                    disabled={isBusy}
+                                                    onClick={() =>
+                                                        void unassign(
+                                                            student.account_id!
+                                                        )
+                                                    }
+                                                    aria-label={t(
+                                                        "unassign-student"
+                                                    )}
+                                                >
+                                                    <UserMinus />
+                                                </Button>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </section>
+                    ) : undefined
                 }
-                className="max-w-2xl"
-            >
-                {managed && (
-                    <div>
-                        <div className="flex justify-end">
-                            <Button
-                                onClick={() => void openAssignment()}
-                                disabled={isBusy}
-                            >
-                                <UserPlus />
-                                {t("assign-student")}
-                            </Button>
-                        </div>
-                        {managed.students.length === 0 ? (
-                            <p className="mt-5 rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
-                                {t("no-student")}
-                            </p>
-                        ) : (
-                            <ul className="mt-5 divide-y rounded-lg border">
-                                {managed.students.map((student) => (
-                                    <li
-                                        key={student.id}
-                                        className="flex items-center justify-between gap-3 px-4 py-3"
-                                    >
-                                        <div>
-                                            <p className="font-medium">
-                                                {student.display_name}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {student.identifier}
-                                            </p>
-                                        </div>
-                                        {student.account_id !== null && (
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                disabled={isBusy}
-                                                onClick={() =>
-                                                    void unassign(
-                                                        student.account_id!
-                                                    )
-                                                }
-                                                aria-label={t(
-                                                    "unassign-student"
-                                                )}
-                                            >
-                                                <UserMinus />
-                                            </Button>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                )}
-            </Dialog>
+            />
 
             <Dialog
                 open={assigning}

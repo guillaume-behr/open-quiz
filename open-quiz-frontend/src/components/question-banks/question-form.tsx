@@ -94,7 +94,6 @@ export function QuestionForm({
 }: QuestionFormProps) {
     const { t } = useTranslation()
     const [prompt, setPrompt] = useState(question?.prompt ?? "")
-    const [points] = useState(question?.points ?? 1)
     const [difficulty, setDifficulty] = useState<QuestionDifficulty>(
         question?.difficulty ?? "medium"
     )
@@ -106,6 +105,9 @@ export function QuestionForm({
     )
     const [responseLanguage, setResponseLanguage] =
         useState<CodeLanguage | null>(question?.response_language ?? null)
+    const [allowCodeExecution, setAllowCodeExecution] = useState(
+        question?.allow_code_execution ?? false
+    )
     const [choices, setChoices] = useState<EditableChoice[]>(() =>
         initialChoices(question)
     )
@@ -235,12 +237,15 @@ export function QuestionForm({
             )
             const payload: NewQuestion = {
                 prompt: prompt.trim(),
-                points,
                 difficulty,
                 answer_mode: answerMode,
                 answer_mode_disclosed: answerModeDisclosed,
                 response_language:
                     answerMode === "written" ? responseLanguage : null,
+                allow_code_execution:
+                    answerMode === "written" && responseLanguage === "python"
+                        ? allowCodeExecution
+                        : false,
                 code_language: hasCode ? codeLanguage : null,
                 code_content: hasCode ? codeContent : null,
                 choices: encodedChoices,
@@ -287,10 +292,15 @@ export function QuestionForm({
                     answerMode={answerMode}
                     answerModeDisclosed={answerModeDisclosed}
                     responseLanguage={responseLanguage}
+                    allowCodeExecution={allowCodeExecution}
                     onDifficultyChange={setDifficulty}
                     onAnswerModeChange={changeAnswerMode}
                     onAnswerModeDisclosedChange={setAnswerModeDisclosed}
-                    onResponseLanguageChange={setResponseLanguage}
+                    onResponseLanguageChange={(language) => {
+                        setResponseLanguage(language)
+                        if (language !== "python") setAllowCodeExecution(false)
+                    }}
+                    onAllowCodeExecutionChange={setAllowCodeExecution}
                 />
                 <QuestionChoicesEditor
                     choices={choices}

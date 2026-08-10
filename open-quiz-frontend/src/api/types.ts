@@ -131,11 +131,11 @@ export type Question = {
     id: number
     question_bank_id: number
     prompt: string
-    points: number
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
     response_language: CodeLanguage | null
+    allow_code_execution: boolean
     has_image: boolean
     code_language: CodeLanguage | null
     code_content: string | null
@@ -145,11 +145,11 @@ export type Question = {
 
 export type NewQuestion = {
     prompt: string
-    points: number
     difficulty: QuestionDifficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
     response_language: CodeLanguage | null
+    allow_code_execution: boolean
     code_language: CodeLanguage | null
     code_content: string | null
     choices: Array<{
@@ -239,7 +239,7 @@ export type QuizAnswerReview = {
 export type StudentQuizHistoryAnswer = Omit<
     QuizAnswerReview,
     "id" | "score" | "max_score" | "is_graded" | "is_correct"
-> & { is_correct: boolean }
+> & { is_correct: boolean | null }
 
 export type StudentQuizHistoryItem = {
     session_id: number
@@ -311,6 +311,7 @@ export type StudentQuizQuestion = {
     answer_mode: AnswerMode
     answer_mode_disclosed: boolean
     response_language: CodeLanguage | null
+    allow_code_execution: boolean
     has_image: boolean
     code_language: CodeLanguage | null
     code_content: string | null
@@ -335,13 +336,27 @@ export type StudentQuizSession = {
     written_answer: string | null
     question: StudentQuizQuestion | null
     training_feedback: TrainingFeedback | null
+    potential_score: number | null
+    potential_maximum_score: number | null
+    pending_manual_review_count: number
 }
 
 export type TrainingFeedback = {
     question_id: number
-    is_correct: boolean
+    is_correct: boolean | null
     correct_choice_ids: number[]
     expected_answer: string | null
+    submitted_answer: string | null
+    requires_manual_review: boolean
+}
+
+export type TrainingHistoryItem = {
+    session_id: number
+    question_bank_id: number
+    started_at: string
+    score: number
+    maximum_score: number
+    pending_manual_review_count: number
 }
 
 export type StudentQuizJoin = StudentQuizSession & {

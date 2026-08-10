@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
+from app.grade_levels import ensure_default_grade_levels
 from app.models import (
     AuthenticationChallenge,
     RefreshSession,
@@ -65,7 +66,7 @@ def list_users(
     return list(
         session.scalars(
             select(User)
-            .order_by(User.created_at.desc(), User.id.desc())
+            .order_by(User.display_name, User.username, User.id)
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -90,6 +91,8 @@ def create_user(
     )
     session.add(user)
     try:
+        session.flush()
+        ensure_default_grade_levels(user.id, session)
         session.commit()
     except IntegrityError:
         session.rollback()

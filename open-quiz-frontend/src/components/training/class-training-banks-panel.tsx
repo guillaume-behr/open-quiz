@@ -5,17 +5,11 @@ import {
     updateClassTrainingQuestionBanks,
 } from "@/api/quizzes"
 import type { QuestionBank, StudentClass } from "@/api/types"
-import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
-import {
-    CheckCircle2,
-    LibraryBig,
-    LoaderCircle,
-    Save,
-    School,
-} from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { Toast } from "@/components/ui/toast"
+import { LibraryBig, LoaderCircle, School } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 export function ClassTrainingBanksPanel() {
@@ -29,7 +23,13 @@ export function ClassTrainingBanksPanel() {
     const [isClassLoading, setIsClassLoading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [saved, setSaved] = useState(false)
+    const [toast, setToast] = useState<{
+        message: string
+        variant: "success" | "error"
+    } | null>(null)
+    const saveVersion = useRef(0)
+    const saveQueue = useRef<Promise<void>>(Promise.resolve())
+    const confirmedBankIds = useRef(new Map<number, number[]>())
 
     useEffect(() => {
         let active = true
@@ -57,6 +57,7 @@ export function ClassTrainingBanksPanel() {
             .then((assignedBanks) => {
                 if (!active) return
                 const ids = assignedBanks.map((bank) => bank.id)
+                confirmedBankIds.current.set(Number(selectedClassId), ids)
                 setSelectedBankIds(ids)
                 setSavedBankIds(ids)
             })
@@ -67,12 +68,11 @@ export function ClassTrainingBanksPanel() {
         }
     }, [selectedClassId, t])
 
-    const hasChanges = useMemo(
-        () =>
-            [...selectedBankIds].sort((a, b) => a - b).join(",") !==
-            [...savedBankIds].sort((a, b) => a - b).join(","),
-        [savedBankIds, selectedBankIds]
-    )
+    useEffect(() => {
+        if (!toast) return
+        const timeout = window.setTimeout(() => setToast(null), 3500)
+        return () => window.clearTimeout(timeout)
+    }, [toast])
     const selectedClass = classes.find(
         (studentClass) => String(studentClass.id) === selectedClassId
     )
@@ -80,25 +80,41 @@ export function ClassTrainingBanksPanel() {
         ? banks.filter((bank) => bank.grade_level === selectedClass.grade_level)
         : []
 
-    async function save() {
+    function changeSelection(nextIds: number[]) {
         if (!selectedClassId) return
+        const classId = Number(selectedClassId)
+        const version = ++saveVersion.current
+        setSelectedBankIds(nextIds)
         setIsSaving(true)
-        setError(null)
-        setSaved(false)
-        try {
-            const assigned = await updateClassTrainingQuestionBanks(
-                Number(selectedClassId),
-                selectedBankIds
-            )
-            const ids = assigned.map((bank) => bank.id)
-            setSelectedBankIds(ids)
-            setSavedBankIds(ids)
-            setSaved(true)
-        } catch {
-            setError(t("training-settings-save-error"))
-        } finally {
-            setIsSaving(false)
-        }
+        saveQueue.current = saveQueue.current.then(async () => {
+            if (version !== saveVersion.current) return
+            try {
+                const assigned = await updateClassTrainingQuestionBanks(
+                    classId,
+                    nextIds
+                )
+                const ids = assigned.map((bank) => bank.id)
+                confirmedBankIds.current.set(classId, ids)
+                if (version !== saveVersion.current) return
+                setSelectedBankIds(ids)
+                setSavedBankIds(ids)
+                setToast({
+                    message: t("training-settings-saved"),
+                    variant: "success",
+                })
+            } catch {
+                if (version !== saveVersion.current) return
+                setSelectedBankIds(
+                    confirmedBankIds.current.get(classId) ?? savedBankIds
+                )
+                setToast({
+                    message: t("training-settings-save-error"),
+                    variant: "error",
+                })
+            } finally {
+                if (version === saveVersion.current) setIsSaving(false)
+            }
+        })
     }
 
     if (isLoading) {
@@ -133,7 +149,8 @@ export function ClassTrainingBanksPanel() {
                             onChange={(event) => {
                                 setIsClassLoading(true)
                                 setError(null)
-                                setSaved(false)
+                                saveVersion.current += 1
+                                setIsSaving(false)
                                 setSelectedClassId(event.target.value)
                             }}
                         >
@@ -167,23 +184,12 @@ export function ClassTrainingBanksPanel() {
                             {t("training-available-banks-help")}
                         </p>
                     </div>
-                    <Button
-                        type="button"
-                        onClick={() => void save()}
-                        disabled={
-                            !selectedClassId ||
-                            !hasChanges ||
-                            isSaving ||
-                            isClassLoading
-                        }
-                    >
-                        {isSaving ? (
-                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                        ) : (
-                            <Save />
-                        )}
-                        {t("save-training-banks")}
-                    </Button>
+                    {isSaving && (
+                        <LoaderCircle
+                            className="size-5 animate-spin text-primary motion-reduce:animate-none"
+                            aria-label={t("saving")}
+                        />
+                    )}
                 </div>
 
                 {error && (
@@ -192,15 +198,6 @@ export function ClassTrainingBanksPanel() {
                         className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
                     >
                         {error}
-                    </p>
-                )}
-                {saved && (
-                    <p
-                        className="mt-4 flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300"
-                        role="status"
-                    >
-                        <CheckCircle2 className="size-4" />
-                        {t("training-settings-saved")}
                     </p>
                 )}
 
@@ -245,12 +242,15 @@ export function ClassTrainingBanksPanel() {
                                         className="mt-1 accent-primary"
                                         checked={selected}
                                         onChange={() =>
-                                            setSelectedBankIds((current) =>
+                                            changeSelection(
                                                 selected
-                                                    ? current.filter(
+                                                    ? selectedBankIds.filter(
                                                           (id) => id !== bank.id
                                                       )
-                                                    : [...current, bank.id]
+                                                    : [
+                                                          ...selectedBankIds,
+                                                          bank.id,
+                                                      ]
                                             )
                                         }
                                     />
@@ -271,6 +271,7 @@ export function ClassTrainingBanksPanel() {
                     </div>
                 )}
             </section>
+            {toast && <Toast {...toast} />}
         </div>
     )
 }

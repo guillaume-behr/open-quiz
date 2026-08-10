@@ -76,7 +76,7 @@ export function QuizzesPanel({
     const [title, setTitle] = useState("")
     const [quizGradeLevel, setQuizGradeLevel] = useState("")
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
-    const [durationMinutes, setDurationMinutes] = useState(30)
+    const [durationMinutes, setDurationMinutes] = useState(15)
     const [allowPreviousQuestions, setAllowPreviousQuestions] = useState(false)
     const [allowNegativePoints, setAllowNegativePoints] = useState(false)
     const [difficultyCounts, setDifficultyCounts] = useState({
@@ -267,7 +267,7 @@ export function QuizzesPanel({
         setTitle("")
         setQuizGradeLevel("")
         setSelectedBankIds([])
-        setDurationMinutes(30)
+        setDurationMinutes(15)
         setAllowPreviousQuestions(false)
         setAllowNegativePoints(false)
         setDifficultyCounts({ easy: 0, medium: 0, hard: 0 })

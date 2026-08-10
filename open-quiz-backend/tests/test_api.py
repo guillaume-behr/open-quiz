@@ -1262,6 +1262,8 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             "is_correct": True,
             "correct_choice_ids": [correct_choice_id],
             "expected_answer": None,
+            "submitted_answer": None,
+            "requires_manual_review": False,
         }
         assert (
             client.get("/api/quizzes/sessions/results", headers=teacher_headers).json()
@@ -1274,12 +1276,20 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         assert class_after_training["latest_quiz_title"] is None
         with sqlite3.connect(database_path) as database:
             assert (
-                database.execute("SELECT COUNT(*) FROM quiz_answers").fetchone()[0] == 0
+                database.execute("SELECT COUNT(*) FROM quiz_answers").fetchone()[0] == 1
             )
             assert (
                 database.execute("SELECT COUNT(*) FROM quiz_sessions").fetchone()[0]
-                == 0
+                == 1
             )
+        history = client.get(
+            f"/api/quizzes/training/{bank['id']}/history",
+            headers=student_headers,
+        )
+        assert history.status_code == 200
+        assert len(history.json()) == 1
+        assert history.json()[0]["score"] == 1
+        assert history.json()[0]["maximum_score"] == 1
 
         second_question = client.post(
             f"/api/question-banks/{bank['id']}/questions",
@@ -1362,11 +1372,13 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         )
         assert joined_exam.status_code == 201
         with sqlite3.connect(database_path) as database:
-            assigned = database.execute(
-                "SELECT points FROM quiz_session_questions "
-                "WHERE session_id = ? ORDER BY position",
-                (launched_exam.json()["id"],),
-            ).fetchall()
+            assert "points" not in {
+                row[1] for row in database.execute("PRAGMA table_info(questions)")
+            }
+            assert "points" not in {
+                row[1]
+                for row in database.execute("PRAGMA table_info(quiz_session_questions)")
+            }
             common_question_ids = {
                 row[0]
                 for row in database.execute(
@@ -1383,7 +1395,6 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                     (launched_exam.json()["id"], account["identifier"]),
                 )
             ]
-        assert assigned == []
         assert common_question_ids == set()
         assert len(student_question_ids) == 2
         assert (
@@ -1554,7 +1565,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["latest_quiz_title"] is None
         assert student_class["latest_quiz_at"] is None
         grade_levels = client.get("/api/grade-levels", headers=teacher_headers).json()
-        assert [level["name"] for level in grade_levels] == ["5e"]
+        assert [level["name"] for level in grade_levels] == [
+            "5e",
+            "Première",
+            "Seconde",
+            "Terminale",
+        ]
         duplicate_grade_level = client.post(
             "/api/grade-levels",
             headers=teacher_headers,
@@ -1709,6 +1725,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert created_question.status_code == 201
         question = created_question.json()
+        assert "points" not in question
         assert question["has_image"] is True
         assert "correction_mode" not in question
         assert question["answer_mode_disclosed"] is False
@@ -1841,6 +1858,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         }
         assert exported_batch["questions"][0]["image"]["content_type"] == "image/png"
         assert "correction_mode" not in exported_batch["questions"][0]
+        assert "points" not in exported_batch["questions"][0]
         assert exported_batch["questions"][0]["code_language"] == "python"
         assert [
             choice["points"] for choice in exported_batch["questions"][0]["choices"]
@@ -1905,9 +1923,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert '"prompt": "Quelle est la capitale' in example.text
         example_batch = example.json()
         assert example_batch["version"] == 1
-        assert "Niveaux de classe disponibles" in example_batch["question_bank"][
-            "_comment_grade_level"
-        ]
+        assert (
+            "Niveaux de classe disponibles"
+            in example_batch["question_bank"]["_comment_grade_level"]
+        )
         assert "3e" in example_batch["question_bank"]["_comment_grade_level"]
         assert {item["answer_mode"] for item in example_batch["questions"]} == {
             "single",
@@ -1915,6 +1934,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "written",
         }
         assert all("correction_mode" not in item for item in example_batch["questions"])
+        assert all("points" not in item for item in example_batch["questions"])
         assert any(item["image"] for item in example_batch["questions"])
         assert any(item["code_content"] for item in example_batch["questions"])
         assert (
@@ -2003,7 +2023,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "medium_points",
             "hard_points",
         }.isdisjoint(quiz)
-        assert quiz["duration_seconds"] == 1800
+        assert quiz["duration_seconds"] == 900
         assert quiz["allow_previous_questions"] is False
         assert quiz["same_questions_for_all"] is False
         assert len(quiz["question_banks"]) == 1
@@ -2108,9 +2128,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 == student_count * quiz["question_count"]
             )
             assigned_points = connection.execute(
-                "SELECT student_id, SUM(points) "
-                "FROM quiz_session_student_questions WHERE session_id = ? "
-                "GROUP BY student_id",
+                "SELECT assigned.student_id, SUM(CASE WHEN choices.points > 0 "
+                "THEN choices.points ELSE 0 END) "
+                "FROM quiz_session_student_questions AS assigned "
+                "JOIN question_choices AS choices "
+                "ON choices.question_id = assigned.question_id "
+                "WHERE assigned.session_id = ? GROUP BY assigned.student_id",
                 (quiz_session["id"],),
             ).fetchall()
             assert assigned_points
@@ -2118,8 +2141,15 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             assert {
                 row[0]
                 for row in connection.execute(
-                    "SELECT DISTINCT points FROM quiz_session_student_questions "
-                    "WHERE session_id = ?",
+                    "SELECT DISTINCT question_total FROM ("
+                    "SELECT assigned.student_id, assigned.question_id, "
+                    "SUM(CASE WHEN choices.points > 0 THEN choices.points "
+                    "ELSE 0 END) AS question_total "
+                    "FROM quiz_session_student_questions AS assigned "
+                    "JOIN question_choices AS choices "
+                    "ON choices.question_id = assigned.question_id "
+                    "WHERE assigned.session_id = ? "
+                    "GROUP BY assigned.student_id, assigned.question_id)",
                     (quiz_session["id"],),
                 )
             } == {3, 6, 9}

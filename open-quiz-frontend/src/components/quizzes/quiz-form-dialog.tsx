@@ -105,18 +105,6 @@ export function QuizFormDialog({
                         />
                     </Field>
                     <Field>
-                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
-                            <span className="font-medium">
-                                {t("allow-negative-points")}
-                            </span>
-                            <Switch
-                                checked={allowNegativePoints}
-                                onCheckedChange={onAllowNegativePointsChange}
-                                aria-label={t("allow-negative-points")}
-                            />
-                        </label>
-                    </Field>
-                    <Field>
                         <FieldLabel htmlFor="quiz-grade-level">
                             {t("grade-level")}
                         </FieldLabel>
@@ -161,8 +149,16 @@ export function QuizFormDialog({
                             onSelectedIdsChange={onSelectedBankIdsChange}
                         />
                     )}
-                    <Field>
-                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4">
+                    <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                        <div>
+                            <h2 className="font-semibold">
+                                {t("quiz-options")}
+                            </h2>
+                            <p className="text-xs text-muted-foreground">
+                                {t("quiz-options-help")}
+                            </p>
+                        </div>
+                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
                             <span>
                                 <span className="block font-medium">
                                     {t("allow-previous-questions")}
@@ -177,7 +173,17 @@ export function QuizFormDialog({
                                 aria-label={t("allow-previous-questions")}
                             />
                         </label>
-                    </Field>
+                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
+                            <span className="font-medium">
+                                {t("allow-negative-points")}
+                            </span>
+                            <Switch
+                                checked={allowNegativePoints}
+                                onCheckedChange={onAllowNegativePointsChange}
+                                aria-label={t("allow-negative-points")}
+                            />
+                        </label>
+                    </section>
                     <DifficultyQuestionCounts
                         counts={difficultyCounts}
                         available={availableByDifficulty}

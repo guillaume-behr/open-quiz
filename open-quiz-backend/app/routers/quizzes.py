@@ -83,6 +83,7 @@ from app.schemas import (
     StudentQuizStateResponse,
     StudentQuizViolation,
     TrainingFeedback,
+    TrainingHistoryItem,
     TrainingQuestionBankSelection,
 )
 
@@ -229,7 +230,7 @@ def difficulty_counts_for_banks(
     return requested
 
 
-def draw_question_ids(quiz: Quiz, session: DbSession) -> dict[int, float]:
+def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
     bank_ids = quiz_bank_ids(quiz.id, session)
     requested = difficulty_counts_for_banks(quiz, bank_ids, session)
     candidates_by_difficulty = {
@@ -250,31 +251,16 @@ def draw_question_ids(quiz: Quiz, session: DbSession) -> dict[int, float]:
             selected.extend(
                 randomizer.sample(candidates_by_difficulty[difficulty], count)
             )
-    selected_ids = [question.id for question in selected]
-    maximums = {
-        question_id: total or 0.0
-        for question_id, total in session.execute(
-            select(
-                QuestionChoice.question_id,
-                func.sum(
-                    case((QuestionChoice.points > 0, QuestionChoice.points), else_=0)
-                ),
-            )
-            .where(QuestionChoice.question_id.in_(selected_ids))
-            .group_by(QuestionChoice.question_id)
-        )
-    }
-    points = {question.id: maximums.get(question.id, 0.0) for question in selected}
-    question_ids = list(points)
+    question_ids = [question.id for question in selected]
     randomizer.shuffle(question_ids)
-    return {question_id: points[question_id] for question_id in question_ids}
+    return question_ids
 
 
 def draw_unique_question_ids(
     quiz: Quiz,
     session: DbSession,
     used_draws: set[tuple[int, ...]],
-) -> dict[int, float]:
+) -> list[int]:
     if used_draws:
         bank_ids = quiz_bank_ids(quiz.id, session)
         requested = difficulty_counts_for_banks(quiz, bank_ids, session)
@@ -286,11 +272,11 @@ def draw_unique_question_ids(
             return draw_question_ids(quiz, session)
 
     for _ in range(200):
-        points = draw_question_ids(quiz, session)
-        signature = tuple(sorted(points))
+        question_ids = draw_question_ids(quiz, session)
+        signature = tuple(sorted(question_ids))
         if signature not in used_draws:
             used_draws.add(signature)
-            return points
+            return question_ids
     # If the banks contain only one possible combination, every student still
     # receives an independent draw even though the resulting sets must match.
     return draw_question_ids(quiz, session)
@@ -548,42 +534,25 @@ def session_question_points(
     session: DbSession,
     participant: QuizParticipant | None = None,
 ) -> dict[int, float]:
-    if participant is not None and participant.student_id is not None:
-        personalized = dict(
-            session.execute(
-                select(
-                    QuizSessionStudentQuestion.question_id,
-                    QuizSessionStudentQuestion.points,
-                ).where(
-                    QuizSessionStudentQuestion.session_id == quiz_session.id,
-                    QuizSessionStudentQuestion.student_id == participant.student_id,
-                )
-            ).all()
-        )
-        if personalized:
-            return personalized
-    if participant is not None:
-        personalized = dict(
-            session.execute(
-                select(
-                    QuizSessionStudentQuestion.question_id,
-                    QuizSessionStudentQuestion.points,
-                ).where(
-                    QuizSessionStudentQuestion.session_id == quiz_session.id,
-                    QuizSessionStudentQuestion.student_identifier
-                    == participant.student_identifier,
-                )
-            ).all()
-        )
-        if personalized:
-            return personalized
-    return dict(
+    question_ids = session_question_ids(quiz_session, session, participant)
+    if not question_ids:
+        return {}
+    maximums = dict(
         session.execute(
-            select(QuizSessionQuestion.question_id, QuizSessionQuestion.points).where(
-                QuizSessionQuestion.session_id == quiz_session.id
+            select(
+                QuestionChoice.question_id,
+                func.sum(
+                    case((QuestionChoice.points > 0, QuestionChoice.points), else_=0)
+                ),
             )
+            .where(QuestionChoice.question_id.in_(question_ids))
+            .group_by(QuestionChoice.question_id)
         ).all()
     )
+    return {
+        question_id: float(maximums.get(question_id) or 0)
+        for question_id in question_ids
+    }
 
 
 def current_question_id(
@@ -624,48 +593,13 @@ def participant_maximum_scores(
     participants: list[QuizParticipant],
     session: DbSession,
 ) -> dict[int, float]:
-    common_maximum = float(
-        session.scalar(
-            select(func.coalesce(func.sum(QuizSessionQuestion.points), 0)).where(
-                QuizSessionQuestion.session_id == quiz_session.id
-            )
+    return {
+        participant.id: round(
+            sum(session_question_points(quiz_session, session, participant).values()),
+            2,
         )
-        or 0
-    )
-    personalized_by_student: dict[int, float] = {}
-    personalized_by_identifier: dict[str, float] = {}
-    personalized_students: set[int] = set()
-    personalized_identifiers: set[str] = set()
-    for student_id, identifier, points in session.execute(
-        select(
-            QuizSessionStudentQuestion.student_id,
-            QuizSessionStudentQuestion.student_identifier,
-            QuizSessionStudentQuestion.points,
-        ).where(QuizSessionStudentQuestion.session_id == quiz_session.id)
-    ):
-        if student_id is not None:
-            personalized_students.add(student_id)
-            personalized_by_student[student_id] = (
-                personalized_by_student.get(student_id, 0) + points
-            )
-        personalized_identifiers.add(identifier)
-        personalized_by_identifier[identifier] = (
-            personalized_by_identifier.get(identifier, 0) + points
-        )
-
-    maximums: dict[int, float] = {}
-    for participant in participants:
-        if (
-            participant.student_id is not None
-            and participant.student_id in personalized_students
-        ):
-            maximum = personalized_by_student[participant.student_id]
-        elif participant.student_identifier in personalized_identifiers:
-            maximum = personalized_by_identifier[participant.student_identifier]
-        else:
-            maximum = common_maximum
-        maximums[participant.id] = round(maximum, 2)
-    return maximums
+        for participant in participants
+    }
 
 
 def session_response(
@@ -838,14 +772,8 @@ def expire_owned_quiz_sessions(
             )
         )
     )
-    finished_training_ids: list[int] = []
     for quiz_session, quiz in rows:
         expire_quiz_session(quiz_session, quiz, session)
-        if quiz.mode == "training" and quiz_session.status == "finished":
-            finished_training_ids.append(quiz_session.id)
-    if finished_training_ids:
-        delete_quiz_session_records(finished_training_ids, session)
-        session.commit()
 
 
 def delete_quiz_session_records(
@@ -876,10 +804,8 @@ def discard_finished_training_session(
     quiz: Quiz,
     session: DbSession,
 ) -> None:
-    if quiz.mode != "training" or quiz_session.status != "finished":
-        return
-    delete_quiz_session_records([quiz_session.id], session)
-    session.commit()
+    # Finished training sessions are the source of the student's history.
+    return
 
 
 def discard_previous_training_sessions(
@@ -898,6 +824,7 @@ def discard_previous_training_sessions(
             .where(
                 Quiz.owner_id == student.owner_id,
                 Quiz.mode == "training",
+                QuizSession.status != "finished",
                 or_(
                     QuizParticipant.student_id == membership.id,
                     QuizParticipant.student_identifier == student.identifier,
@@ -1037,6 +964,7 @@ def student_question_response(
         answer_mode=question.answer_mode,
         answer_mode_disclosed=question.answer_mode_disclosed,
         response_language=question.response_language,
+        allow_code_execution=question.allow_code_execution,
         has_image=question.image_content_type is not None,
         code_language=code.language if code else None,
         code_content=code.content if code else None,
@@ -1104,7 +1032,7 @@ def student_state_response(
             accessible_positions.add(next_position)
     if participant.current_position is not None:
         accessible_positions.add(participant.current_position)
-    return StudentQuizStateResponse(
+    state = StudentQuizStateResponse(
         **student_session_response(quiz_session, quiz, participant).model_dump(),
         question_number=(
             participant.current_position + 1
@@ -1136,6 +1064,73 @@ def student_state_response(
             else None
         ),
     )
+    if quiz.mode == "training" and quiz_session.status == "finished":
+        score, maximum, pending = training_result(quiz_session, participant, session)
+        state.potential_score = score
+        state.potential_maximum_score = maximum
+        state.pending_manual_review_count = pending
+    return state
+
+
+def training_result(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    session: DbSession,
+) -> tuple[float, float, int]:
+    question_ids = session_question_ids(quiz_session, session, participant)
+    if not question_ids:
+        return 0.0, 0.0, 0
+    questions = {
+        question.id: question
+        for question in session.scalars(
+            select(Question).where(Question.id.in_(question_ids))
+        )
+    }
+    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
+    for choice in session.scalars(
+        select(QuestionChoice).where(QuestionChoice.question_id.in_(question_ids))
+    ):
+        choices_by_question[choice.question_id].append(choice)
+    answers = {
+        answer.question_id: answer
+        for answer in session.scalars(
+            select(QuizAnswer).where(
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == participant.id,
+            )
+        )
+    }
+    score = 0.0
+    maximum = 0.0
+    pending = 0
+    for question_id in question_ids:
+        question = questions.get(question_id)
+        if question is None:
+            continue
+        if question.answer_mode == "written":
+            if question_id in answers:
+                pending += 1
+            continue
+        choices = choices_by_question[question_id]
+        maximum += sum(choice.points for choice in choices if choice.points > 0)
+        answer = answers.get(question_id)
+        if answer is None:
+            continue
+        try:
+            answer_data = json.loads(answer.answer_data)
+        except TypeError, ValueError:
+            answer_data = {}
+        selected_ids = set(
+            answer_data.get("selected_choice_ids", [])
+            if isinstance(answer_data, dict)
+            else []
+        )
+        score += sum(
+            choice.points
+            for choice in choices
+            if choice.id in selected_ids and choice.points >= 0
+        )
+    return round(score, 2), round(maximum, 2), pending
 
 
 def generate_join_code(session: DbSession) -> str:
@@ -1185,7 +1180,7 @@ def list_quizzes(
         session.scalars(
             select(Quiz)
             .where(*filters)
-            .order_by(Quiz.created_at.desc(), Quiz.id.desc())
+            .order_by(Quiz.title, Quiz.id)
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -2094,6 +2089,52 @@ def list_student_training_question_banks(
     return question_bank_responses(bank_ids, session)
 
 
+@router.get(
+    "/training/{question_bank_id}/history",
+    response_model=list[TrainingHistoryItem],
+)
+def list_student_training_history(
+    question_bank_id: int,
+    session: DbSession,
+    student: StudentAccount = Depends(current_student),
+) -> list[TrainingHistoryItem]:
+    membership = session.scalar(select(Student).where(Student.account_id == student.id))
+    if membership is None:
+        raise HTTPException(
+            status_code=409, detail="L’élève doit être affecté à une classe"
+        )
+    rows = list(
+        session.execute(
+            select(QuizSession, QuizParticipant)
+            .join(
+                QuizParticipant,
+                QuizParticipant.session_id == QuizSession.id,
+            )
+            .where(
+                QuizSession.training_question_bank_id == question_bank_id,
+                QuizSession.status == "finished",
+                QuizParticipant.student_id == membership.id,
+                QuizSession.started_at.is_not(None),
+            )
+            .order_by(QuizSession.started_at, QuizSession.id)
+        )
+    )
+    return [
+        TrainingHistoryItem(
+            session_id=quiz_session.id,
+            question_bank_id=question_bank_id,
+            started_at=quiz_session.started_at,
+            score=score,
+            maximum_score=maximum,
+            pending_manual_review_count=pending,
+        )
+        for quiz_session, participant in rows
+        for score, maximum, pending in [
+            training_result(quiz_session, participant, session)
+        ]
+    ]
+
+
 @router.post(
     "/training/{question_bank_id}/start",
     response_model=StudentQuizJoinResponse,
@@ -2152,6 +2193,7 @@ def start_training_quiz(
         join_code=generate_join_code(session),
         status="in_progress",
         started_at=now,
+        training_question_bank_id=bank.id,
     )
     session.add(quiz_session)
     session.flush()
@@ -2160,7 +2202,6 @@ def start_training_quiz(
             session_id=quiz_session.id,
             question_id=question_id,
             position=position,
-            points=0,
         )
         for position, question_id in enumerate(question_ids)
     )
@@ -2649,9 +2690,8 @@ def select_makeup_quiz(
             student_identifier=membership.identifier,
             question_id=question_id,
             position=position,
-            points=points,
         )
-        for position, (question_id, points) in enumerate(question_ids.items())
+        for position, question_id in enumerate(question_ids)
     )
     token = token_urlsafe(32)
     participant = QuizParticipant(
@@ -2795,7 +2835,7 @@ def launch_quiz(
     assignments: list[QuizSessionStudentQuestion] = []
     used_draws: set[tuple[int, ...]] = set()
     for student in students:
-        assigned_points = draw_unique_question_ids(quiz, session, used_draws)
+        assigned_question_ids = draw_unique_question_ids(quiz, session, used_draws)
         assignments.extend(
             QuizSessionStudentQuestion(
                 session_id=quiz_session.id,
@@ -2803,9 +2843,8 @@ def launch_quiz(
                 student_identifier=student.identifier,
                 question_id=question_id,
                 position=position,
-                points=points,
             )
-            for position, (question_id, points) in enumerate(assigned_points.items())
+            for position, question_id in enumerate(assigned_question_ids)
         )
     session.add_all(assignments)
     session.commit()
@@ -3063,9 +3102,11 @@ def submit_student_answer(
         if quiz.mode == "training":
             feedback = TrainingFeedback(
                 question_id=question.id,
-                is_correct=written_answer.casefold() == expected_answer.casefold(),
+                is_correct=None,
                 correct_choice_ids=[],
                 expected_answer=expected_answer,
+                submitted_answer=written_answer,
+                requires_manual_review=True,
             )
     else:
         if payload.selected_choice_ids is None:

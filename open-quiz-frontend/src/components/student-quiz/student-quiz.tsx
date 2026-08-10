@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { LogOut } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useNavigate } from "react-router"
 import { FullscreenPrompt } from "./fullscreen-prompt"
 import {
     clearStoredQuizSession,
@@ -32,6 +33,7 @@ export function StudentQuiz({
     onSessionCleared?: () => void
 }) {
     const { t, i18n } = useTranslation()
+    const navigate = useNavigate()
     const [restoredSession] = useState(readStoredQuizSession)
     const [joinCode, setJoinCode] = useState(restoredSession?.joinCode ?? "")
     const [participantToken, setParticipantToken] = useState<string | null>(
@@ -198,6 +200,7 @@ export function StudentQuiz({
         setIsBusy(false)
         translation.reset()
         onSessionCleared?.()
+        if (["finished", "cancelled"].includes(session.status)) navigate("/")
 
         if (document.fullscreenElement) {
             void document
@@ -337,6 +340,7 @@ export function StudentQuiz({
                     void goToQuestion(questionNumber)
                 }
                 onSubmitAnswer={handleAnswer}
+                onReturnHome={() => void leaveQuiz()}
             />
         </>
     )
@@ -362,7 +366,7 @@ function QuizNavbarAction({
                 onClick={onLeave}
             >
                 <LogOut />
-                {t(finished ? "join-another-quiz" : "leave-quiz")}
+                {t(finished ? "back-home" : "leave-quiz")}
             </Button>
         </NavbarAction>
     )

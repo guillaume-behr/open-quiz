@@ -171,9 +171,12 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             connection.execute(
                 text("ALTER TABLE questions ADD COLUMN response_language VARCHAR(30)")
             )
-        if "points" not in question_columns:
+        if "allow_code_execution" not in question_columns:
             connection.execute(
-                text("ALTER TABLE questions ADD COLUMN points FLOAT NOT NULL DEFAULT 1")
+                text(
+                    "ALTER TABLE questions ADD COLUMN "
+                    "allow_code_execution BOOLEAN NOT NULL DEFAULT FALSE"
+                )
             )
         quiz_columns = {
             column["name"] for column in inspect(connection).get_columns("quizzes")
@@ -192,6 +195,13 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
         if "makeup_session_id" not in quiz_session_columns:
             connection.execute(
                 text("ALTER TABLE quiz_sessions ADD COLUMN makeup_session_id INTEGER")
+            )
+        if "training_question_bank_id" not in quiz_session_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE quiz_sessions "
+                    "ADD COLUMN training_question_bank_id INTEGER"
+                )
             )
         if "grades_published_at" not in quiz_session_columns:
             connection.execute(
@@ -368,7 +378,7 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
         points_migrated = connection.execute(
             text("SELECT 1 FROM security_state WHERE key = 'answer_points_migrated'")
         ).first()
-        if points_migrated is None:
+        if points_migrated is None and "points" in question_columns:
             connection.execute(
                 text(
                     "UPDATE question_choices SET points = ("
@@ -427,23 +437,19 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "ADD COLUMN student_id INTEGER"
                 )
             )
-        if "points" not in student_question_columns:
-            connection.execute(
-                text(
-                    "ALTER TABLE quiz_session_student_questions "
-                    "ADD COLUMN points FLOAT NOT NULL DEFAULT 0"
-                )
-            )
         session_question_columns = {
             column["name"]
             for column in inspect(connection).get_columns("quiz_session_questions")
         }
-        if "points" not in session_question_columns:
+        if "points" in question_columns:
+            connection.execute(text("ALTER TABLE questions DROP COLUMN points"))
+        if "points" in student_question_columns:
             connection.execute(
-                text(
-                    "ALTER TABLE quiz_session_questions "
-                    "ADD COLUMN points FLOAT NOT NULL DEFAULT 0"
-                )
+                text("ALTER TABLE quiz_session_student_questions DROP COLUMN points")
+            )
+        if "points" in session_question_columns:
+            connection.execute(
+                text("ALTER TABLE quiz_session_questions DROP COLUMN points")
             )
         connection.execute(
             text(

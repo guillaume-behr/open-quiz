@@ -9,7 +9,15 @@ import { StudentQuestionForm } from "@/components/student-quiz/student-question-
 import { Button } from "@/components/ui/button"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import { isRtlLanguage } from "@/lib/utils"
-import { ArrowLeft, CheckCircle2, LoaderCircle, XCircle } from "lucide-react"
+import {
+    ArrowLeft,
+    CheckCircle2,
+    Dumbbell,
+    Info,
+    LoaderCircle,
+    Scale,
+    XCircle,
+} from "lucide-react"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router"
@@ -152,13 +160,16 @@ export function TrainingPage() {
                 </Button>
             </NavbarAction>
             <main className="mx-auto w-full max-w-2xl rounded-2xl border bg-secondary p-6 shadow-lg sm:p-10">
-                <div className="mb-6 text-center">
-                    <p className="text-sm font-semibold text-primary">
-                        {t("training-mode")}
-                    </p>
-                    <h1 className="mt-1 text-3xl font-extrabold">
-                        {session.quiz_title}
-                    </h1>
+                <div className="mb-6 flex items-center justify-center gap-3 text-center">
+                    <Dumbbell className="size-8 shrink-0 text-primary" />
+                    <div>
+                        <p className="text-sm font-semibold text-primary">
+                            {t("training-mode")}
+                        </p>
+                        <h1 className="text-3xl font-extrabold">
+                            {session.quiz_title}
+                        </h1>
+                    </div>
                 </div>
                 {feedback && answeredQuestion ? (
                     <TrainingCorrection
@@ -176,6 +187,36 @@ export function TrainingPage() {
                         <p className="mt-2 text-muted-foreground">
                             {t("training-finished-help")}
                         </p>
+                        {session.potential_score !== null && (
+                            <div className="mx-auto mt-5 flex w-fit items-center gap-2 rounded-lg border bg-background px-4 py-3">
+                                <Scale className="size-5 text-primary" />
+                                <span className="font-semibold">
+                                    {t("training-potential-score", {
+                                        score: session.potential_score,
+                                        maximum:
+                                            session.potential_maximum_score ??
+                                            0,
+                                    })}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                    aria-label={t(
+                                        "training-potential-score-help"
+                                    )}
+                                    title={t("training-potential-score-help")}
+                                >
+                                    <Info className="size-4" />
+                                </button>
+                            </div>
+                        )}
+                        <Button
+                            className="mx-auto mt-6"
+                            size="lg"
+                            onClick={() => navigate("/")}
+                        >
+                            {t("back-home")}
+                        </Button>
                     </div>
                 ) : session.question ? (
                     <div ref={questionFormRef}>
@@ -221,7 +262,7 @@ function TrainingCorrection({
         .map((choice) => choice.label)
     return (
         <section
-            className={`flex flex-col rounded-xl border p-6 ${feedback.is_correct ? "border-emerald-500/50 bg-emerald-500/10" : "border-destructive/50 bg-destructive/10"}`}
+            className={`flex flex-col rounded-xl border p-6 ${feedback.requires_manual_review ? "border-border bg-muted/30" : feedback.is_correct ? "border-emerald-500/50 bg-emerald-500/10" : "border-destructive/50 bg-destructive/10"}`}
             style={
                 questionFormHeight
                     ? { minHeight: `${questionFormHeight}px` }
@@ -229,20 +270,34 @@ function TrainingCorrection({
             }
         >
             <div className="flex items-center gap-3">
-                {feedback.is_correct ? (
+                {feedback.requires_manual_review ? (
+                    <Scale className="size-7 text-muted-foreground" />
+                ) : feedback.is_correct ? (
                     <CheckCircle2 className="size-7 text-emerald-700 dark:text-emerald-300" />
                 ) : (
                     <XCircle className="size-7 text-destructive" />
                 )}
                 <h2 className="text-xl font-bold">
                     {t(
-                        feedback.is_correct
-                            ? "training-correct"
-                            : "training-incorrect"
+                        feedback.requires_manual_review
+                            ? "training-manual-review"
+                            : feedback.is_correct
+                              ? "training-correct"
+                              : "training-incorrect"
                     )}
                 </h2>
             </div>
             <p className="mt-4 font-medium">{question.prompt}</p>
+            {feedback.submitted_answer && (
+                <div className="mt-4 rounded-lg bg-background/80 p-4">
+                    <p className="text-sm font-semibold">
+                        {t("student-answer")}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap">
+                        {feedback.submitted_answer}
+                    </p>
+                </div>
+            )}
             <div className="mt-4 rounded-lg bg-background/80 p-4">
                 <p className="text-sm font-semibold">{t("correct-answer")}</p>
                 <p className="mt-1">

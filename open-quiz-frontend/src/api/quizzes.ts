@@ -12,6 +12,7 @@ import type {
     StudentQuizAnswer,
     StudentQuizJoin,
     StudentQuizSession,
+    TrainingHistoryItem,
 } from "./types"
 
 export function getQuizzes(
@@ -59,6 +60,17 @@ export function startTrainingQuiz(
             method: "POST",
             headers: { Authorization: `Bearer ${studentToken}` },
         },
+        false
+    )
+}
+
+export function getTrainingHistory(
+    questionBankId: number,
+    studentToken: string
+): Promise<TrainingHistoryItem[]> {
+    return request<TrainingHistoryItem[]>(
+        `/api/quizzes/training/${questionBankId}/history`,
+        { headers: { Authorization: `Bearer ${studentToken}` } },
         false
     )
 }

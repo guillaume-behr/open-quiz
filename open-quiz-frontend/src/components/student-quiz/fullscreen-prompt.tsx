@@ -33,8 +33,8 @@ export function FullscreenPrompt({
 
 export function StudentNameBadge({ name }: { name: string }) {
     return (
-        <div className="fixed top-4 left-4 z-50 flex max-w-[calc(100vw-10rem)] items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm font-semibold shadow-sm backdrop-blur">
-            <UserRound className="size-4 shrink-0" aria-hidden="true" />
+        <div className="fixed top-4 left-4 z-50 flex max-w-[calc(100vw-10rem)] items-center gap-2 rounded-lg border bg-background/95 px-4 py-2.5 text-base font-bold shadow-sm backdrop-blur sm:text-lg">
+            <UserRound className="size-5 shrink-0" aria-hidden="true" />
             <span className="truncate">{name}</span>
         </div>
     )

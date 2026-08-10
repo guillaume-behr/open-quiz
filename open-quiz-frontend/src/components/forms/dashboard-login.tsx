@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { errorMessage } from "@/lib/errors"
 import { LoaderCircle } from "lucide-react"
 import { useState, type SyntheticEvent } from "react"
@@ -71,13 +72,12 @@ export function DashboardLogin({
                     <FieldLabel htmlFor="password">
                         {t("login-password")}
                     </FieldLabel>
-                    <Input
+                    <PasswordInput
                         className="py-6"
                         id="password"
                         name="password"
                         autoComplete="current-password"
                         spellCheck={false}
-                        type="password"
                         required
                         aria-invalid={Boolean(error)}
                         aria-describedby={error ? "login-error" : undefined}

@@ -8,10 +8,7 @@ from app.models import (
     Question,
     QuestionChoice,
     QuizAnswer,
-    QuizParticipant,
     QuizSession,
-    QuizSessionQuestion,
-    QuizSessionStudentQuestion,
 )
 
 
@@ -34,39 +31,6 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
             select(Question).where(Question.id.in_(question_ids))
         )
     }
-    participants = {
-        participant.id: participant
-        for participant in session.scalars(
-            select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
-        )
-    }
-    common_points = dict(
-        session.execute(
-            select(QuizSessionQuestion.question_id, QuizSessionQuestion.points).where(
-                QuizSessionQuestion.session_id == quiz_session.id
-            )
-        ).all()
-    )
-    personalized_points_by_student = {
-        (student_id, question_id): points
-        for student_id, question_id, points in session.execute(
-            select(
-                QuizSessionStudentQuestion.student_id,
-                QuizSessionStudentQuestion.question_id,
-                QuizSessionStudentQuestion.points,
-            ).where(QuizSessionStudentQuestion.session_id == quiz_session.id)
-        )
-    }
-    personalized_points_by_identifier = {
-        (identifier, question_id): points
-        for identifier, question_id, points in session.execute(
-            select(
-                QuizSessionStudentQuestion.student_identifier,
-                QuizSessionStudentQuestion.question_id,
-                QuizSessionStudentQuestion.points,
-            ).where(QuizSessionStudentQuestion.session_id == quiz_session.id)
-        )
-    }
     for answer in answers:
         question = questions.get(answer.question_id)
         choices = choices_by_question.get(answer.question_id, [])
@@ -74,18 +38,6 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
             submitted = json.loads(answer.answer_data)
         except TypeError, ValueError:
             submitted = {}
-        participant = participants.get(answer.participant_id)
-        question_points = common_points.get(answer.question_id)
-        if participant is not None:
-            question_points = personalized_points_by_student.get(
-                (participant.student_id, answer.question_id),
-                personalized_points_by_identifier.get(
-                    (participant.student_identifier, answer.question_id),
-                    question_points,
-                ),
-            )
-        if question_points is None:
-            question_points = 0.0
         if question is None:
             answer.score = 0
             answer.is_graded = True

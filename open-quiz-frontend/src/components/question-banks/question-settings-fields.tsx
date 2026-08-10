@@ -10,10 +10,12 @@ type QuestionSettingsFieldsProps = {
     answerMode: AnswerMode
     answerModeDisclosed: boolean
     responseLanguage: CodeLanguage | null
+    allowCodeExecution: boolean
     onDifficultyChange: (difficulty: QuestionDifficulty) => void
     onAnswerModeChange: (mode: AnswerMode) => void
     onAnswerModeDisclosedChange: (disclosed: boolean) => void
     onResponseLanguageChange: (language: CodeLanguage | null) => void
+    onAllowCodeExecutionChange: (allowed: boolean) => void
 }
 
 export function QuestionSettingsFields({
@@ -21,10 +23,12 @@ export function QuestionSettingsFields({
     answerMode,
     answerModeDisclosed,
     responseLanguage,
+    allowCodeExecution,
     onDifficultyChange,
     onAnswerModeChange,
     onAnswerModeDisclosedChange,
     onResponseLanguageChange,
+    onAllowCodeExecutionChange,
 }: QuestionSettingsFieldsProps) {
     const { t } = useTranslation()
 
@@ -79,7 +83,7 @@ export function QuestionSettingsFields({
                 </label>
             )}
             {answerMode === "written" && (
-                <Field>
+                <Field className="gap-3">
                     <FieldLabel htmlFor="written-response-language">
                         {t("written-response-format")}
                     </FieldLabel>
@@ -101,6 +105,23 @@ export function QuestionSettingsFields({
                             </option>
                         ))}
                     </select>
+                    {responseLanguage === "python" && (
+                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-4 text-sm">
+                            <span>
+                                <span className="block font-medium">
+                                    {t("allow-code-execution")}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                    {t("allow-code-execution-help")}
+                                </span>
+                            </span>
+                            <Switch
+                                checked={allowCodeExecution}
+                                onCheckedChange={onAllowCodeExecutionChange}
+                                aria-label={t("allow-code-execution")}
+                            />
+                        </label>
+                    )}
                 </Field>
             )}
         </>

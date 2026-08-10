@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.grade_levels import ensure_default_grade_levels
 from app.models import GradeLevel, QuestionBank, StudentClass
 from app.schemas import GradeLevelCreate, GradeLevelResponse
 
@@ -14,6 +15,8 @@ def list_grade_levels(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[GradeLevel]:
+    ensure_default_grade_levels(professor.id, session)
+    session.commit()
     return list(
         session.scalars(
             select(GradeLevel)

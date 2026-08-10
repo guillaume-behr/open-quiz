@@ -8,3 +8,10 @@ export function cn(...inputs: ClassValue[]) {
 export function isRtlLanguage(language: string | null | undefined): boolean {
     return Boolean(language && /^ar(?:\b|-)/i.test(language))
 }
+
+export function naturalCompare(first: string, second: string): number {
+    return first.localeCompare(second, undefined, {
+        numeric: true,
+        sensitivity: "base",
+    })
+}

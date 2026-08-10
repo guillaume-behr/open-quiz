@@ -153,8 +153,8 @@ def list_classes(
             select(StudentClass)
             .where(*filters)
             .order_by(
-                StudentClass.grade_level,
                 StudentClass.name,
+                StudentClass.grade_level,
                 StudentClass.id,
             )
             .offset((page - 1) * page_size)

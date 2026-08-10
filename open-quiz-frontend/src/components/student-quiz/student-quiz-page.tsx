@@ -31,6 +31,7 @@ type StudentQuizPageProps = {
     onWrittenAnswerChange: (answer: string) => void
     onNavigate: (questionNumber: number) => void
     onSubmitAnswer: (event: FormEvent<HTMLFormElement>) => void
+    onReturnHome: () => void
 }
 
 export function StudentQuizPage({
@@ -49,6 +50,7 @@ export function StudentQuizPage({
     onWrittenAnswerChange,
     onNavigate,
     onSubmitAnswer,
+    onReturnHome,
 }: StudentQuizPageProps) {
     return (
         <div className="flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 py-8 shadow-lg sm:px-10">
@@ -64,7 +66,7 @@ export function StudentQuizPage({
                     onToggle={onToggleTranslation}
                 />
             )}
-            <QuizStatus session={session} />
+            <QuizStatus session={session} onReturnHome={onReturnHome} />
             {session.status === "in_progress" && question && (
                 <StudentQuestionForm
                     session={session}
@@ -166,7 +168,13 @@ function TranslationNotice({
     )
 }
 
-function QuizStatus({ session }: { session: StudentQuizSession }) {
+function QuizStatus({
+    session,
+    onReturnHome,
+}: {
+    session: StudentQuizSession
+    onReturnHome: () => void
+}) {
     const { t } = useTranslation()
 
     if (session.status === "waiting") {
@@ -211,6 +219,13 @@ function QuizStatus({ session }: { session: StudentQuizSession }) {
                             : "student-quiz-finished"
                     )}
                 </p>
+                <Button
+                    className="mx-auto mt-5"
+                    size="lg"
+                    onClick={onReturnHome}
+                >
+                    {t("back-home")}
+                </Button>
             </div>
         )
     }

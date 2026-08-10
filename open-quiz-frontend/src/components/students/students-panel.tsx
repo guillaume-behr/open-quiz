@@ -9,7 +9,6 @@ import {
 import { ApiError } from "@/api/client"
 import { getAllStudentClasses } from "@/api/classes"
 import type {
-    CreatedStudentAccount,
     StudentAccount,
     StudentClass,
     StudentCredential,
@@ -23,6 +22,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import {
@@ -65,8 +65,6 @@ export function StudentsPanel({
     const [isActive, setIsActive] = useState(true)
     const [isBusy, setIsBusy] = useState(false)
     const [formError, setFormError] = useState<string | null>(null)
-    const [createdCredentials, setCreatedCredentials] =
-        useState<CreatedStudentAccount | null>(null)
     const [credentials, setCredentials] = useState<StudentCredential[] | null>(
         null
     )
@@ -137,11 +135,10 @@ export function StudentsPanel({
                     is_active: isActive,
                 })
             } else {
-                const created = await createStudentAccount({
+                await createStudentAccount({
                     first_name: firstName.trim(),
                     last_name: lastName.trim(),
                 })
-                setCreatedCredentials(created)
             }
             closeForm()
             setReloadKey((value) => value + 1)
@@ -205,26 +202,6 @@ export function StudentsPanel({
 
     return (
         <div className="mt-6">
-            <div className="mb-4 flex flex-wrap justify-end gap-2">
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void showCredentials()}
-                    disabled={isBusy}
-                >
-                    <KeyRound />
-                    {t("view-student-credentials")}
-                </Button>
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void exportCredentials()}
-                    disabled={isBusy}
-                >
-                    <Download />
-                    {t("export-student-credentials")}
-                </Button>
-            </div>
             {credentialsError && (
                 <p role="alert" className="mb-4 text-sm text-destructive">
                     {credentialsError}
@@ -308,6 +285,28 @@ export function StudentsPanel({
                             </Button>
                         )}
                     </FieldGroup>
+                    <div className="mt-4 grid gap-2 border-t pt-4">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void showCredentials()}
+                            disabled={isBusy}
+                        >
+                            <KeyRound />
+                            {t("view-student-credentials")}
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void exportCredentials()}
+                            disabled={isBusy}
+                        >
+                            <Download />
+                            {t("export-student-credentials")}
+                        </Button>
+                    </div>
                 </aside>
                 <div className="min-w-0">
                     {isLoading ? (
@@ -447,9 +446,8 @@ export function StudentsPanel({
                                     <FieldLabel htmlFor="account-password">
                                         {t("new-password-optional")}
                                     </FieldLabel>
-                                    <Input
+                                    <PasswordInput
                                         id="account-password"
-                                        type="password"
                                         value={password}
                                         onChange={(event) =>
                                             setPassword(event.target.value)
@@ -574,37 +572,6 @@ export function StudentsPanel({
                             <Button
                                 type="button"
                                 onClick={() => setCredentials(null)}
-                            >
-                                {t("close")}
-                            </Button>
-                        </div>
-                    </div>
-                )}
-            </Dialog>
-
-            <Dialog
-                open={createdCredentials !== null}
-                onOpenChange={(open) => !open && setCreatedCredentials(null)}
-                title={t("student-credentials-created")}
-                description={t("student-credentials-save-help")}
-                className="max-w-md"
-            >
-                {createdCredentials && (
-                    <div className="space-y-4">
-                        <div className="rounded-lg border bg-muted/40 p-4 font-mono">
-                            <p>
-                                {t("student-id")}:{" "}
-                                {createdCredentials.identifier}
-                            </p>
-                            <p>
-                                {t("login-password")}:{" "}
-                                {createdCredentials.generated_password}
-                            </p>
-                        </div>
-                        <div className="flex justify-end">
-                            <Button
-                                type="button"
-                                onClick={() => setCreatedCredentials(null)}
                             >
                                 {t("close")}
                             </Button>

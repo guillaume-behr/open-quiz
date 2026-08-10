@@ -191,6 +191,7 @@ function WrittenAnswer({
                     code={answer}
                     language={responseLanguage}
                     editable
+                    runnable={question.allow_code_execution}
                     onCodeChange={onAnswerChange}
                     editorClassName="min-h-48"
                     required

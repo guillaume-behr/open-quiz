@@ -345,11 +345,11 @@ class QuestionChoiceCreate(BaseModel):
 
 class QuestionCreate(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
-    points: float = Field(default=1, gt=0, le=10000)
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool = True
     response_language: CodeLanguage | None = None
+    allow_code_execution: bool = False
     choices: list[QuestionChoiceCreate] = Field(min_length=1, max_length=12)
     code_language: CodeLanguage | None = None
     code_content: str | None = Field(default=None, max_length=20000)
@@ -389,6 +389,14 @@ class QuestionCreate(BaseModel):
             raise ValueError(
                 "Un langage de réponse est réservé aux questions rédactionnelles"
             )
+        if self.answer_mode != "written" and self.allow_code_execution:
+            raise ValueError(
+                "L’exécution de code est réservée aux questions rédactionnelles"
+            )
+        if self.allow_code_execution and self.response_language != "python":
+            raise ValueError(
+                "L’exécution de code nécessite une réponse au format Python"
+            )
         if correct_count == 0:
             raise ValueError("Une question nécessite au moins une bonne réponse")
         if self.answer_mode in {"single", "written"} and correct_count != 1:
@@ -419,11 +427,11 @@ class QuestionResponse(BaseModel):
     id: int
     question_bank_id: int
     prompt: str
-    points: float
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool
     response_language: str | None
+    allow_code_execution: bool
     has_image: bool
     code_language: str | None
     code_content: str | None
@@ -432,7 +440,6 @@ class QuestionResponse(BaseModel):
 
 
 class QuestionUpdate(QuestionCreate):
-    points: float | None = Field(default=None, gt=0, le=10000)
     remove_image: bool = False
 
 
@@ -461,7 +468,7 @@ class QuizCreate(BaseModel):
         pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
     )
     question_bank_ids: list[int] = Field(min_length=1, max_length=100)
-    duration_seconds: int = Field(default=1800, ge=60, le=28800)
+    duration_seconds: int = Field(default=900, ge=60, le=28800)
     allow_previous_questions: bool = False
     allow_negative_points: bool = False
     same_questions_for_all: bool = False
@@ -623,6 +630,7 @@ class StudentQuizQuestionResponse(BaseModel):
     answer_mode: Literal["single", "multiple", "written"]
     answer_mode_disclosed: bool
     response_language: str | None
+    allow_code_execution: bool
     has_image: bool
     code_language: str | None
     code_content: str | None
@@ -631,9 +639,11 @@ class StudentQuizQuestionResponse(BaseModel):
 
 class TrainingFeedback(BaseModel):
     question_id: int
-    is_correct: bool
+    is_correct: bool | None
     correct_choice_ids: list[int]
     expected_answer: str | None = None
+    submitted_answer: str | None = None
+    requires_manual_review: bool = False
 
 
 class StudentQuizStateResponse(StudentQuizSessionResponse):
@@ -647,6 +657,9 @@ class StudentQuizStateResponse(StudentQuizSessionResponse):
     written_answer: str | None = None
     question: StudentQuizQuestionResponse | None
     training_feedback: TrainingFeedback | None = None
+    potential_score: float | None = None
+    potential_maximum_score: float | None = None
+    pending_manual_review_count: int = 0
 
 
 class StudentQuizJoinResponse(StudentQuizStateResponse):
@@ -687,7 +700,7 @@ class StudentQuizHistoryAnswer(BaseModel):
     answer_mode: Literal["single", "multiple", "written"]
     submitted_answers: list[str]
     expected_answers: list[str]
-    is_correct: bool
+    is_correct: bool | None
 
 
 class StudentQuizHistoryItem(BaseModel):
@@ -698,6 +711,15 @@ class StudentQuizHistoryItem(BaseModel):
     score: float | None = None
     maximum_score: float | None = None
     answers: list[StudentQuizHistoryAnswer]
+
+
+class TrainingHistoryItem(BaseModel):
+    session_id: int
+    question_bank_id: int
+    started_at: datetime
+    score: float
+    maximum_score: float
+    pending_manual_review_count: int
 
 
 class StudentQuizNavigation(BaseModel):

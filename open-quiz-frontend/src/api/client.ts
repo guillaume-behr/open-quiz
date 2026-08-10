@@ -1,5 +1,10 @@
 const API_URL = import.meta.env.VITE_API_URL ?? ""
 const REFRESH_PROOF_STORAGE_KEY = "open-quiz-refresh-proof"
+const REQUEST_TIMEOUT_MS = 30_000
+
+function requestSignal(signal?: AbortSignal | null): AbortSignal {
+    return signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+}
 
 let accessToken: string | null = null
 let refreshProof: string | null = readRefreshProof()
@@ -56,6 +61,7 @@ async function refreshAccessToken(): Promise<boolean> {
         refreshPromise = fetch(`${API_URL}/api/auth/refresh`, {
             method: "POST",
             credentials: "include",
+            signal: requestSignal(),
             headers: { "X-Refresh-Proof": refreshProof },
         })
             .then(async (response) => {
@@ -115,6 +121,7 @@ export async function request<T>(
 ): Promise<T> {
     const response = await fetch(`${API_URL}${path}`, {
         ...options,
+        signal: requestSignal(options.signal),
         credentials: "include",
         headers: requestHeaders(options),
     })
@@ -142,6 +149,7 @@ export async function requestPage<T>(
 ): Promise<import("./types").Page<T>> {
     const response = await fetch(`${API_URL}${path}`, {
         ...options,
+        signal: requestSignal(options.signal),
         credentials: "include",
         headers: requestHeaders(options),
     })
@@ -177,6 +185,7 @@ export async function requestBlob(
 ): Promise<Blob> {
     const response = await fetch(`${API_URL}${path}`, {
         ...options,
+        signal: requestSignal(options.signal),
         credentials: "include",
         headers: requestHeaders(options, includeAccessToken),
     })
