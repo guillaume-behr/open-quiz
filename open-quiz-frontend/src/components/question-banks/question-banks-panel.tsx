@@ -20,7 +20,7 @@ import {
     QuestionFormDialog,
 } from "@/components/question-banks/question-bank-secondary-dialogs"
 import { QuestionBanksList } from "@/components/question-banks/question-banks-list"
-import { QuestionsDialog } from "@/components/question-banks/questions-dialog"
+import { QuestionsManager } from "@/components/question-banks/questions-dialog"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -187,6 +187,8 @@ export function QuestionBanksPanel({
             setGradeLevel("")
             setTitle("")
             setEditingBank(null)
+            setIsQuestionsDialogOpen(false)
+            setSelectedBankId(null)
             setTitleFilter("")
             setGradeLevelFilter("")
             const allBanks = await getAllQuestionBanks().catch(() => [])
@@ -222,11 +224,15 @@ export function QuestionBanksPanel({
         (bank) => bank.id === selectedBankId
     )
 
-    function openQuestions(bankId: number): void {
+    function openBankEditor(bank: QuestionBank): void {
         setAreQuestionsLoading(true)
         setQuestionsError(null)
         setQuestions([])
-        setSelectedBankId(bankId)
+        setSelectedBankId(bank.id)
+        setEditingBank(bank)
+        setGradeLevel(bank.grade_level)
+        setTitle(bank.chapter)
+        setCreateError(null)
         setIsQuestionsDialogOpen(true)
     }
 
@@ -395,22 +401,19 @@ export function QuestionBanksPanel({
                 onPageChange={setPage}
                 onImport={openImportDialog}
                 onDownloadExample={() => void handleDownloadExample()}
-                onOpen={openQuestions}
                 onExport={(bank) => void handleExport(bank)}
                 onDelete={(bank) => {
                     setDeleteBankError(null)
                     setBankToDelete(bank)
                 }}
-                onEdit={(bank) => {
-                    setEditingBank(bank)
-                    setGradeLevel(bank.grade_level)
-                    setTitle(bank.chapter)
-                    setCreateError(null)
-                }}
+                onEdit={openBankEditor}
             />
 
             <QuestionBankFormDialog
-                open={isCreateDialogOpen || editingBank !== null}
+                open={
+                    isCreateDialogOpen ||
+                    (editingBank !== null && isQuestionsDialogOpen)
+                }
                 editingBank={editingBank}
                 gradeLevels={gradeLevels}
                 gradeLevel={gradeLevel}
@@ -440,11 +443,37 @@ export function QuestionBanksPanel({
                 onClose={() => {
                     onCreateDialogOpenChange(false)
                     setEditingBank(null)
+                    setIsQuestionsDialogOpen(false)
+                    setSelectedBankId(null)
                     setGradeLevel("")
                     setTitle("")
                     setCreateError(null)
                 }}
                 onSubmit={handleSubmit}
+                questionManagement={
+                    editingBank && selectedBank ? (
+                        <QuestionsManager
+                            questions={questions}
+                            isLoading={areQuestionsLoading}
+                            error={questionsError}
+                            onAdd={() => {
+                                setIsQuestionsDialogOpen(false)
+                                setEditingQuestion(null)
+                                setIsQuestionFormOpen(true)
+                            }}
+                            onEdit={(question) => {
+                                setEditingQuestion(question)
+                                setIsQuestionsDialogOpen(false)
+                                setIsQuestionFormOpen(true)
+                            }}
+                            onDelete={(question) => {
+                                setDeleteQuestionError(null)
+                                setQuestionToDelete(question)
+                                setIsQuestionsDialogOpen(false)
+                            }}
+                        />
+                    ) : undefined
+                }
             />
 
             <ImportQuestionBankDialog
@@ -477,30 +506,6 @@ export function QuestionBanksPanel({
 
             {selectedBank && (
                 <>
-                    <QuestionsDialog
-                        bank={selectedBank}
-                        questions={questions}
-                        open={isQuestionsDialogOpen}
-                        isLoading={areQuestionsLoading}
-                        error={questionsError}
-                        onOpenChange={setIsQuestionsDialogOpen}
-                        onAdd={() => {
-                            setIsQuestionsDialogOpen(false)
-                            setEditingQuestion(null)
-                            setIsQuestionFormOpen(true)
-                        }}
-                        onEdit={(question) => {
-                            setEditingQuestion(question)
-                            setIsQuestionsDialogOpen(false)
-                            setIsQuestionFormOpen(true)
-                        }}
-                        onDelete={(question) => {
-                            setDeleteQuestionError(null)
-                            setQuestionToDelete(question)
-                            setIsQuestionsDialogOpen(false)
-                        }}
-                    />
-
                     <DeleteEntityDialog
                         open={questionToDelete !== null}
                         kind="question"

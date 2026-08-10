@@ -1,6 +1,5 @@
-import type { Question, QuestionBank } from "@/api/types"
+import type { Question } from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
 import {
     ImageIcon,
     LoaderCircle,
@@ -15,45 +14,39 @@ import { CodeBlock } from "./code-block"
 import { CODE_LANGUAGES } from "./code-languages"
 import { QuestionImage } from "./question-image"
 
-type QuestionsDialogProps = {
-    bank: QuestionBank
+type QuestionsManagerProps = {
     questions: Question[]
-    open: boolean
     isLoading: boolean
     error: string | null
-    onOpenChange: (open: boolean) => void
     onAdd: () => void
     onEdit: (question: Question) => void
     onDelete: (question: Question) => void
 }
 
-export function QuestionsDialog({
-    bank,
+export function QuestionsManager({
     questions,
-    open,
     isLoading,
     error,
-    onOpenChange,
     onAdd,
     onEdit,
     onDelete,
-}: QuestionsDialogProps) {
+}: QuestionsManagerProps) {
     const { t } = useTranslation()
     return (
-        <Dialog
-            open={open}
-            onOpenChange={onOpenChange}
-            title={bank.chapter}
-            description={`${bank.grade_level} — ${t("bank-questions")}`}
-        >
-            <div className="flex flex-wrap justify-end gap-2">
+        <section className="border-t pt-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <h3 className="font-semibold">{t("bank-questions")}</h3>
+                    <p className="text-xs text-muted-foreground">
+                        {t("add-edit-questions")}
+                    </p>
+                </div>
                 <Button type="button" onClick={onAdd}>
                     <Plus />
                     {t("add-question")}
                 </Button>
             </div>
             <div className="mt-5">
-                <h4 className="font-semibold">{t("bank-questions")}</h4>
                 {isLoading ? (
                     <div
                         className="flex min-h-24 items-center justify-center"
@@ -71,7 +64,7 @@ export function QuestionsDialog({
                         {t("no-question")}
                     </p>
                 ) : (
-                    <ol className="mt-3 space-y-3">
+                    <ol className="max-h-96 space-y-3 overflow-y-auto pr-1">
                         {questions.map((question, index) => (
                             <QuestionCard
                                 key={question.id}
@@ -84,7 +77,7 @@ export function QuestionsDialog({
                     </ol>
                 )}
             </div>
-        </Dialog>
+        </section>
     )
 }
 

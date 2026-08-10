@@ -30,7 +30,6 @@ type QuestionBanksListProps = {
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
     onImport: () => void
     onDownloadExample: () => void
-    onOpen: (bankId: number) => void
     onExport: (bank: QuestionBank) => void
     onEdit: (bank: QuestionBank) => void
     onDelete: (bank: QuestionBank) => void
@@ -54,7 +53,6 @@ export function QuestionBanksList({
     onDeleteGradeLevel,
     onImport,
     onDownloadExample,
-    onOpen,
     onExport,
     onEdit,
     onDelete,
@@ -154,7 +152,6 @@ export function QuestionBanksList({
                     loadError={loadError}
                     isBatchBusy={isBatchBusy}
                     onClearFilters={clearFilters}
-                    onOpen={onOpen}
                     onExport={onExport}
                     onEdit={onEdit}
                     onDelete={onDelete}
@@ -174,7 +171,6 @@ function BanksContent({
     loadError,
     isBatchBusy,
     onClearFilters,
-    onOpen,
     onExport,
     onEdit,
     onDelete,
@@ -188,7 +184,6 @@ function BanksContent({
     loadError: string | null
     isBatchBusy: boolean
     onClearFilters: () => void
-    onOpen: (id: number) => void
     onExport: (bank: QuestionBank) => void
     onEdit: (bank: QuestionBank) => void
     onDelete: (bank: QuestionBank) => void
@@ -254,23 +249,12 @@ function BanksContent({
                             type="button"
                             size="icon-sm"
                             variant="ghost"
-                            className="absolute top-4 right-20 z-10"
+                            className="absolute top-4 right-12 z-10"
                             aria-label={t("edit-question-bank")}
                             title={t("edit-question-bank")}
                             onClick={() => onEdit(bank)}
                         >
                             <Pencil />
-                        </Button>
-                        <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            className="absolute top-4 right-12 z-10"
-                            aria-label={t("add-edit-questions")}
-                            title={t("add-edit-questions")}
-                            onClick={() => onOpen(bank.id)}
-                        >
-                            <BookOpenText />
                         </Button>
                         <Button
                             type="button"

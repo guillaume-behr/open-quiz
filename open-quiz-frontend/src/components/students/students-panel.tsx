@@ -7,7 +7,11 @@ import {
     updateStudentAccount,
 } from "@/api/students"
 import { ApiError } from "@/api/client"
-import { getAllStudentClasses } from "@/api/classes"
+import {
+    assignStudentAccount,
+    getAllStudentClasses,
+    unassignStudentAccount,
+} from "@/api/classes"
 import type {
     StudentAccount,
     StudentClass,
@@ -62,6 +66,10 @@ export function StudentsPanel({
     const [lastName, setLastName] = useState("")
     const [identifier, setIdentifier] = useState("")
     const [password, setPassword] = useState("")
+    const [selectedClassId, setSelectedClassId] = useState("")
+    const [pendingCreatedAccountId, setPendingCreatedAccountId] = useState<
+        number | null
+    >(null)
     const [isActive, setIsActive] = useState(true)
     const [isBusy, setIsBusy] = useState(false)
     const [formError, setFormError] = useState<string | null>(null)
@@ -109,6 +117,8 @@ export function StudentsPanel({
         setLastName("")
         setIdentifier("")
         setPassword("")
+        setSelectedClassId("")
+        setPendingCreatedAccountId(null)
         setIsActive(true)
         setFormError(null)
     }
@@ -118,6 +128,9 @@ export function StudentsPanel({
         setDisplayName(student.display_name)
         setIdentifier(student.identifier)
         setPassword("")
+        setSelectedClassId(
+            student.class_id === null ? "" : String(student.class_id)
+        )
         setIsActive(student.is_active)
         setFormError(null)
     }
@@ -126,6 +139,7 @@ export function StudentsPanel({
         event.preventDefault()
         setIsBusy(true)
         setFormError(null)
+        let classAssignmentFailed = false
         try {
             if (editing) {
                 await updateStudentAccount(editing.id, {
@@ -134,19 +148,58 @@ export function StudentsPanel({
                     ...(password ? { password } : {}),
                     is_active: isActive,
                 })
+                const nextClassId = selectedClassId
+                    ? Number(selectedClassId)
+                    : null
+                if (nextClassId !== editing.class_id) {
+                    try {
+                        if (nextClassId !== null) {
+                            await assignStudentAccount(nextClassId, editing.id)
+                        } else if (editing.class_id !== null) {
+                            await unassignStudentAccount(
+                                editing.class_id,
+                                editing.id
+                            )
+                        }
+                    } catch (error) {
+                        classAssignmentFailed = true
+                        throw error
+                    }
+                }
             } else {
-                await createStudentAccount({
-                    first_name: firstName.trim(),
-                    last_name: lastName.trim(),
-                })
+                let accountId = pendingCreatedAccountId
+                if (accountId === null) {
+                    const created = await createStudentAccount({
+                        first_name: firstName.trim(),
+                        last_name: lastName.trim(),
+                    })
+                    accountId = created.id
+                    setPendingCreatedAccountId(accountId)
+                }
+                if (selectedClassId) {
+                    try {
+                        await assignStudentAccount(
+                            Number(selectedClassId),
+                            accountId
+                        )
+                    } catch (error) {
+                        classAssignmentFailed = true
+                        throw error
+                    }
+                }
             }
             closeForm()
             setReloadKey((value) => value + 1)
         } catch (error) {
+            if (classAssignmentFailed && !editing) {
+                setReloadKey((value) => value + 1)
+            }
             setFormError(
-                error instanceof ApiError && error.status === 409
-                    ? t("student-account-duplicate")
-                    : t("student-account-save-error")
+                classAssignmentFailed
+                    ? t("student-assignment-error")
+                    : error instanceof ApiError && error.status === 409
+                      ? t("student-account-duplicate")
+                      : t("student-account-save-error")
             )
         } finally {
             setIsBusy(false)
@@ -285,30 +338,33 @@ export function StudentsPanel({
                             </Button>
                         )}
                     </FieldGroup>
-                    <div className="mt-4 grid gap-2 border-t pt-4">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void showCredentials()}
-                            disabled={isBusy}
-                        >
-                            <KeyRound />
-                            {t("view-student-credentials")}
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void exportCredentials()}
-                            disabled={isBusy}
-                        >
-                            <Download />
-                            {t("export-student-credentials")}
-                        </Button>
-                    </div>
                 </aside>
                 <div className="min-w-0">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="font-semibold">{t("students")}</h3>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void showCredentials()}
+                                disabled={isBusy}
+                            >
+                                <KeyRound />
+                                {t("view-student-credentials")}
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void exportCredentials()}
+                                disabled={isBusy}
+                            >
+                                <Download />
+                                {t("export-student-credentials")}
+                            </Button>
+                        </div>
+                    </div>
                     {isLoading ? (
                         <div
                             className="flex min-h-40 items-center justify-center"
@@ -344,19 +400,23 @@ export function StudentsPanel({
                                     className="relative flex items-start gap-2.5 rounded-xl border bg-background p-3"
                                 >
                                     <Button
+                                        type="button"
                                         size="icon-sm"
                                         variant="ghost"
-                                        className="absolute top-3 right-10"
+                                        className="absolute top-4 right-12"
                                         aria-label={t("edit-student")}
+                                        title={t("edit-student")}
                                         onClick={() => edit(student)}
                                     >
                                         <Pencil />
                                     </Button>
                                     <Button
+                                        type="button"
                                         size="icon-sm"
                                         variant="destructive"
-                                        className="absolute top-3 right-3"
+                                        className="absolute top-4 right-4"
                                         aria-label={t("delete-student")}
+                                        title={t("delete-student")}
                                         onClick={() => {
                                             setDeleting(student)
                                             setFormError(null)
@@ -487,6 +547,34 @@ export function StudentsPanel({
                                 </Field>
                             </>
                         )}
+                        <Field>
+                            <FieldLabel htmlFor="account-class">
+                                {t("student-class")}
+                            </FieldLabel>
+                            <select
+                                id="account-class"
+                                className={NATIVE_SELECT_CLASS_NAME}
+                                value={selectedClassId}
+                                onChange={(event) =>
+                                    setSelectedClassId(event.target.value)
+                                }
+                                disabled={isBusy}
+                            >
+                                <option value="">{t("no-class")}</option>
+                                {classes.map((studentClass) => (
+                                    <option
+                                        key={studentClass.id}
+                                        value={studentClass.id}
+                                    >
+                                        {studentClass.name} ·{" "}
+                                        {studentClass.grade_level}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-muted-foreground">
+                                {t("student-class-help")}
+                            </p>
+                        </Field>
                         {editing && (
                             <label className="flex items-center gap-2 text-sm">
                                 <input

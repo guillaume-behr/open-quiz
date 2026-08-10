@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { LoaderCircle, Plus } from "lucide-react"
-import type { FormEvent } from "react"
+import type { FormEvent, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 type QuestionBankFormDialogProps = {
@@ -31,6 +31,7 @@ type QuestionBankFormDialogProps = {
     onAddGradeLevel: () => void
     onClose: () => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
+    questionManagement?: ReactNode
 }
 
 export function QuestionBankFormDialog({
@@ -51,6 +52,7 @@ export function QuestionBankFormDialog({
     onAddGradeLevel,
     onClose,
     onSubmit,
+    questionManagement,
 }: QuestionBankFormDialogProps) {
     const { t } = useTranslation()
     return (
@@ -63,7 +65,7 @@ export function QuestionBankFormDialog({
                 editingBank ? "edit-question-bank" : "create-question-bank"
             )}
             description={t("create-question-bank-help")}
-            className="max-w-lg"
+            className={editingBank ? "max-w-3xl" : "max-w-lg"}
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup className="gap-4">
@@ -137,6 +139,7 @@ export function QuestionBankFormDialog({
                             required
                         />
                     </Field>
+                    {editingBank && questionManagement}
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2 border-t pt-4">
                         <Button
