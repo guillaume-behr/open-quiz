@@ -107,6 +107,7 @@ async function mockTeacherApi(page: Page) {
         is_active: true,
         class_id: 11,
         class_name: "Class 8B",
+        grade_level: "Grade 8",
         created_at: "2026-01-03T00:00:00Z",
     }
     const availableStudentAccount = {
@@ -116,6 +117,7 @@ async function mockTeacherApi(page: Page) {
         display_name: "Dorothy Vaughan",
         class_id: 99,
         class_name: "Former class",
+        grade_level: "Grade 7",
     }
     let students = [studentAccount, availableStudentAccount]
     const bank = {
@@ -1021,10 +1023,13 @@ test("teacher updates a class and manages student assignments", async ({
     const assignDialog = page.getByRole("dialog", {
         name: "Assign a student",
     })
-    await expect(assignDialog.locator("select")).toContainText(
-        "Dorothy Vaughan"
-    )
-    await assignDialog.getByRole("button", { name: "Assign" }).click()
+    const availableStudent = assignDialog
+        .getByRole("button")
+        .filter({ hasText: "Dorothy Vaughan" })
+    await expect(availableStudent).toContainText("Former class")
+    await expect(availableStudent).toContainText("Grade 7")
+    await availableStudent.click()
+    await assignDialog.getByRole("button", { name: "Assign 1 student" }).click()
     await expect(manageDialog.getByText("Dorothy Vaughan")).toBeVisible()
 
     await manageDialog

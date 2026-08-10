@@ -337,17 +337,17 @@ export function StudentsPanel({
                             key={students
                                 .map((student) => student.id)
                                 .join(",")}
-                            className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                            className="grid animate-in gap-2 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
                         >
                             {students.map((student) => (
                                 <article
                                     key={student.id}
-                                    className="relative flex items-start gap-3 rounded-xl border bg-background p-4"
+                                    className="relative flex items-start gap-2.5 rounded-xl border bg-background p-3"
                                 >
                                     <Button
                                         size="icon-sm"
                                         variant="ghost"
-                                        className="absolute top-4 right-12"
+                                        className="absolute top-3 right-10"
                                         aria-label={t("edit-student")}
                                         onClick={() => edit(student)}
                                     >
@@ -356,7 +356,7 @@ export function StudentsPanel({
                                     <Button
                                         size="icon-sm"
                                         variant="destructive"
-                                        className="absolute top-4 right-4"
+                                        className="absolute top-3 right-3"
                                         aria-label={t("delete-student")}
                                         onClick={() => {
                                             setDeleting(student)
@@ -365,10 +365,10 @@ export function StudentsPanel({
                                     >
                                         <Trash2 />
                                     </Button>
-                                    <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                                        <UserRound className="size-5" />
+                                    <div className="rounded-lg bg-primary/10 p-1.5 text-primary">
+                                        <UserRound className="size-4" />
                                     </div>
-                                    <div className="min-w-0 flex-1 pr-20">
+                                    <div className="min-w-0 flex-1 pr-16">
                                         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                             {student.identifier}
                                         </p>
@@ -376,6 +376,8 @@ export function StudentsPanel({
                                             {student.display_name}
                                         </p>
                                         <p className="mt-1 text-xs text-muted-foreground">
+                                            {student.grade_level &&
+                                                `${student.grade_level} · `}
                                             {student.class_name ??
                                                 t("student-unassigned")}
                                             {!student.is_active &&

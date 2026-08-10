@@ -44,6 +44,7 @@ export type StudentAccount = {
     is_active: boolean
     class_id: number | null
     class_name: string | null
+    grade_level: string | null
     created_at: string
 }
 

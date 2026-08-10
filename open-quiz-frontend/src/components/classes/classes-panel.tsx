@@ -9,6 +9,7 @@ import {
 import { getAllStudents, getStudentCredentials } from "@/api/students"
 import type { GradeLevel, StudentAccount, StudentClass } from "@/api/types"
 import { ClassFormDialog } from "@/components/classes/class-form-dialog"
+import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -21,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import {
+    Check,
     LoaderCircle,
     Pencil,
     Printer,
@@ -58,8 +60,12 @@ export function ClassesPanel({
     const [deleting, setDeleting] = useState<StudentClass | null>(null)
     const [assigning, setAssigning] = useState(false)
     const [accounts, setAccounts] = useState<StudentAccount[]>([])
-    const [selectedAccountId, setSelectedAccountId] = useState<number | null>(
-        null
+    const [assignmentSearch, setAssignmentSearch] = useState("")
+    const [assignmentClassFilter, setAssignmentClassFilter] = useState("")
+    const [assignmentGradeLevelFilter, setAssignmentGradeLevelFilter] =
+        useState("")
+    const [selectedAccountIds, setSelectedAccountIds] = useState<Set<number>>(
+        new Set()
     )
     const [className, setClassName] = useState("")
     const [gradeLevel, setGradeLevel] = useState("")
@@ -146,7 +152,10 @@ export function ClassesPanel({
                     account.is_active && account.class_id !== managed?.id
             )
             setAccounts(available)
-            setSelectedAccountId(available[0]?.id ?? null)
+            setAssignmentSearch("")
+            setAssignmentClassFilter("")
+            setAssignmentGradeLevelFilter("")
+            setSelectedAccountIds(new Set())
             setAssigning(true)
         } catch {
             setError(t("students-load-error"))
@@ -156,21 +165,69 @@ export function ClassesPanel({
     }
 
     async function assign() {
-        if (!managed || selectedAccountId === null) return
+        if (!managed || selectedAccountIds.size === 0) return
         setIsBusy(true)
+        setError(null)
+        let updated = managed
         try {
-            const updated = await assignStudentAccount(
-                managed.id,
-                selectedAccountId
-            )
+            for (const accountId of selectedAccountIds) {
+                updated = await assignStudentAccount(managed.id, accountId)
+            }
             setManaged(updated)
             setAssigning(false)
+            setSelectedAccountIds(new Set())
             setReloadKey((value) => value + 1)
         } catch {
+            setManaged(updated)
             setError(t("student-assignment-error"))
         } finally {
             setIsBusy(false)
         }
+    }
+
+    const normalizedAssignmentSearch = assignmentSearch
+        .trim()
+        .toLocaleLowerCase()
+    const assignmentClasses = Array.from(
+        new Map(
+            accounts
+                .filter(
+                    (account) =>
+                        account.class_id !== null && account.class_name !== null
+                )
+                .map(
+                    (account) =>
+                        [account.class_id!, account.class_name!] as const
+                )
+        ).entries()
+    ).sort(([, firstName], [, secondName]) =>
+        firstName.localeCompare(secondName, i18n.resolvedLanguage)
+    )
+    const filteredAccounts = accounts.filter((account) => {
+        const matchesSearch = normalizedAssignmentSearch
+            ? `${account.display_name} ${account.identifier} ${account.class_name ?? ""} ${account.grade_level ?? ""}`
+                  .toLocaleLowerCase()
+                  .includes(normalizedAssignmentSearch)
+            : true
+        const matchesClass =
+            assignmentClassFilter === "unassigned"
+                ? account.class_id === null
+                : assignmentClassFilter
+                  ? account.class_id === Number(assignmentClassFilter)
+                  : true
+        const matchesGradeLevel = assignmentGradeLevelFilter
+            ? account.grade_level === assignmentGradeLevelFilter
+            : true
+        return matchesSearch && matchesClass && matchesGradeLevel
+    })
+
+    function toggleAccount(accountId: number) {
+        setSelectedAccountIds((current) => {
+            const next = new Set(current)
+            if (next.has(accountId)) next.delete(accountId)
+            else next.add(accountId)
+            return next
+        })
     }
 
     async function unassign(accountId: number) {
@@ -308,24 +365,18 @@ export function ClassesPanel({
                             <FieldLabel htmlFor="class-filter-grade-level">
                                 {t("grade-level")}
                             </FieldLabel>
-                            <select
+                            <GradeLevelSelect
                                 id="class-filter-grade-level"
-                                className={NATIVE_SELECT_CLASS_NAME}
                                 value={gradeLevelFilter}
-                                onChange={(event) => {
-                                    setGradeLevelFilter(event.target.value)
+                                levels={gradeLevels}
+                                onChange={(value) => {
+                                    setGradeLevelFilter(value)
                                     setPage(1)
                                 }}
-                            >
-                                <option value="">
-                                    {t("all-grade-levels")}
-                                </option>
-                                {gradeLevels.map((level) => (
-                                    <option key={level.id} value={level.name}>
-                                        {level.name}
-                                    </option>
-                                ))}
-                            </select>
+                                onDelete={onDeleteGradeLevel}
+                                required={false}
+                                placeholder={t("all-grade-levels")}
+                            />
                         </Field>
                         {(search || gradeLevelFilter) && (
                             <Button
@@ -547,29 +598,164 @@ export function ClassesPanel({
                 description={t("assign-student-help", {
                     className: managed?.name,
                 })}
-                className="max-w-lg"
+                className="max-w-3xl"
             >
                 {accounts.length === 0 ? (
                     <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
                         {t("no-student-to-assign")}
                     </p>
                 ) : (
-                    <select
-                        className="h-10 w-full rounded-lg border bg-background px-3"
-                        value={selectedAccountId ?? ""}
-                        onChange={(event) =>
-                            setSelectedAccountId(Number(event.target.value))
-                        }
-                    >
-                        {accounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                                {account.display_name} ({account.identifier})
-                                {account.class_name
-                                    ? ` — ${account.class_name}`
-                                    : ""}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <Field>
+                                <FieldLabel htmlFor="assignment-student-search">
+                                    {t("search")}
+                                </FieldLabel>
+                                <Input
+                                    id="assignment-student-search"
+                                    value={assignmentSearch}
+                                    onChange={(event) =>
+                                        setAssignmentSearch(event.target.value)
+                                    }
+                                    placeholder={t("search-student")}
+                                />
+                            </Field>
+                            <Field>
+                                <FieldLabel htmlFor="assignment-student-class">
+                                    {t("student-class")}
+                                </FieldLabel>
+                                <select
+                                    id="assignment-student-class"
+                                    className={NATIVE_SELECT_CLASS_NAME}
+                                    value={assignmentClassFilter}
+                                    onChange={(event) =>
+                                        setAssignmentClassFilter(
+                                            event.target.value
+                                        )
+                                    }
+                                >
+                                    <option value="">{t("all-classes")}</option>
+                                    <option value="unassigned">
+                                        {t("student-unassigned")}
+                                    </option>
+                                    {assignmentClasses.map(
+                                        ([classId, name]) => (
+                                            <option
+                                                key={classId}
+                                                value={classId}
+                                            >
+                                                {name}
+                                            </option>
+                                        )
+                                    )}
+                                </select>
+                            </Field>
+                            <Field>
+                                <FieldLabel htmlFor="assignment-student-grade-level">
+                                    {t("grade-level")}
+                                </FieldLabel>
+                                <GradeLevelSelect
+                                    id="assignment-student-grade-level"
+                                    value={assignmentGradeLevelFilter}
+                                    levels={gradeLevels}
+                                    onChange={(value) =>
+                                        setAssignmentGradeLevelFilter(value)
+                                    }
+                                    onDelete={onDeleteGradeLevel}
+                                    required={false}
+                                    placeholder={t("all-grade-levels")}
+                                />
+                            </Field>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                            <p className="text-muted-foreground">
+                                {t("selected-students", {
+                                    count: selectedAccountIds.size,
+                                })}
+                            </p>
+                            {(assignmentSearch ||
+                                assignmentClassFilter ||
+                                assignmentGradeLevelFilter) && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                        setAssignmentSearch("")
+                                        setAssignmentClassFilter("")
+                                        setAssignmentGradeLevelFilter("")
+                                    }}
+                                >
+                                    {t("clear-filters")}
+                                </Button>
+                            )}
+                        </div>
+
+                        {filteredAccounts.length === 0 ? (
+                            <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+                                {t("no-student-matching-filters")}
+                            </p>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                {filteredAccounts.map((account) => {
+                                    const isSelected = selectedAccountIds.has(
+                                        account.id
+                                    )
+                                    return (
+                                        <button
+                                            key={account.id}
+                                            type="button"
+                                            aria-pressed={isSelected}
+                                            onClick={() =>
+                                                toggleAccount(account.id)
+                                            }
+                                            className={`relative rounded-xl border p-4 text-left transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none ${isSelected ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "bg-background hover:border-primary/50 hover:bg-muted/40"}`}
+                                        >
+                                            <span
+                                                className={`absolute top-4 right-4 flex size-6 items-center justify-center rounded-md border ${isSelected ? "border-primary bg-primary text-primary-foreground" : "text-transparent"}`}
+                                                aria-hidden="true"
+                                            >
+                                                <Check className="size-4" />
+                                            </span>
+                                            <div className="pr-9">
+                                                <p className="font-semibold break-words">
+                                                    {account.display_name}
+                                                </p>
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    {account.identifier}
+                                                </p>
+                                            </div>
+                                            <div className="mt-4 grid grid-cols-2 gap-3 border-t pt-3 text-sm">
+                                                <div className="min-w-0">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {t("student-class")}
+                                                    </p>
+                                                    <p className="mt-1 truncate font-medium">
+                                                        {account.class_name ??
+                                                            t(
+                                                                "student-unassigned"
+                                                            )}
+                                                    </p>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {t("grade-level")}
+                                                    </p>
+                                                    <p className="mt-1 truncate font-medium">
+                                                        {account.grade_level ??
+                                                            t(
+                                                                "student-no-grade-level"
+                                                            )}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
                 )}
                 <div className="mt-5 flex justify-end gap-2">
                     <Button
@@ -580,12 +766,14 @@ export function ClassesPanel({
                     </Button>
                     <Button
                         onClick={() => void assign()}
-                        disabled={isBusy || selectedAccountId === null}
+                        disabled={isBusy || selectedAccountIds.size === 0}
                     >
                         {isBusy && (
                             <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                         )}
-                        {t("assign")}
+                        {t("assign-selected-students", {
+                            count: selectedAccountIds.size,
+                        })}
                     </Button>
                 </div>
             </Dialog>
