@@ -8,7 +8,11 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle, RotateCcw } from "lucide-react"
+import {
+    STUDENT_ACCESS_CARD_CLASS_NAME,
+    StudentAccessHeader,
+} from "@/components/forms/student-access-card"
 import { storeQuizSession } from "./student-quiz-session"
 import { useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
@@ -59,66 +63,89 @@ export function StudentMakeupPanel({ token }: { token: string }) {
 
     if (lobby)
         return (
-            <div className="grid w-full max-w-md gap-3">
-                <p className="text-sm text-muted-foreground">
-                    {t("makeup-choose-help", { className: lobby.class_name })}
-                </p>
-                {lobby.quizzes.length ? (
-                    lobby.quizzes.map((quiz) => (
-                        <button
-                            key={quiz.id}
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void select(quiz.id)}
-                            className="flex items-center justify-between rounded-xl border bg-background p-4 text-left transition hover:border-primary hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <span className="font-semibold">{quiz.title}</span>
-                            <span className="text-sm text-muted-foreground">
-                                {Math.round(quiz.duration_seconds / 60)} min
-                            </span>
-                        </button>
-                    ))
-                ) : (
-                    <p className="rounded-xl border p-4 text-sm text-muted-foreground">
-                        {t("makeup-no-eligible-quiz")}
-                    </p>
-                )}
-                {error && (
-                    <p className="text-sm text-destructive" role="alert">
-                        {error}
-                    </p>
-                )}
+            <div className={STUDENT_ACCESS_CARD_CLASS_NAME}>
+                <StudentAccessHeader
+                    icon={RotateCcw}
+                    title={t("makeup-tab")}
+                    description={t("makeup-choose-help", {
+                        className: lobby.class_name,
+                    })}
+                    headingLevel={3}
+                />
+                <div className="grid gap-3">
+                    {lobby.quizzes.length ? (
+                        lobby.quizzes.map((quiz) => (
+                            <button
+                                key={quiz.id}
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void select(quiz.id)}
+                                className="flex items-center justify-between gap-4 rounded-xl border bg-card p-4 text-left transition hover:border-primary hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <span className="font-semibold break-words">
+                                    {quiz.title}
+                                </span>
+                                <span className="shrink-0 text-sm text-muted-foreground">
+                                    {Math.round(quiz.duration_seconds / 60)} min
+                                </span>
+                            </button>
+                        ))
+                    ) : (
+                        <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
+                            {t("makeup-no-eligible-quiz")}
+                        </p>
+                    )}
+                    {error && <FieldError>{error}</FieldError>}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => {
+                            setLobby(null)
+                            setError(null)
+                        }}
+                    >
+                        {t("cancel")}
+                    </Button>
+                </div>
             </div>
         )
 
     return (
-        <form
-            onSubmit={join}
-            className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-14"
-        >
-            <h3 className="text-center text-xl font-bold">
-                {t("join-quiz-title")}
-            </h3>
+        <form onSubmit={join} className={STUDENT_ACCESS_CARD_CLASS_NAME}>
+            <StudentAccessHeader
+                icon={RotateCcw}
+                title={t("makeup-tab")}
+                description={t("makeup-code-help")}
+                headingLevel={3}
+            />
             <FieldGroup className="gap-4">
                 <Field>
                     <FieldLabel htmlFor="makeup-session-code">
                         {t("join-code")}
                     </FieldLabel>
                     <Input
-                        className="py-6 font-mono tracking-[0.2em] uppercase"
+                        className="py-6 text-center font-mono text-lg font-semibold tracking-[0.25em] uppercase"
                         id="makeup-session-code"
+                        name="makeup-session-code"
                         value={code}
                         onChange={(event) =>
                             setCode(event.target.value.toUpperCase())
                         }
+                        minLength={4}
                         maxLength={8}
                         autoComplete="off"
                         spellCheck={false}
                         aria-invalid={Boolean(error)}
+                        aria-describedby={
+                            error ? "makeup-join-error" : undefined
+                        }
                         required
                     />
                 </Field>
-                {error && <FieldError>{error}</FieldError>}
+                {error && (
+                    <FieldError id="makeup-join-error">{error}</FieldError>
+                )}
                 <Button
                     className="py-7 text-base"
                     type="submit"
@@ -127,7 +154,7 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                     {busy && (
                         <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                     )}
-                    {t("join-quiz")}
+                    {t(busy ? "joining-quiz" : "join-quiz-button")}
                 </Button>
             </FieldGroup>
         </form>

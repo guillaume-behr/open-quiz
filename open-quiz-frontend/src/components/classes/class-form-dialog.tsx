@@ -9,7 +9,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { LoaderCircle, Plus } from "lucide-react"
+import { LoaderCircle, Pencil, Plus } from "lucide-react"
 import type { FormEvent } from "react"
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
@@ -95,7 +95,6 @@ export function ClassFormDialog({
                             ))}
                         </datalist>
                     </Field>
-                    {editingClass && studentManagement}
                     <Field>
                         <FieldLabel htmlFor="class-grade">
                             {t("grade-level")}
@@ -151,8 +150,9 @@ export function ClassFormDialog({
                             </div>
                         )}
                     </Field>
+                    {editingClass && studentManagement}
                     {error && <FieldError>{error}</FieldError>}
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-2 border-t pt-4">
                         <Button
                             type="button"
                             variant="outline"
@@ -164,6 +164,8 @@ export function ClassFormDialog({
                         <Button type="submit" disabled={isBusy}>
                             {isBusy ? (
                                 <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                            ) : editingClass ? (
+                                <Pencil />
                             ) : (
                                 <Plus />
                             )}

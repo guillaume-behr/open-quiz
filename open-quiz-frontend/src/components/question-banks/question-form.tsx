@@ -10,7 +10,7 @@ import type {
 } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { FieldError, FieldGroup } from "@/components/ui/field"
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle, Pencil, Plus } from "lucide-react"
 import { type FormEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { QuestionChoicesEditor } from "./question-choices-editor"
@@ -316,8 +316,12 @@ export function QuestionForm({
                         {t("cancel")}
                     </Button>
                     <Button type="submit" disabled={isCreating}>
-                        {isCreating && (
+                        {isCreating ? (
                             <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                        ) : question ? (
+                            <Pencil />
+                        ) : (
+                            <Plus />
                         )}
                         {isCreating
                             ? t("creating-question")

@@ -8,6 +8,10 @@ import { joinQuiz } from "@/api/quizzes"
 import type { StudentAccount } from "@/api/types"
 import { StudentLogin } from "@/components/forms/student-login"
 import { JoinQuizForm } from "@/components/forms/join-quiz-form"
+import {
+    STUDENT_ACCESS_CARD_CLASS_NAME,
+    StudentAccessHeader,
+} from "@/components/forms/student-access-card"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import {
     readStoredQuizSession,
@@ -333,9 +337,19 @@ export function HomePage({
                         {activeTab === "exam" ? (
                             <div className="mt-6 flex justify-center">
                                 {storedExam ? (
-                                    <div className="w-full max-w-md rounded-xl border bg-background p-5">
+                                    <div
+                                        className={
+                                            STUDENT_ACCESS_CARD_CLASS_NAME
+                                        }
+                                    >
+                                        <StudentAccessHeader
+                                            icon={ClipboardPenLine}
+                                            title={t("resume-quiz")}
+                                            description={t("enter-exam-help")}
+                                            headingLevel={3}
+                                        />
                                         <Button
-                                            className="w-full"
+                                            className="w-full py-7 text-base"
                                             onClick={() =>
                                                 navigate("/student/exam", {
                                                     state: { student, token },

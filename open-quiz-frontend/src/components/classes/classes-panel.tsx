@@ -78,6 +78,7 @@ export function ClassesPanel({
     const [newStudentFirstName, setNewStudentFirstName] = useState("")
     const [newStudentLastName, setNewStudentLastName] = useState("")
     const [isBusy, setIsBusy] = useState(false)
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
@@ -94,12 +95,12 @@ export function ClassesPanel({
                           ) ?? current)
                         : null
                 )
-                setError(null)
+                setLoadError(null)
                 if (result.page > result.totalPages) {
                     setPage(result.totalPages)
                 }
             })
-            .catch(() => active && setError(t("classes-load-error")))
+            .catch(() => active && setLoadError(t("classes-load-error")))
             .finally(() => active && setIsLoading(false))
         return () => {
             active = false
@@ -428,6 +429,7 @@ export function ClassesPanel({
                     </FieldGroup>
                 </aside>
                 <div className="min-w-0">
+                    <h3 className="mb-4 font-semibold">{t("classes")}</h3>
                     {isLoading ? (
                         <div
                             className="flex min-h-40 items-center justify-center"
@@ -436,10 +438,23 @@ export function ClassesPanel({
                         >
                             <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                         </div>
+                    ) : loadError ? (
+                        <p
+                            role="alert"
+                            className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+                        >
+                            {loadError}
+                        </p>
                     ) : classes.length === 0 ? (
-                        <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground">
+                        <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed text-center text-muted-foreground">
                             <UsersRound className="mb-2 size-8" />
-                            <p>{t("no-class")}</p>
+                            <p>
+                                {t(
+                                    search || gradeLevelFilter
+                                        ? "no-class-filtered"
+                                        : "no-class"
+                                )}
+                            </p>
                         </div>
                     ) : (
                         <div
@@ -454,6 +469,7 @@ export function ClassesPanel({
                                     className="relative rounded-xl border bg-background p-4"
                                 >
                                     <Button
+                                        type="button"
                                         size="icon-sm"
                                         variant="ghost"
                                         className="absolute top-4 right-12"
@@ -466,10 +482,12 @@ export function ClassesPanel({
                                             )
                                         }}
                                         aria-label={t("edit-class")}
+                                        title={t("edit-class")}
                                     >
                                         <Pencil />
                                     </Button>
                                     <Button
+                                        type="button"
                                         size="icon-sm"
                                         variant="destructive"
                                         className="absolute top-4 right-4"
@@ -477,6 +495,7 @@ export function ClassesPanel({
                                             setDeleting(studentClass)
                                         }
                                         aria-label={t("delete-class")}
+                                        title={t("delete-class")}
                                     >
                                         <Trash2 />
                                     </Button>
@@ -500,22 +519,7 @@ export function ClassesPanel({
                                             </div>
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => {
-                                                        setManaged(studentClass)
-                                                        setEditing(studentClass)
-                                                        setClassName(
-                                                            studentClass.name
-                                                        )
-                                                        setGradeLevel(
-                                                            studentClass.grade_level
-                                                        )
-                                                    }}
-                                                >
-                                                    {t("manage-students")}
-                                                </Button>
-                                                <Button
+                                                    type="button"
                                                     size="sm"
                                                     variant="outline"
                                                     onClick={() =>
@@ -839,14 +843,17 @@ export function ClassesPanel({
                         )}
                     </div>
                 )}
+                {error && <FieldError className="mt-4">{error}</FieldError>}
                 <div className="mt-5 flex justify-end gap-2">
                     <Button
+                        type="button"
                         variant="outline"
                         onClick={() => setAssigning(false)}
                     >
                         {t("cancel")}
                     </Button>
                     <Button
+                        type="button"
                         onClick={() => void assign()}
                         disabled={isBusy || selectedAccountIds.size === 0}
                     >

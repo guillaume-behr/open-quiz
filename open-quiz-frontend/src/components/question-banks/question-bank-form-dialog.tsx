@@ -9,7 +9,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { LoaderCircle, Plus } from "lucide-react"
+import { LoaderCircle, Pencil, Plus } from "lucide-react"
 import type { FormEvent, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -70,6 +70,21 @@ export function QuestionBankFormDialog({
             <form onSubmit={onSubmit}>
                 <FieldGroup className="gap-4">
                     <Field>
+                        <FieldLabel htmlFor="question-bank-title">
+                            {t("question-bank-title")}
+                        </FieldLabel>
+                        <Input
+                            id="question-bank-title"
+                            value={title}
+                            onChange={(event) =>
+                                onTitleChange(event.target.value)
+                            }
+                            maxLength={160}
+                            placeholder={t("question-bank-title-placeholder")}
+                            required
+                        />
+                    </Field>
+                    <Field>
                         <FieldLabel htmlFor="question-bank-grade-level">
                             {t("grade-level")}
                         </FieldLabel>
@@ -124,21 +139,6 @@ export function QuestionBankFormDialog({
                             </div>
                         )}
                     </Field>
-                    <Field>
-                        <FieldLabel htmlFor="question-bank-title">
-                            {t("question-bank-title")}
-                        </FieldLabel>
-                        <Input
-                            id="question-bank-title"
-                            value={title}
-                            onChange={(event) =>
-                                onTitleChange(event.target.value)
-                            }
-                            maxLength={160}
-                            placeholder={t("question-bank-title-placeholder")}
-                            required
-                        />
-                    </Field>
                     {editingBank && questionManagement}
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2 border-t pt-4">
@@ -153,6 +153,8 @@ export function QuestionBankFormDialog({
                         <Button type="submit" disabled={isBusy}>
                             {isBusy ? (
                                 <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                            ) : editingBank ? (
+                                <Pencil />
                             ) : (
                                 <Plus />
                             )}

@@ -103,12 +103,17 @@ export function QuizzesList({
                         onGradeLevelFilterChange={onGradeLevelFilterChange}
                         onDeleteGradeLevel={onDeleteGradeLevel}
                     />
-                    <p
-                        role="alert"
-                        className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-                    >
-                        {loadError}
-                    </p>
+                    <div className="min-w-0">
+                        <h3 className="mb-4 font-semibold">
+                            {t("exam-quizzes")}
+                        </h3>
+                        <p
+                            role="alert"
+                            className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+                        >
+                            {loadError}
+                        </p>
+                    </div>
                 </div>
             ) : (
                 <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
@@ -120,43 +125,50 @@ export function QuizzesList({
                         onGradeLevelFilterChange={onGradeLevelFilterChange}
                         onDeleteGradeLevel={onDeleteGradeLevel}
                     />
-                    {sortedQuizzes.length === 0 &&
-                    (quizFilter || gradeLevelFilter) ? (
-                        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                            {t("no-quiz-filtered")}
-                        </p>
-                    ) : sortedQuizzes.length === 0 ? (
-                        <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-                            <BookOpenText className="mb-2 size-8" />
-                            <p className="font-medium">{t("no-quiz")}</p>
-                            <p className="mt-1 text-sm">{t("no-quiz-help")}</p>
-                        </div>
-                    ) : (
-                        <div>
-                            <ul
-                                key={sortedQuizzes
-                                    .map((quiz) => quiz.id)
-                                    .join(",")}
-                                className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
-                            >
-                                {sortedQuizzes.map((quiz) => (
-                                    <QuizCard
-                                        key={quiz.id}
-                                        quiz={quiz}
-                                        onEdit={() => onEdit(quiz)}
-                                        onPreview={() => onPreview(quiz)}
-                                        onLaunch={() => onLaunch(quiz)}
-                                        onDelete={() => onDelete(quiz)}
-                                    />
-                                ))}
-                            </ul>
-                            <Pagination
-                                currentPage={page}
-                                totalPages={totalPages}
-                                onPageChange={onPageChange}
-                            />
-                        </div>
-                    )}
+                    <div className="min-w-0">
+                        <h3 className="mb-4 font-semibold">
+                            {t("exam-quizzes")}
+                        </h3>
+                        {sortedQuizzes.length === 0 &&
+                        (quizFilter || gradeLevelFilter) ? (
+                            <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                                {t("no-quiz-filtered")}
+                            </p>
+                        ) : sortedQuizzes.length === 0 ? (
+                            <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+                                <BookOpenText className="mb-2 size-8" />
+                                <p className="font-medium">{t("no-quiz")}</p>
+                                <p className="mt-1 text-sm">
+                                    {t("no-quiz-help")}
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                <ul
+                                    key={sortedQuizzes
+                                        .map((quiz) => quiz.id)
+                                        .join(",")}
+                                    className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                                >
+                                    {sortedQuizzes.map((quiz) => (
+                                        <QuizCard
+                                            key={quiz.id}
+                                            quiz={quiz}
+                                            onEdit={() => onEdit(quiz)}
+                                            onPreview={() => onPreview(quiz)}
+                                            onLaunch={() => onLaunch(quiz)}
+                                            onDelete={() => onDelete(quiz)}
+                                        />
+                                    ))}
+                                </ul>
+                                <Pagination
+                                    currentPage={page}
+                                    totalPages={totalPages}
+                                    onPageChange={onPageChange}
+                                />
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
         </>

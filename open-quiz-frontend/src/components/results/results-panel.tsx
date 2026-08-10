@@ -423,9 +423,7 @@ export function ResultsPanel({
                 </aside>
                 <div className="min-w-0">
                     <div className="mb-4 flex min-h-8 items-center justify-between gap-3">
-                        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                            {t("results")}
-                        </h3>
+                        <h3 className="font-semibold">{t("results")}</h3>
                         {results.length > 0 && (
                             <div
                                 className="flex gap-1"

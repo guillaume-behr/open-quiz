@@ -381,11 +381,17 @@ export function StudentsPanel({
                         <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed text-center text-muted-foreground">
                             <UserRound className="mb-2 size-8" />
                             <p className="font-medium">
-                                {t("no-student-account")}
+                                {t(
+                                    search || classFilter || statusFilter
+                                        ? "no-student-matching-filters"
+                                        : "no-student-account"
+                                )}
                             </p>
-                            <p className="mt-1 text-sm">
-                                {t("no-student-account-help")}
-                            </p>
+                            {!search && !classFilter && !statusFilter && (
+                                <p className="mt-1 text-sm">
+                                    {t("no-student-account-help")}
+                                </p>
+                            )}
                         </div>
                     ) : (
                         <div
@@ -502,20 +508,6 @@ export function StudentsPanel({
                                         required
                                     />
                                 </Field>
-                                <Field>
-                                    <FieldLabel htmlFor="account-password">
-                                        {t("new-password-optional")}
-                                    </FieldLabel>
-                                    <PasswordInput
-                                        id="account-password"
-                                        value={password}
-                                        onChange={(event) =>
-                                            setPassword(event.target.value)
-                                        }
-                                        minLength={8}
-                                        autoComplete="new-password"
-                                    />
-                                </Field>
                             </>
                         ) : (
                             <>
@@ -571,10 +563,28 @@ export function StudentsPanel({
                                     </option>
                                 ))}
                             </select>
-                            <p className="text-xs text-muted-foreground">
-                                {t("student-class-help")}
-                            </p>
+                            {editing && (
+                                <p className="text-xs text-muted-foreground">
+                                    {t("student-class-help")}
+                                </p>
+                            )}
                         </Field>
+                        {editing && (
+                            <Field>
+                                <FieldLabel htmlFor="account-password">
+                                    {t("new-password-optional")}
+                                </FieldLabel>
+                                <PasswordInput
+                                    id="account-password"
+                                    value={password}
+                                    onChange={(event) =>
+                                        setPassword(event.target.value)
+                                    }
+                                    minLength={8}
+                                    autoComplete="new-password"
+                                />
+                            </Field>
+                        )}
                         {editing && (
                             <label className="flex items-center gap-2 text-sm">
                                 <input
@@ -589,7 +599,7 @@ export function StudentsPanel({
                             </label>
                         )}
                         {formError && <FieldError>{formError}</FieldError>}
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2 border-t pt-4">
                             <Button
                                 type="button"
                                 variant="outline"
@@ -601,6 +611,8 @@ export function StudentsPanel({
                             <Button type="submit" disabled={isBusy}>
                                 {isBusy ? (
                                     <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                                ) : editing ? (
+                                    <Pencil />
                                 ) : (
                                     <UserRoundPlus />
                                 )}

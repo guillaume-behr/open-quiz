@@ -6,9 +6,13 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { LoaderCircle } from "lucide-react"
+import { ClipboardPenLine, LoaderCircle } from "lucide-react"
 import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
+import {
+    STUDENT_ACCESS_CARD_CLASS_NAME,
+    StudentAccessHeader,
+} from "./student-access-card"
 
 type JoinQuizFormProps = {
     joinCode: string
@@ -30,31 +34,18 @@ export function JoinQuizForm({
     const { t } = useTranslation()
 
     return (
-        <form
-            className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-14"
-            onSubmit={onSubmit}
-        >
-            <div className="flex flex-col items-center gap-2 text-center">
-                {embedded ? (
-                    <h3 className="text-xl font-bold">
-                        {t("join-quiz-title")}
-                    </h3>
-                ) : (
-                    <h1 className="text-4xl font-extrabold">
-                        {t("join-quiz-title")}
-                    </h1>
-                )}
-                {!embedded && (
-                    <p className="text-center font-light">
-                        {t("join-quiz-instructions")}
-                    </p>
-                )}
-            </div>
+        <form className={STUDENT_ACCESS_CARD_CLASS_NAME} onSubmit={onSubmit}>
+            <StudentAccessHeader
+                icon={ClipboardPenLine}
+                title={t("join-quiz-title")}
+                description={t("join-quiz-instructions")}
+                headingLevel={embedded ? 3 : 1}
+            />
             <FieldGroup className="gap-4">
                 <Field>
                     <FieldLabel htmlFor="quiz-id">{t("quiz-id")}</FieldLabel>
                     <Input
-                        className="py-6 font-mono tracking-[0.2em] uppercase"
+                        className="py-6 text-center font-mono text-lg font-semibold tracking-[0.25em] uppercase"
                         id="quiz-id"
                         name="quiz-id"
                         autoComplete="off"
