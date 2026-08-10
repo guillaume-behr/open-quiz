@@ -1,8 +1,8 @@
 import type { GradeLevel, QuestionBank } from "@/api/types"
+import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import {
     BookOpenText,
@@ -27,10 +27,12 @@ type QuestionBanksListProps = {
     batchMessage: string | null
     onTitleFilterChange: (value: string) => void
     onGradeLevelFilterChange: (value: string) => void
+    onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
     onImport: () => void
     onDownloadExample: () => void
     onOpen: (bankId: number) => void
     onExport: (bank: QuestionBank) => void
+    onEdit: (bank: QuestionBank) => void
     onDelete: (bank: QuestionBank) => void
     page: number
     totalPages: number
@@ -49,10 +51,12 @@ export function QuestionBanksList({
     batchMessage,
     onTitleFilterChange,
     onGradeLevelFilterChange,
+    onDeleteGradeLevel,
     onImport,
     onDownloadExample,
     onOpen,
     onExport,
+    onEdit,
     onDelete,
     page,
     totalPages,
@@ -86,21 +90,15 @@ export function QuestionBanksList({
                         <FieldLabel htmlFor="question-bank-grade-filter">
                             {t("grade-level")}
                         </FieldLabel>
-                        <select
+                        <GradeLevelSelect
                             id="question-bank-grade-filter"
-                            className={NATIVE_SELECT_CLASS_NAME}
                             value={gradeLevelFilter}
-                            onChange={(event) =>
-                                onGradeLevelFilterChange(event.target.value)
-                            }
-                        >
-                            <option value="">{t("all-grade-levels")}</option>
-                            {gradeLevels.map((level) => (
-                                <option key={level.id} value={level.name}>
-                                    {level.name}
-                                </option>
-                            ))}
-                        </select>
+                            levels={gradeLevels}
+                            onChange={onGradeLevelFilterChange}
+                            onDelete={onDeleteGradeLevel}
+                            required={false}
+                            placeholder={t("all-grade-levels")}
+                        />
                     </Field>
                     {(titleFilter || gradeLevelFilter) && (
                         <Button
@@ -158,6 +156,7 @@ export function QuestionBanksList({
                     onClearFilters={clearFilters}
                     onOpen={onOpen}
                     onExport={onExport}
+                    onEdit={onEdit}
                     onDelete={onDelete}
                     page={page}
                     totalPages={totalPages}
@@ -177,6 +176,7 @@ function BanksContent({
     onClearFilters,
     onOpen,
     onExport,
+    onEdit,
     onDelete,
     page,
     totalPages,
@@ -190,6 +190,7 @@ function BanksContent({
     onClearFilters: () => void
     onOpen: (id: number) => void
     onExport: (bank: QuestionBank) => void
+    onEdit: (bank: QuestionBank) => void
     onDelete: (bank: QuestionBank) => void
     page: number
     totalPages: number
@@ -253,12 +254,23 @@ function BanksContent({
                             type="button"
                             size="icon-sm"
                             variant="ghost"
+                            className="absolute top-4 right-20 z-10"
+                            aria-label={t("edit-question-bank")}
+                            title={t("edit-question-bank")}
+                            onClick={() => onEdit(bank)}
+                        >
+                            <Pencil />
+                        </Button>
+                        <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
                             className="absolute top-4 right-12 z-10"
                             aria-label={t("add-edit-questions")}
                             title={t("add-edit-questions")}
                             onClick={() => onOpen(bank.id)}
                         >
-                            <Pencil />
+                            <BookOpenText />
                         </Button>
                         <Button
                             type="button"

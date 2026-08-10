@@ -1,4 +1,4 @@
-import type { GradeLevel } from "@/api/types"
+import type { GradeLevel, QuestionBank } from "@/api/types"
 import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next"
 
 type QuestionBankFormDialogProps = {
     open: boolean
+    editingBank: QuestionBank | null
     gradeLevels: GradeLevel[]
     gradeLevel: string
     title: string
@@ -34,6 +35,7 @@ type QuestionBankFormDialogProps = {
 
 export function QuestionBankFormDialog({
     open,
+    editingBank,
     gradeLevels,
     gradeLevel,
     title,
@@ -57,7 +59,9 @@ export function QuestionBankFormDialog({
             onOpenChange={(nextOpen) => {
                 if (!nextOpen && !isBusy) onClose()
             }}
-            title={t("create-question-bank")}
+            title={t(
+                editingBank ? "edit-question-bank" : "create-question-bank"
+            )}
             description={t("create-question-bank-help")}
             className="max-w-lg"
         >
@@ -151,8 +155,12 @@ export function QuestionBankFormDialog({
                             )}
                             {t(
                                 isBusy
-                                    ? "creating-question-bank"
-                                    : "create-question-bank-action"
+                                    ? editingBank
+                                        ? "saving-question-bank"
+                                        : "creating-question-bank"
+                                    : editingBank
+                                      ? "save-question-bank"
+                                      : "create-question-bank-action"
                             )}
                         </Button>
                     </div>

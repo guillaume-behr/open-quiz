@@ -204,7 +204,16 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     }
 
     async function handleCreateGradeLevel(name: string): Promise<GradeLevel> {
-        const level = await createGradeLevel(name)
+        const normalizedName = name.trim().replace(/\s+/g, " ")
+        const existing = gradeLevels.find(
+            (level) =>
+                level.name.localeCompare(normalizedName, undefined, {
+                    sensitivity: "accent",
+                }) === 0
+        )
+        if (existing) return existing
+
+        const level = await createGradeLevel(normalizedName)
         setGradeLevels((current) =>
             current.some((item) => item.id === level.id)
                 ? current
@@ -425,6 +434,8 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                             <QuizzesPanel
                                 isCreateDialogOpen={isQuizCreationOpen}
                                 onCreateDialogOpenChange={setIsQuizCreationOpen}
+                                gradeLevels={gradeLevels}
+                                onDeleteGradeLevel={handleDeleteGradeLevel}
                             />
                         )}
                         {activeSection === "makeup" && <MakeupSessionsPanel />}

@@ -17,6 +17,7 @@ import {
     updateQuiz,
 } from "@/api/quizzes"
 import type {
+    GradeLevel,
     Question,
     QuestionBank,
     Quiz,
@@ -41,6 +42,8 @@ import { useTranslation } from "react-i18next"
 type QuizzesPanelProps = {
     isCreateDialogOpen: boolean
     onCreateDialogOpenChange: (open: boolean) => void
+    gradeLevels: GradeLevel[]
+    onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
 }
 
 const difficultyKeys = ["easy", "medium", "hard"] as const
@@ -56,6 +59,8 @@ type Difficulty = (typeof difficultyKeys)[number]
 export function QuizzesPanel({
     isCreateDialogOpen,
     onCreateDialogOpenChange,
+    gradeLevels,
+    onDeleteGradeLevel,
 }: QuizzesPanelProps) {
     const { t, i18n } = useTranslation()
     const [quizzes, setQuizzes] = useState<Quiz[]>([])
@@ -226,9 +231,7 @@ export function QuizzesPanel({
         (total, count) => total + count,
         0
     )
-    const quizGradeLevels = Array.from(
-        new Set(banks.map((bank) => bank.grade_level))
-    ).sort((first, second) => first.localeCompare(second, "fr"))
+    const quizGradeLevels = gradeLevels
     const loadError =
         supportLoadFailed || quizListLoadFailed ? t("quizzes-load-error") : null
 
@@ -495,6 +498,7 @@ export function QuizzesPanel({
                     setGradeLevelFilter(value)
                     setPage(1)
                 }}
+                onDeleteGradeLevel={onDeleteGradeLevel}
                 page={page}
                 totalPages={totalPages}
                 onPageChange={setPage}
@@ -532,6 +536,7 @@ export function QuizzesPanel({
                 onTitleChange={setTitle}
                 onDurationChange={setDurationMinutes}
                 onQuizGradeLevelChange={handleQuizGradeLevelChange}
+                onDeleteGradeLevel={onDeleteGradeLevel}
                 onSelectedBankIdsChange={handleSelectedBankIdsChange}
                 onAllowPreviousQuestionsChange={setAllowPreviousQuestions}
                 onAllowNegativePointsChange={setAllowNegativePoints}

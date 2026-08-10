@@ -1,8 +1,8 @@
-import type { Quiz, QuizSession } from "@/api/types"
+import type { GradeLevel, Quiz, QuizSession } from "@/api/types"
+import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import {
     BookOpenText,
@@ -19,13 +19,14 @@ const difficulties = ["easy", "medium", "hard"] as const
 type QuizzesListProps = {
     quizzes: Quiz[]
     sessions: QuizSession[]
-    gradeLevels: string[]
+    gradeLevels: GradeLevel[]
     isLoading: boolean
     loadError: string | null
     quizFilter: string
     gradeLevelFilter: string
     onQuizFilterChange: (value: string) => void
     onGradeLevelFilterChange: (value: string) => void
+    onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
     onEdit: (quiz: Quiz) => void
     onPreview: (quiz: Quiz) => void
     onLaunch: (quiz: Quiz) => void
@@ -46,6 +47,7 @@ export function QuizzesList({
     gradeLevelFilter,
     onQuizFilterChange,
     onGradeLevelFilterChange,
+    onDeleteGradeLevel,
     onEdit,
     onPreview,
     onLaunch,
@@ -95,6 +97,7 @@ export function QuizzesList({
                         gradeLevelFilter={gradeLevelFilter}
                         onQuizFilterChange={onQuizFilterChange}
                         onGradeLevelFilterChange={onGradeLevelFilterChange}
+                        onDeleteGradeLevel={onDeleteGradeLevel}
                     />
                     <p
                         role="alert"
@@ -111,6 +114,7 @@ export function QuizzesList({
                         gradeLevelFilter={gradeLevelFilter}
                         onQuizFilterChange={onQuizFilterChange}
                         onGradeLevelFilterChange={onGradeLevelFilterChange}
+                        onDeleteGradeLevel={onDeleteGradeLevel}
                     />
                     {quizzes.length === 0 &&
                     (quizFilter || gradeLevelFilter) ? (
@@ -159,12 +163,14 @@ function QuizFilters({
     gradeLevelFilter,
     onQuizFilterChange,
     onGradeLevelFilterChange,
+    onDeleteGradeLevel,
 }: {
-    gradeLevels: string[]
+    gradeLevels: GradeLevel[]
     quizFilter: string
     gradeLevelFilter: string
     onQuizFilterChange: (value: string) => void
     onGradeLevelFilterChange: (value: string) => void
+    onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
 }) {
     const { t } = useTranslation()
     return (
@@ -186,21 +192,15 @@ function QuizFilters({
                     <FieldLabel htmlFor="quiz-grade-filter">
                         {t("grade-level")}
                     </FieldLabel>
-                    <select
+                    <GradeLevelSelect
                         id="quiz-grade-filter"
-                        className={NATIVE_SELECT_CLASS_NAME}
                         value={gradeLevelFilter}
-                        onChange={(event) =>
-                            onGradeLevelFilterChange(event.target.value)
-                        }
-                    >
-                        <option value="">{t("all-grade-levels")}</option>
-                        {gradeLevels.map((level) => (
-                            <option key={level} value={level}>
-                                {level}
-                            </option>
-                        ))}
-                    </select>
+                        levels={gradeLevels}
+                        onChange={onGradeLevelFilterChange}
+                        onDelete={onDeleteGradeLevel}
+                        required={false}
+                        placeholder={t("all-grade-levels")}
+                    />
                 </Field>
                 {(quizFilter || gradeLevelFilter) && (
                     <Button

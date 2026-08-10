@@ -43,6 +43,19 @@ export function createQuestionBank(
     })
 }
 
+export function updateQuestionBank(
+    questionBankId: number,
+    questionBank: NewQuestionBank
+): Promise<QuestionBank> {
+    return request<QuestionBank>(
+        `/api/question-banks/${questionBankId}/update`,
+        {
+            method: "POST",
+            body: JSON.stringify(questionBank),
+        }
+    )
+}
+
 export function deleteQuestionBank(questionBankId: number): Promise<void> {
     return request<void>(`/api/question-banks/${questionBankId}`, {
         method: "DELETE",

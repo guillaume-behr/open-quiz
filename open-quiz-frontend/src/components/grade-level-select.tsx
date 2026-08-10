@@ -10,6 +10,8 @@ type GradeLevelSelectProps = {
     onChange: (value: string) => void
     onDelete: (level: GradeLevel) => Promise<void>
     disabled?: boolean
+    required?: boolean
+    placeholder?: string
 }
 
 export function GradeLevelSelect({
@@ -19,6 +21,8 @@ export function GradeLevelSelect({
     onChange,
     onDelete,
     disabled = false,
+    required = true,
+    placeholder,
 }: GradeLevelSelectProps) {
     const { t } = useTranslation()
     const selected = levels.find((level) => level.name === value)
@@ -50,9 +54,11 @@ export function GradeLevelSelect({
                 onChange={(event) => onChange(event.target.value)}
                 disabled={disabled}
                 className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                required
+                required={required}
             >
-                <option value="">{t("choose-grade-level")}</option>
+                <option value="" disabled={required}>
+                    {placeholder ?? t("choose-grade-level")}
+                </option>
                 {levels.map((level) => (
                     <option key={level.id} value={level.name}>
                         {level.name}

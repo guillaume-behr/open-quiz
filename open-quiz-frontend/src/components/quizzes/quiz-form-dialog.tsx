@@ -1,4 +1,5 @@
-import type { QuestionBank, Quiz } from "@/api/types"
+import type { GradeLevel, QuestionBank, Quiz } from "@/api/types"
+import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -8,7 +9,6 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import { Switch } from "@/components/ui/switch"
 import { LoaderCircle, Pencil, Plus } from "lucide-react"
@@ -24,7 +24,7 @@ type QuizFormDialogProps = {
     open: boolean
     editingQuiz: Quiz | null
     banks: QuestionBank[]
-    gradeLevels: string[]
+    gradeLevels: GradeLevel[]
     quizGradeLevel: string
     title: string
     durationMinutes: number
@@ -38,6 +38,7 @@ type QuizFormDialogProps = {
     onTitleChange: (value: string) => void
     onDurationChange: (value: number) => void
     onQuizGradeLevelChange: (value: string) => void
+    onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
     onSelectedBankIdsChange: (ids: number[]) => void
     onAllowPreviousQuestionsChange: (value: boolean) => void
     onAllowNegativePointsChange: (value: boolean) => void
@@ -64,6 +65,7 @@ export function QuizFormDialog({
     onTitleChange,
     onDurationChange,
     onQuizGradeLevelChange,
+    onDeleteGradeLevel,
     onSelectedBankIdsChange,
     onAllowPreviousQuestionsChange,
     onAllowNegativePointsChange,
@@ -118,24 +120,14 @@ export function QuizFormDialog({
                         <FieldLabel htmlFor="quiz-grade-level">
                             {t("grade-level")}
                         </FieldLabel>
-                        <select
+                        <GradeLevelSelect
                             id="quiz-grade-level"
-                            className={NATIVE_SELECT_CLASS_NAME}
                             value={quizGradeLevel}
-                            onChange={(event) =>
-                                onQuizGradeLevelChange(event.target.value)
-                            }
-                            required
-                        >
-                            <option value="" disabled>
-                                {t("choose-grade-level")}
-                            </option>
-                            {gradeLevels.map((level) => (
-                                <option key={level} value={level}>
-                                    {level}
-                                </option>
-                            ))}
-                        </select>
+                            levels={gradeLevels}
+                            onChange={onQuizGradeLevelChange}
+                            onDelete={onDeleteGradeLevel}
+                            disabled={isBusy}
+                        />
                     </Field>
                     <Field>
                         <FieldLabel htmlFor="quiz-duration">

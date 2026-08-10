@@ -8,6 +8,7 @@ import {
     getQuestionBanks,
     getQuestions,
     importQuestionBatch,
+    updateQuestionBank,
 } from "@/api/question-banks"
 import { ApiError } from "@/api/client"
 import type { GradeLevel, Question, QuestionBank } from "@/api/types"
@@ -82,6 +83,7 @@ export function QuestionBanksPanel({
     const [reloadKey, setReloadKey] = useState(0)
     const [gradeLevel, setGradeLevel] = useState("")
     const [title, setTitle] = useState("")
+    const [editingBank, setEditingBank] = useState<QuestionBank | null>(null)
     const [titleFilter, setTitleFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
     const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
@@ -166,19 +168,28 @@ export function QuestionBanksPanel({
         setIsCreating(true)
 
         try {
-            const created = await createQuestionBank({
-                grade_level: gradeLevel.trim(),
-                chapter: title.trim(),
-            })
+            const saved = editingBank
+                ? await updateQuestionBank(editingBank.id, {
+                      grade_level: gradeLevel.trim(),
+                      chapter: title.trim(),
+                  })
+                : await createQuestionBank({
+                      grade_level: gradeLevel.trim(),
+                      chapter: title.trim(),
+                  })
             setQuestionBanks((banks) =>
-                [...banks, created].sort(compareQuestionBanks)
+                (editingBank
+                    ? banks.map((bank) => (bank.id === saved.id ? saved : bank))
+                    : [...banks, saved]
+                ).sort(compareQuestionBanks)
             )
             setGradeLevel("")
             setTitle("")
+            setEditingBank(null)
             setTitleFilter("")
             setGradeLevelFilter("")
             const allBanks = await getAllQuestionBanks().catch(() => [])
-            setPage(pageContaining(allBanks, created.id))
+            setPage(pageContaining(allBanks, saved.id))
             setReloadKey((current) => current + 1)
             onCreateDialogOpenChange(false)
         } catch (caughtError) {
@@ -377,6 +388,7 @@ export function QuestionBanksPanel({
                     setGradeLevelFilter(value)
                     setPage(1)
                 }}
+                onDeleteGradeLevel={onDeleteGradeLevel}
                 page={page}
                 totalPages={totalPages}
                 onPageChange={setPage}
@@ -388,10 +400,17 @@ export function QuestionBanksPanel({
                     setDeleteBankError(null)
                     setBankToDelete(bank)
                 }}
+                onEdit={(bank) => {
+                    setEditingBank(bank)
+                    setGradeLevel(bank.grade_level)
+                    setTitle(bank.chapter)
+                    setCreateError(null)
+                }}
             />
 
             <QuestionBankFormDialog
-                open={isCreateDialogOpen}
+                open={isCreateDialogOpen || editingBank !== null}
+                editingBank={editingBank}
                 gradeLevels={gradeLevels}
                 gradeLevel={gradeLevel}
                 title={title}
@@ -419,6 +438,9 @@ export function QuestionBanksPanel({
                 onAddGradeLevel={() => void addGradeLevel()}
                 onClose={() => {
                     onCreateDialogOpenChange(false)
+                    setEditingBank(null)
+                    setGradeLevel("")
+                    setTitle("")
                     setCreateError(null)
                 }}
                 onSubmit={handleSubmit}
