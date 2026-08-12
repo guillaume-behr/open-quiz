@@ -15,6 +15,7 @@ import type { GradeLevel, StudentAccount, StudentClass } from "@/api/types"
 import { ClassFormDialog } from "@/components/classes/class-form-dialog"
 import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
+import { CollapsibleFilters } from "@/components/ui/collapsible-filters"
 import { Dialog } from "@/components/ui/dialog"
 import {
     Field,
@@ -710,67 +711,98 @@ export function ClassesPanel({
                     </p>
                 ) : (
                     <div className="space-y-4">
-                        <div className="grid gap-3 sm:grid-cols-3">
-                            <Field>
-                                <FieldLabel htmlFor="assignment-student-search">
-                                    {t("search")}
-                                </FieldLabel>
-                                <Input
-                                    id="assignment-student-search"
-                                    value={assignmentSearch}
-                                    onChange={(event) =>
-                                        setAssignmentSearch(event.target.value)
-                                    }
-                                    placeholder={t("search-student")}
-                                />
-                            </Field>
-                            <Field>
-                                <FieldLabel htmlFor="assignment-student-class">
-                                    {t("student-class")}
-                                </FieldLabel>
-                                <select
-                                    id="assignment-student-class"
-                                    className={NATIVE_SELECT_CLASS_NAME}
-                                    value={assignmentClassFilter}
-                                    onChange={(event) =>
-                                        setAssignmentClassFilter(
-                                            event.target.value
-                                        )
-                                    }
-                                >
-                                    <option value="">{t("all-classes")}</option>
-                                    <option value="unassigned">
-                                        {t("student-unassigned")}
-                                    </option>
-                                    {assignmentClasses.map(
-                                        ([classId, name]) => (
-                                            <option
-                                                key={classId}
-                                                value={classId}
-                                            >
-                                                {name}
-                                            </option>
-                                        )
-                                    )}
-                                </select>
-                            </Field>
-                            <Field>
-                                <FieldLabel htmlFor="assignment-student-grade-level">
-                                    {t("grade-level")}
-                                </FieldLabel>
-                                <GradeLevelSelect
-                                    id="assignment-student-grade-level"
-                                    value={assignmentGradeLevelFilter}
-                                    levels={gradeLevels}
-                                    onChange={(value) =>
-                                        setAssignmentGradeLevelFilter(value)
-                                    }
-                                    onDelete={onDeleteGradeLevel}
-                                    required={false}
-                                    placeholder={t("all-grade-levels")}
-                                />
-                            </Field>
-                        </div>
+                        <CollapsibleFilters
+                            activeCount={
+                                Number(Boolean(assignmentSearch)) +
+                                Number(Boolean(assignmentClassFilter)) +
+                                Number(Boolean(assignmentGradeLevelFilter))
+                            }
+                        >
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                <Field>
+                                    <FieldLabel htmlFor="assignment-student-search">
+                                        {t("search")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="assignment-student-search"
+                                        value={assignmentSearch}
+                                        onChange={(event) =>
+                                            setAssignmentSearch(
+                                                event.target.value
+                                            )
+                                        }
+                                        placeholder={t("search-student")}
+                                    />
+                                </Field>
+                                <Field>
+                                    <FieldLabel htmlFor="assignment-student-class">
+                                        {t("student-class")}
+                                    </FieldLabel>
+                                    <select
+                                        id="assignment-student-class"
+                                        className={NATIVE_SELECT_CLASS_NAME}
+                                        value={assignmentClassFilter}
+                                        onChange={(event) =>
+                                            setAssignmentClassFilter(
+                                                event.target.value
+                                            )
+                                        }
+                                    >
+                                        <option value="">
+                                            {t("all-classes")}
+                                        </option>
+                                        <option value="unassigned">
+                                            {t("student-unassigned")}
+                                        </option>
+                                        {assignmentClasses.map(
+                                            ([classId, name]) => (
+                                                <option
+                                                    key={classId}
+                                                    value={classId}
+                                                >
+                                                    {name}
+                                                </option>
+                                            )
+                                        )}
+                                    </select>
+                                </Field>
+                                <Field>
+                                    <FieldLabel htmlFor="assignment-student-grade-level">
+                                        {t("grade-level")}
+                                    </FieldLabel>
+                                    <GradeLevelSelect
+                                        id="assignment-student-grade-level"
+                                        value={assignmentGradeLevelFilter}
+                                        levels={gradeLevels}
+                                        onChange={(value) =>
+                                            setAssignmentGradeLevelFilter(value)
+                                        }
+                                        onDelete={onDeleteGradeLevel}
+                                        required={false}
+                                        placeholder={t("all-grade-levels")}
+                                    />
+                                </Field>
+                            </div>
+
+                            {(assignmentSearch ||
+                                assignmentClassFilter ||
+                                assignmentGradeLevelFilter) && (
+                                <div className="mt-3 flex justify-end">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                            setAssignmentSearch("")
+                                            setAssignmentClassFilter("")
+                                            setAssignmentGradeLevelFilter("")
+                                        }}
+                                    >
+                                        {t("clear-filters")}
+                                    </Button>
+                                </div>
+                            )}
+                        </CollapsibleFilters>
 
                         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                             <p className="text-muted-foreground">
@@ -778,22 +810,6 @@ export function ClassesPanel({
                                     count: selectedAccountIds.size,
                                 })}
                             </p>
-                            {(assignmentSearch ||
-                                assignmentClassFilter ||
-                                assignmentGradeLevelFilter) && (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                        setAssignmentSearch("")
-                                        setAssignmentClassFilter("")
-                                        setAssignmentGradeLevelFilter("")
-                                    }}
-                                >
-                                    {t("clear-filters")}
-                                </Button>
-                            )}
                         </div>
 
                         {filteredAccounts.length === 0 ? (

@@ -5,6 +5,7 @@ import {
     type Question,
 } from "@/api/types"
 import { Button } from "@/components/ui/button"
+import { CollapsibleFilters } from "@/components/ui/collapsible-filters"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import {
@@ -131,7 +132,17 @@ export function QuestionsManager({
                     {t("add-question")}
                 </Button>
             </div>
-            <div className="mt-5 rounded-xl border bg-muted/20 p-4">
+            <CollapsibleFilters
+                className="mt-5"
+                activeCount={
+                    Number(sort !== "default") +
+                    Number(Boolean(minimumPoints)) +
+                    Number(Boolean(maximumPoints)) +
+                    Number(Boolean(minimumDifficulty)) +
+                    Number(Boolean(maximumDifficulty)) +
+                    answerModes.length
+                }
+            >
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     <label className="grid gap-1 text-sm font-medium">
                         {t("question-sort")}
@@ -264,7 +275,7 @@ export function QuestionsManager({
                         )}
                     </div>
                 </fieldset>
-            </div>
+            </CollapsibleFilters>
             <div className="mt-5">
                 {isLoading ? (
                     <div

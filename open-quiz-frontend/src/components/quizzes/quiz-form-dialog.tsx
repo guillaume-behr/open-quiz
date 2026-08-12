@@ -1,6 +1,7 @@
 import type { GradeLevel, QuestionBank, Quiz } from "@/api/types"
 import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
+import { CollapsibleFilters } from "@/components/ui/collapsible-filters"
 import { Dialog } from "@/components/ui/dialog"
 import {
     Field,
@@ -279,17 +280,19 @@ function QuestionBankPicker({
             <FieldLabel htmlFor="quiz-bank-search">
                 {t("quiz-question-banks")}
             </FieldLabel>
-            <Input
-                id="quiz-bank-search"
-                className="max-w-md"
-                value={search}
-                placeholder={t("search-question-bank")}
-                aria-label={t("search-question-bank")}
-                onChange={(event) => {
-                    setSearch(event.target.value)
-                    setPage(1)
-                }}
-            />
+            <CollapsibleFilters activeCount={Number(Boolean(trimmedSearch))}>
+                <Input
+                    id="quiz-bank-search"
+                    className="max-w-md"
+                    value={search}
+                    placeholder={t("search-question-bank")}
+                    aria-label={t("search-question-bank")}
+                    onChange={(event) => {
+                        setSearch(event.target.value)
+                        setPage(1)
+                    }}
+                />
+            </CollapsibleFilters>
             {filtered.length === 0 ? (
                 <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                     {t("quiz-needs-question-bank")}

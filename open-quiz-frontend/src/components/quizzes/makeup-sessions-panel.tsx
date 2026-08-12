@@ -230,6 +230,7 @@ export function MakeupSessionsPanel() {
                     )}
                     <Button
                         type="submit"
+                        className="w-full max-w-md"
                         disabled={busy || !classId || !quizIds.length}
                     >
                         {t("makeup-launch")}

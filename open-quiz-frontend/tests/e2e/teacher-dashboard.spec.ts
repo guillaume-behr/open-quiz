@@ -920,6 +920,14 @@ test("teacher creates, edits, and deletes a scored question", async ({
     const questionsDialog = page.getByRole("dialog", {
         name: "Matter and energy",
     })
+    const questionFilters = questionsDialog.getByText("Filters", {
+        exact: true,
+    })
+    await expect(questionsDialog.getByLabel("Minimum points")).toBeHidden()
+    await questionFilters.click()
+    await expect(questionsDialog.getByLabel("Minimum points")).toBeVisible()
+    await questionFilters.click()
+    await expect(questionsDialog.getByLabel("Minimum points")).toBeHidden()
     await questionsDialog
         .getByRole("button", { name: "Add a question" })
         .click()
@@ -1297,9 +1305,17 @@ test("teacher creates and controls a retake session", async ({ page }) => {
     await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Retake", exact: true }).click()
 
-    await page.getByRole("combobox", { name: "Class" }).selectOption("11")
+    const classSelector = page.getByRole("combobox", { name: "Class" })
+    const createButton = page.getByRole("button", { name: "Create session" })
+    const classSelectorBox = await classSelector.boundingBox()
+    const createButtonBox = await createButton.boundingBox()
+    expect(classSelectorBox).not.toBeNull()
+    expect(createButtonBox).not.toBeNull()
+    expect(createButtonBox!.width).toBeCloseTo(classSelectorBox!.width, 0)
+
+    await classSelector.selectOption("11")
     await page.getByText("Science checkpoint", { exact: true }).click()
-    await page.getByRole("button", { name: "Create session" }).click()
+    await createButton.click()
 
     await expect
         .poll(() =>
