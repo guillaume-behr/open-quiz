@@ -1,6 +1,7 @@
 import type { GradeLevel } from "@/api/types"
 import { ApiError } from "@/api/client"
 import { Button } from "@/components/ui/button"
+import { Dialog } from "@/components/ui/dialog"
 import { Toast } from "@/components/ui/toast"
 import { Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -30,6 +31,8 @@ export function GradeLevelSelect({
     const { t } = useTranslation()
     const selected = levels.find((level) => level.name === value)
     const [deleteError, setDeleteError] = useState<string | null>(null)
+    const [levelToDelete, setLevelToDelete] = useState<GradeLevel | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     useEffect(() => {
         if (!deleteError) return
@@ -38,25 +41,21 @@ export function GradeLevelSelect({
     }, [deleteError])
 
     async function confirmDelete(): Promise<void> {
-        if (
-            !selected ||
-            !window.confirm(
-                t("delete-grade-level-confirmation", {
-                    level: selected.name,
-                })
-            )
-        ) {
-            return
-        }
+        if (!levelToDelete) return
+        setIsDeleting(true)
         try {
-            await onDelete(selected)
+            await onDelete(levelToDelete)
             onChange("")
+            setLevelToDelete(null)
         } catch (error) {
             setDeleteError(
                 error instanceof ApiError && error.status === 409
                     ? t("grade-level-in-use-error")
                     : t("grade-level-delete-error")
             )
+            setLevelToDelete(null)
+        } finally {
+            setIsDeleting(false)
         }
     }
 
@@ -85,7 +84,7 @@ export function GradeLevelSelect({
                     type="button"
                     variant="outline"
                     size="icon"
-                    onClick={() => void confirmDelete()}
+                    onClick={() => setLevelToDelete(selected)}
                     disabled={disabled}
                     aria-label={t("delete-grade-level", {
                         level: selected.name,
@@ -97,6 +96,38 @@ export function GradeLevelSelect({
                     <Trash2 />
                 </Button>
             )}
+            <Dialog
+                open={levelToDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open && !isDeleting) setLevelToDelete(null)
+                }}
+                title={t("delete-grade-level", {
+                    level: levelToDelete?.name ?? "",
+                })}
+                description={t("delete-grade-level-confirmation", {
+                    level: levelToDelete?.name ?? "",
+                })}
+                size="sm"
+            >
+                <div className="flex justify-end gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isDeleting}
+                        onClick={() => setLevelToDelete(null)}
+                    >
+                        {t("cancel")}
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={isDeleting}
+                        onClick={() => void confirmDelete()}
+                    >
+                        {t("delete")}
+                    </Button>
+                </div>
+            </Dialog>
         </div>
     )
 }

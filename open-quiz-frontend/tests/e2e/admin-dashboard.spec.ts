@@ -205,8 +205,24 @@ test("administrator manages teachers and problem reports", async ({ page }) => {
     await expect(
         page.getByText("The results table is difficult to read on a phone.")
     ).toBeVisible()
-    page.once("dialog", (dialog) => dialog.accept())
-    await page.getByRole("button", { name: "Delete" }).click()
+    const reportCard = page.getByRole("article").filter({
+        hasText: "The results table is difficult to read on a phone.",
+    })
+    await reportCard.getByRole("button", { name: "Delete" }).click()
+    let deleteDialog = page.getByRole("dialog", { name: "Delete" })
+    await expect(deleteDialog).toContainText("Permanently delete this report?")
+    const closingContent = await deleteDialog
+        .getByRole("button", { name: "Cancel" })
+        .evaluate((button) => {
+            button.click()
+            return button.closest('[role="dialog"]')?.textContent
+        })
+    expect(closingContent).toContain("Permanently delete this report?")
+    await expect(deleteDialog).toBeHidden()
+
+    await reportCard.getByRole("button", { name: "Delete" }).click()
+    deleteDialog = page.getByRole("dialog", { name: "Delete" })
+    await deleteDialog.getByRole("button", { name: "Delete" }).click()
     await expect(
         page.getByText("The results table is difficult to read on a phone.")
     ).toHaveCount(0)

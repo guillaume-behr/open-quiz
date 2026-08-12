@@ -829,6 +829,19 @@ test("teacher can open class and question-bank creation dialogs", async ({
     await expect(
         classDialog.getByRole("combobox", { name: "Class" })
     ).toBeEditable()
+    await classDialog.getByLabel("Grade level").selectOption("Grade 8")
+    await classDialog
+        .getByRole("button", { name: "Delete grade level Grade 8" })
+        .click()
+    const deleteGradeDialog = page.getByRole("dialog", {
+        name: "Delete grade level Grade 8",
+    })
+    await expect(deleteGradeDialog).toContainText(
+        "This action cannot be undone."
+    )
+    await deleteGradeDialog.getByRole("button", { name: "Cancel" }).click()
+    await expect(deleteGradeDialog).toBeHidden()
+    await expect(classDialog).toBeVisible()
     await classDialog.getByRole("button", { name: "Cancel" }).click()
 
     await page

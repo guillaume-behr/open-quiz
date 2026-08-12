@@ -1,6 +1,6 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { X } from "lucide-react"
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
@@ -32,6 +32,21 @@ export function Dialog({
     className,
 }: DialogProps) {
     const { t } = useTranslation()
+    const currentContent = { title, description, children }
+    const [openContent, setOpenContent] = useState(currentContent)
+    if (
+        open &&
+        (openContent.title !== title ||
+            openContent.description !== description ||
+            openContent.children !== children)
+    ) {
+        setOpenContent({
+            title,
+            description,
+            children,
+        })
+    }
+    const content = open ? currentContent : openContent
 
     return (
         <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -47,11 +62,11 @@ export function Dialog({
                     <div className="flex shrink-0 items-start justify-between gap-4 border-b px-5 py-4">
                         <div className="min-w-0">
                             <DialogPrimitive.Title className="text-xl font-bold break-words">
-                                {title}
+                                {content.title}
                             </DialogPrimitive.Title>
-                            {description && (
+                            {content.description && (
                                 <DialogPrimitive.Description className="mt-1 text-sm text-muted-foreground">
-                                    {description}
+                                    {content.description}
                                 </DialogPrimitive.Description>
                             )}
                         </div>
@@ -63,7 +78,7 @@ export function Dialog({
                         </DialogPrimitive.Close>
                     </div>
                     <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                        {children}
+                        {content.children}
                     </div>
                 </DialogPrimitive.Popup>
             </DialogPrimitive.Portal>
