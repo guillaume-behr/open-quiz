@@ -24,12 +24,16 @@ export function PasswordInput({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="absolute top-1/2 right-1 -translate-y-1/2"
+                className="absolute top-1/2 right-1 size-8 -translate-y-1/2 active:not-aria-[haspopup]:-translate-y-1/2"
                 aria-label={t(visible ? "hide-password" : "show-password")}
                 aria-pressed={visible}
                 onClick={() => setVisible((current) => !current)}
             >
-                {visible ? <EyeOff /> : <Eye />}
+                {visible ? (
+                    <EyeOff className="size-4" />
+                ) : (
+                    <Eye className="size-4" />
+                )}
             </Button>
         </div>
     )
