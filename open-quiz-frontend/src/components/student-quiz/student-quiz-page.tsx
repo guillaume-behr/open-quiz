@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next"
 import { StudentNameBadge } from "./fullscreen-prompt"
 import { StudentQuestionForm } from "./student-question-form"
 
-export type TranslationViewState = {
+type TranslationViewState = {
     offered: boolean
     active: boolean
     hasError: boolean

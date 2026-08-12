@@ -28,7 +28,7 @@ export type ProblemReport = {
     created_at: string
 }
 
-export type Student = {
+type Student = {
     id: number
     class_id: number
     account_id: number | null
@@ -113,7 +113,7 @@ export type CodeLanguage =
     | "bash"
     | "json"
 
-export type QuestionChoice = {
+type QuestionChoice = {
     id: number
     label: string
     is_correct: boolean
@@ -238,7 +238,7 @@ export type QuizAnswerReview = {
     is_correct: boolean | null
 }
 
-export type StudentQuizHistoryAnswer = Omit<
+type StudentQuizHistoryAnswer = Omit<
     QuizAnswerReview,
     "id" | "score" | "max_score" | "is_graded" | "is_correct"
 > & { is_correct: boolean | null }
@@ -273,7 +273,7 @@ export type QuizSession = {
     grades_published_at: string | null
 }
 
-export type MakeupQuizOption = {
+type MakeupQuizOption = {
     id: number
     title: string
     duration_seconds: number
@@ -297,7 +297,7 @@ export type MakeupJoin = {
     quizzes: MakeupQuizOption[]
 }
 
-export type StudentQuizChoice = {
+type StudentQuizChoice = {
     id: number
     label: string
     position: number

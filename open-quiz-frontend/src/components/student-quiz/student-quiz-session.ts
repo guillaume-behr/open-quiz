@@ -1,6 +1,6 @@
 const QUIZ_SESSION_STORAGE_KEY = "open-quiz-student-session"
 
-export type StoredQuizSession = {
+type StoredQuizSession = {
     joinCode: string
     participantToken: string
 }

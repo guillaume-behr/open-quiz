@@ -80,7 +80,6 @@ def list_problem_reports(
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_problem_report(
     report_id: int,
-    request: Request,
     admin_user: AdminUser,
     session: DbSession,
 ) -> Response:

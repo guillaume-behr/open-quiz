@@ -898,15 +898,6 @@ def quiz_session_class_name(quiz_session: QuizSession, session: DbSession) -> st
     return format_class_name(student_class.grade_level, student_class.name)
 
 
-def discard_finished_training_session(
-    quiz_session: QuizSession,
-    quiz: Quiz,
-    session: DbSession,
-) -> None:
-    # Finished training sessions are the source of the student's history.
-    return
-
-
 def discard_previous_training_sessions(
     student: StudentAccount,
     membership: Student,
@@ -3231,7 +3222,6 @@ def get_student_quiz_state(
         f"participant:{participant.id}",
     )
     state = student_state_response(quiz_session, quiz, participant, session)
-    discard_finished_training_session(quiz_session, quiz, session)
     return state
 
 
@@ -3394,7 +3384,6 @@ def submit_student_answer(
     state = student_state_response(quiz_session, quiz, participant, session)
     if feedback is not None:
         state.training_feedback = feedback
-    discard_finished_training_session(quiz_session, quiz, session)
     return state
 
 

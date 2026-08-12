@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { useOutletContext } from "react-router"
 
-export type MainLayoutOutletContext = {
+type MainLayoutOutletContext = {
     navbarActionTarget: HTMLDivElement | null
 }
 
