@@ -96,8 +96,10 @@ export type QuestionBankImportResult = {
     questions: Question[]
 }
 
-export type QuestionDifficulty = "easy" | "medium" | "hard"
-export type AnswerMode = "single" | "multiple" | "written"
+export const QUESTION_DIFFICULTIES = ["easy", "medium", "hard"] as const
+export type QuestionDifficulty = (typeof QUESTION_DIFFICULTIES)[number]
+export const ANSWER_MODES = ["single", "multiple", "written"] as const
+export type AnswerMode = (typeof ANSWER_MODES)[number]
 export type CodeLanguage =
     | "javascript"
     | "typescript"

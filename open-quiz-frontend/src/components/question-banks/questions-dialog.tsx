@@ -1,5 +1,12 @@
-import type { Question } from "@/api/types"
+import {
+    ANSWER_MODES,
+    QUESTION_DIFFICULTIES,
+    type AnswerMode,
+    type Question,
+} from "@/api/types"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import {
     ImageIcon,
     LoaderCircle,
@@ -8,6 +15,7 @@ import {
     Settings2,
     Trash2,
 } from "lucide-react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChoiceImage } from "./choice-image"
 import { CodeBlock } from "./code-block"
@@ -32,6 +40,83 @@ export function QuestionsManager({
     onDelete,
 }: QuestionsManagerProps) {
     const { t } = useTranslation()
+    const [sort, setSort] = useState("default")
+    const [minimumPoints, setMinimumPoints] = useState("")
+    const [maximumPoints, setMaximumPoints] = useState("")
+    const [minimumDifficulty, setMinimumDifficulty] = useState("")
+    const [maximumDifficulty, setMaximumDifficulty] = useState("")
+    const [answerModes, setAnswerModes] = useState<AnswerMode[]>([])
+    const visibleQuestions = useMemo(() => {
+        const difficultyRank = new Map(
+            QUESTION_DIFFICULTIES.map((difficulty, index) => [
+                difficulty,
+                index,
+            ])
+        )
+        const minPoints = minimumPoints === "" ? null : Number(minimumPoints)
+        const maxPoints = maximumPoints === "" ? null : Number(maximumPoints)
+        const minDifficulty = minimumDifficulty
+            ? (difficultyRank.get(
+                  minimumDifficulty as (typeof QUESTION_DIFFICULTIES)[number]
+              ) ?? null)
+            : null
+        const maxDifficulty = maximumDifficulty
+            ? (difficultyRank.get(
+                  maximumDifficulty as (typeof QUESTION_DIFFICULTIES)[number]
+              ) ?? null)
+            : null
+        const pointsFor = (question: Question) =>
+            question.choices.reduce(
+                (total, choice) => total + Math.max(0, choice.points),
+                0
+            )
+        const filtered = questions.filter((question) => {
+            const points = pointsFor(question)
+            const difficulty = difficultyRank.get(question.difficulty) ?? 0
+            return (
+                (minPoints === null || points >= minPoints) &&
+                (maxPoints === null || points <= maxPoints) &&
+                (minDifficulty === null || difficulty >= minDifficulty) &&
+                (maxDifficulty === null || difficulty <= maxDifficulty) &&
+                (answerModes.length === 0 ||
+                    answerModes.includes(question.answer_mode))
+            )
+        })
+        if (sort === "default") return filtered
+        return [...filtered].sort((first, second) => {
+            if (sort === "difficulty-asc" || sort === "difficulty-desc") {
+                const difference =
+                    (difficultyRank.get(first.difficulty) ?? 0) -
+                    (difficultyRank.get(second.difficulty) ?? 0)
+                return sort === "difficulty-asc" ? difference : -difference
+            }
+            const difference = pointsFor(first) - pointsFor(second)
+            return sort === "points-asc" ? difference : -difference
+        })
+    }, [
+        answerModes,
+        maximumDifficulty,
+        maximumPoints,
+        minimumDifficulty,
+        minimumPoints,
+        questions,
+        sort,
+    ])
+    const hasFilters = Boolean(
+        minimumPoints ||
+        maximumPoints ||
+        minimumDifficulty ||
+        maximumDifficulty ||
+        answerModes.length
+    )
+
+    function toggleAnswerMode(mode: AnswerMode) {
+        setAnswerModes((current) =>
+            current.includes(mode)
+                ? current.filter((item) => item !== mode)
+                : [...current, mode]
+        )
+    }
     return (
         <section className="border-t pt-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -45,6 +130,140 @@ export function QuestionsManager({
                     <Plus />
                     {t("add-question")}
                 </Button>
+            </div>
+            <div className="mt-5 rounded-xl border bg-muted/20 p-4">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <label className="grid gap-1 text-sm font-medium">
+                        {t("question-sort")}
+                        <select
+                            className={NATIVE_SELECT_CLASS_NAME}
+                            value={sort}
+                            onChange={(event) => setSort(event.target.value)}
+                        >
+                            <option value="default">{t("sort-default")}</option>
+                            <option value="difficulty-asc">
+                                {t("sort-difficulty-asc")}
+                            </option>
+                            <option value="difficulty-desc">
+                                {t("sort-difficulty-desc")}
+                            </option>
+                            <option value="points-asc">
+                                {t("sort-points-asc")}
+                            </option>
+                            <option value="points-desc">
+                                {t("sort-points-desc")}
+                            </option>
+                        </select>
+                    </label>
+                    <fieldset>
+                        <legend className="text-sm font-medium">
+                            {t("points-range")}
+                        </legend>
+                        <div className="mt-1 grid grid-cols-2 gap-2">
+                            <Input
+                                type="number"
+                                min={0}
+                                step="0.25"
+                                value={minimumPoints}
+                                placeholder={t("minimum")}
+                                aria-label={t("minimum-points")}
+                                onChange={(event) =>
+                                    setMinimumPoints(event.target.value)
+                                }
+                            />
+                            <Input
+                                type="number"
+                                min={0}
+                                step="0.25"
+                                value={maximumPoints}
+                                placeholder={t("maximum")}
+                                aria-label={t("maximum-points")}
+                                onChange={(event) =>
+                                    setMaximumPoints(event.target.value)
+                                }
+                            />
+                        </div>
+                    </fieldset>
+                    <fieldset>
+                        <legend className="text-sm font-medium">
+                            {t("difficulty-range")}
+                        </legend>
+                        <div className="mt-1 grid grid-cols-2 gap-2">
+                            <select
+                                className={NATIVE_SELECT_CLASS_NAME}
+                                value={minimumDifficulty}
+                                aria-label={t("minimum-difficulty")}
+                                onChange={(event) =>
+                                    setMinimumDifficulty(event.target.value)
+                                }
+                            >
+                                <option value="">{t("minimum")}</option>
+                                {QUESTION_DIFFICULTIES.map((difficulty) => (
+                                    <option key={difficulty} value={difficulty}>
+                                        {t(`difficulty-${difficulty}`)}
+                                    </option>
+                                ))}
+                            </select>
+                            <select
+                                className={NATIVE_SELECT_CLASS_NAME}
+                                value={maximumDifficulty}
+                                aria-label={t("maximum-difficulty")}
+                                onChange={(event) =>
+                                    setMaximumDifficulty(event.target.value)
+                                }
+                            >
+                                <option value="">{t("maximum")}</option>
+                                {QUESTION_DIFFICULTIES.map((difficulty) => (
+                                    <option key={difficulty} value={difficulty}>
+                                        {t(`difficulty-${difficulty}`)}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </fieldset>
+                </div>
+                <fieldset className="mt-4">
+                    <legend className="text-sm font-medium">
+                        {t("question-types")}
+                    </legend>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {ANSWER_MODES.map((mode) => (
+                            <label
+                                key={mode}
+                                className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={answerModes.includes(mode)}
+                                    onChange={() => toggleAnswerMode(mode)}
+                                />
+                                {t(
+                                    mode === "single"
+                                        ? "single-choice"
+                                        : mode === "multiple"
+                                          ? "multiple-choice"
+                                          : "written-answer"
+                                )}
+                            </label>
+                        ))}
+                        {hasFilters && (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                    setMinimumPoints("")
+                                    setMaximumPoints("")
+                                    setMinimumDifficulty("")
+                                    setMaximumDifficulty("")
+                                    setAnswerModes([])
+                                }}
+                            >
+                                {t("clear-filters")}
+                            </Button>
+                        )}
+                    </div>
+                </fieldset>
             </div>
             <div className="mt-5">
                 {isLoading ? (
@@ -64,8 +283,8 @@ export function QuestionsManager({
                         {t("no-question")}
                     </p>
                 ) : (
-                    <ol className="max-h-96 space-y-3 overflow-y-auto pr-1">
-                        {questions.map((question, index) => (
+                    <ol className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
+                        {visibleQuestions.map((question, index) => (
                             <QuestionCard
                                 key={question.id}
                                 question={question}
@@ -74,6 +293,11 @@ export function QuestionsManager({
                                 onDelete={() => onDelete(question)}
                             />
                         ))}
+                        {visibleQuestions.length === 0 && (
+                            <li className="rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">
+                                {t("no-question-matches-filters")}
+                            </li>
+                        )}
                     </ol>
                 )}
             </div>

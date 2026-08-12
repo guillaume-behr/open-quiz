@@ -21,6 +21,7 @@ import {
 } from "@/components/question-banks/question-bank-secondary-dialogs"
 import { QuestionBanksList } from "@/components/question-banks/question-banks-list"
 import { QuestionsManager } from "@/components/question-banks/questions-dialog"
+import { Toast } from "@/components/ui/toast"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -377,6 +378,12 @@ export function QuestionBanksPanel({
 
     return (
         <div className="mt-6">
+            {(deleteBankError || deleteQuestionError) && (
+                <Toast
+                    message={(deleteBankError || deleteQuestionError)!}
+                    variant="error"
+                />
+            )}
             <QuestionBanksList
                 banks={questionBanks}
                 gradeLevels={gradeLevels}

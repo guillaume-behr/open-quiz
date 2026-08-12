@@ -65,7 +65,7 @@ export function QuestionBankFormDialog({
                 editingBank ? "edit-question-bank" : "create-question-bank"
             )}
             description={t("create-question-bank-help")}
-            className={editingBank ? "max-w-3xl" : "max-w-lg"}
+            className={editingBank ? "max-w-6xl" : "max-w-2xl"}
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup className="gap-4">

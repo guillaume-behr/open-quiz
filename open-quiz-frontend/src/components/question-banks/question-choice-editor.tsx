@@ -1,5 +1,6 @@
 import type { AnswerMode, CodeLanguage } from "@/api/types"
 import { Button } from "@/components/ui/button"
+import { FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
@@ -34,22 +35,50 @@ export function QuestionChoiceEditor({
 }: QuestionChoiceEditorProps) {
     const { t } = useTranslation()
 
+    if (answerMode === "written") {
+        return (
+            <div className="space-y-3 rounded-lg border p-3">
+                <div className="max-w-40">
+                    <FieldLabel htmlFor={`written-points-${index}`}>
+                        {t("points")}
+                    </FieldLabel>
+                    <Input
+                        id={`written-points-${index}`}
+                        className="mt-2"
+                        type="number"
+                        min={0}
+                        max={10000}
+                        step="0.25"
+                        value={choice.points}
+                        onChange={(event) =>
+                            onUpdate({ points: Number(event.target.value) })
+                        }
+                        required
+                    />
+                </div>
+                <ChoiceValueField
+                    choice={choice}
+                    index={index}
+                    answerMode={answerMode}
+                    responseLanguage={responseLanguage}
+                    onUpdate={onUpdate}
+                />
+            </div>
+        )
+    }
+
     return (
         <div className="rounded-lg border p-3">
             <div className="flex items-center gap-2">
-                {answerMode !== "written" && (
-                    <input
-                        type={answerMode === "single" ? "radio" : "checkbox"}
-                        name="correct-choice"
-                        checked={choice.is_correct}
-                        onChange={(event) =>
-                            onCorrectChange(event.target.checked)
-                        }
-                        aria-label={t("correct-answer-number", {
-                            number: index + 1,
-                        })}
-                    />
-                )}
+                <input
+                    type={answerMode === "single" ? "radio" : "checkbox"}
+                    name="correct-choice"
+                    checked={choice.is_correct}
+                    onChange={(event) => onCorrectChange(event.target.checked)}
+                    aria-label={t("correct-answer-number", {
+                        number: index + 1,
+                    })}
+                />
                 <ChoiceValueField
                     choice={choice}
                     index={index}
@@ -72,30 +101,24 @@ export function QuestionChoiceEditor({
                     }
                     required
                 />
-                {answerMode !== "written" && (
-                    <>
-                        <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            aria-label={t("remove-choice-number", {
-                                number: index + 1,
-                            })}
-                            disabled={choiceCount <= 2}
-                            onClick={onRemove}
-                        >
-                            <Trash2 />
-                        </Button>
-                    </>
-                )}
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={t("remove-choice-number", {
+                        number: index + 1,
+                    })}
+                    disabled={choiceCount <= 2}
+                    onClick={onRemove}
+                >
+                    <Trash2 />
+                </Button>
             </div>
-            {answerMode !== "written" && (
-                <ChoiceAttachments
-                    choice={choice}
-                    index={index}
-                    onUpdate={onUpdate}
-                />
-            )}
+            <ChoiceAttachments
+                choice={choice}
+                index={index}
+                onUpdate={onUpdate}
+            />
         </div>
     )
 }
