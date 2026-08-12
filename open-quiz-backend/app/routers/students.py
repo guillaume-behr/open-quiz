@@ -31,7 +31,10 @@ from app.security import (
     encrypt_student_password,
     hash_password,
 )
-from app.student_memberships import delete_student_membership
+from app.student_memberships import (
+    delete_student_membership,
+    revoke_student_participations,
+)
 
 router = APIRouter(prefix="/api/students", tags=["student accounts"])
 
@@ -340,6 +343,9 @@ def update_student_account(
     request: Request,
 ) -> StudentAccountResponse:
     account = owned_account(account_id, professor, session)
+    credentials_changed = payload.password is not None or (
+        account.is_active and not payload.is_active
+    )
     account.identifier = payload.identifier
     account.display_name = payload.display_name
     account.is_active = payload.is_active
@@ -353,6 +359,8 @@ def update_student_account(
     if membership is not None:
         membership.identifier = account.identifier
         membership.display_name = account.display_name
+        if credentials_changed:
+            revoke_student_participations(membership.id, session)
     try:
         session.commit()
     except IntegrityError:

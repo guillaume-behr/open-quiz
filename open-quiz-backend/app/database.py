@@ -372,7 +372,9 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                 )
                 connection.execute(
                     text(
-                        f"UPDATE quiz_sessions SET {column_name} = "
+                        # Identifiers come exclusively from the static tuple
+                        # above; no request or configuration value reaches SQL.
+                        f"UPDATE quiz_sessions SET {column_name} = "  # noqa: S608
                         f"(SELECT {quiz_column} FROM quizzes "
                         "WHERE quizzes.id = quiz_sessions.quiz_id)"
                     )

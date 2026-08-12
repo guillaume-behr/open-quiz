@@ -44,7 +44,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     refresh_proof: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105 - OAuth token type, not a secret.
 
 
 class LoginResponse(BaseModel):
@@ -172,7 +172,7 @@ class StudentAccountCreate(BaseModel):
 class StudentAccountUpdate(BaseModel):
     identifier: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
     display_name: str = Field(min_length=1, max_length=120)
-    password: str | None = Field(default=None, min_length=8, max_length=256)
+    password: str | None = Field(default=None, min_length=10, max_length=256)
     is_active: bool = True
 
     @field_validator("identifier")
@@ -187,6 +187,24 @@ class StudentAccountUpdate(BaseModel):
         if not normalized:
             raise ValueError("Le nom ne peut pas être vide")
         return normalized
+
+    @field_validator("password")
+    @classmethod
+    def validate_student_password(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            reject_predictable_secret(
+                "PASSWORD",
+                value,
+                minimum_unique_characters=5,
+            )
+        except ValueError:
+            raise ValueError(
+                "Le mot de passe élève doit être difficile à deviner "
+                "et ne pas répéter un motif"
+            ) from None
+        return value
 
 
 class StudentAccountResponse(BaseModel):
@@ -222,7 +240,7 @@ class StudentLoginRequest(BaseModel):
 
 class StudentLoginResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105 - OAuth token type, not a secret.
     student: StudentAccountResponse
 
 

@@ -1,12 +1,14 @@
 /// <reference lib="webworker" />
 
+import { loadPyodide } from "pyodide"
+
 type RunRequest = {
-    id: number
+    id: string
     source: string
 }
 
 type RunResponse = {
-    id: number
+    id: string
     started?: boolean
     output?: string
     error?: string
@@ -19,23 +21,19 @@ type PythonRuntime = {
     runPythonAsync(source: string): Promise<unknown>
 }
 
-type PyodideModule = {
-    loadPyodide(options: { indexURL: string }): Promise<PythonRuntime>
-}
-
-const PYODIDE_MODULE_URL = "/pyodide/pyodide.asm.mjs"
 const MAX_OUTPUT_CHARACTERS = 1_000_000
 let runtimePromise: Promise<PythonRuntime> | undefined
-let networkDisabled = false
+let sandboxRestricted = false
+const sendMessage = self.postMessage.bind(self)
 
 class OutputLimitError extends Error {}
 
-function denyNetworkAccess(): never {
-    throw new Error("Network access is disabled for Python execution.")
+function denySandboxCapability(): never {
+    throw new Error("This browser capability is disabled for Python execution.")
 }
 
-function disableNetworkAccess() {
-    if (networkDisabled) return
+function restrictSandboxCapabilities() {
+    if (sandboxRestricted) return
     for (const capability of [
         "fetch",
         "XMLHttpRequest",
@@ -46,30 +44,24 @@ function disableNetworkAccess() {
         "Worker",
         "SharedWorker",
         "importScripts",
+        "BroadcastChannel",
         "caches",
-        "eval",
-        "Function",
+        "indexedDB",
     ]) {
         Object.defineProperty(self, capability, {
-            value: denyNetworkAccess,
+            value: denySandboxCapability,
             configurable: false,
             writable: false,
         })
     }
-    networkDisabled = true
+    sandboxRestricted = true
 }
 
 function runtime(): Promise<PythonRuntime> {
-    runtimePromise ??= import(/* @vite-ignore */ PYODIDE_MODULE_URL)
-        .then((module) =>
-            (module as PyodideModule).loadPyodide({
-                indexURL: "/pyodide/",
-            })
-        )
-        .catch((error) => {
-            runtimePromise = undefined
-            throw error
-        })
+    runtimePromise ??= loadPyodide({ indexURL: "/pyodide/" }).catch((error) => {
+        runtimePromise = undefined
+        throw error
+    })
     return runtimePromise
 }
 
@@ -78,8 +70,8 @@ self.onmessage = async (event: MessageEvent<RunRequest>) => {
     let outputLimitExceeded = false
     try {
         const python = await runtime()
-        disableNetworkAccess()
-        self.postMessage({ id, started: true } satisfies RunResponse)
+        restrictSandboxCapabilities()
+        sendMessage({ id, started: true } satisfies RunResponse)
         const lines: string[] = []
         let outputCharacters = 0
         const appendOutput = (line: string) => {
@@ -104,10 +96,10 @@ self.onmessage = async (event: MessageEvent<RunRequest>) => {
                 }
             }
         }
-        self.postMessage({ id, output: lines.join("\n") } satisfies RunResponse)
+        sendMessage({ id, output: lines.join("\n") } satisfies RunResponse)
     } catch (error) {
         const fatal = outputLimitExceeded || error instanceof OutputLimitError
-        self.postMessage({
+        sendMessage({
             id,
             error: error instanceof Error ? error.message : String(error),
             fatal,

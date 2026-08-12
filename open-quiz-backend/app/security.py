@@ -12,6 +12,8 @@ from pwdlib import PasswordHash
 
 password_hash = PasswordHash.recommended()
 DUMMY_PASSWORD_HASH = password_hash.hash(token_urlsafe(32))
+ACCESS_TOKEN_REQUIRED_CLAIMS = ["sub", "type", "ver", "iat", "exp"]
+TWO_FACTOR_TOKEN_REQUIRED_CLAIMS = ["sub", "type", "jti", "iat", "exp"]
 
 
 def hash_password(password: str) -> str:
@@ -59,7 +61,12 @@ def create_access_token(
 
 
 def decode_access_token(token: str, secret: str) -> tuple[int, str]:
-    payload = jwt.decode(token, secret, algorithms=["HS256"])
+    payload = jwt.decode(
+        token,
+        secret,
+        algorithms=["HS256"],
+        options={"require": ACCESS_TOKEN_REQUIRED_CLAIMS},
+    )
     if payload.get("type") != "access":
         raise jwt.InvalidTokenError("Unexpected token type")
     version = payload.get("ver")
@@ -86,7 +93,12 @@ def create_student_access_token(
 
 
 def decode_student_access_token(token: str, secret: str) -> tuple[int, str]:
-    payload = jwt.decode(token, secret, algorithms=["HS256"])
+    payload = jwt.decode(
+        token,
+        secret,
+        algorithms=["HS256"],
+        options={"require": ACCESS_TOKEN_REQUIRED_CLAIMS},
+    )
     if payload.get("type") != "student_access":
         raise jwt.InvalidTokenError("Unexpected token type")
     version = payload.get("ver")
@@ -116,7 +128,12 @@ def create_two_factor_token(
 
 
 def decode_two_factor_token(token: str, secret: str) -> tuple[int, str, str]:
-    payload = jwt.decode(token, secret, algorithms=["HS256"])
+    payload = jwt.decode(
+        token,
+        secret,
+        algorithms=["HS256"],
+        options={"require": TWO_FACTOR_TOKEN_REQUIRED_CLAIMS},
+    )
     purpose = payload["type"]
     if purpose not in {"two_factor_setup", "two_factor_verification"}:
         raise jwt.InvalidTokenError("Unexpected token type")

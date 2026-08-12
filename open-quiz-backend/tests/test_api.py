@@ -13,6 +13,7 @@ from threading import Barrier
 from time import sleep, time
 from typing import Any
 
+import jwt
 import pyotp
 import pytest
 from fastapi import HTTPException, status
@@ -51,10 +52,17 @@ from app.routers.quizzes import (
 from app.schemas import (
     LoginRequest,
     QuestionBatchImport,
+    StudentAccountUpdate,
     StudentLoginRequest,
     StudentQuizAnswer,
 )
-from app.security import DUMMY_PASSWORD_HASH, refresh_request_proof
+from app.security import (
+    DUMMY_PASSWORD_HASH,
+    decode_access_token,
+    decode_student_access_token,
+    decode_two_factor_token,
+    refresh_request_proof,
+)
 from main import create_app
 from scripts.reset_two_factor import reset
 
@@ -281,6 +289,52 @@ def test_login_schemas_preserve_password_characters(
     payload = schema.model_validate({identity_field: "account", "password": password})
 
     assert payload.password == password
+
+
+@pytest.mark.parametrize(
+    ("decoder", "payload"),
+    [
+        (
+            decode_access_token,
+            {"sub": "1", "type": "access", "ver": "version", "iat": 1},
+        ),
+        (
+            decode_student_access_token,
+            {
+                "sub": "1",
+                "type": "student_access",
+                "ver": "version",
+                "iat": 1,
+            },
+        ),
+        (
+            decode_two_factor_token,
+            {
+                "sub": "1",
+                "type": "two_factor_verification",
+                "jti": "token-id",
+                "iat": 1,
+            },
+        ),
+    ],
+)
+def test_signed_tokens_require_an_expiration_claim(decoder, payload) -> None:
+    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        decoder(token, JWT_SECRET)
+
+
+@pytest.mark.parametrize("password", ["shortpass", "abcdeabcde"])
+def test_student_password_resets_reject_weak_values(password: str) -> None:
+    with pytest.raises(ValidationError):
+        StudentAccountUpdate.model_validate(
+            {
+                "identifier": "student.account",
+                "display_name": "Student Account",
+                "password": password,
+            }
+        )
 
 
 def test_login_accepts_the_exact_configured_password_with_spaces(
@@ -4233,6 +4287,61 @@ def test_join_and_start_race_never_strands_a_participant(tmp_path: Path) -> None
 
 def correct_choice_id(question: dict[str, Any]) -> int:
     return next(choice["id"] for choice in question["choices"] if choice["is_correct"])
+
+
+def test_student_password_reset_revokes_an_active_quiz_capability(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "participant-revocation.db")) as client:
+        environment = exam_environment(client)
+        launched, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+
+        account = environment["account"]
+        replacement_password = "Replacement-42"
+        changed = client.post(
+            f"/api/students/{account['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "identifier": account["identifier"],
+                "display_name": account["display_name"],
+                "password": replacement_password,
+                "is_active": True,
+            },
+        )
+        assert changed.status_code == 200
+
+        endpoint = f"/api/quizzes/student/sessions/{launched['join_code']}"
+        assert client.get(endpoint, headers=participant_headers).status_code == 401
+        assert (
+            client.get(
+                "/api/student-auth/me",
+                headers=environment["student_headers"],
+            ).status_code
+            == 401
+        )
+
+        new_login = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": account["identifier"],
+                "password": replacement_password,
+            },
+        )
+        assert new_login.status_code == 200
+        rejoined = client.post(
+            "/api/quizzes/join",
+            headers={"Authorization": f"Bearer {new_login.json()['access_token']}"},
+            json={"join_code": launched["join_code"]},
+        )
+        assert rejoined.status_code == 201
+        assert rejoined.json()["question"] is not None
 
 
 def test_completed_student_waits_for_classmates_without_a_blank_state(

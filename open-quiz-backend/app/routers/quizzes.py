@@ -1017,6 +1017,17 @@ def authenticated_participant(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Jeton de participation au quiz invalide",
         )
+    quiz_session, quiz, participant = row
+    active_account = session.scalar(
+        select(StudentAccount.is_active)
+        .join(Student, Student.account_id == StudentAccount.id)
+        .where(Student.id == participant.student_id)
+    )
+    if active_account is not True:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Jeton de participation au quiz invalide",
+        )
     return row
 
 

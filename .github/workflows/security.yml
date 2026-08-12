@@ -25,6 +25,7 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --dev
       - run: uv run --frozen ruff check app tests main.py scripts
+      - run: uv run --frozen ruff check --select S app main.py scripts
       - run: uv run --frozen ruff format --check app tests main.py scripts
       - name: Run backend tests
         env:
