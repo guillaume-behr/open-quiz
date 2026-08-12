@@ -6,6 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.config import reject_predictable_secret
 
 MAX_QUESTIONS_PER_BANK = 500
+QuizSessionStatus = Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
+
+
+def _normalize_optional_code(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized if normalized.strip() else None
 
 
 def validate_teacher_password(value: str) -> str:
@@ -329,10 +337,7 @@ class QuestionChoiceCreate(BaseModel):
     @field_validator("code_content")
     @classmethod
     def normalize_code(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.replace("\r\n", "\n").replace("\r", "\n")
-        return normalized if normalized.strip() else None
+        return _normalize_optional_code(value)
 
     @model_validator(mode="after")
     def validate_code(self) -> QuestionChoiceCreate:
@@ -365,12 +370,7 @@ class QuestionCreate(BaseModel):
     @field_validator("code_content")
     @classmethod
     def normalize_code(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.replace("\r\n", "\n").replace("\r", "\n")
-        if not normalized.strip():
-            return None
-        return normalized
+        return _normalize_optional_code(value)
 
     @model_validator(mode="after")
     def validate_correct_choices(self) -> QuestionCreate:
@@ -423,9 +423,8 @@ class QuestionChoiceResponse(BaseModel):
     code_content: str | None
 
 
-class QuestionResponse(BaseModel):
+class QuestionContentResponse(BaseModel):
     id: int
-    question_bank_id: int
     prompt: str
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
@@ -435,6 +434,10 @@ class QuestionResponse(BaseModel):
     has_image: bool
     code_language: str | None
     code_content: str | None
+
+
+class QuestionResponse(QuestionContentResponse):
+    question_bank_id: int
     choices: list[QuestionChoiceResponse]
     created_at: datetime
 
@@ -553,7 +556,7 @@ class MakeupSessionResponse(BaseModel):
     class_id: int | None
     class_name: str
     join_code: str
-    status: Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
+    status: QuizSessionStatus
     quizzes: list[MakeupQuizOption]
     participant_count: int
     created_at: datetime
@@ -591,7 +594,7 @@ class QuizSessionResponse(BaseModel):
     class_id: int | None
     class_name: str
     join_code: str
-    status: Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
+    status: QuizSessionStatus
     participant_count: int
     participants: list[QuizParticipantResponse]
     median_maximum_score: float = 0
@@ -610,7 +613,7 @@ class StudentQuizSessionResponse(BaseModel):
     class_name: str
     student_name: str
     join_code: str
-    status: Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
+    status: QuizSessionStatus
     ends_at: datetime | None
 
 
@@ -623,17 +626,7 @@ class StudentQuizChoiceResponse(BaseModel):
     code_content: str | None
 
 
-class StudentQuizQuestionResponse(BaseModel):
-    id: int
-    prompt: str
-    difficulty: Literal["easy", "medium", "hard"]
-    answer_mode: Literal["single", "multiple", "written"]
-    answer_mode_disclosed: bool
-    response_language: str | None
-    allow_code_execution: bool
-    has_image: bool
-    code_language: str | None
-    code_content: str | None
+class StudentQuizQuestionResponse(QuestionContentResponse):
     choices: list[StudentQuizChoiceResponse]
 
 

@@ -21,8 +21,35 @@ from app.models import (
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import StudentClassCreate, StudentClassResponse, StudentResponse
+from app.student_memberships import delete_student_membership
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
+
+
+def commit_unique_class(session: DbSession) -> None:
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Une classe porte déjà ce nom",
+        ) from None
+
+
+def class_has_active_exam_session(class_id: int, session: DbSession) -> bool:
+    return (
+        session.scalar(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                QuizSession.class_id == class_id,
+                Quiz.mode == "exam",
+                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            )
+        )
+        is not None
+    )
 
 
 def owned_class(
@@ -257,14 +284,7 @@ def create_class(
     )
     session.add(student_class)
     ensure_grade_level(professor.id, payload.grade_level, session)
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Une classe porte déjà ce nom",
-        ) from None
+    commit_unique_class(session)
     session.refresh(student_class)
     return class_response(student_class, session)
 
@@ -276,18 +296,7 @@ def delete_class(
     session: DbSession,
 ) -> None:
     owned_class(class_id, professor, session)
-    if (
-        session.scalar(
-            select(QuizSession.id)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                QuizSession.class_id == class_id,
-                Quiz.mode == "exam",
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
-            )
-        )
-        is not None
-    ):
+    if class_has_active_exam_session(class_id, session):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette classe est utilisée par une salle d’attente active",
@@ -419,30 +428,9 @@ def unassign_student_account(
     )
     if membership is None:
         raise HTTPException(status_code=404, detail="Affectation introuvable")
-    if (
-        session.scalar(
-            select(QuizSession.id)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                QuizSession.class_id == class_id,
-                Quiz.mode == "exam",
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
-            )
-        )
-        is not None
-    ):
+    if class_has_active_exam_session(class_id, session):
         raise HTTPException(status_code=409, detail="La classe a une session active")
-    session.execute(
-        update(QuizParticipant)
-        .where(QuizParticipant.student_id == membership.id)
-        .values(student_id=None)
-    )
-    session.execute(
-        delete(MakeupSessionSelection).where(
-            MakeupSessionSelection.student_id == membership.id
-        )
-    )
-    session.execute(delete(Student).where(Student.id == membership.id))
+    delete_student_membership(membership.id, session)
     session.commit()
 
 
@@ -478,13 +466,6 @@ def update_class(
     student_class.name = payload.name
     student_class.grade_level = payload.grade_level
     ensure_grade_level(professor.id, payload.grade_level, session)
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Une classe porte déjà ce nom",
-        ) from None
+    commit_unique_class(session)
     session.refresh(student_class)
     return class_response(student_class, session)

@@ -6,15 +6,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
 from app.models import (
-    MakeupSessionSelection,
     Quiz,
-    QuizParticipant,
     QuizSession,
     Student,
     StudentAccount,
@@ -33,6 +31,7 @@ from app.security import (
     encrypt_student_password,
     hash_password,
 )
+from app.student_memberships import delete_student_membership
 
 router = APIRouter(prefix="/api/students", tags=["student accounts"])
 
@@ -391,17 +390,7 @@ def delete_student_account(
             raise HTTPException(
                 status_code=409, detail="Ce compte participe à une session active"
             )
-        session.execute(
-            update(QuizParticipant)
-            .where(QuizParticipant.student_id == membership.id)
-            .values(student_id=None)
-        )
-        session.execute(
-            delete(MakeupSessionSelection).where(
-                MakeupSessionSelection.student_id == membership.id
-            )
-        )
-        session.execute(delete(Student).where(Student.id == membership.id))
+        delete_student_membership(membership.id, session)
     session.execute(delete(StudentAccount).where(StudentAccount.id == account.id))
     session.commit()
     audit_event(
