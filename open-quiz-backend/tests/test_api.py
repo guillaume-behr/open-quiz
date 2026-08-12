@@ -2484,6 +2484,20 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert started.json()["status"] == "in_progress"
         assert started.json()["started_at"] is not None
         assert started.json()["ends_at"] is not None
+        active_leave = client.post(
+            f"{student_state_url}/leave", headers=student_headers
+        )
+        assert active_leave.status_code == 204
+        active_rejoin = client.post(
+            "/api/quizzes/join",
+            headers=exam_account_headers,
+            json={"join_code": quiz_session["join_code"]},
+        )
+        assert active_rejoin.status_code == 201
+        assert active_rejoin.json()["status"] == "in_progress"
+        assert active_rejoin.json()["participant_token"] != participant_token
+        participant_token = active_rejoin.json()["participant_token"]
+        student_headers = {"X-Quiz-Token": participant_token}
         late_join = client.post(
             "/api/quizzes/join",
             headers=late_account_headers,
