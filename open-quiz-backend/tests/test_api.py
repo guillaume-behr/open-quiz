@@ -26,20 +26,26 @@ from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
     ProblemReport,
+    Question,
     QuestionBank,
+    QuestionChoice,
     Quiz,
     QuizParticipant,
     QuizQuestionBank,
     QuizSession,
+    QuizSessionStudentQuestion,
     RefreshSession,
     RefreshSessionFamily,
+    Student,
     StudentAccount,
+    StudentClass,
     User,
 )
 from app.rate_limit import LoginRateLimiter
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.routers.quizzes import (
     generate_join_code,
+    participant_maximum_scores,
     safe_spreadsheet_cell,
 )
 from app.schemas import (
@@ -108,6 +114,24 @@ def test_health_checks_database_readiness(tmp_path: Path) -> None:
     assert response.headers["cache-control"] == "no-store"
     if os.name == "posix":
         assert database.stat().st_mode & 0o077 == 0
+
+
+def test_rate_limit_expiration_has_a_supporting_index(tmp_path: Path) -> None:
+    database = tmp_path / "rate-limit-index.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE login_rate_limits ("
+            "limiter_key VARCHAR(96) PRIMARY KEY, "
+            "window_started_at INTEGER NOT NULL, attempts INTEGER NOT NULL)"
+        )
+    with make_client(settings_for(database)):
+        pass
+
+    with sqlite3.connect(database) as connection:
+        indexes = {
+            row[1] for row in connection.execute("PRAGMA index_list(login_rate_limits)")
+        }
+    assert "ix_login_rate_limits_window_started_at" in indexes
 
 
 def test_cors_allows_class_training_update_preflight(tmp_path: Path) -> None:
@@ -792,6 +816,108 @@ def test_teacher_lists_use_constant_query_counts(tmp_path: Path) -> None:
         assert student_query_count <= 4
         assert class_query_count <= 7
         assert quiz_query_count <= 5
+
+
+def test_participant_maximum_scores_uses_constant_query_count(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "score-performance.db")) as client:
+        with client.app.state.session_factory() as session:
+            professor = User(
+                username="score.teacher",
+                display_name="Score Teacher",
+                password_hash="unused",
+            )
+            session.add(professor)
+            session.flush()
+            student_class = StudentClass(
+                owner_id=professor.id,
+                name="Class",
+                grade_level="6e",
+            )
+            bank = QuestionBank(
+                owner_id=professor.id,
+                grade_level="6e",
+                chapter="Scores",
+            )
+            quiz = Quiz(
+                owner_id=professor.id,
+                mode="exam",
+                title="Scores",
+                question_count=1,
+            )
+            session.add_all([student_class, bank, quiz])
+            session.flush()
+            question = Question(
+                question_bank_id=bank.id,
+                prompt="Question",
+                difficulty="easy",
+                answer_mode="single",
+                correction_mode="automatic",
+            )
+            session.add(question)
+            session.flush()
+            session.add(
+                QuestionChoice(
+                    question_id=question.id,
+                    label="Answer",
+                    is_correct=True,
+                    points=2.5,
+                    position=0,
+                )
+            )
+            quiz_session = QuizSession(
+                quiz_id=quiz.id,
+                class_id=student_class.id,
+                class_name="Class",
+                join_code="SCORE1",
+            )
+            session.add(quiz_session)
+            session.flush()
+            participants = []
+            for index in range(12):
+                student = Student(
+                    class_id=student_class.id,
+                    identifier=f"student.{index}",
+                    display_name=f"Student {index}",
+                )
+                session.add(student)
+                session.flush()
+                participant = QuizParticipant(
+                    session_id=quiz_session.id,
+                    student_id=student.id,
+                    student_identifier=student.identifier,
+                )
+                session.add(participant)
+                participants.append(participant)
+                session.add(
+                    QuizSessionStudentQuestion(
+                        session_id=quiz_session.id,
+                        student_id=student.id,
+                        student_identifier=student.identifier,
+                        question_id=question.id,
+                        position=0,
+                    )
+                )
+            session.commit()
+
+            engine = client.app.state.session_factory.kw["bind"]
+            statements: list[str] = []
+
+            def record_statement(
+                _connection, _cursor, statement, _parameters, _context, _executemany
+            ) -> None:
+                if statement.lstrip().upper().startswith("SELECT"):
+                    statements.append(statement)
+
+            event.listen(engine, "before_cursor_execute", record_statement)
+            try:
+                scores = participant_maximum_scores(
+                    quiz_session, participants, session
+                )
+            finally:
+                event.remove(engine, "before_cursor_execute", record_statement)
+
+        assert scores == {participant.id: 2.5 for participant in participants}
+        assert len(statements) == 3
 
 
 def test_professor_manages_student_accounts_and_class_assignments(

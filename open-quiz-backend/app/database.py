@@ -116,6 +116,16 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
 
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
+        # Every public/authentication request removes expired limiter buckets.
+        # Add the supporting index explicitly because create_all does not add a
+        # newly declared index to databases whose table already exists.
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_login_rate_limits_window_started_at "
+                "ON login_rate_limits (window_started_at)"
+            )
+        )
         student_account_columns = {
             column["name"]
             for column in inspect(connection).get_columns("student_accounts")

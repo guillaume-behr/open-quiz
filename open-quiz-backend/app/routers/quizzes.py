@@ -594,13 +594,76 @@ def participant_maximum_scores(
     participants: list[QuizParticipant],
     session: DbSession,
 ) -> dict[int, float]:
-    return {
-        participant.id: round(
-            sum(session_question_points(quiz_session, session, participant).values()),
+    if not participants:
+        return {}
+
+    # Load assignments and choice totals once for the whole session. Calling
+    # session_question_points for every participant made result polling issue
+    # two or three additional queries per student, which quickly overwhelmed
+    # SQLite for full classrooms.
+    personalized_by_student: dict[int, list[int]] = defaultdict(list)
+    personalized_by_identifier: dict[str, list[int]] = defaultdict(list)
+    personalized_rows = list(
+        session.execute(
+            select(
+                QuizSessionStudentQuestion.student_id,
+                QuizSessionStudentQuestion.student_identifier,
+                QuizSessionStudentQuestion.question_id,
+            )
+            .where(QuizSessionStudentQuestion.session_id == quiz_session.id)
+            .order_by(QuizSessionStudentQuestion.position)
+        )
+    )
+    for student_id, student_identifier, question_id in personalized_rows:
+        if student_id is not None:
+            personalized_by_student[student_id].append(question_id)
+        personalized_by_identifier[student_identifier].append(question_id)
+
+    common_question_ids = list(
+        session.scalars(
+            select(QuizSessionQuestion.question_id)
+            .where(QuizSessionQuestion.session_id == quiz_session.id)
+            .order_by(QuizSessionQuestion.position)
+        )
+    )
+    assigned_question_ids = set(common_question_ids)
+    assigned_question_ids.update(row.question_id for row in personalized_rows)
+    maximums = (
+        dict(
+            session.execute(
+                select(
+                    QuestionChoice.question_id,
+                    func.sum(
+                        case(
+                            (QuestionChoice.points > 0, QuestionChoice.points),
+                            else_=0,
+                        )
+                    ),
+                )
+                .where(QuestionChoice.question_id.in_(assigned_question_ids))
+                .group_by(QuestionChoice.question_id)
+            ).all()
+        )
+        if assigned_question_ids
+        else {}
+    )
+
+    result: dict[int, float] = {}
+    for participant in participants:
+        question_ids = (
+            personalized_by_student.get(participant.student_id, [])
+            if participant.student_id is not None
+            else []
+        )
+        if not question_ids:
+            question_ids = personalized_by_identifier.get(
+                participant.student_identifier, common_question_ids
+            )
+        result[participant.id] = round(
+            sum(float(maximums.get(question_id) or 0) for question_id in question_ids),
             2,
         )
-        for participant in participants
-    }
+    return result
 
 
 def session_response(

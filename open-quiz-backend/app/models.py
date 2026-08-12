@@ -466,7 +466,7 @@ class LoginRateLimit(Base):
     __tablename__ = "login_rate_limits"
 
     limiter_key: Mapped[str] = mapped_column(String(96), primary_key=True)
-    window_started_at: Mapped[int] = mapped_column(Integer)
+    window_started_at: Mapped[int] = mapped_column(Integer, index=True)
     attempts: Mapped[int] = mapped_column(Integer)
 
 
