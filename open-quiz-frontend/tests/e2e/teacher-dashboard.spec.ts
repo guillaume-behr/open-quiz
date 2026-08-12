@@ -1302,6 +1302,14 @@ test("teacher creates and controls a retake session", async ({ page }) => {
     await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Retake", exact: true }).click()
 
+    const activePanel = page.getByRole("region", { name: "Retake" })
+    const dashboardGrid = activePanel.locator("..")
+    const activePanelBox = await activePanel.boundingBox()
+    const dashboardGridBox = await dashboardGrid.boundingBox()
+    expect(activePanelBox).not.toBeNull()
+    expect(dashboardGridBox).not.toBeNull()
+    expect(activePanelBox!.height).toBeCloseTo(dashboardGridBox!.height, 0)
+
     const classSelector = page.getByRole("combobox", { name: "Class" })
     const createButton = page.getByRole("button", { name: "Create session" })
     const createForm = page
