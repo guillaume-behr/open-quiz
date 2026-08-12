@@ -1304,11 +1304,17 @@ test("teacher creates and controls a retake session", async ({ page }) => {
 
     const classSelector = page.getByRole("combobox", { name: "Class" })
     const createButton = page.getByRole("button", { name: "Create session" })
+    const createForm = page
+        .getByRole("heading", { name: "New retake session" })
+        .locator("xpath=ancestor::form")
     const classSelectorBox = await classSelector.boundingBox()
     const createButtonBox = await createButton.boundingBox()
+    const createFormBox = await createForm.boundingBox()
     expect(classSelectorBox).not.toBeNull()
     expect(createButtonBox).not.toBeNull()
+    expect(createFormBox).not.toBeNull()
     expect(createButtonBox!.width).toBeCloseTo(classSelectorBox!.width, 0)
+    expect(createFormBox!.width).toBeCloseTo(classSelectorBox!.width + 42, 0)
 
     await classSelector.selectOption("11")
     await page.getByText("Science checkpoint", { exact: true }).click()

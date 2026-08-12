@@ -138,7 +138,7 @@ export function MakeupSessionsPanel() {
             {error && <Toast message={error} variant="error" />}
             <form
                 onSubmit={create}
-                className="max-w-3xl rounded-2xl border bg-card p-5"
+                className="w-full max-w-md rounded-2xl border bg-card p-5"
             >
                 <h2 className="text-xl font-bold">{t("makeup-create")}</h2>
                 <div className="mt-4 grid gap-4">
