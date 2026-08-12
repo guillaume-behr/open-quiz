@@ -535,6 +535,7 @@ def download_import_example(
                 "difficulty": "easy",
                 "answer_mode": "single",
                 "answer_mode_disclosed": True,
+                "response_language": None,
                 "allow_code_execution": False,
                 "choices": [
                     {
@@ -563,6 +564,7 @@ def download_import_example(
                 "difficulty": "medium",
                 "answer_mode": "multiple",
                 "answer_mode_disclosed": False,
+                "response_language": None,
                 "allow_code_execution": False,
                 "choices": [
                     {
@@ -613,7 +615,7 @@ def download_import_example(
                 },
             },
             {
-                "prompt": "Expliquez pourquoi la Terre tourne autour du Soleil.",
+                "prompt": "Écrivez un programme Python qui affiche la somme de 2 et 3.",
                 "difficulty": "hard",
                 "answer_mode": "written",
                 "answer_mode_disclosed": True,
@@ -621,7 +623,7 @@ def download_import_example(
                 "allow_code_execution": True,
                 "choices": [
                     {
-                        "label": "La gravitation maintient la Terre en orbite autour du Soleil.",
+                        "label": "print(2 + 3)",
                         "is_correct": True,
                         "points": 9,
                         "image": None,

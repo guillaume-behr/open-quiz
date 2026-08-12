@@ -2116,16 +2116,17 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         }
         assert all("correction_mode" not in item for item in example_batch["questions"])
         assert all("points" not in item for item in example_batch["questions"])
+        assert all("response_language" in item for item in example_batch["questions"])
         assert any(item["image"] for item in example_batch["questions"])
         assert any(item["code_content"] for item in example_batch["questions"])
-        assert (
-            next(
-                item
-                for item in example_batch["questions"]
-                if item["answer_mode"] == "written"
-            )["response_language"]
-            == "python"
+        written_example = next(
+            item
+            for item in example_batch["questions"]
+            if item["answer_mode"] == "written"
         )
+        assert written_example["response_language"] == "python"
+        assert written_example["allow_code_execution"] is True
+        assert written_example["choices"][0]["label"] == "print(2 + 3)"
         assert any(
             choice["image"]
             for item in example_batch["questions"]
