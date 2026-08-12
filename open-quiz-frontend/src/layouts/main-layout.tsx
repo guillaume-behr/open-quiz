@@ -2,7 +2,7 @@ import { LanguageSelector } from "@/components/language/language-selector"
 import { PageTransition } from "@/components/navigation/page-transition"
 import { ThemeSelector } from "@/components/theme/theme-selector"
 import { useTranslation } from "react-i18next"
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { Link, Outlet, useLocation } from "react-router"
 
 export function MainLayout() {
@@ -63,7 +63,18 @@ export function MainLayout() {
                 className="flex min-h-0 w-full flex-1"
             >
                 <PageTransition>
-                    <Outlet context={{ navbarActionTarget }} />
+                    <Suspense
+                        fallback={
+                            <div
+                                className="flex min-h-40 w-full items-center justify-center"
+                                role="status"
+                            >
+                                {t("page-loading")}
+                            </div>
+                        }
+                    >
+                        <Outlet context={{ navbarActionTarget }} />
+                    </Suspense>
                 </PageTransition>
             </main>
 

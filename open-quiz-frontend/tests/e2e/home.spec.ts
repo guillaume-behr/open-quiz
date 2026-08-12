@@ -25,7 +25,7 @@ test("the root redirects to the student login", async ({ page }) => {
         page.getByRole("heading", { name: "Student space" })
     ).toBeVisible()
     await expect(page.getByLabel("Student ID")).toBeVisible()
-    await expect(page.getByLabel("Password")).toBeVisible()
+    await expect(page.getByLabel("Password", { exact: true })).toBeVisible()
     await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled()
 })
 
@@ -39,7 +39,7 @@ test("a signed-in student enters exam mode from the dashboard", async ({
     })
     await page.goto("/student/login")
     await page.getByLabel("Student ID").fill("alex-8b")
-    await page.getByLabel("Password").fill("student-password")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
     await page.getByRole("button", { name: "Sign in" }).click()
 
     await expect(page).toHaveURL(/\/student\/dashboard$/)
@@ -75,7 +75,7 @@ test("student authentication clears activity sessions between users", async ({
         sessionStorage.setItem("open-quiz-training-session", "stale-training")
     })
     await page.getByLabel("Student ID").fill("alex-8b")
-    await page.getByLabel("Password").fill("student-password")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
     await page.getByRole("button", { name: "Sign in" }).click()
 
     await expect(page).toHaveURL(/\/student\/dashboard$/)
@@ -211,7 +211,7 @@ test("a student launches training and sees the correct answer", async ({
     )
     await expect(studentSignInButton.locator("svg")).toHaveCount(0)
     await page.getByLabel("Student ID").fill("alex-8b")
-    await page.getByLabel("Password").fill("student-password")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
     await studentSignInButton.click()
     await page.getByRole("button", { name: "Training", exact: true }).click()
     await expect(page.getByText("Practice science")).toBeVisible()
@@ -332,11 +332,11 @@ test("a student joins a retake room and selects an eligible quiz", async ({
 
     await page.goto("/student/login")
     await page.getByLabel("Student ID").fill("alex-8b")
-    await page.getByLabel("Password").fill("student-password")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
     await page.getByRole("button", { name: "Sign in" }).click()
     await page.getByRole("button", { name: "Retake", exact: true }).click()
     await expect(
-        page.getByRole("heading", { name: "Join a quiz", exact: true })
+        page.getByRole("heading", { name: "Retake", exact: true })
     ).toBeVisible()
     await page.getByLabel("Session code").fill("retake1")
     await page.getByRole("button", { name: "Join" }).click()
@@ -394,7 +394,7 @@ test("a student reviews the correction history", async ({ page }) => {
 
     await page.goto("/student/login")
     await page.getByLabel("Student ID").fill("alex-8b")
-    await page.getByLabel("Password").fill("student-password")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
     await page.getByRole("button", { name: "Sign in" }).click()
     await page.getByRole("button", { name: "Results", exact: true }).click()
     await expect(page).toHaveURL(/\/student\/results$/)
@@ -429,5 +429,5 @@ test("student login remains usable on a mobile viewport", async ({ page }) => {
     const loginButton = page.getByRole("button", { name: "Sign in" })
     await expect(loginButton).toBeInViewport()
     await expect(page.getByLabel("Student ID")).toBeEditable()
-    await expect(page.getByLabel("Password")).toBeEditable()
+    await expect(page.getByLabel("Password", { exact: true })).toBeEditable()
 })

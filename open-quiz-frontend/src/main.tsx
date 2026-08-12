@@ -11,6 +11,7 @@ import { MainLayout } from "./layouts/main-layout.tsx"
 
 import { LanguageDirection } from "@/components/language/language-direction"
 import { RouteErrorBoundary } from "@/components/error-boundary"
+import { RouteFocusManager } from "@/components/navigation/route-focus-manager"
 import {
     AccessibilityPage,
     AdminDashboard,
@@ -29,6 +30,7 @@ createRoot(document.getElementById("root")!).render(
     <StrictMode>
         <ThemeProvider>
             <BrowserRouter>
+                <RouteFocusManager />
                 <RouteErrorBoundary>
                     <Suspense
                         fallback={

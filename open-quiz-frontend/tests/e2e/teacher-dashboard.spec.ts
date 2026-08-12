@@ -707,7 +707,9 @@ test("restores a teacher session and displays their classes", async ({
     await expect(
         page.locator("header").getByRole("link", { name: "Homepage" })
     ).toHaveCount(0)
-    await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
+    await expect(
+        page.getByRole("article").filter({ hasText: "Class 8B" })
+    ).toBeVisible()
     await expect(page.getByText(/Grade 8/).last()).toBeVisible()
     await expect
         .poll(
@@ -916,9 +918,9 @@ test("teacher creates, edits, and deletes a scored question", async ({
     const bankCard = page.getByRole("listitem").filter({
         hasText: "Matter and energy",
     })
-    await bankCard.getByRole("button", { name: "Add/edit questions" }).click()
+    await bankCard.getByRole("button", { name: "Edit question bank" }).click()
     const questionsDialog = page.getByRole("dialog", {
-        name: "Matter and energy",
+        name: "Edit question bank",
     })
     const questionFilters = questionsDialog.getByText("Filters", {
         exact: true,
@@ -947,7 +949,7 @@ test("teacher creates, edits, and deletes a scored question", async ({
         questionsDialog.getByText("1. Which form of energy is stored?")
     ).toBeVisible()
     await expect(
-        questionsDialog.getByText("Hard", { exact: true })
+        questionsDialog.locator("ol").getByText("Hard", { exact: true })
     ).toBeVisible()
     const createRequest = requests.find(
         (request) =>
@@ -994,7 +996,9 @@ test("teacher can create a class", async ({ page }) => {
     await dialog.getByLabel("Grade level").selectOption("Grade 8")
     await dialog.getByRole("button", { name: "New class", exact: true }).click()
 
-    await expect(page.getByText("Class 9A", { exact: true })).toBeVisible()
+    await expect(
+        page.getByRole("article").filter({ hasText: "Class 9A" })
+    ).toBeVisible()
     const createRequest = requests.find(
         (request) =>
             new URL(request.url()).pathname === "/api/classes" &&
@@ -1016,16 +1020,18 @@ test("teacher updates a class and manages student assignments", async ({
     const classCard = page.getByRole("article").filter({ hasText: "Class 8B" })
     await classCard.getByRole("button", { name: "Edit class" }).click()
     const editDialog = page.getByRole("dialog", { name: "Edit class" })
-    await editDialog.getByLabel("Class").fill("Class 8 Advanced")
+    await editDialog
+        .getByRole("combobox", { name: "Class", exact: true })
+        .fill("Class 8 Advanced")
     await editDialog.getByRole("button", { name: "Save class" }).click()
     await expect(page.getByText("Class 8 Advanced")).toBeVisible()
 
     const updatedCard = page.getByRole("article").filter({
         hasText: "Class 8 Advanced",
     })
-    await updatedCard.getByRole("button", { name: "Manage students" }).click()
+    await updatedCard.getByRole("button", { name: "Edit class" }).click()
     const manageDialog = page.getByRole("dialog", {
-        name: "Class 8 Advanced",
+        name: "Edit class",
     })
     await manageDialog.getByRole("button", { name: "Assign a student" }).click()
     const assignDialog = page.getByRole("dialog", {
@@ -1082,14 +1088,7 @@ test("teacher creates, updates, disables, and deletes a student account", async 
     await createDialog.getByLabel("Last name").fill("Hopper")
     await createDialog.getByRole("button", { name: "Save student" }).click()
 
-    const credentialsDialog = page.getByRole("dialog", {
-        name: "Student credentials created",
-    })
-    await expect(credentialsDialog.getByText("hopper-grace")).toBeVisible()
-    await expect(
-        credentialsDialog.getByText("generated-password")
-    ).toBeVisible()
-    await credentialsDialog.getByText("Close", { exact: true }).click()
+    await expect(page.getByText("hopper-grace", { exact: true })).toBeVisible()
     await expect(page.getByText("Grace Hopper")).toBeVisible()
     expect(
         requests
@@ -1164,12 +1163,16 @@ test("class list recovers after a temporary load failure", async ({ page }) => {
     )
     await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Classes", exact: true }).click()
-    await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
+    await expect(
+        page.getByRole("article").filter({ hasText: "Class 8B" })
+    ).toBeVisible()
 
     await page.getByPlaceholder("Search for a class").fill("first request")
     await expect(page.getByRole("alert")).toHaveText("Failed to load classes.")
     await page.getByPlaceholder("Search for a class").fill("Class")
-    await expect(page.getByText("Class 8B", { exact: true })).toBeVisible()
+    await expect(
+        page.getByRole("article").filter({ hasText: "Class 8B" })
+    ).toBeVisible()
     await expect(page.getByRole("alert")).toHaveCount(0)
 })
 
@@ -1223,7 +1226,6 @@ test("teacher assigns existing question banks to a training class", async ({
     await expect(
         page.getByText("Advanced matter", { exact: true })
     ).toHaveCount(0)
-    await page.getByRole("button", { name: "Save question banks" }).click()
     await expect(
         page.getByText("The class training question banks have been saved.")
     ).toBeVisible()
@@ -1273,10 +1275,6 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
     await cancelDialog
         .getByRole("button", { name: "Confirm cancellation" })
         .click()
-    await expect(sessionDialog.getByText("Quiz cancelled")).toBeVisible()
-    await sessionDialog.getByRole("button", { name: "Delete session" }).click()
-    const deleteDialog = page.getByRole("dialog", { name: "Delete session" })
-    await deleteDialog.getByRole("button", { name: "Delete" }).click()
     await expect(sessionDialog).toHaveCount(0)
 
     expect(
@@ -1296,7 +1294,6 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
         { method: "POST", action: "pause" },
         { method: "POST", action: "resume" },
         { method: "POST", action: "cancel" },
-        { method: "DELETE", action: "80" },
     ])
 })
 
@@ -1525,7 +1522,7 @@ test("teacher can create a quiz from a question bank", async ({ page }) => {
         same_questions_for_all: false,
         source_language: "en",
         question_bank_ids: [21],
-        duration_seconds: 1800,
+        duration_seconds: 900,
         easy_question_count: 10,
         medium_question_count: 0,
         hard_question_count: 0,

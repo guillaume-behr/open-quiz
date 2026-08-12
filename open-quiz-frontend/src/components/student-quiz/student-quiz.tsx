@@ -200,7 +200,8 @@ export function StudentQuiz({
         setIsBusy(false)
         translation.reset()
         onSessionCleared?.()
-        if (["finished", "cancelled"].includes(session.status)) navigate("/")
+        if (["finished", "cancelled"].includes(session.status))
+            navigate("/student/dashboard")
 
         if (document.fullscreenElement) {
             void document
@@ -366,7 +367,7 @@ function QuizNavbarAction({
                 onClick={onLeave}
             >
                 <LogOut />
-                {t(finished ? "back-home" : "leave-quiz")}
+                {t(finished ? "join-another-quiz" : "leave-quiz")}
             </Button>
         </NavbarAction>
     )

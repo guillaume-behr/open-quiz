@@ -21,7 +21,7 @@ test("teacher sees a login error returned by the API", async ({ page }) => {
     await page.goto("/teacher/login")
 
     await page.getByLabel("Username").fill("teacher")
-    await page.getByLabel("Password").fill("incorrect")
+    await page.getByLabel("Password", { exact: true }).fill("incorrect")
     await page.evaluate(() =>
         sessionStorage.setItem("open-quiz-refresh-proof", "existing-proof")
     )
@@ -63,7 +63,7 @@ test("successful credentials advance to two-factor authentication", async ({
     await page.goto("/teacher/login")
 
     await page.getByLabel("Username").fill("teacher")
-    await page.getByLabel("Password").fill("secret-password")
+    await page.getByLabel("Password", { exact: true }).fill("secret-password")
     await page.getByRole("button", { name: "Sign in" }).click()
 
     await expect(
@@ -98,7 +98,7 @@ test("invalid two-factor code returns to an actionable verification form", async
     })
     await page.goto("/teacher/login")
     await page.getByLabel("Username").fill("teacher")
-    await page.getByLabel("Password").fill("secret-password")
+    await page.getByLabel("Password", { exact: true }).fill("secret-password")
     await page.getByRole("button", { name: "Sign in" }).click()
     await page.getByLabel("Authentication code").fill("123456")
     await page.getByRole("button", { name: "Continue" }).click()

@@ -27,7 +27,7 @@ test("keyboard navigation and login errors expose accessible context", async ({
     await expect(page.getByRole("main")).toBeFocused()
 
     const username = page.getByLabel("Username")
-    const password = page.getByLabel("Password")
+    const password = page.getByLabel("Password", { exact: true })
     await username.fill("invalid")
     await password.fill("invalid-password")
     await page.getByRole("button", { name: "Sign in" }).click()

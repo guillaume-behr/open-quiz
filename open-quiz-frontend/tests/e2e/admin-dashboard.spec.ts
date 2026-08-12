@@ -144,7 +144,9 @@ test("administrator manages teachers and problem reports", async ({ page }) => {
 
     await page.getByLabel("Display name").fill("Katherine Johnson")
     await page.getByLabel("Username").fill("katherine")
-    await page.getByLabel("Password").fill("a-secure-password-2026")
+    await page
+        .getByLabel("Password", { exact: true })
+        .fill("a-secure-password-2026")
     await page.getByRole("button", { name: "Create user" }).click()
 
     await expect(page.getByText("Katherine Johnson")).toBeVisible()
