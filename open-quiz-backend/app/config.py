@@ -79,6 +79,7 @@ class Settings:
     environment: str = "development"
     legal_host_name: str = ""
     legal_host_address: str = ""
+    legal_host_phone: str = ""
     privacy_controller_name: str = ""
     privacy_controller_contact: str = ""
     privacy_dpo_contact: str = ""
@@ -256,6 +257,7 @@ def get_settings() -> Settings:
         environment=required_environment("APP_ENV"),
         legal_host_name=os.getenv("LEGAL_HOST_NAME", ""),
         legal_host_address=os.getenv("LEGAL_HOST_ADDRESS", ""),
+        legal_host_phone=os.getenv("LEGAL_HOST_PHONE", ""),
         privacy_controller_name=os.getenv("PRIVACY_CONTROLLER_NAME", ""),
         privacy_controller_contact=os.getenv("PRIVACY_CONTROLLER_CONTACT", ""),
         privacy_dpo_contact=os.getenv("PRIVACY_DPO_CONTACT", ""),

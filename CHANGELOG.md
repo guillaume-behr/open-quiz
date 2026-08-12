@@ -31,6 +31,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - gestion indépendante des élèves et des classes ;
 - examens créés séparément et banques d’entraînement affectées par classe ;
 - entraînements relançables librement avec correction immédiate ;
+- score potentiel et historique de progression des entraînements ;
+- sessions de rattrapage limitées à des examens déjà passés par la classe ;
 - tirage individuel des questions au lancement pour chaque élève ;
 - ordre aléatoire propre à chaque élève ;
 - quantités explicites de questions par difficulté, limitées par les banques ;

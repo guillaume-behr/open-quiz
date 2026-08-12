@@ -10,7 +10,7 @@ import { type ReactNode, useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
-const UPDATED_AT = new Date("2026-07-29T00:00:00+02:00")
+const UPDATED_AT = new Date("2026-08-12T00:00:00+02:00")
 const LOCAL_STORAGE_KEYS = ["i18nextLng", "vite-ui-theme"]
 
 function usePublicInformation() {
@@ -169,7 +169,9 @@ export function LegalNoticesPage() {
     const pending = !information && !loadFailed
     const hostInformationMissing =
         information !== null &&
-        (!information.host.name.trim() || !information.host.address.trim())
+        (!information.host.name.trim() ||
+            !information.host.address.trim() ||
+            !information.host.phone?.trim())
 
     return (
         <LegalPage
@@ -207,6 +209,12 @@ export function LegalNoticesPage() {
                     <Definition term={t("legal-notice-host-address")}>
                         <ConfigValue
                             value={information?.host.address}
+                            pending={pending}
+                        />
+                    </Definition>
+                    <Definition term={t("legal-notice-host-phone")}>
+                        <ConfigValue
+                            value={information?.host.phone}
                             pending={pending}
                         />
                     </Definition>
@@ -590,9 +598,21 @@ export function CookiesPage() {
                                 duration={t("cookies-device-duration")}
                             />
                             <StorageRow
+                                name="open-quiz-student-access-token"
+                                type={t("cookies-session-storage")}
+                                purpose={t("cookies-student-auth-purpose")}
+                                duration={t("cookies-session-duration")}
+                            />
+                            <StorageRow
                                 name="open-quiz-student-session"
                                 type={t("cookies-session-storage")}
-                                purpose={t("cookies-student-purpose")}
+                                purpose={t("cookies-activity-purpose")}
+                                duration={t("cookies-session-duration")}
+                            />
+                            <StorageRow
+                                name="open-quiz-training-session"
+                                type={t("cookies-session-storage")}
+                                purpose={t("cookies-activity-purpose")}
                                 duration={t("cookies-session-duration")}
                             />
                             <StorageRow

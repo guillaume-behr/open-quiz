@@ -72,17 +72,21 @@ sélectionnées. Dans l’onglet
 **Entraînements**, l’enseignant choisit une classe puis les banques que ses élèves
 pourront utiliser.
 
-Le tableau de bord élève propose deux activités :
+Le tableau de bord élève propose trois activités :
 
 - saisir le code d’un examen après authentification ;
-- relancer à volonté un entraînement disponible, sans points ni note, avec la
-  bonne réponse affichée après chaque question.
+- relancer à volonté un entraînement disponible, avec la bonne réponse affichée
+  après chaque question, un score potentiel final et un historique de
+  progression ;
+- rejoindre avec un code une session de rattrapage créée par l’enseignant pour
+  repasser un examen éligible.
 
 Le backend fournit à chaque élève un tirage individuel et un ordre stable pour
 sa session.
 
-Les jetons d’accès élève et les jetons de participation au quiz sont conservés
-dans `sessionStorage` pour permettre un rafraîchissement de l’onglet. Les jetons
+Les jetons d’accès élève, les reprises d’examen ou d’entraînement et les jetons
+de participation sont conservés dans `sessionStorage` pour permettre un
+rafraîchissement de l’onglet. Les jetons
 d’accès enseignant et administrateur restent en mémoire ; leur renouvellement
 repose sur un cookie HttpOnly.
 

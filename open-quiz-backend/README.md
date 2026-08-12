@@ -52,6 +52,10 @@ la rotation des sessions d’authentification.
 - les quiz `exam` sont notés et lancés par l’enseignant, tandis que les banques
   d’entraînement sont autorisées par classe puis tirées et démarrées librement
   par l’élève ;
+- les entraînements fournissent une correction immédiate et conservent un
+  historique de scores potentiels pour l’élève ;
+- les sessions de rattrapage permettent à une classe de repasser une sélection
+  de quiz déjà effectués au moyen d’un code temporaire ;
 - chaque proposition porte son propre nombre de points. Un quiz choisit si les
   points négatifs sont appliqués ou ramenés à zéro lors de la correction ;
 - les questions sont tirées individuellement au lancement pour chaque élève ;

@@ -9,7 +9,11 @@ test.beforeEach(async ({ page }) => {
             status: 200,
             contentType: "application/json",
             body: JSON.stringify({
-                host: { name: "Example host", address: "Paris" },
+                host: {
+                    name: "Example host",
+                    address: "Paris",
+                    phone: "+33 1 23 45 67 89",
+                },
                 privacy: {
                     controller_name: "Example school",
                     controller_contact: "privacy@example.test",
@@ -90,7 +94,11 @@ test("unsafe configured external URLs are not rendered as links", async ({
     await page.route("**/api/public-information", async (route) => {
         await route.fulfill({
             json: {
-                host: { name: "Example host", address: "Paris" },
+                host: {
+                    name: "Example host",
+                    address: "Paris",
+                    phone: "+33 1 23 45 67 89",
+                },
                 privacy: {
                     controller_name: "Example school",
                     controller_contact: "privacy@example.test",
@@ -183,7 +191,12 @@ test("cookie settings clear local quiz and preference data", async ({
 }) => {
     await page.addInitScript(() => {
         localStorage.setItem("vite-ui-theme", "dark")
+        sessionStorage.setItem(
+            "open-quiz-student-access-token",
+            "student-token"
+        )
         sessionStorage.setItem("open-quiz-student-session", "stored-session")
+        sessionStorage.setItem("open-quiz-training-session", "training-session")
         sessionStorage.setItem("open-quiz-refresh-proof", "stored-proof")
     })
     await page.route("**/api/auth/logout", async (route) => {
@@ -200,9 +213,20 @@ test("cookie settings clear local quiz and preference data", async ({
             page.evaluate(() => ({
                 language: localStorage.getItem("i18nextLng"),
                 theme: localStorage.getItem("vite-ui-theme"),
+                studentToken: sessionStorage.getItem(
+                    "open-quiz-student-access-token"
+                ),
                 quiz: sessionStorage.getItem("open-quiz-student-session"),
+                training: sessionStorage.getItem("open-quiz-training-session"),
                 proof: sessionStorage.getItem("open-quiz-refresh-proof"),
             }))
         )
-        .toEqual({ language: null, theme: null, quiz: null, proof: null })
+        .toEqual({
+            language: null,
+            theme: null,
+            studentToken: null,
+            quiz: null,
+            training: null,
+            proof: null,
+        })
 })

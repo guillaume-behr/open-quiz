@@ -96,8 +96,12 @@ barème sont mémorisés dans la session afin de préserver la correction
 historique.
 
 Une banque autorisée est disponible à tout moment dans le tableau de bord des
-élèves de la classe. Un nouveau tirage est effectué à chaque démarrage, sans
-points ni note, et la bonne réponse apparaît après chaque question.
+élèves de la classe. Un nouveau tirage est effectué à chaque démarrage, la bonne
+réponse apparaît après chaque question et le tableau de bord conserve
+l’historique des scores potentiels obtenus.
+
+Un enseignant peut aussi ouvrir une session de rattrapage donnant à une classe
+un code temporaire pour repasser un ou plusieurs examens déjà effectués.
 
 Si la langue d’un élève diffère de celle du quiz, il peut demander une
 traduction automatique ou conserver le texte original.
@@ -147,7 +151,9 @@ exploitables dans un tableur.
 - connexion avec un compte créé par l’enseignant ;
 - tableau de bord séparant l’entrée en examen des entraînements disponibles ;
 - entrée en examen avec le seul code de session après authentification ;
-- entraînements relançables librement, sans note et avec correction immédiate ;
+- entraînements relançables librement, avec correction immédiate, score
+  potentiel et historique de progression ;
+- accès aux rattrapages autorisés par l’enseignant au moyen d’un code dédié ;
 - interface claire ou sombre ;
 - français, anglais, allemand, espagnol, portugais, ukrainien, arabe et chinois
   simplifié ;
@@ -238,6 +244,7 @@ démarrage, mais affiche un avertissement public.
 | --- | --- |
 | `LEGAL_HOST_NAME` | Nom ou raison sociale de l’hébergeur |
 | `LEGAL_HOST_ADDRESS` | Adresse de l’hébergeur |
+| `LEGAL_HOST_PHONE` | Numéro de téléphone de l’hébergeur |
 | `PRIVACY_CONTROLLER_NAME` | Responsable du traitement |
 | `PRIVACY_CONTROLLER_CONTACT` | Contact pour l’exercice des droits |
 | `PRIVACY_DPO_CONTACT` | Contact du DPO compétent |

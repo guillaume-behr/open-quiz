@@ -27,6 +27,7 @@ def public_information(request: Request) -> dict[str, object]:
         "host": {
             "name": settings.legal_host_name,
             "address": settings.legal_host_address,
+            "phone": settings.legal_host_phone,
         },
         "privacy": {
             "controller_name": settings.privacy_controller_name,

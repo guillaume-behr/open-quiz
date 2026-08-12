@@ -258,6 +258,92 @@ test("a student launches training and sees the correct answer", async ({
     await expect(page).toHaveURL(/\/student\/dashboard$/)
 })
 
+test("training history ignores a response from a previously closed dialog", async ({
+    page,
+}) => {
+    await page.route("**/api/student-auth/login", async (route) => {
+        await route.fulfill({
+            json: { access_token: "student-token", student },
+        })
+    })
+    await page.route("**/api/quizzes/training", async (route) => {
+        const bank = (id: number, chapter: string) => ({
+            id,
+            grade_level: "Grade 8",
+            chapter,
+            question_count: 1,
+            easy_question_count: 1,
+            medium_question_count: 0,
+            hard_question_count: 0,
+            created_at: "2026-01-01T00:00:00Z",
+        })
+        await route.fulfill({
+            json: [bank(12, "Practice science"), bank(13, "Practice maths")],
+        })
+    })
+    let releaseFirstHistory: (() => void) | undefined
+    const firstHistoryCanFinish = new Promise<void>((resolve) => {
+        releaseFirstHistory = resolve
+    })
+    await page.route("**/api/quizzes/training/12/history", async (route) => {
+        await firstHistoryCanFinish
+        await route.fulfill({
+            json: [
+                {
+                    session_id: 120,
+                    score: 1,
+                    maximum_score: 4,
+                    started_at: "2026-01-01T10:00:00Z",
+                },
+            ],
+        })
+    })
+    await page.route("**/api/quizzes/training/13/history", async (route) => {
+        await route.fulfill({
+            json: [
+                {
+                    session_id: 130,
+                    score: 4,
+                    maximum_score: 4,
+                    started_at: "2026-01-02T10:00:00Z",
+                },
+            ],
+        })
+    })
+
+    await page.goto("/student/login")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
+    await page.getByRole("button", { name: "Sign in" }).click()
+    await page.getByRole("button", { name: "Training", exact: true }).click()
+
+    const firstRequest = page.waitForRequest(
+        "**/api/quizzes/training/12/history"
+    )
+    await page
+        .getByRole("article")
+        .filter({ hasText: "Practice science" })
+        .getByRole("button", { name: "View history" })
+        .click()
+    await firstRequest
+    await page.getByRole("button", { name: "Close" }).click()
+    await page
+        .getByRole("article")
+        .filter({ hasText: "Practice maths" })
+        .getByRole("button", { name: "View history" })
+        .click()
+    await expect(page.getByText("4 / 4 (100%)")).toBeVisible()
+
+    const staleResponse = page.waitForResponse(
+        "**/api/quizzes/training/12/history"
+    )
+    releaseFirstHistory?.()
+    await staleResponse
+    await page.waitForTimeout(100)
+    await expect(page.getByText("4 / 4 (100%)")).toBeVisible()
+    await expect(page.getByText("1 / 4 (25%)")).toHaveCount(0)
+})
+
 test("a student joins a retake room and selects an eligible quiz", async ({
     page,
 }) => {

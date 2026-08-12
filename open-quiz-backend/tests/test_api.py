@@ -567,6 +567,7 @@ def test_public_information_describes_instance_settings(tmp_path: Path) -> None:
         tmp_path / "public-information.db",
         legal_host_name="Test host",
         legal_host_address="Test host address",
+        legal_host_phone="+33 1 23 45 67 89",
         privacy_controller_name="Test controller",
         accessibility_contact="Accessibility contact",
         refresh_token_days=9,
@@ -580,6 +581,7 @@ def test_public_information_describes_instance_settings(tmp_path: Path) -> None:
     assert response.json()["host"] == {
         "name": "Test host",
         "address": "Test host address",
+        "phone": "+33 1 23 45 67 89",
     }
     assert response.json()["privacy"]["controller_name"] == "Test controller"
     assert response.json()["privacy"]["quiz_result_retention_days"] == 120

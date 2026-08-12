@@ -4,6 +4,7 @@ export type PublicInformation = {
     host: {
         name: string
         address: string
+        phone: string
     }
     privacy: {
         controller_name: string

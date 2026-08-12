@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { naturalCompare } from "@/lib/utils"
 import { BarChart3, Dumbbell, LoaderCircle, Play } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 
@@ -33,6 +33,7 @@ export function TrainingQuizzesPanel({
     const [history, setHistory] = useState<TrainingHistoryItem[]>([])
     const [historyLoading, setHistoryLoading] = useState(false)
     const [historyError, setHistoryError] = useState<string | null>(null)
+    const historyRequestVersion = useRef(0)
     const sortedBanks = [...banks].sort((first, second) =>
         naturalCompare(first.chapter, second.chapter)
     )
@@ -78,17 +79,31 @@ export function TrainingQuizzesPanel({
     }
 
     async function openHistory(bank: QuestionBank) {
+        const requestVersion = ++historyRequestVersion.current
         setHistoryBank(bank)
         setHistory([])
         setHistoryError(null)
         setHistoryLoading(true)
         try {
-            setHistory(await getTrainingHistory(bank.id, token))
+            const loadedHistory = await getTrainingHistory(bank.id, token)
+            if (historyRequestVersion.current === requestVersion) {
+                setHistory(loadedHistory)
+            }
         } catch {
-            setHistoryError(t("training-history-error"))
+            if (historyRequestVersion.current === requestVersion) {
+                setHistoryError(t("training-history-error"))
+            }
         } finally {
-            setHistoryLoading(false)
+            if (historyRequestVersion.current === requestVersion) {
+                setHistoryLoading(false)
+            }
         }
+    }
+
+    function closeHistory() {
+        historyRequestVersion.current += 1
+        setHistoryBank(null)
+        setHistoryLoading(false)
     }
 
     if (isLoading) {
@@ -170,7 +185,7 @@ export function TrainingQuizzesPanel({
             )}
             <Dialog
                 open={historyBank !== null}
-                onOpenChange={(open) => !open && setHistoryBank(null)}
+                onOpenChange={(open) => !open && closeHistory()}
                 title={t("training-history-title", {
                     bank: historyBank?.chapter ?? "",
                 })}
