@@ -248,7 +248,6 @@ export function HomePage({
                     {storedExam ? (
                         <div className={STUDENT_ACCESS_CARD_CLASS_NAME}>
                             <StudentAccessHeader
-                                icon={ClipboardPenLine}
                                 title={t("resume-quiz")}
                                 description={t("enter-exam-help")}
                                 headingLevel={3}

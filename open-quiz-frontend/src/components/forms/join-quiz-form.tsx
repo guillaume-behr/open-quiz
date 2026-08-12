@@ -6,7 +6,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { ClipboardPenLine, LoaderCircle } from "lucide-react"
+import { LoaderCircle } from "lucide-react"
 import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -36,7 +36,6 @@ export function JoinQuizForm({
     return (
         <form className={STUDENT_ACCESS_CARD_CLASS_NAME} onSubmit={onSubmit}>
             <StudentAccessHeader
-                icon={ClipboardPenLine}
                 title={t("join-quiz-title")}
                 description={t("join-quiz-instructions")}
                 headingLevel={embedded ? 3 : 1}

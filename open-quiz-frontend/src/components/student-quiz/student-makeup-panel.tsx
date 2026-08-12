@@ -8,7 +8,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { LoaderCircle, RotateCcw } from "lucide-react"
+import { LoaderCircle } from "lucide-react"
 import {
     STUDENT_ACCESS_CARD_CLASS_NAME,
     StudentAccessHeader,
@@ -65,7 +65,6 @@ export function StudentMakeupPanel({ token }: { token: string }) {
         return (
             <div className={STUDENT_ACCESS_CARD_CLASS_NAME}>
                 <StudentAccessHeader
-                    icon={RotateCcw}
                     title={t("makeup-tab")}
                     description={t("makeup-choose-help", {
                         className: lobby.class_name,
@@ -114,7 +113,6 @@ export function StudentMakeupPanel({ token }: { token: string }) {
     return (
         <form onSubmit={join} className={STUDENT_ACCESS_CARD_CLASS_NAME}>
             <StudentAccessHeader
-                icon={RotateCcw}
                 title={t("makeup-tab")}
                 description={t("makeup-code-help")}
                 headingLevel={3}

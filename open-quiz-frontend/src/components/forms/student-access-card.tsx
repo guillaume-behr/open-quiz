@@ -9,7 +9,7 @@ export function StudentAccessHeader({
     description,
     headingLevel = 1,
 }: {
-    icon: LucideIcon
+    icon?: LucideIcon
     title: string
     description: string
     headingLevel?: 1 | 3
@@ -17,11 +17,15 @@ export function StudentAccessHeader({
     const Heading = headingLevel === 1 ? "h1" : "h3"
     return (
         <div className="flex flex-col items-center gap-3 text-center">
-            <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                <Icon className="size-7" aria-hidden="true" />
-            </div>
+            {Icon ? (
+                <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+                    <Icon className="size-7" aria-hidden="true" />
+                </div>
+            ) : null}
             <div>
-                <Heading className="text-2xl font-extrabold">{title}</Heading>
+                <Heading className="text-3xl font-extrabold sm:text-4xl">
+                    {title}
+                </Heading>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                     {description}
                 </p>
