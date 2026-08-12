@@ -114,28 +114,37 @@ function requestHeaders(
     }
 }
 
-export async function request<T>(
+async function authenticatedFetch(
     path: string,
-    options: RequestInit = {},
-    allowRefresh = true
-): Promise<T> {
+    options: RequestInit,
+    allowRefresh: boolean,
+    includeAccessToken = true
+): Promise<Response> {
     const response = await fetch(`${API_URL}${path}`, {
         ...options,
         signal: requestSignal(options.signal),
         credentials: "include",
-        headers: requestHeaders(options),
+        headers: requestHeaders(options, includeAccessToken),
     })
-
     if (
         response.status === 401 &&
         allowRefresh &&
         (await refreshAccessToken())
     ) {
-        return request<T>(path, options, false)
+        return authenticatedFetch(path, options, false, includeAccessToken)
     }
     if (!response.ok) {
         throw await errorFrom(response)
     }
+    return response
+}
+
+export async function request<T>(
+    path: string,
+    options: RequestInit = {},
+    allowRefresh = true
+): Promise<T> {
+    const response = await authenticatedFetch(path, options, allowRefresh)
     if (response.status === 204) {
         return undefined as T
     }
@@ -147,20 +156,7 @@ export async function requestPage<T>(
     options: RequestInit = {},
     allowRefresh = true
 ): Promise<import("./types").Page<T>> {
-    const response = await fetch(`${API_URL}${path}`, {
-        ...options,
-        signal: requestSignal(options.signal),
-        credentials: "include",
-        headers: requestHeaders(options),
-    })
-    if (
-        response.status === 401 &&
-        allowRefresh &&
-        (await refreshAccessToken())
-    ) {
-        return requestPage<T>(path, options, false)
-    }
-    if (!response.ok) throw await errorFrom(response)
+    const response = await authenticatedFetch(path, options, allowRefresh)
 
     const items = (await response.json()) as T[]
     const page = Number(response.headers.get("X-Page") ?? 1)
@@ -183,21 +179,11 @@ export async function requestBlob(
     allowRefresh = true,
     includeAccessToken = true
 ): Promise<Blob> {
-    const response = await fetch(`${API_URL}${path}`, {
-        ...options,
-        signal: requestSignal(options.signal),
-        credentials: "include",
-        headers: requestHeaders(options, includeAccessToken),
-    })
-    if (
-        response.status === 401 &&
-        allowRefresh &&
-        (await refreshAccessToken())
-    ) {
-        return requestBlob(path, options, false, includeAccessToken)
-    }
-    if (!response.ok) {
-        throw await errorFrom(response)
-    }
+    const response = await authenticatedFetch(
+        path,
+        options,
+        allowRefresh,
+        includeAccessToken
+    )
     return response.blob()
 }
