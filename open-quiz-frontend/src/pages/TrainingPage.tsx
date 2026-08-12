@@ -137,7 +137,7 @@ export function TrainingPage() {
     }
 
     return (
-        <div className="flex flex-1 flex-col px-4 py-2">
+        <div className="flex flex-1 flex-col px-4 py-4 sm:px-6">
             <NavbarAction>
                 <Button
                     variant="outline"
@@ -148,7 +148,7 @@ export function TrainingPage() {
                     {t("student-dashboard")}
                 </Button>
             </NavbarAction>
-            <main className="mx-auto w-full max-w-2xl rounded-2xl border bg-secondary p-6 shadow-lg sm:p-10">
+            <div className="mx-auto my-auto w-full max-w-7xl rounded-2xl border bg-secondary p-5 shadow-lg sm:p-8 lg:p-12">
                 <div className="mb-6 flex items-center justify-center gap-3 text-center">
                     <Dumbbell className="size-8 shrink-0 text-primary" />
                     <div>
@@ -229,7 +229,7 @@ export function TrainingPage() {
                         />
                     </div>
                 ) : null}
-            </main>
+            </div>
         </div>
     )
 }

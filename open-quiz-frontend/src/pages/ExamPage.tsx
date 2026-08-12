@@ -62,7 +62,7 @@ export function ExamPage() {
     }
 
     return (
-        <div className="flex flex-1 flex-col px-4">
+        <div className="flex flex-1 flex-col px-4 py-4 sm:px-6">
             <div className="flex flex-1 items-center justify-center">
                 <StudentQuiz
                     studentToken={token}

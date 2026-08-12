@@ -47,36 +47,43 @@ export function StudentQuestionForm({
               )
 
     return (
-        <form className="space-y-5" onSubmit={onSubmit}>
-            <p className="text-sm font-semibold text-primary">
-                {t("student-question-progress", {
-                    current: session.question_number,
-                    total: session.total_questions,
-                })}
-            </p>
-            <div
-                className="h-2 overflow-hidden rounded-full bg-muted"
-                role="progressbar"
-                aria-valuenow={session.answered_count}
-                aria-valuemin={0}
-                aria-valuemax={session.total_questions}
-                aria-label={t("student-answered-progress", {
-                    count: session.answered_count,
-                    total: session.total_questions,
-                })}
-            >
+        <form className="space-y-6" onSubmit={onSubmit}>
+            <div className="max-w-5xl space-y-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className="text-sm font-semibold text-primary">
+                        {t("student-question-progress", {
+                            current: session.question_number,
+                            total: session.total_questions,
+                        })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        {t("student-answered-progress", {
+                            count: session.answered_count,
+                            total: session.total_questions,
+                        })}
+                    </p>
+                </div>
                 <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${progress}%` }}
-                />
+                    className="h-2 overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuenow={session.answered_count}
+                    aria-valuemin={0}
+                    aria-valuemax={session.total_questions}
+                    aria-label={t("student-answered-progress", {
+                        count: session.answered_count,
+                        total: session.total_questions,
+                    })}
+                >
+                    <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-                {t("student-answered-progress", {
-                    count: session.answered_count,
-                    total: session.total_questions,
-                })}
-            </p>
-            <h2 className="text-xl font-bold" dir={contentDirection}>
+            <h2
+                className="max-w-5xl text-2xl leading-relaxed font-bold text-balance"
+                dir={contentDirection}
+            >
                 {question.prompt}
             </h2>
             {question.has_image && (
@@ -111,9 +118,9 @@ export function StudentQuestionForm({
                 />
             )}
             {error && <FieldError>{error}</FieldError>}
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex justify-end border-t pt-5">
                 <Button
-                    className="flex-1"
+                    className="w-full sm:w-auto sm:min-w-64"
                     size="lg"
                     type="submit"
                     disabled={
@@ -180,25 +187,30 @@ function WrittenAnswer({
         : null
 
     return (
-        <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
+        <section className="space-y-3" aria-labelledby="written-answer-label">
+            <p
+                id="written-answer-label"
+                className="text-sm font-medium text-muted-foreground"
+            >
                 {languageLabel
                     ? t("write-code-in-language", { language: languageLabel })
                     : t("plain-text-response")}
             </p>
             {responseLanguage ? (
-                <CodeBlock
-                    code={answer}
-                    language={responseLanguage}
-                    editable
-                    runnable={question.allow_code_execution}
-                    onCodeChange={onAnswerChange}
-                    editorClassName="min-h-48"
-                    required
-                />
+                <div className="mx-auto max-w-5xl">
+                    <CodeBlock
+                        code={answer}
+                        language={responseLanguage}
+                        editable
+                        runnable={question.allow_code_execution}
+                        onCodeChange={onAnswerChange}
+                        editorClassName="min-h-96 lg:min-h-[32rem]"
+                        required
+                    />
+                </div>
             ) : (
                 <textarea
-                    className="min-h-32 w-full rounded-md border bg-background p-3"
+                    className="mx-auto block min-h-64 w-full max-w-5xl resize-y rounded-xl border bg-background p-4 text-base leading-7 shadow-xs transition-shadow outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:min-h-80"
                     value={answer}
                     aria-label={t("written-answer")}
                     spellCheck
@@ -207,7 +219,7 @@ function WrittenAnswer({
                     required
                 />
             )}
-        </div>
+        </section>
     )
 }
 
@@ -226,6 +238,8 @@ function ChoiceAnswers({
     selectedChoiceIds: number[]
     onSelectedChoiceIdsChange: (choiceIds: number[]) => void
 }) {
+    const { t } = useTranslation()
+
     function toggleChoice(choiceId: number) {
         if (question.answer_mode === "single") {
             onSelectedChoiceIdsChange([choiceId])
@@ -238,52 +252,73 @@ function ChoiceAnswers({
         )
     }
 
+    const answerModeHelpId = `question-${question.id}-answer-mode-help`
+
     return (
-        <div className="grid gap-3">
-            {question.choices.map((choice) => {
-                const checked = selectedChoiceIds.includes(choice.id)
-                return (
-                    <label
-                        key={choice.id}
-                        className={cn(
-                            "flex cursor-pointer gap-3 rounded-xl border bg-background p-4 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50 hover:bg-primary/5",
-                            checked && "border-primary bg-primary/10"
-                        )}
-                    >
-                        <input
-                            className="mt-1 accent-primary"
-                            type={
-                                question.answer_mode === "single"
-                                    ? "radio"
-                                    : "checkbox"
-                            }
-                            name="answer"
-                            checked={checked}
-                            onChange={() => toggleChoice(choice.id)}
-                        />
-                        <span className="min-w-0 flex-1" dir={contentDirection}>
-                            {choice.label}
-                            {choice.has_image && (
-                                <ProtectedQuizImage
-                                    path="choices"
-                                    id={choice.id}
-                                    joinCode={joinCode}
-                                    token={participantToken}
-                                    alt={choice.label}
-                                />
+        <fieldset aria-describedby={answerModeHelpId}>
+            <legend className="text-base font-semibold">
+                {t("answer-choices")}
+            </legend>
+            <p
+                id={answerModeHelpId}
+                className="mt-1 mb-3 text-sm text-muted-foreground"
+            >
+                {t(
+                    question.answer_mode === "single"
+                        ? "single-choice"
+                        : "multiple-choice"
+                )}
+            </p>
+            <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {question.choices.map((choice) => {
+                    const checked = selectedChoiceIds.includes(choice.id)
+                    return (
+                        <label
+                            key={choice.id}
+                            className={cn(
+                                "flex min-h-24 cursor-pointer items-start gap-3 rounded-xl border bg-background p-4 shadow-xs transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50 hover:bg-primary/5",
+                                checked &&
+                                    "border-primary bg-primary/10 ring-1 ring-primary/30"
                             )}
-                            {choice.code_content && (
-                                <pre
-                                    className="mt-2 overflow-x-auto rounded bg-slate-950 p-3 text-left text-sm text-slate-50"
-                                    dir="ltr"
-                                >
-                                    <code>{choice.code_content}</code>
-                                </pre>
-                            )}
-                        </span>
-                    </label>
-                )
-            })}
-        </div>
+                        >
+                            <input
+                                className="mt-0.5 size-5 shrink-0 accent-primary"
+                                type={
+                                    question.answer_mode === "single"
+                                        ? "radio"
+                                        : "checkbox"
+                                }
+                                name="answer"
+                                checked={checked}
+                                onChange={() => toggleChoice(choice.id)}
+                            />
+                            <span
+                                className="min-w-0 flex-1 leading-6 break-words"
+                                dir={contentDirection}
+                            >
+                                {choice.label}
+                                {choice.has_image && (
+                                    <ProtectedQuizImage
+                                        path="choices"
+                                        id={choice.id}
+                                        joinCode={joinCode}
+                                        token={participantToken}
+                                        alt={choice.label}
+                                    />
+                                )}
+                                {choice.code_content && (
+                                    <pre
+                                        className="mt-2 overflow-x-auto rounded bg-slate-950 p-3 text-left text-sm text-slate-50"
+                                        dir="ltr"
+                                    >
+                                        <code>{choice.code_content}</code>
+                                    </pre>
+                                )}
+                            </span>
+                        </label>
+                    )
+                })}
+            </div>
+        </fieldset>
     )
 }

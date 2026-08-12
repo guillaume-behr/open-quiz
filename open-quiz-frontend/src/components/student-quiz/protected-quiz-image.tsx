@@ -25,7 +25,7 @@ export function ProtectedQuizImage({
 
     return source ? (
         <img
-            className="max-h-80 rounded-lg object-contain"
+            className="mx-auto mt-3 max-h-80 max-w-full rounded-lg object-contain"
             src={source}
             alt={alt}
         />

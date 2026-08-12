@@ -53,7 +53,7 @@ export function StudentQuizPage({
     onReturnHome,
 }: StudentQuizPageProps) {
     return (
-        <div className="flex w-full max-w-2xl flex-col gap-5 rounded-2xl border bg-secondary px-6 py-8 shadow-lg sm:px-10">
+        <div className="flex w-full max-w-7xl flex-col gap-6 rounded-2xl border bg-secondary px-5 py-6 shadow-lg sm:px-8 sm:py-8 lg:px-12">
             <StudentNameBadge name={session.student_name} />
             <QuizHeader
                 session={session}
