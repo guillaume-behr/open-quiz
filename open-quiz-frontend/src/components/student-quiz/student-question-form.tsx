@@ -269,7 +269,7 @@ function ChoiceAnswers({
                         : "multiple-choice"
                 )}
             </p>
-            <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid items-stretch gap-3 sm:grid-cols-2">
                 {question.choices.map((choice) => {
                     const checked = selectedChoiceIds.includes(choice.id)
                     return (
