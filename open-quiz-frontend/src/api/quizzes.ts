@@ -147,8 +147,8 @@ export function createMakeupSession(
 export function controlMakeupSession(
     sessionId: number,
     action: "start" | "pause" | "resume" | "finish" | "cancel"
-): Promise<MakeupSession> {
-    return request<MakeupSession>(
+): Promise<MakeupSession | undefined> {
+    return request<MakeupSession | undefined>(
         `/api/quizzes/makeup/sessions/${sessionId}/${action}`,
         { method: "POST" }
     )
@@ -273,8 +273,8 @@ export function resumeQuizSession(sessionId: number): Promise<QuizSession> {
     })
 }
 
-export function cancelQuizSession(sessionId: number): Promise<QuizSession> {
-    return request<QuizSession>(`/api/quizzes/sessions/${sessionId}/cancel`, {
+export function cancelQuizSession(sessionId: number): Promise<void> {
+    return request<void>(`/api/quizzes/sessions/${sessionId}/cancel`, {
         method: "POST",
     })
 }

@@ -1566,10 +1566,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["latest_quiz_at"] is None
         grade_levels = client.get("/api/grade-levels", headers=teacher_headers).json()
         assert [level["name"] for level in grade_levels] == [
+            "1ere",
+            "2nd",
             "5e",
-            "Première",
-            "Seconde",
-            "Terminale",
+            "Tle",
         ]
         duplicate_grade_level = client.post(
             "/api/grade-levels",
@@ -1577,10 +1577,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             json={"name": " 5E "},
         )
         assert duplicate_grade_level.status_code == 201
-        assert duplicate_grade_level.json()["id"] == grade_levels[0]["id"]
+        fifth_grade = next(
+            level for level in grade_levels if level["name"] == "5e"
+        )
+        assert duplicate_grade_level.json()["id"] == fifth_grade["id"]
         assert (
             client.delete(
-                f"/api/grade-levels/{grade_levels[0]['id']}",
+                f"/api/grade-levels/{fifth_grade['id']}",
                 headers=teacher_headers,
             ).status_code
             == 409
@@ -2104,7 +2107,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert launched.status_code == 201
         quiz_session = launched.json()
-        assert quiz_session["class_name"] == "5e B"
+        assert quiz_session["class_name"] == "Cinquième 5e B"
         assert quiz_session["status"] == "waiting"
         assert len(quiz_session["join_code"]) == 6
         with sqlite3.connect(tmp_path / "test.db") as connection:
@@ -2562,7 +2565,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert results.status_code == 200
         assert [result["id"] for result in results.json()] == [quiz_session["id"]]
         assert results.json()[0]["quiz_title"] == quiz["title"]
-        assert results.json()[0]["class_name"] == "5e B"
+        assert results.json()[0]["class_name"] == "Cinquième 5e B"
         assert results.json()[0]["participants"][0]["score"] > 0
         maximum_score = results.json()[0]["participants"][0]["maximum_score"]
         assert maximum_score > 0
@@ -2829,27 +2832,19 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             f"/api/quizzes/sessions/{cancelled_session['id']}/cancel",
             headers=teacher_headers,
         )
-        assert cancelled.status_code == 200
-        assert cancelled.json()["status"] == "cancelled"
+        assert cancelled.status_code == 204
         cancelled_student_state = client.get(
             f"/api/quizzes/student/sessions/{cancelled_session['join_code']}",
             headers=cancelled_headers,
         )
-        assert cancelled_student_state.status_code == 200
-        assert cancelled_student_state.json()["status"] == "cancelled"
-        assert cancelled_student_state.json()["question"] is None
-        assert cancelled_session["id"] in {
+        assert cancelled_student_state.status_code == 401
+        assert cancelled_session["id"] not in {
             item["id"]
             for item in client.get(
                 "/api/quizzes/sessions/active",
                 headers=teacher_headers,
             ).json()
         }
-        deleted_cancelled = client.delete(
-            f"/api/quizzes/sessions/{cancelled_session['id']}",
-            headers=teacher_headers,
-        )
-        assert deleted_cancelled.status_code == 204
         assert (
             client.get(
                 f"/api/quizzes/sessions/{cancelled_session['id']}",

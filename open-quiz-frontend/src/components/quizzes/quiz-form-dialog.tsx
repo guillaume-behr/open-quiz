@@ -90,57 +90,62 @@ export function QuizFormDialog({
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup className="gap-5">
-                    <Field>
-                        <FieldLabel htmlFor="quiz-title">
-                            {t("quiz-title")}
-                        </FieldLabel>
-                        <Input
-                            id="quiz-title"
-                            value={title}
-                            onChange={(event) =>
-                                onTitleChange(event.target.value)
-                            }
-                            maxLength={160}
-                            required
-                        />
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="quiz-grade-level">
-                            {t("grade-level")}
-                        </FieldLabel>
-                        <GradeLevelSelect
-                            id="quiz-grade-level"
-                            value={quizGradeLevel}
-                            levels={gradeLevels}
-                            onChange={onQuizGradeLevelChange}
-                            onDelete={onDeleteGradeLevel}
-                            disabled={isBusy}
-                        />
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="quiz-duration">
-                            {t("quiz-duration")}
-                        </FieldLabel>
-                        <Input
-                            id="quiz-duration"
-                            type="number"
-                            min={1}
-                            max={480}
-                            value={durationMinutes}
-                            onChange={(event) =>
-                                onDurationChange(
-                                    Math.min(
-                                        480,
-                                        Math.max(1, Number(event.target.value))
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <Field>
+                            <FieldLabel htmlFor="quiz-title">
+                                {t("quiz-title")}
+                            </FieldLabel>
+                            <Input
+                                id="quiz-title"
+                                value={title}
+                                onChange={(event) =>
+                                    onTitleChange(event.target.value)
+                                }
+                                maxLength={160}
+                                required
+                            />
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="quiz-grade-level">
+                                {t("grade-level")}
+                            </FieldLabel>
+                            <GradeLevelSelect
+                                id="quiz-grade-level"
+                                value={quizGradeLevel}
+                                levels={gradeLevels}
+                                onChange={onQuizGradeLevelChange}
+                                onDelete={onDeleteGradeLevel}
+                                disabled={isBusy}
+                            />
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="quiz-duration">
+                                {t("quiz-duration")}
+                            </FieldLabel>
+                            <Input
+                                id="quiz-duration"
+                                type="number"
+                                min={1}
+                                max={480}
+                                value={durationMinutes}
+                                onChange={(event) =>
+                                    onDurationChange(
+                                        Math.min(
+                                            480,
+                                            Math.max(
+                                                1,
+                                                Number(event.target.value)
+                                            )
+                                        )
                                     )
-                                )
-                            }
-                            required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            {t("quiz-duration-help")}
-                        </p>
-                    </Field>
+                                }
+                                required
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                {t("quiz-duration-help")}
+                            </p>
+                        </Field>
+                    </div>
                     {quizGradeLevel && (
                         <QuestionBankPicker
                             banks={banks}
@@ -158,31 +163,37 @@ export function QuizFormDialog({
                                 {t("quiz-options-help")}
                             </p>
                         </div>
-                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
-                            <span>
-                                <span className="block font-medium">
-                                    {t("allow-previous-questions")}
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
+                                <span>
+                                    <span className="block font-medium">
+                                        {t("allow-previous-questions")}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {t("allow-previous-questions-help")}
+                                    </span>
                                 </span>
-                                <span className="text-xs text-muted-foreground">
-                                    {t("allow-previous-questions-help")}
+                                <Switch
+                                    checked={allowPreviousQuestions}
+                                    onCheckedChange={
+                                        onAllowPreviousQuestionsChange
+                                    }
+                                    aria-label={t("allow-previous-questions")}
+                                />
+                            </label>
+                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
+                                <span className="font-medium">
+                                    {t("allow-negative-points")}
                                 </span>
-                            </span>
-                            <Switch
-                                checked={allowPreviousQuestions}
-                                onCheckedChange={onAllowPreviousQuestionsChange}
-                                aria-label={t("allow-previous-questions")}
-                            />
-                        </label>
-                        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
-                            <span className="font-medium">
-                                {t("allow-negative-points")}
-                            </span>
-                            <Switch
-                                checked={allowNegativePoints}
-                                onCheckedChange={onAllowNegativePointsChange}
-                                aria-label={t("allow-negative-points")}
-                            />
-                        </label>
+                                <Switch
+                                    checked={allowNegativePoints}
+                                    onCheckedChange={
+                                        onAllowNegativePointsChange
+                                    }
+                                    aria-label={t("allow-negative-points")}
+                                />
+                            </label>
+                        </div>
                     </section>
                     <DifficultyQuestionCounts
                         counts={difficultyCounts}

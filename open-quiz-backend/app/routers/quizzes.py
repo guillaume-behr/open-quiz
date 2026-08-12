@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 
 from app.audit import audit_event
+from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser
 from app.grading import compute_final_scores
 from app.models import (
@@ -658,7 +659,7 @@ def session_response(
         quiz_id=quiz.id,
         quiz_title=quiz_session.quiz_title or quiz.title,
         class_id=quiz_session.class_id,
-        class_name=quiz_session.class_name,
+        class_name=quiz_session_class_name(quiz_session, session),
         join_code=quiz_session.join_code,
         status=quiz_session.status,
         participant_count=len(participants),
@@ -705,11 +706,12 @@ def student_session_response(
     quiz_session: QuizSession,
     quiz: Quiz,
     participant: QuizParticipant,
+    session: DbSession,
 ) -> StudentQuizSessionResponse:
     return StudentQuizSessionResponse(
         quiz_title=quiz_session.quiz_title or quiz.title,
         source_language=quiz_session.source_language or quiz.source_language,
-        class_name=quiz_session.class_name,
+        class_name=quiz_session_class_name(quiz_session, session),
         student_name=(
             participant.student_display_name or participant.student_identifier
         ),
@@ -797,6 +799,40 @@ def delete_quiz_session_records(
         )
     )
     session.execute(delete(QuizSession).where(QuizSession.id.in_(session_ids)))
+
+
+def delete_makeup_session_records(
+    makeup_session_id: int,
+    session: DbSession,
+) -> None:
+    child_ids = list(
+        session.scalars(
+            select(QuizSession.id).where(
+                QuizSession.makeup_session_id == makeup_session_id
+            )
+        )
+    )
+    delete_quiz_session_records(child_ids, session)
+    session.execute(
+        delete(MakeupSessionSelection).where(
+            MakeupSessionSelection.session_id == makeup_session_id
+        )
+    )
+    session.execute(
+        delete(MakeupSessionQuiz).where(
+            MakeupSessionQuiz.session_id == makeup_session_id
+        )
+    )
+    session.execute(delete(MakeupSession).where(MakeupSession.id == makeup_session_id))
+
+
+def quiz_session_class_name(quiz_session: QuizSession, session: DbSession) -> str:
+    if quiz_session.class_id is None:
+        return quiz_session.class_name
+    student_class = session.get(StudentClass, quiz_session.class_id)
+    if student_class is None:
+        return quiz_session.class_name
+    return format_class_name(student_class.grade_level, student_class.name)
 
 
 def discard_finished_training_session(
@@ -1033,7 +1069,9 @@ def student_state_response(
     if participant.current_position is not None:
         accessible_positions.add(participant.current_position)
     state = StudentQuizStateResponse(
-        **student_session_response(quiz_session, quiz, participant).model_dump(),
+        **student_session_response(
+            quiz_session, quiz, participant, session
+        ).model_dump(),
         question_number=(
             participant.current_position + 1
             if participant.current_position is not None
@@ -1233,13 +1271,27 @@ def list_active_sessions(
     session: DbSession,
 ) -> list[QuizSessionResponse]:
     expire_owned_quiz_sessions(professor, session)
+    obsolete_cancelled_ids = list(
+        session.scalars(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                Quiz.owner_id == professor.id,
+                QuizSession.status == "cancelled",
+                ~QuizSession.id.in_(select(QuizAnswer.session_id)),
+            )
+        )
+    )
+    if obsolete_cancelled_ids:
+        delete_quiz_session_records(obsolete_cancelled_ids, session)
+        session.commit()
     rows = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             Quiz.owner_id == professor.id,
             Quiz.mode == "exam",
-            QuizSession.status.in_(["waiting", "in_progress", "paused", "cancelled"]),
+            QuizSession.status.in_(["waiting", "in_progress", "paused"]),
         )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
         .limit(20)
@@ -1630,7 +1682,7 @@ def list_student_quiz_history(
             StudentQuizHistoryItem(
                 session_id=quiz_session.id,
                 quiz_title=quiz_session.quiz_title or "Quiz",
-                class_name=quiz_session.class_name,
+                class_name=quiz_session_class_name(quiz_session, session),
                 started_at=quiz_session.started_at,
                 score=(
                     round(
@@ -1876,6 +1928,36 @@ def delete_quiz(
             status_code=status.HTTP_409_CONFLICT,
             detail="Un quiz avec une session active ne peut pas être supprimé",
         )
+    if (
+        session.scalar(
+            select(QuizSession.id)
+            .where(
+                QuizSession.quiz_id == quiz.id,
+                QuizSession.status == "finished",
+            )
+            .limit(1)
+        )
+        is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Impossible de supprimer ce quiz car il possède des résultats "
+                "qui doivent être conservés"
+            ),
+        )
+    if (
+        session.scalar(
+            select(MakeupSessionQuiz.session_id)
+            .where(MakeupSessionQuiz.quiz_id == quiz.id)
+            .limit(1)
+        )
+        is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Impossible de supprimer ce quiz car un rattrapage l’utilise",
+        )
     session.execute(delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz_id))
     session.execute(
         delete(TrainingQuizProfile).where(TrainingQuizProfile.quiz_id == quiz_id)
@@ -1883,15 +1965,15 @@ def delete_quiz(
     session.execute(
         delete(MakeupSessionQuiz).where(MakeupSessionQuiz.quiz_id == quiz_id)
     )
-    finished_session_ids = list(
+    cancelled_session_ids = list(
         session.scalars(
             select(QuizSession.id).where(
                 QuizSession.quiz_id == quiz.id,
-                QuizSession.status.in_(["finished", "cancelled"]),
+                QuizSession.status == "cancelled",
             )
         )
     )
-    delete_quiz_session_records(finished_session_ids, session)
+    delete_quiz_session_records(cancelled_session_ids, session)
     session.execute(delete(Quiz).where(Quiz.id == quiz_id))
     session.commit()
     audit_event(
@@ -1954,13 +2036,13 @@ def resume_quiz_session(
 
 @router.post(
     "/sessions/{session_id}/cancel",
-    response_model=QuizSessionResponse,
+    status_code=status.HTTP_204_NO_CONTENT,
 )
 def cancel_quiz_session(
     session_id: int,
     professor: ProfessorUser,
     session: DbSession,
-) -> QuizSessionResponse:
+) -> None:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status not in {"waiting", "in_progress", "paused"}:
@@ -1968,15 +2050,28 @@ def cancel_quiz_session(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette session ne peut plus être annulée",
         )
-    quiz_session.status = "cancelled"
-    quiz_session.paused_at = None
-    for participant in session.scalars(
-        select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
+    if (
+        session.scalar(
+            select(QuizAnswer.id)
+            .where(QuizAnswer.session_id == quiz_session.id)
+            .limit(1)
+        )
+        is not None
     ):
-        participant.current_position = None
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Impossible d’annuler ce quiz car des réponses ont déjà été "
+                "enregistrées. Terminez la session pour conserver les résultats"
+            ),
+        )
+    delete_quiz_session_records([quiz_session.id], session)
     session.commit()
-    session.refresh(quiz_session)
-    return session_response(quiz_session, quiz, session)
+    audit_event(
+        "quiz.session_cancelled_and_deleted",
+        professor_id=professor.id,
+        session_id=session_id,
+    )
 
 
 @router.get(
@@ -2189,7 +2284,7 @@ def start_training_quiz(
         allow_negative_points=False,
         same_questions_for_all=False,
         class_id=student_class.id,
-        class_name=student_class.name,
+        class_name=format_class_name(student_class.grade_level, student_class.name),
         join_code=generate_join_code(session),
         status="in_progress",
         started_at=now,
@@ -2242,7 +2337,13 @@ def makeup_session_response(
     return MakeupSessionResponse(
         id=makeup.id,
         class_id=makeup.class_id,
-        class_name=makeup.class_name,
+        class_name=(
+            format_class_name(student_class.grade_level, student_class.name)
+            if makeup.class_id is not None
+            and (student_class := session.get(StudentClass, makeup.class_id))
+            is not None
+            else makeup.class_name
+        ),
         join_code=makeup.join_code,
         status=makeup.status,
         quizzes=[
@@ -2276,10 +2377,30 @@ def owned_makeup_session(
 def list_makeup_sessions(
     professor: ProfessorUser, session: DbSession
 ) -> list[MakeupSessionResponse]:
+    obsolete_cancelled_ids = list(
+        session.scalars(
+            select(MakeupSession.id).where(
+                MakeupSession.owner_id == professor.id,
+                MakeupSession.status == "cancelled",
+                ~MakeupSession.id.in_(
+                    select(QuizSession.makeup_session_id)
+                    .join(QuizAnswer, QuizAnswer.session_id == QuizSession.id)
+                    .where(QuizSession.makeup_session_id.is_not(None))
+                ),
+            )
+        )
+    )
+    for makeup_session_id in obsolete_cancelled_ids:
+        delete_makeup_session_records(makeup_session_id, session)
+    if obsolete_cancelled_ids:
+        session.commit()
     makeups = list(
         session.scalars(
             select(MakeupSession)
-            .where(MakeupSession.owner_id == professor.id)
+            .where(
+                MakeupSession.owner_id == professor.id,
+                MakeupSession.status != "cancelled",
+            )
             .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
         )
     )
@@ -2370,7 +2491,7 @@ def create_makeup_session(
     makeup = MakeupSession(
         owner_id=professor.id,
         class_id=student_class.id,
-        class_name=student_class.name,
+        class_name=format_class_name(student_class.grade_level, student_class.name),
         join_code=generate_join_code(session),
         status="waiting",
     )
@@ -2392,7 +2513,7 @@ def control_makeup_session(
     action: str,
     professor: ProfessorUser,
     session: DbSession,
-) -> MakeupSessionResponse:
+) -> MakeupSessionResponse | Response:
     makeup = owned_makeup_session(session_id, professor, session)
     allowed = {
         "start": ("waiting", "in_progress"),
@@ -2408,6 +2529,27 @@ def control_makeup_session(
         raise HTTPException(
             status_code=409, detail="Action impossible pour cette session"
         )
+    if action == "cancel":
+        has_answers = (
+            session.scalar(
+                select(QuizAnswer.id)
+                .join(QuizSession, QuizSession.id == QuizAnswer.session_id)
+                .where(QuizSession.makeup_session_id == makeup.id)
+                .limit(1)
+            )
+            is not None
+        )
+        if has_answers:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Impossible d’annuler ce rattrapage car des réponses ont déjà "
+                    "été enregistrées"
+                ),
+            )
+        delete_makeup_session_records(makeup.id, session)
+        session.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     transition = session.execute(
         update(MakeupSession)
         .where(
@@ -2472,10 +2614,6 @@ def control_makeup_session(
                 select(QuizParticipant).where(QuizParticipant.session_id == child.id)
             ):
                 participant.current_position = None
-        elif action == "cancel":
-            if child.status in {"finished", "cancelled"}:
-                continue
-            child.status = "cancelled"
     session.commit()
     return makeup_session_response(makeup, session)
 
@@ -2826,7 +2964,7 @@ def launch_quiz(
         allow_negative_points=quiz.allow_negative_points,
         same_questions_for_all=False,
         class_id=student_class.id,
-        class_name=student_class.name,
+        class_name=format_class_name(student_class.grade_level, student_class.name),
         join_code=generate_join_code(session),
         status="waiting",
     )

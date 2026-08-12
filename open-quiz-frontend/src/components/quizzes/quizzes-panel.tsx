@@ -1,4 +1,5 @@
 import { getAllStudentClasses } from "@/api/classes"
+import { ApiError } from "@/api/client"
 import { getAllQuestionBanks } from "@/api/question-banks"
 import {
     cancelQuizSession,
@@ -33,6 +34,7 @@ import {
 } from "@/components/quizzes/quiz-secondary-dialogs"
 import { QuizzesList } from "@/components/quizzes/quizzes-list"
 import { Button } from "@/components/ui/button"
+import { Toast } from "@/components/ui/toast"
 import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
 import { type FormEvent, useEffect, useRef, useState } from "react"
@@ -431,16 +433,28 @@ export function QuizzesPanel({
         setSessionAction(action)
         sessionRequestVersion.current += 1
         try {
-            const updated =
-                action === "pause"
-                    ? await pauseQuizSession(activeSession.id)
-                    : action === "resume"
-                      ? await resumeQuizSession(activeSession.id)
-                      : await cancelQuizSession(activeSession.id)
-            updateSession(updated)
+            if (action === "cancel") {
+                await cancelQuizSession(activeSession.id)
+                setSessions((current) =>
+                    current.filter((item) => item.id !== activeSession.id)
+                )
+                setActiveSession(null)
+            } else {
+                const updated =
+                    action === "pause"
+                        ? await pauseQuizSession(activeSession.id)
+                        : await resumeQuizSession(activeSession.id)
+                updateSession(updated)
+            }
             setSessionActionToConfirm(null)
-        } catch {
-            setActiveSessionError(t("quiz-session-action-error"))
+        } catch (caught) {
+            setActiveSessionError(
+                caught instanceof ApiError && caught.status === 409
+                    ? action === "cancel"
+                        ? t("quiz-cancel-with-answers-error")
+                        : t("quiz-session-action-error")
+                    : t("quiz-session-action-error")
+            )
         } finally {
             setSessionAction(null)
         }
@@ -473,8 +487,12 @@ export function QuizzesPanel({
             await deleteQuiz(quizToDelete.id)
             setQuizToDelete(null)
             setReloadKey((k) => k + 1)
-        } catch {
-            setDeleteError(t("quiz-delete-error"))
+        } catch (caught) {
+            setDeleteError(
+                caught instanceof ApiError && caught.status === 409
+                    ? t("quiz-delete-error")
+                    : t("quiz-delete-error")
+            )
         } finally {
             setIsDeleting(false)
         }
@@ -482,6 +500,13 @@ export function QuizzesPanel({
 
     return (
         <div className="mt-6">
+            {(deleteError ||
+                (sessionActionToConfirm && activeSessionError)) && (
+                <Toast
+                    message={(deleteError || activeSessionError)!}
+                    variant="error"
+                />
+            )}
             <QuizzesList
                 quizzes={quizzes}
                 sessions={sessions}

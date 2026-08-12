@@ -1,4 +1,5 @@
 import { getAllStudentClasses } from "@/api/classes"
+import { ApiError } from "@/api/client"
 import {
     controlMakeupSession,
     createMakeupSession,
@@ -6,7 +7,9 @@ import {
     getMakeupSessions,
 } from "@/api/quizzes"
 import type { MakeupSession, Quiz, StudentClass } from "@/api/types"
+import { formatClassName } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Toast } from "@/components/ui/toast"
 import { Input } from "@/components/ui/input"
 import { useEffect, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
@@ -110,12 +113,20 @@ export function MakeupSessionsPanel() {
         try {
             const updated = await controlMakeupSession(item.id, value)
             setSessions((current) =>
-                current.map((session) =>
-                    session.id === updated.id ? updated : session
-                )
+                value === "cancel" || !updated
+                    ? current.filter((session) => session.id !== item.id)
+                    : current.map((session) =>
+                          session.id === updated.id ? updated : session
+                      )
             )
-        } catch {
-            setError(t("makeup-action-error"))
+        } catch (caught) {
+            setError(
+                caught instanceof ApiError && caught.status === 409
+                    ? value === "cancel"
+                        ? t("makeup-cancel-with-answers-error")
+                        : t("makeup-action-error")
+                    : t("makeup-action-error")
+            )
         } finally {
             setBusy(false)
         }
@@ -123,6 +134,7 @@ export function MakeupSessionsPanel() {
 
     return (
         <div className="mt-6 grid gap-6">
+            {error && <Toast message={error} variant="error" />}
             <form onSubmit={create} className="rounded-2xl border bg-card p-5">
                 <h2 className="text-xl font-bold">{t("makeup-create")}</h2>
                 <div className="mt-4 grid gap-4">
@@ -142,7 +154,10 @@ export function MakeupSessionsPanel() {
                             <option value="">{t("select-class")}</option>
                             {classes.map((item) => (
                                 <option key={item.id} value={item.id}>
-                                    {item.name}
+                                    {formatClassName(
+                                        item.grade_level,
+                                        item.name
+                                    )}
                                 </option>
                             ))}
                         </select>
