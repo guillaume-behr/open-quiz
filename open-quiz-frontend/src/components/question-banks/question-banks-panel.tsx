@@ -11,6 +11,7 @@ import {
     updateQuestionBank,
 } from "@/api/question-banks"
 import { naturalCompare } from "@/lib/utils"
+import { describeJsonImportFailure } from "@/lib/json-import"
 import { ApiError } from "@/api/client"
 import type { GradeLevel, Question, QuestionBank } from "@/api/types"
 import { QuestionBankFormDialog } from "@/components/question-banks/question-bank-form-dialog"
@@ -353,7 +354,10 @@ export function QuestionBanksPanel({
             setImportError(
                 caughtError instanceof ApiError && caughtError.status === 409
                     ? t("json-import-duplicate-error")
-                    : t("json-import-error")
+                    : describeJsonImportFailure(
+                          caughtError,
+                          t("json-import-error")
+                      )
             )
         } finally {
             setIsBatchBusy(false)

@@ -8,6 +8,7 @@ import type {
     QuestionUpdate,
     Page,
 } from "./types"
+import { readJsonImportFile } from "@/lib/json-import"
 
 export function getQuestionBanks(
     page = 1,
@@ -129,6 +130,6 @@ export async function importQuestionBatch(
 ): Promise<QuestionBankImportResult> {
     return request<QuestionBankImportResult>("/api/question-banks/import", {
         method: "POST",
-        body: await file.text(),
+        body: await readJsonImportFile(file),
     })
 }

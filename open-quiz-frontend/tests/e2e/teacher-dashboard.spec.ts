@@ -1320,6 +1320,64 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
     ])
 })
 
+test("question bank import identifies JSON syntax and validation locations", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Question banks", exact: true })
+        .click()
+    await page.getByRole("button", { name: "Import" }).click()
+
+    const dialog = page.getByRole("dialog", {
+        name: "Import a question bank",
+    })
+    const fileInput = dialog.getByLabel(".json file")
+    await fileInput.setInputFiles({
+        name: "invalid.json",
+        mimeType: "application/json",
+        buffer: Buffer.from('{\n  "version": 1,\n  "questions": [}\n'),
+    })
+    await dialog.getByRole("button", { name: "Import" }).click()
+    await expect(dialog.getByRole("alert")).toContainText(
+        /JSON — line 3, column \d+:/
+    )
+
+    await page.route("**/api/question-banks/import", async (route) => {
+        await route.fulfill({
+            status: 422,
+            json: {
+                detail: [
+                    {
+                        type: "string_too_short",
+                        loc: ["body", "questions", 1, "choices", 0, "label"],
+                        msg: "String should have at least 1 character",
+                    },
+                ],
+            },
+        })
+    })
+    await fileInput.setInputFiles({
+        name: "invalid-bank.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(
+            JSON.stringify({
+                version: 1,
+                question_bank: {
+                    grade_level: "Grade 8",
+                    chapter: "Invalid bank",
+                },
+                questions: [],
+            })
+        ),
+    })
+    await dialog.getByRole("button", { name: "Import" }).click()
+    await expect(dialog.getByRole("alert")).toContainText(
+        "$.questions[1].choices[0].label: String should have at least 1 character"
+    )
+})
+
 test("teacher creates and controls a retake session", async ({ page }) => {
     const requests = await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
