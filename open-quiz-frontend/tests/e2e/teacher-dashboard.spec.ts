@@ -819,6 +819,13 @@ test("teacher can open class and question-bank creation dialogs", async ({
     await page.getByRole("button", { name: "New class" }).click()
     const classDialog = page.getByRole("dialog", { name: "New class" })
     await expect(classDialog).toBeVisible()
+    await expect
+        .poll(() =>
+            classDialog.evaluate(
+                (element) => getComputedStyle(element).transitionDuration
+            )
+        )
+        .not.toBe("0s")
     await expect(
         classDialog.getByRole("combobox", { name: "Class" })
     ).toBeEditable()
@@ -922,13 +929,16 @@ test("teacher creates, edits, and deletes a scored question", async ({
     const questionsDialog = page.getByRole("dialog", {
         name: "Edit question bank",
     })
-    const questionFilters = questionsDialog.getByText("Filters", {
-        exact: true,
+    const questionFilters = questionsDialog.getByRole("button", {
+        name: /Filters/,
     })
+    await expect(questionFilters).toHaveAttribute("aria-expanded", "false")
     await expect(questionsDialog.getByLabel("Minimum points")).toBeHidden()
     await questionFilters.click()
+    await expect(questionFilters).toHaveAttribute("aria-expanded", "true")
     await expect(questionsDialog.getByLabel("Minimum points")).toBeVisible()
     await questionFilters.click()
+    await expect(questionFilters).toHaveAttribute("aria-expanded", "false")
     await expect(questionsDialog.getByLabel("Minimum points")).toBeHidden()
     await questionsDialog
         .getByRole("button", { name: "Add a question" })
@@ -1434,6 +1444,15 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
         .filter({ hasText: /2\s*\/\s*10\s*pts?/ })
     await expect(scoreHeading).toBeVisible()
     await expect(participantScore).toBeVisible()
+    await expect
+        .poll(() =>
+            resultDialog.evaluate((element) =>
+                element
+                    .getAnimations()
+                    .every((animation) => animation.playState === "finished")
+            )
+        )
+        .toBe(true)
     const scoreHeadingBox = await scoreHeading.boundingBox()
     const participantScoreBox = await participantScore.boundingBox()
     expect(scoreHeadingBox).not.toBeNull()

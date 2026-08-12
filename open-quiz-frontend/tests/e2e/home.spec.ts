@@ -399,7 +399,12 @@ test("a student reviews the correction history", async ({ page }) => {
     await page.getByRole("button", { name: "Results", exact: true }).click()
     await expect(page).toHaveURL(/\/student\/results$/)
 
-    await page.getByText("Science checkpoint").click()
+    const correctionTrigger = page.getByRole("button", {
+        name: /Science checkpoint/,
+    })
+    await expect(correctionTrigger).toHaveAttribute("aria-expanded", "false")
+    await correctionTrigger.click()
+    await expect(correctionTrigger).toHaveAttribute("aria-expanded", "true")
     await expect(page.getByText("Grade: 7 / 10")).toBeVisible()
     await expect(page.getByText("Which planet is red?")).toBeVisible()
     await expect(page.getByText("Venus", { exact: true })).toHaveClass(
@@ -407,6 +412,9 @@ test("a student reviews the correction history", async ({ page }) => {
     )
     await expect(page.getByText("Review this answer")).toBeAttached()
     await expect(page.getByText("Mars", { exact: true })).toBeVisible()
+    await correctionTrigger.click()
+    await expect(correctionTrigger).toHaveAttribute("aria-expanded", "false")
+    await expect(page.getByText("Which planet is red?")).toBeHidden()
 })
 
 test("teacher area navigation works without a page reload", async ({
