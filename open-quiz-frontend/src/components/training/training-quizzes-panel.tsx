@@ -199,6 +199,14 @@ export function TrainingQuizzesPanel({
 
 function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
     const { t, i18n } = useTranslation()
+    const chart = {
+        left: 52,
+        right: 788,
+        top: 12,
+        bottom: 238,
+    }
+    const chartWidth = chart.right - chart.left
+    const chartHeight = chart.bottom - chart.top
     const percentages = items.map((item) =>
         item.maximum_score > 0
             ? Math.max(
@@ -210,30 +218,96 @@ function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
     const points = percentages
         .map((value, index) => {
             const x =
-                items.length === 1 ? 50 : (index / (items.length - 1)) * 100
-            return `${x},${100 - value}`
+                items.length === 1
+                    ? chart.left + chartWidth / 2
+                    : chart.left + (index / (items.length - 1)) * chartWidth
+            const y = chart.bottom - (value / 100) * chartHeight
+            return `${x},${y}`
         })
         .join(" ")
+    const xTickStep = Math.max(1, Math.ceil(items.length / 8))
+    const xTickIndexes = items
+        .map((_, index) => index)
+        .filter(
+            (index) => index % xTickStep === 0 || index === items.length - 1
+        )
     return (
-        <div className="space-y-5">
-            <div className="rounded-xl border bg-muted/20 p-4">
+        <div className="w-full space-y-5">
+            <div className="w-full rounded-xl border bg-muted/20 p-2 sm:p-4">
                 <svg
-                    viewBox="-4 -8 108 116"
-                    className="h-56 w-full overflow-visible"
+                    viewBox="0 0 800 280"
+                    className="block h-auto w-full"
                     role="img"
                     aria-label={t("training-history-chart-label")}
                 >
                     {[0, 25, 50, 75, 100].map((value) => (
-                        <line
-                            key={value}
-                            x1="0"
-                            x2="100"
-                            y1={100 - value}
-                            y2={100 - value}
-                            className="stroke-border"
-                            strokeWidth="0.5"
-                        />
+                        <g key={value}>
+                            <line
+                                x1={chart.left}
+                                x2={chart.right}
+                                y1={chart.bottom - (value / 100) * chartHeight}
+                                y2={chart.bottom - (value / 100) * chartHeight}
+                                className="stroke-border"
+                                strokeWidth="1"
+                                vectorEffect="non-scaling-stroke"
+                            />
+                            <text
+                                x={chart.left - 10}
+                                y={chart.bottom - (value / 100) * chartHeight}
+                                className="fill-muted-foreground text-[12px]"
+                                textAnchor="end"
+                                dominantBaseline="middle"
+                            >
+                                {value} %
+                            </text>
+                        </g>
                     ))}
+                    <line
+                        x1={chart.left}
+                        x2={chart.left}
+                        y1={chart.top}
+                        y2={chart.bottom}
+                        className="stroke-foreground"
+                        strokeWidth="1"
+                        vectorEffect="non-scaling-stroke"
+                    />
+                    <line
+                        x1={chart.left}
+                        x2={chart.right}
+                        y1={chart.bottom}
+                        y2={chart.bottom}
+                        className="stroke-foreground"
+                        strokeWidth="1"
+                        vectorEffect="non-scaling-stroke"
+                    />
+                    {xTickIndexes.map((index) => {
+                        const x =
+                            items.length === 1
+                                ? chart.left + chartWidth / 2
+                                : chart.left +
+                                  (index / (items.length - 1)) * chartWidth
+                        return (
+                            <g key={items[index].session_id}>
+                                <line
+                                    x1={x}
+                                    x2={x}
+                                    y1={chart.bottom}
+                                    y2={chart.bottom + 6}
+                                    className="stroke-foreground"
+                                    strokeWidth="1"
+                                    vectorEffect="non-scaling-stroke"
+                                />
+                                <text
+                                    x={x}
+                                    y={chart.bottom + 22}
+                                    className="fill-muted-foreground text-[12px]"
+                                    textAnchor="middle"
+                                >
+                                    {index + 1}
+                                </text>
+                            </g>
+                        )
+                    })}
                     <polyline
                         points={points}
                         fill="none"
@@ -244,14 +318,16 @@ function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
                     {percentages.map((value, index) => {
                         const x =
                             items.length === 1
-                                ? 50
-                                : (index / (items.length - 1)) * 100
+                                ? chart.left + chartWidth / 2
+                                : chart.left +
+                                  (index / (items.length - 1)) * chartWidth
+                        const y = chart.bottom - (value / 100) * chartHeight
                         return (
                             <circle
                                 key={items[index].session_id}
                                 cx={x}
-                                cy={100 - value}
-                                r="2.5"
+                                cy={y}
+                                r="5"
                                 className="fill-primary"
                             />
                         )
