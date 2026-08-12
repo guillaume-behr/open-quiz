@@ -7,13 +7,9 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
-import { LoaderCircle, UserRound } from "lucide-react"
+import { LoaderCircle } from "lucide-react"
 import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
-import {
-    STUDENT_ACCESS_CARD_CLASS_NAME,
-    StudentAccessHeader,
-} from "./student-access-card"
 
 export function StudentLogin({
     identifier,
@@ -34,12 +30,18 @@ export function StudentLogin({
 }) {
     const { t } = useTranslation()
     return (
-        <form className={STUDENT_ACCESS_CARD_CLASS_NAME} onSubmit={onSubmit}>
-            <StudentAccessHeader
-                icon={UserRound}
-                title={t("student-login-title")}
-                description={t("student-login-instructions")}
-            />
+        <form
+            className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-15"
+            onSubmit={onSubmit}
+        >
+            <div className="flex flex-col gap-2">
+                <h1 className="text-center text-4xl font-extrabold">
+                    {t("student-login-title")}
+                </h1>
+                <p className="text-center font-light">
+                    {t("student-login-instructions")}
+                </p>
+            </div>
             <FieldGroup className="gap-4">
                 <Field>
                     <FieldLabel htmlFor="student-login-id">
@@ -83,7 +85,7 @@ export function StudentLogin({
                     <FieldError id="student-login-error">{error}</FieldError>
                 )}
                 <Button
-                    className="py-7 text-base"
+                    className="text-md py-7 shadow"
                     type="submit"
                     disabled={isBusy}
                 >
