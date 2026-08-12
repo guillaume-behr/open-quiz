@@ -29,6 +29,8 @@ import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
+import { Toast } from "@/components/ui/toast"
+import { formatClassName } from "@/lib/utils"
 import {
     LoaderCircle,
     Download,
@@ -255,6 +257,9 @@ export function StudentsPanel({
 
     return (
         <div className="mt-6">
+            {deleting && formError && (
+                <Toast message={formError} variant="error" />
+            )}
             {credentialsError && (
                 <p role="alert" className="mb-4 text-sm text-destructive">
                     {credentialsError}
@@ -300,7 +305,10 @@ export function StudentsPanel({
                                         key={studentClass.id}
                                         value={studentClass.id}
                                     >
-                                        {studentClass.name}
+                                        {formatClassName(
+                                            studentClass.grade_level,
+                                            studentClass.name
+                                        )}
                                     </option>
                                 ))}
                             </select>
@@ -441,10 +449,12 @@ export function StudentsPanel({
                                             {student.display_name}
                                         </p>
                                         <p className="mt-1 text-xs text-muted-foreground">
-                                            {student.grade_level &&
-                                                `${student.grade_level} · `}
-                                            {student.class_name ??
-                                                t("student-unassigned")}
+                                            {student.class_name
+                                                ? formatClassName(
+                                                      student.grade_level,
+                                                      student.class_name
+                                                  )
+                                                : t("student-unassigned")}
                                             {!student.is_active &&
                                                 ` · ${t("student-disabled")}`}
                                         </p>
@@ -472,7 +482,7 @@ export function StudentsPanel({
                         ? "student-account-form-help"
                         : "student-id-generated-help"
                 )}
-                className="max-w-lg"
+                className="max-w-3xl"
             >
                 <form onSubmit={submit}>
                     <FieldGroup>
@@ -558,8 +568,10 @@ export function StudentsPanel({
                                         key={studentClass.id}
                                         value={studentClass.id}
                                     >
-                                        {studentClass.name} ·{" "}
-                                        {studentClass.grade_level}
+                                        {formatClassName(
+                                            studentClass.grade_level,
+                                            studentClass.name
+                                        )}
                                     </option>
                                 ))}
                             </select>
@@ -628,7 +640,7 @@ export function StudentsPanel({
                 onOpenChange={(open) => !open && setCredentials(null)}
                 title={t("student-credentials")}
                 description={t("student-credentials-sensitive-help")}
-                className="max-w-2xl"
+                className="max-w-5xl"
             >
                 {credentials && (
                     <div className="space-y-4">

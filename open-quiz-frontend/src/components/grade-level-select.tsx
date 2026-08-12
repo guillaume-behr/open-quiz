@@ -1,6 +1,9 @@
 import type { GradeLevel } from "@/api/types"
+import { ApiError } from "@/api/client"
 import { Button } from "@/components/ui/button"
+import { Toast } from "@/components/ui/toast"
 import { Trash2 } from "lucide-react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 type GradeLevelSelectProps = {
@@ -26,6 +29,13 @@ export function GradeLevelSelect({
 }: GradeLevelSelectProps) {
     const { t } = useTranslation()
     const selected = levels.find((level) => level.name === value)
+    const [deleteError, setDeleteError] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (!deleteError) return
+        const timeout = window.setTimeout(() => setDeleteError(null), 5000)
+        return () => window.clearTimeout(timeout)
+    }, [deleteError])
 
     async function confirmDelete(): Promise<void> {
         if (
@@ -41,13 +51,18 @@ export function GradeLevelSelect({
         try {
             await onDelete(selected)
             onChange("")
-        } catch {
-            // The parent displays the contextual API error.
+        } catch (error) {
+            setDeleteError(
+                error instanceof ApiError && error.status === 409
+                    ? t("grade-level-in-use-error")
+                    : t("grade-level-delete-error")
+            )
         }
     }
 
     return (
         <div className="flex min-w-0 flex-1 gap-2">
+            {deleteError && <Toast message={deleteError} variant="error" />}
             <select
                 id={id}
                 value={value}

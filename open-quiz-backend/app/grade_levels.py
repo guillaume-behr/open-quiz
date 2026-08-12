@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models import GradeLevel
 
-DEFAULT_GRADE_LEVELS = ("Seconde", "Première", "Terminale")
+DEFAULT_GRADE_LEVELS = ("1ere", "2nd", "Tle")
 
 
 def ensure_grade_level(owner_id: int, name: str, session: Session) -> GradeLevel:
@@ -24,8 +24,10 @@ def ensure_default_grade_levels(owner_id: int, session: Session) -> None:
     existing = set(
         session.scalars(select(GradeLevel.name).where(GradeLevel.owner_id == owner_id))
     )
+    # Defaults initialize a new account only. Existing installations keep their
+    # own vocabulary instead of receiving renamed duplicates.
+    if existing:
+        return
     session.add_all(
-        GradeLevel(owner_id=owner_id, name=name)
-        for name in DEFAULT_GRADE_LEVELS
-        if name not in existing
+        GradeLevel(owner_id=owner_id, name=name) for name in DEFAULT_GRADE_LEVELS
     )

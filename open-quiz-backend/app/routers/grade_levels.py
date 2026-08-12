@@ -102,7 +102,10 @@ def delete_grade_level(
     if is_used:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ce niveau est encore utilisé",
+            detail=(
+                "Impossible de supprimer ce niveau car des classes, des élèves "
+                "ou des banques de questions y sont encore associés"
+            ),
         )
     session.delete(grade_level)
     session.commit()

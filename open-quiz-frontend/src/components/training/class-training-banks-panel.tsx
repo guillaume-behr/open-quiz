@@ -5,6 +5,7 @@ import {
     updateClassTrainingQuestionBanks,
 } from "@/api/quizzes"
 import type { QuestionBank, StudentClass } from "@/api/types"
+import { formatClassName } from "@/lib/utils"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Toast } from "@/components/ui/toast"
@@ -162,8 +163,10 @@ export function ClassTrainingBanksPanel() {
                                     key={studentClass.id}
                                     value={studentClass.id}
                                 >
-                                    {studentClass.name} ·{" "}
-                                    {studentClass.grade_level}
+                                    {formatClassName(
+                                        studentClass.grade_level,
+                                        studentClass.name
+                                    )}
                                 </option>
                             ))}
                         </select>

@@ -9,6 +9,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { formatClassName } from "@/lib/utils"
 import { LoaderCircle, Pencil, Plus } from "lucide-react"
 import type { FormEvent } from "react"
 import type { ReactNode } from "react"
@@ -67,89 +68,97 @@ export function ClassFormDialog({
             }}
             title={t(editingClass ? "edit-class" : "create-class")}
             description={t("create-class-help")}
-            className={editingClass ? "max-w-2xl" : "max-w-lg"}
+            className={editingClass ? "max-w-6xl" : "max-w-2xl"}
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup>
-                    <Field>
-                        <FieldLabel htmlFor="class-name">
-                            {t("class-name")}
-                        </FieldLabel>
-                        <Input
-                            id="class-name"
-                            list="existing-class-names"
-                            value={className}
-                            onChange={(event) =>
-                                onClassNameChange(event.target.value)
-                            }
-                            placeholder={t("class-name-placeholder")}
-                            maxLength={120}
-                            required
-                        />
-                        <datalist id="existing-class-names">
-                            {classes.map((studentClass) => (
-                                <option
-                                    key={studentClass.id}
-                                    value={studentClass.name}
-                                />
-                            ))}
-                        </datalist>
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="class-grade">
-                            {t("grade-level")}
-                        </FieldLabel>
-                        <div className="flex gap-2">
-                            <GradeLevelSelect
-                                id="class-grade"
-                                value={gradeLevel}
-                                levels={gradeLevels}
-                                onChange={onGradeLevelChange}
-                                onDelete={onDeleteGradeLevel}
-                                disabled={isBusy}
-                            />
-                            <Button
-                                type="button"
-                                size="icon"
-                                variant="outline"
-                                aria-label={t("add-grade-level")}
-                                onClick={() =>
-                                    onAddingGradeLevelChange(
-                                        !isAddingGradeLevel
-                                    )
+                    <div className="grid items-start gap-4 md:grid-cols-2">
+                        <Field>
+                            <FieldLabel htmlFor="class-name">
+                                {t("class-name")}
+                            </FieldLabel>
+                            <Input
+                                id="class-name"
+                                list="existing-class-names"
+                                value={className}
+                                onChange={(event) =>
+                                    onClassNameChange(event.target.value)
                                 }
-                            >
-                                <Plus />
-                            </Button>
-                        </div>
-                        {isAddingGradeLevel && (
-                            <div className="mt-2 flex gap-2">
-                                <Input
-                                    value={newGradeLevel}
-                                    onChange={(event) =>
-                                        onNewGradeLevelChange(
-                                            event.target.value
-                                        )
-                                    }
-                                    onKeyDown={(event) => {
-                                        if (event.key === "Enter") {
-                                            event.preventDefault()
-                                            onAddGradeLevel()
-                                        }
-                                    }}
-                                    maxLength={80}
-                                    placeholder={t("grade-level-placeholder")}
+                                placeholder={t("class-name-placeholder")}
+                                maxLength={120}
+                                required
+                            />
+                            <datalist id="existing-class-names">
+                                {classes.map((studentClass) => (
+                                    <option
+                                        key={studentClass.id}
+                                        value={studentClass.name}
+                                        label={formatClassName(
+                                            studentClass.grade_level,
+                                            studentClass.name
+                                        )}
+                                    />
+                                ))}
+                            </datalist>
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="class-grade">
+                                {t("grade-level")}
+                            </FieldLabel>
+                            <div className="flex gap-2">
+                                <GradeLevelSelect
+                                    id="class-grade"
+                                    value={gradeLevel}
+                                    levels={gradeLevels}
+                                    onChange={onGradeLevelChange}
+                                    onDelete={onDeleteGradeLevel}
+                                    disabled={isBusy}
                                 />
                                 <Button
                                     type="button"
-                                    size="sm"
-                                    onClick={onAddGradeLevel}
+                                    size="icon"
+                                    variant="outline"
+                                    aria-label={t("add-grade-level")}
+                                    onClick={() =>
+                                        onAddingGradeLevelChange(
+                                            !isAddingGradeLevel
+                                        )
+                                    }
                                 >
-                                    {t("save-grade-level")}
+                                    <Plus />
                                 </Button>
                             </div>
-                        )}
-                    </Field>
+                            {isAddingGradeLevel && (
+                                <div className="mt-2 flex gap-2">
+                                    <Input
+                                        value={newGradeLevel}
+                                        onChange={(event) =>
+                                            onNewGradeLevelChange(
+                                                event.target.value
+                                            )
+                                        }
+                                        onKeyDown={(event) => {
+                                            if (event.key === "Enter") {
+                                                event.preventDefault()
+                                                onAddGradeLevel()
+                                            }
+                                        }}
+                                        maxLength={80}
+                                        placeholder={t(
+                                            "grade-level-placeholder"
+                                        )}
+                                    />
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={onAddGradeLevel}
+                                    >
+                                        {t("save-grade-level")}
+                                    </Button>
+                                </div>
+                            )}
+                        </Field>
+                    </div>
                     {editingClass && studentManagement}
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2 border-t pt-4">

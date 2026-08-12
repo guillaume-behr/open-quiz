@@ -23,6 +23,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
+import { formatClassName } from "@/lib/utils"
 import {
     CalendarDays,
     CalendarRange,
@@ -401,7 +402,10 @@ export function ResultsPanel({
                                         key={studentClass.id}
                                         value={studentClass.name}
                                     >
-                                        {studentClass.name}
+                                        {formatClassName(
+                                            studentClass.grade_level,
+                                            studentClass.name
+                                        )}
                                     </option>
                                 ))}
                             </select>
@@ -594,8 +598,10 @@ export function ResultsPanel({
                                         key={studentClass.id}
                                         value={studentClass.id}
                                     >
-                                        {studentClass.name} —{" "}
-                                        {studentClass.grade_level}
+                                        {formatClassName(
+                                            studentClass.grade_level,
+                                            studentClass.name
+                                        )}
                                     </option>
                                 ))}
                             </select>
@@ -674,7 +680,7 @@ export function ResultsPanel({
                         ? `${selectedResult.class_name} · ${resultDate(selectedResult)}`
                         : undefined
                 }
-                className="max-w-5xl"
+                className="max-w-6xl"
             >
                 {selectedResult && (
                     <div className="space-y-4">

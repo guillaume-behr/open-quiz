@@ -1,5 +1,6 @@
 import type { FormEvent } from "react"
 import type { Question, Quiz, StudentClass } from "@/api/types"
+import { formatClassName } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -146,9 +147,11 @@ export function LaunchQuizDialog({
                                     key={studentClass.id}
                                     value={studentClass.id}
                                 >
-                                    {studentClass.grade_level} —{" "}
-                                    {studentClass.name} (
-                                    {studentClass.student_count})
+                                    {formatClassName(
+                                        studentClass.grade_level,
+                                        studentClass.name
+                                    )}{" "}
+                                    ({studentClass.student_count})
                                 </option>
                             ))}
                         </select>

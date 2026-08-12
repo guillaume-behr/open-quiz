@@ -23,8 +23,10 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { formatClassName } from "@/lib/utils"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
+import { Toast } from "@/components/ui/toast"
 import {
     Check,
     LoaderCircle,
@@ -80,6 +82,7 @@ export function ClassesPanel({
     const [isBusy, setIsBusy] = useState(false)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [deleteToast, setDeleteToast] = useState<string | null>(null)
 
     useEffect(() => {
         let active = true
@@ -232,7 +235,13 @@ export function ClassesPanel({
                 )
                 .map(
                     (account) =>
-                        [account.class_id!, account.class_name!] as const
+                        [
+                            account.class_id!,
+                            formatClassName(
+                                account.grade_level,
+                                account.class_name
+                            ),
+                        ] as const
                 )
         ).entries()
     ).sort(([, firstName], [, secondName]) =>
@@ -293,7 +302,9 @@ export function ClassesPanel({
             setDeleting(null)
             setReloadKey((value) => value + 1)
         } catch {
-            setError(t("class-student-delete-error"))
+            const message = t("class-student-delete-error")
+            setError(message)
+            setDeleteToast(message)
         } finally {
             setIsBusy(false)
         }
@@ -312,7 +323,10 @@ export function ClassesPanel({
             const credentials = await getStudentCredentials(studentClass.id)
             const document = printWindow.document
             document.title = t("student-credentials-print-title", {
-                className: studentClass.name,
+                className: formatClassName(
+                    studentClass.grade_level,
+                    studentClass.name
+                ),
             })
             document.documentElement.lang = i18n.resolvedLanguage ?? "fr"
             document.documentElement.dir = i18n.dir()
@@ -343,7 +357,10 @@ export function ClassesPanel({
                 const card = document.createElement("article")
                 const classLabel = document.createElement("p")
                 classLabel.className = "class"
-                classLabel.textContent = studentClass.name
+                classLabel.textContent = formatClassName(
+                    studentClass.grade_level,
+                    studentClass.name
+                )
                 const name = document.createElement("p")
                 name.className = "name"
                 name.textContent = credential.display_name
@@ -378,6 +395,7 @@ export function ClassesPanel({
 
     return (
         <div className="mt-6">
+            {deleteToast && <Toast message={deleteToast} variant="error" />}
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
                 <aside className="h-fit rounded-xl border bg-background p-4">
                     <h3 className="font-semibold">{t("filters")}</h3>
@@ -504,12 +522,12 @@ export function ClassesPanel({
                                             <UsersRound className="size-5" />
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                                {studentClass.grade_level}
-                                            </p>
                                             <div className="mt-1 flex flex-wrap items-center gap-2">
                                                 <p className="font-semibold break-words">
-                                                    {studentClass.name}
+                                                    {formatClassName(
+                                                        studentClass.grade_level,
+                                                        studentClass.name
+                                                    )}
                                                 </p>
                                                 <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-primary">
                                                     {t("student-count", {
@@ -684,7 +702,7 @@ export function ClassesPanel({
                 description={t("assign-student-help", {
                     className: managed?.name,
                 })}
-                className="max-w-3xl"
+                className="max-w-6xl"
             >
                 {accounts.length === 0 ? (
                     <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
@@ -818,10 +836,14 @@ export function ClassesPanel({
                                                         {t("student-class")}
                                                     </p>
                                                     <p className="mt-1 truncate font-medium">
-                                                        {account.class_name ??
-                                                            t(
-                                                                "student-unassigned"
-                                                            )}
+                                                        {account.class_name
+                                                            ? formatClassName(
+                                                                  account.grade_level,
+                                                                  account.class_name
+                                                              )
+                                                            : t(
+                                                                  "student-unassigned"
+                                                              )}
                                                     </p>
                                                 </div>
                                                 <div className="min-w-0">
