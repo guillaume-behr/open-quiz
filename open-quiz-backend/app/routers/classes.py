@@ -21,7 +21,10 @@ from app.models import (
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import StudentClassCreate, StudentClassResponse, StudentResponse
-from app.student_memberships import delete_student_membership
+from app.student_memberships import (
+    delete_student_membership,
+    delete_unfinished_training_sessions,
+)
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
 
@@ -314,7 +317,10 @@ def delete_class(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette classe est utilisée par un rattrapage actif",
         )
-    student_ids = select(Student.id).where(Student.class_id == class_id)
+    student_ids = list(
+        session.scalars(select(Student.id).where(Student.class_id == class_id))
+    )
+    delete_unfinished_training_sessions(student_ids, session)
     session.execute(
         update(QuizParticipant)
         .where(QuizParticipant.student_id.in_(student_ids))
@@ -383,6 +389,7 @@ def assign_student_account(
                 status_code=409,
                 detail="Un élève ne peut pas être transféré pendant une session active",
             )
+        delete_unfinished_training_sessions([membership.id], session)
         membership.class_id = class_id
         membership.identifier = account.identifier
         membership.display_name = account.display_name

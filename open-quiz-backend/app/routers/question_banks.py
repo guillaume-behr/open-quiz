@@ -43,6 +43,7 @@ from app.models import (
     QuizSession,
     QuizSessionQuestion,
     QuizSessionStudentQuestion,
+    StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.schemas import (
@@ -170,6 +171,16 @@ def update_question_bank(
 ) -> QuestionBankResponse:
     """Update the title and grade level of a question bank."""
     question_bank = owned_question_bank(question_bank_id, professor, session)
+    if question_bank.grade_level != payload.grade_level:
+        mismatched_class_ids = select(StudentClass.id).where(
+            StudentClass.grade_level != payload.grade_level
+        )
+        session.execute(
+            delete(ClassTrainingQuestionBank).where(
+                ClassTrainingQuestionBank.question_bank_id == question_bank.id,
+                ClassTrainingQuestionBank.class_id.in_(mismatched_class_ids),
+            )
+        )
     question_bank.grade_level = payload.grade_level
     question_bank.chapter = payload.chapter
     ensure_grade_level(professor.id, payload.grade_level, session)

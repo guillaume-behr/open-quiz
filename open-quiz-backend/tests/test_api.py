@@ -1310,6 +1310,36 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             ).json()
             == []
         )
+        mutable_bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "3e", "chapter": "Changing level"},
+        ).json()
+        assert (
+            client.put(
+                f"/api/quizzes/training/classes/{student_class['id']}/question-banks",
+                headers=teacher_headers,
+                json={"question_bank_ids": [bank["id"], mutable_bank["id"]]},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/question-banks/{mutable_bank['id']}/update",
+                headers=teacher_headers,
+                json={"grade_level": "4e", "chapter": "Changing level"},
+            ).status_code
+            == 200
+        )
+        with sqlite3.connect(database_path) as database:
+            assert (
+                database.execute(
+                    "SELECT COUNT(*) FROM class_training_question_banks "
+                    "WHERE question_bank_id = ?",
+                    (mutable_bank["id"],),
+                ).fetchone()[0]
+                == 0
+            )
         other_class_account = client.post(
             "/api/students",
             headers=teacher_headers,
@@ -1387,6 +1417,19 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             ).status_code
             == 200
         )
+        other_login = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": other_account["identifier"],
+                "password": other_account["generated_password"],
+            },
+        )
+        assert other_login.status_code == 200
+        other_training = client.post(
+            f"/api/quizzes/training/{bank['id']}/start",
+            headers={"Authorization": f"Bearer {other_login.json()['access_token']}"},
+        )
+        assert other_training.status_code == 201
         assert (
             client.delete(
                 f"/api/classes/{student_class['id']}/accounts/{other_account['id']}",
@@ -1397,9 +1440,43 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         with sqlite3.connect(database_path) as database:
             assert (
                 database.execute(
+                    "SELECT COUNT(*) FROM quiz_sessions WHERE join_code = ?",
+                    (other_training.json()["join_code"],),
+                ).fetchone()[0]
+                == 0
+            )
+            assert (
+                database.execute(
                     "SELECT COUNT(DISTINCT session_id) FROM quiz_session_questions"
                 ).fetchone()[0]
                 == 1
+            )
+        assert (
+            client.post(
+                f"/api/classes/{student_class['id']}/accounts/{other_account['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+        transferred_training = client.post(
+            f"/api/quizzes/training/{bank['id']}/start",
+            headers={"Authorization": f"Bearer {other_login.json()['access_token']}"},
+        )
+        assert transferred_training.status_code == 201
+        assert (
+            client.post(
+                f"/api/classes/{other_class['id']}/accounts/{other_account['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+        with sqlite3.connect(database_path) as database:
+            assert (
+                database.execute(
+                    "SELECT COUNT(*) FROM quiz_sessions WHERE join_code = ?",
+                    (transferred_training.json()["join_code"],),
+                ).fetchone()[0]
+                == 0
             )
         replaced_attempt = client.post(
             f"/api/quizzes/student/sessions/{started.json()['join_code']}/answer",
