@@ -536,24 +536,38 @@ def session_question_points(
     participant: QuizParticipant | None = None,
 ) -> dict[int, float]:
     question_ids = session_question_ids(quiz_session, session, participant)
+    return question_maximum_scores(question_ids, session)
+
+
+def question_maximum_scores(
+    question_ids: list[int],
+    session: DbSession,
+) -> dict[int, float]:
     if not question_ids:
         return {}
-    maximums = dict(
-        session.execute(
+    positive_points = case(
+        (QuestionChoice.points > 0, QuestionChoice.points),
+        else_=0,
+    )
+    maximums = {
+        question_id: float(maximum or 0)
+        for question_id, maximum in session.execute(
             select(
                 QuestionChoice.question_id,
-                func.sum(
-                    case((QuestionChoice.points > 0, QuestionChoice.points), else_=0)
+                case(
+                    (
+                        Question.answer_mode == "single",
+                        func.max(positive_points),
+                    ),
+                    else_=func.sum(positive_points),
                 ),
             )
+            .join(Question, Question.id == QuestionChoice.question_id)
             .where(QuestionChoice.question_id.in_(question_ids))
-            .group_by(QuestionChoice.question_id)
-        ).all()
-    )
-    return {
-        question_id: float(maximums.get(question_id) or 0)
-        for question_id in question_ids
+            .group_by(QuestionChoice.question_id, Question.answer_mode)
+        )
     }
+    return {question_id: maximums.get(question_id, 0) for question_id in question_ids}
 
 
 def current_question_id(
@@ -628,24 +642,9 @@ def participant_maximum_scores(
     )
     assigned_question_ids = set(common_question_ids)
     assigned_question_ids.update(row.question_id for row in personalized_rows)
-    maximums = (
-        dict(
-            session.execute(
-                select(
-                    QuestionChoice.question_id,
-                    func.sum(
-                        case(
-                            (QuestionChoice.points > 0, QuestionChoice.points),
-                            else_=0,
-                        )
-                    ),
-                )
-                .where(QuestionChoice.question_id.in_(assigned_question_ids))
-                .group_by(QuestionChoice.question_id)
-            ).all()
-        )
-        if assigned_question_ids
-        else {}
+    maximums = question_maximum_scores(
+        list(assigned_question_ids),
+        session,
     )
 
     result: dict[int, float] = {}
@@ -1089,7 +1088,15 @@ def student_state_response(
             )
         )
     )
-    has_answered = question_id is not None and question_id in answered_question_ids
+    # A participant who has submitted every assigned answer has no current
+    # question while classmates may still be working. Keep that completed
+    # state explicit so the frontend can render its waiting message instead of
+    # an otherwise empty in-progress page.
+    has_answered = (
+        question_id in answered_question_ids
+        if question_id is not None
+        else bool(question_ids) and set(question_ids).issubset(answered_question_ids)
+    )
     existing_answer = (
         session.scalar(
             select(QuizAnswer).where(
@@ -1195,6 +1202,7 @@ def training_result(
     score = 0.0
     maximum = 0.0
     pending = 0
+    maximums = question_maximum_scores(question_ids, session)
     for question_id in question_ids:
         question = questions.get(question_id)
         if question is None:
@@ -1204,7 +1212,7 @@ def training_result(
                 pending += 1
             continue
         choices = choices_by_question[question_id]
-        maximum += sum(choice.points for choice in choices if choice.points > 0)
+        maximum += maximums.get(question_id, 0)
         answer = answers.get(question_id)
         if answer is None:
             continue

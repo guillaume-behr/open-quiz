@@ -253,6 +253,9 @@ test("a student launches training and sees the correct answer", async ({
     expect(
         Math.abs(continueButtonBox!.y - submitButtonBox!.y)
     ).toBeLessThanOrEqual(25)
+    await page.getByRole("button", { name: "Continue" }).click()
+    await page.getByRole("button", { name: "Back to home" }).click()
+    await expect(page).toHaveURL(/\/student\/dashboard$/)
 })
 
 test("a student joins a retake room and selects an eligible quiz", async ({

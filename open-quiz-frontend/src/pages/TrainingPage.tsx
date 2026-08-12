@@ -202,7 +202,11 @@ export function TrainingPage() {
                         <Button
                             className="mx-auto mt-6"
                             size="lg"
-                            onClick={() => navigate("/")}
+                            onClick={() =>
+                                navigate("/student/dashboard", {
+                                    replace: true,
+                                })
+                            }
                         >
                             {t("back-home")}
                         </Button>

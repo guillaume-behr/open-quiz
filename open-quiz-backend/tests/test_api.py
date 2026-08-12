@@ -910,9 +910,7 @@ def test_participant_maximum_scores_uses_constant_query_count(tmp_path: Path) ->
 
             event.listen(engine, "before_cursor_execute", record_statement)
             try:
-                scores = participant_maximum_scores(
-                    quiz_session, participants, session
-                )
+                scores = participant_maximum_scores(quiz_session, participants, session)
             finally:
                 event.remove(engine, "before_cursor_execute", record_statement)
 
@@ -1703,9 +1701,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             json={"name": " 5E "},
         )
         assert duplicate_grade_level.status_code == 201
-        fifth_grade = next(
-            level for level in grade_levels if level["name"] == "5e"
-        )
+        fifth_grade = next(level for level in grade_levels if level["name"] == "5e")
         assert duplicate_grade_level.json()["id"] == fifth_grade["id"]
         assert (
             client.delete(
@@ -4237,6 +4233,120 @@ def test_join_and_start_race_never_strands_a_participant(tmp_path: Path) -> None
 
 def correct_choice_id(question: dict[str, Any]) -> int:
     return next(choice["id"] for choice in question["choices"] if choice["is_correct"])
+
+
+def test_completed_student_waits_for_classmates_without_a_blank_state(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "completed-student-state.db")) as client:
+        environment = exam_environment(client)
+        other_account = client.post(
+            "/api/students",
+            headers=environment["teacher_headers"],
+            json={"first_name": "Other", "last_name": "Student"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/classes/{environment['student_class']['id']}"
+                f"/accounts/{other_account['id']}",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        other_login = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": other_account["identifier"],
+                "password": other_account["generated_password"],
+            },
+        )
+        assert other_login.status_code == 200
+        other_student_headers = {
+            "Authorization": f"Bearer {other_login.json()['access_token']}"
+        }
+
+        launched, first_participant_headers = launch_and_join(client, environment)
+        other_join = client.post(
+            "/api/quizzes/join",
+            headers=other_student_headers,
+            json={"join_code": launched["join_code"]},
+        )
+        assert other_join.status_code == 201
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+
+        completed = client.post(
+            f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
+            headers=first_participant_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert completed.status_code == 200
+        assert completed.json()["status"] == "in_progress"
+        assert completed.json()["question"] is None
+        assert completed.json()["has_answered"] is True
+
+
+def test_single_choice_maximum_uses_the_best_selectable_option(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "single-choice-maximum.db")) as client:
+        environment = exam_environment(client)
+        question = environment["question"]
+        update_payload = {
+            "prompt": question["prompt"],
+            "difficulty": question["difficulty"],
+            "answer_mode": question["answer_mode"],
+            "answer_mode_disclosed": question["answer_mode_disclosed"],
+            "response_language": question["response_language"],
+            "allow_code_execution": question["allow_code_execution"],
+            "code_language": question["code_language"],
+            "code_content": question["code_content"],
+            "choices": [
+                {
+                    "id": choice["id"],
+                    "label": choice["label"],
+                    "is_correct": choice["is_correct"],
+                    "points": 2 if choice["is_correct"] else 1,
+                    "code_language": choice["code_language"],
+                    "code_content": choice["code_content"],
+                }
+                for choice in question["choices"]
+            ],
+        }
+        updated = client.post(
+            f"/api/question-banks/questions/{question['id']}/update",
+            headers=environment["teacher_headers"],
+            data={"payload": json.dumps(update_payload)},
+        )
+        assert updated.status_code == 200
+        environment["question"] = updated.json()
+
+        launched, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        answered = client.post(
+            f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert answered.status_code == 200
+
+        result = client.get(
+            f"/api/quizzes/sessions/{launched['id']}",
+            headers=environment["teacher_headers"],
+        )
+        assert result.status_code == 200
+        participant = result.json()["participants"][0]
+        assert participant["score"] == 2
+        assert participant["maximum_score"] == 2
 
 
 def test_answer_points_are_summed_and_negative_points_follow_quiz_setting(

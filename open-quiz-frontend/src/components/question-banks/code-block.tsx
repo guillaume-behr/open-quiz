@@ -58,6 +58,10 @@ export function CodeBlock({
     }, [code])
 
     useEffect(() => {
+        // React Strict Mode runs an extra setup/cleanup cycle in development.
+        // Reset the flag during setup so that execution results are not
+        // discarded after that development-only cleanup.
+        mountedRef.current = true
         return () => {
             mountedRef.current = false
         }
