@@ -44,7 +44,7 @@ export function ParticipantAnswersDialog({
                 participant?.student_display_name ??
                 participant?.student_identifier
             }
-            className="max-w-5xl"
+            size="xl"
         >
             {isLoading ? (
                 <div

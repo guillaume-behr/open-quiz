@@ -175,7 +175,7 @@ export function TrainingQuizzesPanel({
                     bank: historyBank?.chapter ?? "",
                 })}
                 description={t("training-history-help")}
-                className="max-w-4xl"
+                size="lg"
             >
                 {historyLoading ? (
                     <div className="flex min-h-40 items-center justify-center">

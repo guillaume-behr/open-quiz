@@ -87,6 +87,7 @@ export function QuizFormDialog({
             }}
             title={t(editingQuiz ? "edit-exam-quiz" : "create-exam-quiz")}
             description={t("create-exam-quiz-help")}
+            size="xl"
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup className="gap-5">
@@ -280,6 +281,7 @@ function QuestionBankPicker({
             </FieldLabel>
             <Input
                 id="quiz-bank-search"
+                className="max-w-md"
                 value={search}
                 placeholder={t("search-question-bank")}
                 aria-label={t("search-question-bank")}

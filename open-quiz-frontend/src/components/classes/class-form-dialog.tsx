@@ -68,7 +68,7 @@ export function ClassFormDialog({
             }}
             title={t(editingClass ? "edit-class" : "create-class")}
             description={t("create-class-help")}
-            className={editingClass ? "max-w-6xl" : "max-w-2xl"}
+            size={editingClass ? "xl" : "md"}
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup>

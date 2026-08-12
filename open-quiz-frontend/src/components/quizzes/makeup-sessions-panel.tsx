@@ -11,6 +11,7 @@ import { formatClassName } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Toast } from "@/components/ui/toast"
 import { Input } from "@/components/ui/input"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { useEffect, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -135,13 +136,16 @@ export function MakeupSessionsPanel() {
     return (
         <div className="mt-6 grid gap-6">
             {error && <Toast message={error} variant="error" />}
-            <form onSubmit={create} className="rounded-2xl border bg-card p-5">
+            <form
+                onSubmit={create}
+                className="max-w-3xl rounded-2xl border bg-card p-5"
+            >
                 <h2 className="text-xl font-bold">{t("makeup-create")}</h2>
                 <div className="mt-4 grid gap-4">
-                    <label className="grid gap-1 text-sm font-medium">
+                    <label className="grid max-w-md gap-1 text-sm font-medium">
                         {t("class-name")}
                         <select
-                            className="h-10 rounded-md border bg-background px-3"
+                            className={NATIVE_SELECT_CLASS_NAME}
                             value={classId}
                             onChange={(event) => {
                                 setClassId(event.target.value)
@@ -167,7 +171,7 @@ export function MakeupSessionsPanel() {
                             <legend className="mb-2 text-sm font-medium">
                                 {t("makeup-authorized-quizzes")}
                             </legend>
-                            <label className="grid gap-1 text-sm">
+                            <label className="grid max-w-md gap-1 text-sm">
                                 {t("search")}
                                 <Input
                                     value={quizSearch}

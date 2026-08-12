@@ -49,7 +49,7 @@ export function StudentLogin({
                     </FieldLabel>
                     <Input
                         id="student-login-id"
-                        className="py-6"
+                        className="h-12"
                         autoComplete="username"
                         value={identifier}
                         onChange={(event) =>
@@ -68,7 +68,7 @@ export function StudentLogin({
                     </FieldLabel>
                     <PasswordInput
                         id="student-login-password"
-                        className="py-6"
+                        className="h-12"
                         autoComplete="current-password"
                         value={password}
                         onChange={(event) =>
@@ -85,7 +85,7 @@ export function StudentLogin({
                     <FieldError id="student-login-error">{error}</FieldError>
                 )}
                 <Button
-                    className="text-md py-7 shadow"
+                    className="h-12 text-base shadow"
                     type="submit"
                     disabled={isBusy}
                 >

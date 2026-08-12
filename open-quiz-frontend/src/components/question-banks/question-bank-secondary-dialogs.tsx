@@ -41,7 +41,7 @@ export function ImportQuestionBankDialog({
             }}
             title={t("import-json-title")}
             description={t("import-json-help")}
-            className="max-w-lg"
+            size="sm"
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup className="gap-4">
@@ -114,7 +114,7 @@ export function DeleteEntityDialog({
             }}
             title={t(titleKey)}
             description={t(helpKey, { title })}
-            className="max-w-md"
+            size="sm"
         >
             <div className="space-y-4">
                 {error && <FieldError>{error}</FieldError>}
@@ -166,6 +166,7 @@ export function QuestionFormDialog({
             }}
             title={t(question ? "edit-question" : "add-question")}
             description={`${bank.grade_level} — ${bank.chapter}`}
+            size="xl"
         >
             <QuestionForm
                 key={question?.id ?? "new"}

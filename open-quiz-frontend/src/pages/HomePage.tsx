@@ -349,7 +349,7 @@ export function HomePage({
                                             headingLevel={3}
                                         />
                                         <Button
-                                            className="w-full py-7 text-base"
+                                            className="h-12 w-full text-base"
                                             onClick={() =>
                                                 navigate("/student/exam", {
                                                     state: { student, token },

@@ -520,6 +520,7 @@ export function AdminDashboard() {
                         description={t("account-recovery-help", {
                             username: recoveryUser?.username,
                         })}
+                        size="sm"
                     >
                         <form
                             className="space-y-4"

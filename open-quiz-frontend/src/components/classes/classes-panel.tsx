@@ -702,7 +702,7 @@ export function ClassesPanel({
                 description={t("assign-student-help", {
                     className: managed?.name,
                 })}
-                className="max-w-6xl"
+                size="xl"
             >
                 {accounts.length === 0 ? (
                     <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
@@ -894,7 +894,7 @@ export function ClassesPanel({
                 onOpenChange={(open) => !open && setDeleting(null)}
                 title={t("delete-class")}
                 description={t("delete-class-help", { name: deleting?.name })}
-                className="max-w-md"
+                size="sm"
             >
                 <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={() => setDeleting(null)}>

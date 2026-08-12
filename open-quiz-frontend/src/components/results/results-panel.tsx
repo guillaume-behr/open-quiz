@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import { formatClassName } from "@/lib/utils"
 import {
@@ -388,7 +389,7 @@ export function ResultsPanel({
                             </FieldLabel>
                             <select
                                 id="result-class-filter"
-                                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                                className={NATIVE_SELECT_CLASS_NAME}
                                 value={classFilter}
                                 disabled={areClassesLoading}
                                 onChange={(event) => {
@@ -570,6 +571,7 @@ export function ResultsPanel({
                 }}
                 title={t("export-results-csv")}
                 description={t("export-results-help")}
+                size="md"
             >
                 {isExportLoading || areClassesLoading ? (
                     <div
@@ -581,55 +583,59 @@ export function ResultsPanel({
                     </div>
                 ) : (
                     <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="export-results-class">
-                                {t("class-name")}
-                            </FieldLabel>
-                            <select
-                                id="export-results-class"
-                                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                                value={exportClassId ?? ""}
-                                onChange={(event) =>
-                                    setExportClassId(Number(event.target.value))
-                                }
-                            >
-                                {exportClasses.map((studentClass) => (
-                                    <option
-                                        key={studentClass.id}
-                                        value={studentClass.id}
-                                    >
-                                        {formatClassName(
-                                            studentClass.grade_level,
-                                            studentClass.name
-                                        )}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="export-results-quiz">
-                                {t("quiz-title")}
-                            </FieldLabel>
-                            <select
-                                id="export-results-quiz"
-                                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                                value={exportQuizId ?? ""}
-                                onChange={(event) =>
-                                    setExportQuizId(
-                                        event.target.value
-                                            ? Number(event.target.value)
-                                            : null
-                                    )
-                                }
-                            >
-                                <option value="">{t("all-quizzes")}</option>
-                                {exportQuizzes.map((quiz) => (
-                                    <option key={quiz.id} value={quiz.id}>
-                                        {quiz.title}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
+                        <div className="grid items-start gap-4 sm:grid-cols-2">
+                            <Field>
+                                <FieldLabel htmlFor="export-results-class">
+                                    {t("class-name")}
+                                </FieldLabel>
+                                <select
+                                    id="export-results-class"
+                                    className={NATIVE_SELECT_CLASS_NAME}
+                                    value={exportClassId ?? ""}
+                                    onChange={(event) =>
+                                        setExportClassId(
+                                            Number(event.target.value)
+                                        )
+                                    }
+                                >
+                                    {exportClasses.map((studentClass) => (
+                                        <option
+                                            key={studentClass.id}
+                                            value={studentClass.id}
+                                        >
+                                            {formatClassName(
+                                                studentClass.grade_level,
+                                                studentClass.name
+                                            )}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field>
+                                <FieldLabel htmlFor="export-results-quiz">
+                                    {t("quiz-title")}
+                                </FieldLabel>
+                                <select
+                                    id="export-results-quiz"
+                                    className={NATIVE_SELECT_CLASS_NAME}
+                                    value={exportQuizId ?? ""}
+                                    onChange={(event) =>
+                                        setExportQuizId(
+                                            event.target.value
+                                                ? Number(event.target.value)
+                                                : null
+                                        )
+                                    }
+                                >
+                                    <option value="">{t("all-quizzes")}</option>
+                                    {exportQuizzes.map((quiz) => (
+                                        <option key={quiz.id} value={quiz.id}>
+                                            {quiz.title}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                        </div>
                         {exportClasses.length === 0 && !exportError && (
                             <p className="text-sm text-muted-foreground">
                                 {t("export-results-no-classes")}
@@ -680,7 +686,7 @@ export function ResultsPanel({
                         ? `${selectedResult.class_name} · ${resultDate(selectedResult)}`
                         : undefined
                 }
-                className="max-w-6xl"
+                size="xl"
             >
                 {selectedResult && (
                     <div className="space-y-4">
@@ -900,6 +906,7 @@ export function ResultsPanel({
                 description={t("delete-result-help", {
                     title: resultToDelete?.quiz_title,
                 })}
+                size="sm"
             >
                 <div className="space-y-4">
                     {deleteError && (

@@ -125,7 +125,7 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                         {t("join-code")}
                     </FieldLabel>
                     <Input
-                        className="py-6 text-center font-mono text-lg font-semibold tracking-[0.25em] uppercase"
+                        className="h-12 text-center font-mono text-lg font-semibold tracking-[0.25em] uppercase"
                         id="makeup-session-code"
                         name="makeup-session-code"
                         value={code}
@@ -147,7 +147,7 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                     <FieldError id="makeup-join-error">{error}</FieldError>
                 )}
                 <Button
-                    className="py-7 text-base"
+                    className="h-12 text-base"
                     type="submit"
                     disabled={busy}
                 >

@@ -68,6 +68,7 @@ export function ActiveQuizSessionDialog({
                       )}`
                     : undefined
             }
+            size="lg"
         >
             {session && (
                 <div>

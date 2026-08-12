@@ -9,6 +9,7 @@ import {
     FieldGroup,
     FieldLabel,
 } from "@/components/ui/field"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { LoaderCircle, Play, RefreshCw, Trash2, XCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -36,6 +37,7 @@ export function QuizPreviewDialog({
             }}
             title={quiz?.title ?? t("preview-quiz")}
             description={t("quiz-random-preview-help")}
+            size="xl"
         >
             <div className="flex justify-end">
                 <Button
@@ -122,7 +124,7 @@ export function LaunchQuizDialog({
             }}
             title={t("launch-quiz")}
             description={quiz?.title}
-            className="max-w-lg"
+            size="sm"
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup>
@@ -132,7 +134,7 @@ export function LaunchQuizDialog({
                         </FieldLabel>
                         <select
                             id="quiz-class-name"
-                            className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                            className={NATIVE_SELECT_CLASS_NAME}
                             value={selectedClassId}
                             onChange={(event) =>
                                 onSelectedClassIdChange(event.target.value)
@@ -212,7 +214,7 @@ export function SessionActionDialog({
             description={t(
                 isDelete ? "delete-session-help" : "cancel-quiz-help"
             )}
-            className="max-w-md"
+            size="sm"
         >
             {error && <FieldError className="mb-4">{error}</FieldError>}
             <div className="flex justify-end gap-2">

@@ -93,7 +93,7 @@ export function TwoFactorForm({
                         minLength={6}
                         maxLength={6}
                         placeholder="000000"
-                        className="py-6 text-center text-xl tracking-[0.35em]"
+                        className="h-12 text-center text-xl tracking-[0.35em]"
                         autoFocus
                         aria-invalid={Boolean(error)}
                         aria-describedby={
@@ -115,7 +115,7 @@ export function TwoFactorForm({
                 )}
 
                 <Button
-                    className="text-md py-7 shadow"
+                    className="h-12 text-base shadow"
                     type="submit"
                     disabled={isSubmitting}
                 >
@@ -127,7 +127,7 @@ export function TwoFactorForm({
                         : t("two-factor-continue")}
                 </Button>
                 <Button
-                    className="text-md py-7 shadow"
+                    className="h-12 text-base shadow"
                     type="button"
                     variant="ghost"
                     onClick={onCancel}

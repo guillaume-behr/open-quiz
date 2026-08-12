@@ -45,7 +45,7 @@ export function JoinQuizForm({
                 <Field>
                     <FieldLabel htmlFor="quiz-id">{t("quiz-id")}</FieldLabel>
                     <Input
-                        className="py-6 text-center font-mono text-lg font-semibold tracking-[0.25em] uppercase"
+                        className="h-12 text-center font-mono text-lg font-semibold tracking-[0.25em] uppercase"
                         id="quiz-id"
                         name="quiz-id"
                         autoComplete="off"
@@ -63,7 +63,7 @@ export function JoinQuizForm({
                 </Field>
                 {error && <FieldError id="join-quiz-error">{error}</FieldError>}
                 <Button
-                    className="py-7 text-base"
+                    className="h-12 text-base"
                     type="submit"
                     disabled={isBusy}
                 >

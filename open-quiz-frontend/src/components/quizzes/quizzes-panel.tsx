@@ -637,7 +637,7 @@ export function QuizzesPanel({
                 description={t("delete-quiz-help", {
                     title: quizToDelete?.title ?? "",
                 })}
-                className="max-w-md"
+                size="sm"
             >
                 {deleteError && (
                     <FieldError className="mb-4">{deleteError}</FieldError>

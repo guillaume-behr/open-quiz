@@ -57,7 +57,7 @@ export function DashboardLogin({
                 <Field>
                     <FieldLabel htmlFor="login">{t("login-id")}</FieldLabel>
                     <Input
-                        className="py-6"
+                        className="h-12"
                         id="login"
                         name="login"
                         autoComplete="username"
@@ -73,7 +73,7 @@ export function DashboardLogin({
                         {t("login-password")}
                     </FieldLabel>
                     <PasswordInput
-                        className="py-6"
+                        className="h-12"
                         id="password"
                         name="password"
                         autoComplete="current-password"
@@ -96,7 +96,7 @@ export function DashboardLogin({
                 )}
 
                 <Button
-                    className="text-md py-7 shadow"
+                    className="h-12 text-base shadow"
                     type="submit"
                     disabled={isSubmitting}
                 >

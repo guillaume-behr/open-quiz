@@ -11,8 +11,16 @@ type DialogProps = {
     title: string
     description?: string
     children: ReactNode
+    size?: "sm" | "md" | "lg" | "xl"
     className?: string
 }
+
+const dialogSizes = {
+    sm: "max-w-md",
+    md: "max-w-2xl",
+    lg: "max-w-4xl",
+    xl: "max-w-6xl",
+} as const
 
 export function Dialog({
     open,
@@ -20,6 +28,7 @@ export function Dialog({
     title,
     description,
     children,
+    size = "md",
     className,
 }: DialogProps) {
     const { t } = useTranslation()
@@ -30,7 +39,8 @@ export function Dialog({
                 <DialogPrimitive.Backdrop className="fixed inset-0 z-50 min-h-dvh bg-black/50 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
                 <DialogPrimitive.Popup
                     className={cn(
-                        "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(1200px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-2xl transition-[scale,opacity] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
+                        "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-2xl transition-[scale,opacity] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
+                        dialogSizes[size],
                         className
                     )}
                 >

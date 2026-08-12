@@ -482,121 +482,125 @@ export function StudentsPanel({
                         ? "student-account-form-help"
                         : "student-id-generated-help"
                 )}
-                className="max-w-3xl"
+                size="md"
             >
                 <form onSubmit={submit}>
                     <FieldGroup>
-                        {editing ? (
-                            <>
-                                <Field>
-                                    <FieldLabel htmlFor="account-name">
-                                        {t("student-name")}
-                                    </FieldLabel>
-                                    <Input
-                                        id="account-name"
-                                        value={displayName}
-                                        onChange={(event) =>
-                                            setDisplayName(event.target.value)
-                                        }
-                                        required
-                                    />
-                                </Field>
-                                <Field>
-                                    <FieldLabel htmlFor="account-id">
-                                        {t("student-id")}
-                                    </FieldLabel>
-                                    <Input
-                                        id="account-id"
-                                        value={identifier}
-                                        onChange={(event) =>
-                                            setIdentifier(
-                                                event.target.value.toLowerCase()
-                                            )
-                                        }
-                                        pattern="[a-zA-Z0-9._-]+"
-                                        autoComplete="off"
-                                        required
-                                    />
-                                </Field>
-                            </>
-                        ) : (
-                            <>
-                                <Field>
-                                    <FieldLabel htmlFor="account-first-name">
-                                        {t("first-name")}
-                                    </FieldLabel>
-                                    <Input
-                                        id="account-first-name"
-                                        value={firstName}
-                                        onChange={(event) =>
-                                            setFirstName(event.target.value)
-                                        }
-                                        required
-                                    />
-                                </Field>
-                                <Field>
-                                    <FieldLabel htmlFor="account-last-name">
-                                        {t("last-name")}
-                                    </FieldLabel>
-                                    <Input
-                                        id="account-last-name"
-                                        value={lastName}
-                                        onChange={(event) =>
-                                            setLastName(event.target.value)
-                                        }
-                                        required
-                                    />
-                                </Field>
-                            </>
-                        )}
-                        <Field>
-                            <FieldLabel htmlFor="account-class">
-                                {t("student-class")}
-                            </FieldLabel>
-                            <select
-                                id="account-class"
-                                className={NATIVE_SELECT_CLASS_NAME}
-                                value={selectedClassId}
-                                onChange={(event) =>
-                                    setSelectedClassId(event.target.value)
-                                }
-                                disabled={isBusy}
-                            >
-                                <option value="">{t("no-class")}</option>
-                                {classes.map((studentClass) => (
-                                    <option
-                                        key={studentClass.id}
-                                        value={studentClass.id}
-                                    >
-                                        {formatClassName(
-                                            studentClass.grade_level,
-                                            studentClass.name
-                                        )}
-                                    </option>
-                                ))}
-                            </select>
-                            {editing && (
-                                <p className="text-xs text-muted-foreground">
-                                    {t("student-class-help")}
-                                </p>
+                        <div className="grid items-start gap-4 sm:grid-cols-2">
+                            {editing ? (
+                                <>
+                                    <Field>
+                                        <FieldLabel htmlFor="account-name">
+                                            {t("student-name")}
+                                        </FieldLabel>
+                                        <Input
+                                            id="account-name"
+                                            value={displayName}
+                                            onChange={(event) =>
+                                                setDisplayName(
+                                                    event.target.value
+                                                )
+                                            }
+                                            required
+                                        />
+                                    </Field>
+                                    <Field>
+                                        <FieldLabel htmlFor="account-id">
+                                            {t("student-id")}
+                                        </FieldLabel>
+                                        <Input
+                                            id="account-id"
+                                            value={identifier}
+                                            onChange={(event) =>
+                                                setIdentifier(
+                                                    event.target.value.toLowerCase()
+                                                )
+                                            }
+                                            pattern="[a-zA-Z0-9._-]+"
+                                            autoComplete="off"
+                                            required
+                                        />
+                                    </Field>
+                                </>
+                            ) : (
+                                <>
+                                    <Field>
+                                        <FieldLabel htmlFor="account-first-name">
+                                            {t("first-name")}
+                                        </FieldLabel>
+                                        <Input
+                                            id="account-first-name"
+                                            value={firstName}
+                                            onChange={(event) =>
+                                                setFirstName(event.target.value)
+                                            }
+                                            required
+                                        />
+                                    </Field>
+                                    <Field>
+                                        <FieldLabel htmlFor="account-last-name">
+                                            {t("last-name")}
+                                        </FieldLabel>
+                                        <Input
+                                            id="account-last-name"
+                                            value={lastName}
+                                            onChange={(event) =>
+                                                setLastName(event.target.value)
+                                            }
+                                            required
+                                        />
+                                    </Field>
+                                </>
                             )}
-                        </Field>
-                        {editing && (
                             <Field>
-                                <FieldLabel htmlFor="account-password">
-                                    {t("new-password-optional")}
+                                <FieldLabel htmlFor="account-class">
+                                    {t("student-class")}
                                 </FieldLabel>
-                                <PasswordInput
-                                    id="account-password"
-                                    value={password}
+                                <select
+                                    id="account-class"
+                                    className={NATIVE_SELECT_CLASS_NAME}
+                                    value={selectedClassId}
                                     onChange={(event) =>
-                                        setPassword(event.target.value)
+                                        setSelectedClassId(event.target.value)
                                     }
-                                    minLength={8}
-                                    autoComplete="new-password"
-                                />
+                                    disabled={isBusy}
+                                >
+                                    <option value="">{t("no-class")}</option>
+                                    {classes.map((studentClass) => (
+                                        <option
+                                            key={studentClass.id}
+                                            value={studentClass.id}
+                                        >
+                                            {formatClassName(
+                                                studentClass.grade_level,
+                                                studentClass.name
+                                            )}
+                                        </option>
+                                    ))}
+                                </select>
+                                {editing && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("student-class-help")}
+                                    </p>
+                                )}
                             </Field>
-                        )}
+                            {editing && (
+                                <Field>
+                                    <FieldLabel htmlFor="account-password">
+                                        {t("new-password-optional")}
+                                    </FieldLabel>
+                                    <PasswordInput
+                                        id="account-password"
+                                        value={password}
+                                        onChange={(event) =>
+                                            setPassword(event.target.value)
+                                        }
+                                        minLength={8}
+                                        autoComplete="new-password"
+                                    />
+                                </Field>
+                            )}
+                        </div>
                         {editing && (
                             <label className="flex items-center gap-2 text-sm">
                                 <input
@@ -640,7 +644,7 @@ export function StudentsPanel({
                 onOpenChange={(open) => !open && setCredentials(null)}
                 title={t("student-credentials")}
                 description={t("student-credentials-sensitive-help")}
-                className="max-w-5xl"
+                size="xl"
             >
                 {credentials && (
                     <div className="space-y-4">
@@ -699,7 +703,7 @@ export function StudentsPanel({
                 description={t("delete-student-account-help", {
                     name: deleting?.display_name,
                 })}
-                className="max-w-md"
+                size="sm"
             >
                 {formError && <FieldError>{formError}</FieldError>}
                 <div className="mt-4 flex justify-end gap-2">
