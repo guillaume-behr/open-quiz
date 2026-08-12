@@ -12,23 +12,18 @@ import {
     STUDENT_ACCESS_CARD_CLASS_NAME,
     StudentAccessHeader,
 } from "@/components/forms/student-access-card"
-import { NavbarAction } from "@/components/navigation/navbar-action"
+import {
+    DashboardShell,
+    type DashboardEntry,
+} from "@/components/navigation/dashboard-shell"
 import {
     readStoredQuizSession,
     storeQuizSession,
 } from "@/components/student-quiz/student-quiz-session"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import {
-    ClipboardPenLine,
-    Dumbbell,
-    History,
-    LoaderCircle,
-    LogOut,
-    RotateCcw,
-    type LucideIcon,
-} from "lucide-react"
-import { lazy, Suspense, type FormEvent, useEffect, useState } from "react"
+import { PageLoader } from "@/components/ui/page-loader"
+import { ClipboardPenLine, Dumbbell, History, RotateCcw } from "lucide-react"
+import { lazy, type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router"
 
@@ -55,13 +50,6 @@ const StudentMakeupPanel = lazy(() =>
 )
 
 type StudentSection = "exam" | "training" | "makeup" | "results"
-
-type StudentDashboardEntry = {
-    id: StudentSection
-    icon: LucideIcon
-    label: string
-    description: string
-}
 
 export function HomePage({
     page,
@@ -92,7 +80,7 @@ export function HomePage({
     const [activeTab, setActiveTab] = useState<StudentSection>(
         routeState?.section ?? initialSection
     )
-    const dashboardEntries: StudentDashboardEntry[] = [
+    const dashboardEntries: DashboardEntry<StudentSection>[] = [
         {
             id: "exam",
             icon: ClipboardPenLine,
@@ -219,15 +207,7 @@ export function HomePage({
     }
 
     if (isLoading) {
-        return (
-            <div
-                className="flex flex-1 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle className="size-9 animate-spin text-primary motion-reduce:animate-none" />
-            </div>
-        )
+        return <PageLoader />
     }
 
     if (page === "login" && (!student || !token)) {
@@ -249,150 +229,69 @@ export function HomePage({
     if (!student || !token) return null
 
     return (
-        <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
-            <NavbarAction>
-                <Button variant="outline" onClick={logout}>
-                    <LogOut />
-                    {t("sign-out")}
-                </Button>
-            </NavbarAction>
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-extrabold">
-                        {t("student-dashboard-welcome", {
-                            name: student.display_name,
-                        })}
-                    </h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        {t("student-dashboard-help")}
-                    </p>
+        <DashboardShell
+            entries={dashboardEntries}
+            activeEntry={activeEntry}
+            welcome={t("student-dashboard-welcome", {
+                name: student.display_name,
+            })}
+            help={t("student-dashboard-help")}
+            menuLabel={t("dashboard-menu")}
+            navigationLabel={t("student-activities")}
+            signOutLabel={t("sign-out")}
+            loadingLabel={t("page-loading")}
+            onSelect={selectSection}
+            onSignOut={logout}
+        >
+            {activeTab === "exam" ? (
+                <div className="mt-6 flex justify-center">
+                    {storedExam ? (
+                        <div className={STUDENT_ACCESS_CARD_CLASS_NAME}>
+                            <StudentAccessHeader
+                                icon={ClipboardPenLine}
+                                title={t("resume-quiz")}
+                                description={t("enter-exam-help")}
+                                headingLevel={3}
+                            />
+                            <Button
+                                className="h-12 w-full text-base"
+                                onClick={() =>
+                                    navigate("/student/exam", {
+                                        state: { student, token },
+                                    })
+                                }
+                            >
+                                <ClipboardPenLine />
+                                {t("resume-quiz")}
+                            </Button>
+                        </div>
+                    ) : (
+                        <JoinQuizForm
+                            embedded
+                            joinCode={joinCode}
+                            isBusy={isJoining}
+                            error={joinError}
+                            onJoinCodeChange={(value) => {
+                                setJoinCode(value)
+                                setJoinError(null)
+                            }}
+                            onSubmit={joinExam}
+                        />
+                    )}
                 </div>
-            </div>
-
-            <div className="grid min-h-0 min-w-0 flex-1 items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-                <aside className="h-fit min-w-0 rounded-2xl border bg-card p-3 shadow-sm">
-                    <p className="px-3 py-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                        {t("dashboard-menu")}
-                    </p>
-                    <nav
-                        className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible"
-                        aria-label={t("student-activities")}
-                    >
-                        {dashboardEntries.map((entry) => {
-                            const Icon = entry.icon
-                            const isActive = entry.id === activeTab
-                            return (
-                                <button
-                                    key={entry.id}
-                                    type="button"
-                                    onClick={() => selectSection(entry.id)}
-                                    aria-current={isActive ? "page" : undefined}
-                                    className={cn(
-                                        "flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:w-full lg:min-w-0",
-                                        isActive
-                                            ? "bg-primary text-primary-foreground shadow-sm"
-                                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                                    )}
-                                >
-                                    <Icon className="size-5 shrink-0" />
-                                    <span>{entry.label}</span>
-                                </button>
-                            )
-                        })}
-                    </nav>
-                </aside>
-
-                <section
-                    key={activeTab}
-                    className="min-h-72 min-w-0 animate-in overflow-hidden rounded-2xl border bg-card p-4 shadow-sm duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:p-5 lg:min-h-full"
-                    aria-labelledby={`${activeEntry.id}-title`}
-                >
-                    <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-                        <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                            <activeEntry.icon className="size-6" />
-                        </div>
-                        <div className="min-w-0">
-                            <h2
-                                id={`${activeEntry.id}-title`}
-                                className="text-2xl font-bold"
-                            >
-                                {activeEntry.label}
-                            </h2>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                {activeEntry.description}
-                            </p>
-                        </div>
-                    </div>
-                    <Suspense
-                        fallback={
-                            <div
-                                className="flex min-h-64 items-center justify-center"
-                                role="status"
-                                aria-label={t("page-loading")}
-                            >
-                                <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
-                            </div>
-                        }
-                    >
-                        {activeTab === "exam" ? (
-                            <div className="mt-6 flex justify-center">
-                                {storedExam ? (
-                                    <div
-                                        className={
-                                            STUDENT_ACCESS_CARD_CLASS_NAME
-                                        }
-                                    >
-                                        <StudentAccessHeader
-                                            icon={ClipboardPenLine}
-                                            title={t("resume-quiz")}
-                                            description={t("enter-exam-help")}
-                                            headingLevel={3}
-                                        />
-                                        <Button
-                                            className="h-12 w-full text-base"
-                                            onClick={() =>
-                                                navigate("/student/exam", {
-                                                    state: { student, token },
-                                                })
-                                            }
-                                        >
-                                            <ClipboardPenLine />
-                                            {t("resume-quiz")}
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <JoinQuizForm
-                                        embedded
-                                        joinCode={joinCode}
-                                        isBusy={isJoining}
-                                        error={joinError}
-                                        onJoinCodeChange={(value) => {
-                                            setJoinCode(value)
-                                            setJoinError(null)
-                                        }}
-                                        onSubmit={joinExam}
-                                    />
-                                )}
-                            </div>
-                        ) : activeTab === "training" ? (
-                            <div className="mt-6">
-                                <TrainingQuizzesPanel
-                                    student={student}
-                                    token={token}
-                                />
-                            </div>
-                        ) : activeTab === "makeup" ? (
-                            <div className="mt-6 flex justify-center">
-                                <StudentMakeupPanel token={token} />
-                            </div>
-                        ) : (
-                            <div className="mt-6">
-                                <StudentQuizHistory token={token} />
-                            </div>
-                        )}
-                    </Suspense>
-                </section>
-            </div>
-        </div>
+            ) : activeTab === "training" ? (
+                <div className="mt-6">
+                    <TrainingQuizzesPanel student={student} token={token} />
+                </div>
+            ) : activeTab === "makeup" ? (
+                <div className="mt-6 flex justify-center">
+                    <StudentMakeupPanel token={token} />
+                </div>
+            ) : (
+                <div className="mt-6">
+                    <StudentQuizHistory token={token} />
+                </div>
+            )}
+        </DashboardShell>
     )
 }

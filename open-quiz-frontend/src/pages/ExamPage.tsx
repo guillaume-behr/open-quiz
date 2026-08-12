@@ -6,7 +6,7 @@ import {
 import type { StudentAccount } from "@/api/types"
 import { StudentQuiz } from "@/components/student-quiz/student-quiz"
 import { readStoredQuizSession } from "@/components/student-quiz/student-quiz-session"
-import { LoaderCircle } from "lucide-react"
+import { PageLoader } from "@/components/ui/page-loader"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router"
@@ -58,18 +58,7 @@ export function ExamPage() {
     }, [t])
 
     if (isLoading || !student || !token) {
-        return (
-            <div
-                className="flex flex-1 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle
-                    className="size-9 animate-spin text-primary motion-reduce:animate-none"
-                    aria-hidden="true"
-                />
-            </div>
-        )
+        return <PageLoader />
     }
 
     return (

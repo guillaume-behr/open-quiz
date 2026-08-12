@@ -57,6 +57,26 @@ function pageContaining(items: Quiz[], id: number): number {
 }
 
 type Difficulty = (typeof difficultyKeys)[number]
+type DifficultyCounts = Record<Difficulty, number>
+
+function availableQuestionCounts(
+    banks: QuestionBank[],
+    selectedBankIds: number[]
+): DifficultyCounts {
+    const selectedBanks = banks.filter((bank) =>
+        selectedBankIds.includes(bank.id)
+    )
+    return difficultyKeys.reduce(
+        (result, difficulty) => {
+            result[difficulty] = selectedBanks.reduce(
+                (total, bank) => total + bank[`${difficulty}_question_count`],
+                0
+            )
+            return result
+        },
+        { easy: 0, medium: 0, hard: 0 } as DifficultyCounts
+    )
+}
 
 export function QuizzesPanel({
     isCreateDialogOpen,
@@ -216,18 +236,9 @@ export function QuizzesPanel({
         }
     }, [activeSessionId, activeSessionStatus, isSessionMutating, t])
 
-    const availableByDifficulty = difficultyKeys.reduce(
-        (result, difficulty) => {
-            result[difficulty] = banks
-                .filter((bank) => selectedBankIds.includes(bank.id))
-                .reduce(
-                    (total, bank) =>
-                        total + bank[`${difficulty}_question_count`],
-                    0
-                )
-            return result
-        },
-        { easy: 0, medium: 0, hard: 0 } as Record<Difficulty, number>
+    const availableByDifficulty = availableQuestionCounts(
+        banks,
+        selectedBankIds
     )
     const questionCount = Object.values(difficultyCounts).reduce(
         (total, count) => total + count,
@@ -239,19 +250,7 @@ export function QuizzesPanel({
 
     function handleSelectedBankIdsChange(ids: number[]): void {
         setSelectedBankIds(ids)
-        const available = difficultyKeys.reduce(
-            (result, difficulty) => {
-                result[difficulty] = banks
-                    .filter((bank) => ids.includes(bank.id))
-                    .reduce(
-                        (total, bank) =>
-                            total + bank[`${difficulty}_question_count`],
-                        0
-                    )
-                return result
-            },
-            { easy: 0, medium: 0, hard: 0 } as Record<Difficulty, number>
-        )
+        const available = availableQuestionCounts(banks, ids)
         setDifficultyCounts((current) => ({
             easy: Math.min(current.easy, available.easy),
             medium: Math.min(current.medium, available.medium),

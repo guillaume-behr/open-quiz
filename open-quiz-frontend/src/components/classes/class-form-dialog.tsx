@@ -1,6 +1,6 @@
 import type { GradeLevel, StudentClass } from "@/api/types"
-import { GradeLevelSelect } from "@/components/grade-level-select"
-import { Button } from "@/components/ui/button"
+import { DialogFormActions } from "@/components/forms/dialog-form-actions"
+import { GradeLevelField } from "@/components/forms/grade-level-field"
 import { Dialog } from "@/components/ui/dialog"
 import {
     Field,
@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { formatClassName } from "@/lib/utils"
-import { LoaderCircle, Pencil, Plus } from "lucide-react"
 import type { FormEvent } from "react"
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
@@ -101,86 +100,30 @@ export function ClassFormDialog({
                                 ))}
                             </datalist>
                         </Field>
-                        <Field>
-                            <FieldLabel htmlFor="class-grade">
-                                {t("grade-level")}
-                            </FieldLabel>
-                            <div className="flex gap-2">
-                                <GradeLevelSelect
-                                    id="class-grade"
-                                    value={gradeLevel}
-                                    levels={gradeLevels}
-                                    onChange={onGradeLevelChange}
-                                    onDelete={onDeleteGradeLevel}
-                                    disabled={isBusy}
-                                />
-                                <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="outline"
-                                    aria-label={t("add-grade-level")}
-                                    onClick={() =>
-                                        onAddingGradeLevelChange(
-                                            !isAddingGradeLevel
-                                        )
-                                    }
-                                >
-                                    <Plus />
-                                </Button>
-                            </div>
-                            {isAddingGradeLevel && (
-                                <div className="mt-2 flex gap-2">
-                                    <Input
-                                        value={newGradeLevel}
-                                        onChange={(event) =>
-                                            onNewGradeLevelChange(
-                                                event.target.value
-                                            )
-                                        }
-                                        onKeyDown={(event) => {
-                                            if (event.key === "Enter") {
-                                                event.preventDefault()
-                                                onAddGradeLevel()
-                                            }
-                                        }}
-                                        maxLength={80}
-                                        placeholder={t(
-                                            "grade-level-placeholder"
-                                        )}
-                                    />
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={onAddGradeLevel}
-                                    >
-                                        {t("save-grade-level")}
-                                    </Button>
-                                </div>
-                            )}
-                        </Field>
+                        <GradeLevelField
+                            id="class-grade"
+                            value={gradeLevel}
+                            levels={gradeLevels}
+                            newValue={newGradeLevel}
+                            isAdding={isAddingGradeLevel}
+                            disabled={isBusy}
+                            onChange={onGradeLevelChange}
+                            onNewValueChange={onNewGradeLevelChange}
+                            onAddingChange={onAddingGradeLevelChange}
+                            onDelete={onDeleteGradeLevel}
+                            onAdd={onAddGradeLevel}
+                        />
                     </div>
                     {editingClass && studentManagement}
                     {error && <FieldError>{error}</FieldError>}
-                    <div className="flex justify-end gap-2 border-t pt-4">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isBusy}
-                            onClick={onClose}
-                        >
-                            {t("cancel")}
-                        </Button>
-                        <Button type="submit" disabled={isBusy}>
-                            {isBusy ? (
-                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                            ) : editingClass ? (
-                                <Pencil />
-                            ) : (
-                                <Plus />
-                            )}
-                            {t(editingClass ? "save-class" : "create-class")}
-                        </Button>
-                    </div>
+                    <DialogFormActions
+                        isBusy={isBusy}
+                        isEditing={Boolean(editingClass)}
+                        submitLabel={t(
+                            editingClass ? "save-class" : "create-class"
+                        )}
+                        onClose={onClose}
+                    />
                 </FieldGroup>
             </form>
         </Dialog>

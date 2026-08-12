@@ -1,6 +1,6 @@
 import type { GradeLevel, QuestionBank, Quiz } from "@/api/types"
 import { GradeLevelSelect } from "@/components/grade-level-select"
-import { Button } from "@/components/ui/button"
+import { DialogFormActions } from "@/components/forms/dialog-form-actions"
 import { CollapsibleFilters } from "@/components/ui/collapsible-filters"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -12,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
 import { Switch } from "@/components/ui/switch"
-import { LoaderCircle, Pencil, Plus } from "lucide-react"
 import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -204,34 +203,19 @@ export function QuizFormDialog({
                         onChange={onDifficultyCountsChange}
                     />
                     {error && <FieldError>{error}</FieldError>}
-                    <div className="flex justify-end gap-2 border-t pt-4">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isBusy}
-                            onClick={onClose}
-                        >
-                            {t("cancel")}
-                        </Button>
-                        <Button
-                            type="submit"
-                            disabled={
-                                isBusy ||
-                                !quizGradeLevel ||
-                                selectedBankIds.length === 0 ||
-                                questionCount === 0
-                            }
-                        >
-                            {isBusy ? (
-                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                            ) : editingQuiz ? (
-                                <Pencil />
-                            ) : (
-                                <Plus />
-                            )}
-                            {t(editingQuiz ? "save-quiz" : "create-quiz")}
-                        </Button>
-                    </div>
+                    <DialogFormActions
+                        isBusy={isBusy}
+                        isEditing={Boolean(editingQuiz)}
+                        submitLabel={t(
+                            editingQuiz ? "save-quiz" : "create-quiz"
+                        )}
+                        submitDisabled={
+                            !quizGradeLevel ||
+                            selectedBankIds.length === 0 ||
+                            questionCount === 0
+                        }
+                        onClose={onClose}
+                    />
                 </FieldGroup>
             </form>
         </Dialog>

@@ -7,6 +7,7 @@ import type {
 } from "@/api/types"
 import { StudentQuestionForm } from "@/components/student-quiz/student-question-form"
 import { Button } from "@/components/ui/button"
+import { PageLoader } from "@/components/ui/page-loader"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import { isRtlLanguage } from "@/lib/utils"
 import {
@@ -14,7 +15,6 @@ import {
     CheckCircle2,
     Dumbbell,
     Info,
-    LoaderCircle,
     Scale,
     XCircle,
 } from "lucide-react"
@@ -133,18 +133,7 @@ export function TrainingPage() {
     }
 
     if (!session || !participantToken) {
-        return (
-            <div
-                className="flex flex-1 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle
-                    className="size-9 animate-spin text-primary motion-reduce:animate-none"
-                    aria-hidden="true"
-                />
-            </div>
-        )
+        return <PageLoader />
     }
 
     return (

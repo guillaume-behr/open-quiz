@@ -22,6 +22,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Pagination } from "@/components/ui/pagination"
+import { PageLoader } from "@/components/ui/page-loader"
 import { errorMessage } from "@/lib/errors"
 import {
     LoaderCircle,
@@ -219,15 +220,7 @@ export function AdminDashboard() {
     }
 
     if (isLoading) {
-        return (
-            <div
-                className="flex flex-1 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle className="size-9 animate-spin text-primary motion-reduce:animate-none" />
-            </div>
-        )
+        return <PageLoader />
     }
 
     if (!currentUser) {

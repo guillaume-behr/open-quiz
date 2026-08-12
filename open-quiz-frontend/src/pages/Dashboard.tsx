@@ -7,24 +7,24 @@ import {
 import type { GradeLevel, TwoFactorChallenge, User } from "@/api/types"
 import { DashboardLogin } from "@/components/forms/dashboard-login"
 import { TwoFactorForm } from "@/components/forms/two-factor-form"
-import { NavbarAction } from "@/components/navigation/navbar-action"
+import {
+    DashboardShell,
+    type DashboardEntry,
+} from "@/components/navigation/dashboard-shell"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { PageLoader } from "@/components/ui/page-loader"
 import {
     ChartColumn,
     ClipboardList,
     Download,
     Dumbbell,
     LibraryBig,
-    LoaderCircle,
-    LogOut,
     Plus,
     RotateCcw,
     School,
     UsersRound,
-    type LucideIcon,
 } from "lucide-react"
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 
@@ -73,13 +73,6 @@ const ClassTrainingBanksPanel = lazy(() =>
     )
 )
 
-type DashboardEntry = {
-    id: DashboardSection
-    icon: LucideIcon
-    label: string
-    description: string
-}
-
 export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
@@ -96,7 +89,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const [isResultsExportOpen, setIsResultsExportOpen] = useState(false)
     const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([])
 
-    const dashboardEntries: DashboardEntry[] = [
+    const dashboardEntries: DashboardEntry<DashboardSection>[] = [
         {
             id: "students",
             icon: UsersRound,
@@ -238,15 +231,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     }
 
     if (isLoading) {
-        return (
-            <div
-                className="flex flex-1 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle className="size-9 animate-spin text-primary motion-reduce:animate-none" />
-            </div>
-        )
+        return <PageLoader />
     }
 
     if (page === "login" && !currentUser) {
@@ -271,194 +256,111 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     if (!currentUser) return null
 
     return (
-        <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-2 sm:px-6 lg:px-10">
-            <NavbarAction>
-                <Button variant="outline" onClick={handleLogout}>
-                    <LogOut />
-                    {t("sign-out")}
-                </Button>
-            </NavbarAction>
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-extrabold">
-                        {t("welcome-professor", {
-                            name: currentUser.display_name,
-                        })}
-                    </h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        {t("professor-dashboard-help")}
-                    </p>
-                </div>
-            </div>
-
-            <div className="grid min-h-0 min-w-0 flex-1 items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-                <aside className="h-fit min-w-0 rounded-2xl border bg-card p-3 shadow-sm">
-                    <p className="px-3 py-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                        {t("dashboard-menu")}
-                    </p>
-                    <nav
-                        className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible"
-                        aria-label={t("dashboard-menu")}
-                    >
-                        {dashboardEntries.map((entry) => {
-                            const Icon = entry.icon
-                            const isActive = entry.id === activeSection
-
-                            return (
-                                <button
-                                    key={entry.id}
-                                    type="button"
-                                    onClick={() => setActiveSection(entry.id)}
-                                    aria-current={isActive ? "page" : undefined}
-                                    className={cn(
-                                        "flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:w-full lg:min-w-0",
-                                        isActive
-                                            ? "bg-primary text-primary-foreground shadow-sm"
-                                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                                    )}
-                                >
-                                    <Icon className="size-5 shrink-0" />
-                                    <span>{entry.label}</span>
-                                </button>
-                            )
-                        })}
-                    </nav>
-                </aside>
-
-                <section
-                    key={activeSection}
-                    className="min-h-72 min-w-0 animate-in overflow-hidden rounded-2xl border bg-card p-4 shadow-sm duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:p-5 lg:min-h-full"
-                    aria-labelledby={`${activeEntry.id}-title`}
-                >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-                            <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                                <activeEntry.icon className="size-6" />
-                            </div>
-                            <div className="min-w-0">
-                                <h2
-                                    id={`${activeEntry.id}-title`}
-                                    className="text-2xl font-bold"
-                                >
-                                    {activeEntry.label}
-                                </h2>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    {activeEntry.description}
-                                </p>
-                            </div>
-                        </div>
-                        {activeSection === "question-banks" && (
-                            <Button
-                                type="button"
-                                onClick={() =>
-                                    setIsQuestionBankCreationOpen(true)
-                                }
-                            >
-                                <Plus />
-                                {t("create-question-bank")}
-                            </Button>
-                        )}
-                        {activeSection === "students" && (
-                            <Button
-                                type="button"
-                                onClick={() => setIsStudentCreationOpen(true)}
-                            >
-                                <Plus />
-                                {t("create-student-account")}
-                            </Button>
-                        )}
-                        {activeSection === "classes" && (
-                            <Button
-                                type="button"
-                                onClick={() => setIsClassCreationOpen(true)}
-                            >
-                                <Plus />
-                                {t("create-class")}
-                            </Button>
-                        )}
-                        {activeSection === "exam-quizzes" && (
-                            <Button
-                                type="button"
-                                onClick={() => setIsQuizCreationOpen(true)}
-                            >
-                                <Plus />
-                                {t("create-exam-quiz")}
-                            </Button>
-                        )}
-                        {activeSection === "results" && (
-                            <Button
-                                type="button"
-                                onClick={() => setIsResultsExportOpen(true)}
-                            >
-                                <Download />
-                                {t("export-results-csv")}
-                            </Button>
-                        )}
-                    </div>
-                    <Suspense
-                        fallback={
-                            <div
-                                className="flex min-h-64 items-center justify-center"
-                                role="status"
-                                aria-label={t("page-loading")}
-                            >
-                                <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
-                            </div>
-                        }
-                    >
-                        {activeSection === "question-banks" && (
-                            <QuestionBanksPanel
-                                gradeLevels={gradeLevels}
-                                onCreateGradeLevel={handleCreateGradeLevel}
-                                onDeleteGradeLevel={handleDeleteGradeLevel}
-                                isCreateDialogOpen={isQuestionBankCreationOpen}
-                                onCreateDialogOpenChange={
-                                    setIsQuestionBankCreationOpen
-                                }
-                            />
-                        )}
-                        {activeSection === "students" && (
-                            <StudentsPanel
-                                isCreateDialogOpen={isStudentCreationOpen}
-                                onCreateDialogOpenChange={
-                                    setIsStudentCreationOpen
-                                }
-                            />
-                        )}
-                        {activeSection === "classes" && (
-                            <ClassesPanel
-                                gradeLevels={gradeLevels}
-                                onCreateGradeLevel={handleCreateGradeLevel}
-                                onDeleteGradeLevel={handleDeleteGradeLevel}
-                                isCreateDialogOpen={isClassCreationOpen}
-                                onCreateDialogOpenChange={
-                                    setIsClassCreationOpen
-                                }
-                            />
-                        )}
-                        {activeSection === "exam-quizzes" && (
-                            <QuizzesPanel
-                                isCreateDialogOpen={isQuizCreationOpen}
-                                onCreateDialogOpenChange={setIsQuizCreationOpen}
-                                gradeLevels={gradeLevels}
-                                onDeleteGradeLevel={handleDeleteGradeLevel}
-                            />
-                        )}
-                        {activeSection === "makeup" && <MakeupSessionsPanel />}
-                        {activeSection === "training-quizzes" && (
-                            <ClassTrainingBanksPanel />
-                        )}
-                        {activeSection === "results" && (
-                            <ResultsPanel
-                                isExportDialogOpen={isResultsExportOpen}
-                                onExportDialogOpenChange={
-                                    setIsResultsExportOpen
-                                }
-                            />
-                        )}
-                    </Suspense>
-                </section>
-            </div>
-        </div>
+        <DashboardShell
+            entries={dashboardEntries}
+            activeEntry={activeEntry}
+            welcome={t("welcome-professor", {
+                name: currentUser.display_name,
+            })}
+            help={t("professor-dashboard-help")}
+            menuLabel={t("dashboard-menu")}
+            navigationLabel={t("dashboard-menu")}
+            signOutLabel={t("sign-out")}
+            loadingLabel={t("page-loading")}
+            onSelect={setActiveSection}
+            onSignOut={handleLogout}
+            headerAction={
+                <>
+                    {activeSection === "question-banks" && (
+                        <Button
+                            type="button"
+                            onClick={() => setIsQuestionBankCreationOpen(true)}
+                        >
+                            <Plus />
+                            {t("create-question-bank")}
+                        </Button>
+                    )}
+                    {activeSection === "students" && (
+                        <Button
+                            type="button"
+                            onClick={() => setIsStudentCreationOpen(true)}
+                        >
+                            <Plus />
+                            {t("create-student-account")}
+                        </Button>
+                    )}
+                    {activeSection === "classes" && (
+                        <Button
+                            type="button"
+                            onClick={() => setIsClassCreationOpen(true)}
+                        >
+                            <Plus />
+                            {t("create-class")}
+                        </Button>
+                    )}
+                    {activeSection === "exam-quizzes" && (
+                        <Button
+                            type="button"
+                            onClick={() => setIsQuizCreationOpen(true)}
+                        >
+                            <Plus />
+                            {t("create-exam-quiz")}
+                        </Button>
+                    )}
+                    {activeSection === "results" && (
+                        <Button
+                            type="button"
+                            onClick={() => setIsResultsExportOpen(true)}
+                        >
+                            <Download />
+                            {t("export-results-csv")}
+                        </Button>
+                    )}
+                </>
+            }
+        >
+            {activeSection === "question-banks" && (
+                <QuestionBanksPanel
+                    gradeLevels={gradeLevels}
+                    onCreateGradeLevel={handleCreateGradeLevel}
+                    onDeleteGradeLevel={handleDeleteGradeLevel}
+                    isCreateDialogOpen={isQuestionBankCreationOpen}
+                    onCreateDialogOpenChange={setIsQuestionBankCreationOpen}
+                />
+            )}
+            {activeSection === "students" && (
+                <StudentsPanel
+                    isCreateDialogOpen={isStudentCreationOpen}
+                    onCreateDialogOpenChange={setIsStudentCreationOpen}
+                />
+            )}
+            {activeSection === "classes" && (
+                <ClassesPanel
+                    gradeLevels={gradeLevels}
+                    onCreateGradeLevel={handleCreateGradeLevel}
+                    onDeleteGradeLevel={handleDeleteGradeLevel}
+                    isCreateDialogOpen={isClassCreationOpen}
+                    onCreateDialogOpenChange={setIsClassCreationOpen}
+                />
+            )}
+            {activeSection === "exam-quizzes" && (
+                <QuizzesPanel
+                    isCreateDialogOpen={isQuizCreationOpen}
+                    onCreateDialogOpenChange={setIsQuizCreationOpen}
+                    gradeLevels={gradeLevels}
+                    onDeleteGradeLevel={handleDeleteGradeLevel}
+                />
+            )}
+            {activeSection === "makeup" && <MakeupSessionsPanel />}
+            {activeSection === "training-quizzes" && (
+                <ClassTrainingBanksPanel />
+            )}
+            {activeSection === "results" && (
+                <ResultsPanel
+                    isExportDialogOpen={isResultsExportOpen}
+                    onExportDialogOpenChange={setIsResultsExportOpen}
+                />
+            )}
+        </DashboardShell>
     )
 }

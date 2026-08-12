@@ -93,28 +93,6 @@ export function QuizzesList({
                 >
                     <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
                 </div>
-            ) : loadError ? (
-                <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                    <QuizFilters
-                        gradeLevels={gradeLevels}
-                        quizFilter={quizFilter}
-                        gradeLevelFilter={gradeLevelFilter}
-                        onQuizFilterChange={onQuizFilterChange}
-                        onGradeLevelFilterChange={onGradeLevelFilterChange}
-                        onDeleteGradeLevel={onDeleteGradeLevel}
-                    />
-                    <div className="min-w-0">
-                        <h3 className="mb-4 font-semibold">
-                            {t("exam-quizzes")}
-                        </h3>
-                        <p
-                            role="alert"
-                            className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-                        >
-                            {loadError}
-                        </p>
-                    </div>
-                </div>
             ) : (
                 <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
                     <QuizFilters
@@ -129,8 +107,15 @@ export function QuizzesList({
                         <h3 className="mb-4 font-semibold">
                             {t("exam-quizzes")}
                         </h3>
-                        {sortedQuizzes.length === 0 &&
-                        (quizFilter || gradeLevelFilter) ? (
+                        {loadError ? (
+                            <p
+                                role="alert"
+                                className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+                            >
+                                {loadError}
+                            </p>
+                        ) : sortedQuizzes.length === 0 &&
+                          (quizFilter || gradeLevelFilter) ? (
                             <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                                 {t("no-quiz-filtered")}
                             </p>
