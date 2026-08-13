@@ -1,6 +1,6 @@
 import { getAllStudentClasses } from "@/api/classes"
 import { ApiError } from "@/api/client"
-import { getAllQuestionBanks } from "@/api/question-banks"
+import { getAllQuestionBanks, getQuestions } from "@/api/question-banks"
 import {
     cancelQuizSession,
     createQuiz,
@@ -298,6 +298,110 @@ export function QuizzesPanel({
         setCreateError(null)
     }
 
+    async function printExamSubjects(quiz: Quiz) {
+        const printWindow = window.open("", "_blank")
+        if (!printWindow) return
+        printWindow.opener = null
+        try {
+            const [questionGroups, allClasses] = await Promise.all([
+                Promise.all(
+                    quiz.question_banks.map((bank) => getQuestions(bank.id))
+                ),
+                getAllStudentClasses(),
+            ])
+            const questions = questionGroups.flat()
+            const matchingClasses = allClasses.filter(
+                (item) =>
+                    item.grade_level === quiz.question_banks[0]?.grade_level
+            )
+            const candidates = matchingClasses.flatMap((studentClass) =>
+                studentClass.students.map((student) => ({
+                    student,
+                    studentClass,
+                }))
+            )
+            const subjects = candidates.length
+                ? candidates
+                : [{ student: null, studentClass: null }]
+            const seeded = (seed: number) => () => {
+                seed |= 0
+                seed = (seed + 0x6d2b79f5) | 0
+                let value = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+                value =
+                    (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^
+                    value
+                return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+            }
+            const shuffle = <T,>(items: T[], random: () => number) => {
+                const result = [...items]
+                for (let index = result.length - 1; index > 0; index--) {
+                    const target = Math.floor(random() * (index + 1))
+                    ;[result[index], result[target]] = [
+                        result[target],
+                        result[index],
+                    ]
+                }
+                return result
+            }
+            const doc = printWindow.document
+            doc.documentElement.lang = i18n.resolvedLanguage ?? "fr"
+            doc.title = quiz.title
+            const style = doc.createElement("style")
+            style.textContent = `@page{size:A4;margin:15mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.subject{break-after:page}.subject:last-child{break-after:auto}header{border-bottom:2px solid #111;margin-bottom:8mm;padding-bottom:4mm}h1{font-size:20pt;margin:0 0 3mm}.identity{font-size:11pt}.question{break-inside:avoid;margin:0 0 8mm}.question h2{font-size:12pt;margin:0 0 3mm}.choice{margin:2mm 0}.box{display:inline-block;width:4mm;height:4mm;border:1px solid;margin-right:2mm;vertical-align:middle}.writing{height:35mm;border-bottom:1px dotted #777;background:repeating-linear-gradient(transparent,transparent 8mm,#ddd 8.2mm)}@media print{button,nav{display:none!important}}`
+            doc.head.append(style)
+            for (const { student, studentClass } of subjects) {
+                const random = seeded(quiz.id * 1000003 + (student?.id ?? 0))
+                const selected = difficultyKeys.flatMap((difficulty) =>
+                    shuffle(
+                        questions.filter(
+                            (question) => question.difficulty === difficulty
+                        ),
+                        random
+                    ).slice(0, quiz[`${difficulty}_question_count`])
+                )
+                const section = doc.createElement("section")
+                section.className = "subject"
+                const header = doc.createElement("header")
+                const title = doc.createElement("h1")
+                title.textContent = quiz.title
+                header.append(title)
+                const identity = doc.createElement("p")
+                identity.className = "identity"
+                identity.textContent = student
+                    ? `${student.display_name} — ${studentClass?.grade_level} ${studentClass?.name}`
+                    : t("student-name-placeholder")
+                header.append(identity)
+                section.append(header)
+                shuffle(selected, random).forEach((question, index) => {
+                    const article = doc.createElement("article")
+                    article.className = "question"
+                    const heading = doc.createElement("h2")
+                    heading.textContent = `${index + 1}. ${question.prompt}`
+                    article.append(heading)
+                    if (question.answer_mode === "written") {
+                        const writing = doc.createElement("div")
+                        writing.className = "writing"
+                        article.append(writing)
+                    } else
+                        shuffle(question.choices, random).forEach((choice) => {
+                            const row = doc.createElement("div")
+                            row.className = "choice"
+                            const box = doc.createElement("span")
+                            box.className = "box"
+                            row.append(box, doc.createTextNode(choice.label))
+                            article.append(row)
+                        })
+                    section.append(article)
+                })
+                doc.body.append(section)
+            }
+            printWindow.focus()
+            printWindow.setTimeout(() => printWindow.print(), 100)
+        } catch {
+            printWindow.close()
+        }
+    }
+
     async function handleCreate(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
         if (questionCount === 0 || selectedBankIds.length === 0)
@@ -536,6 +640,7 @@ export function QuizzesPanel({
                     setDeleteError(null)
                     setQuizToDelete(quiz)
                 }}
+                onPrint={(quiz) => void printExamSubjects(quiz)}
                 onOpenSession={(quizSession) => {
                     setActiveSessionError(null)
                     setActiveSession(quizSession)

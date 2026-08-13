@@ -11,6 +11,7 @@ import {
     LoaderCircle,
     Pencil,
     Play,
+    Printer,
     Trash2,
     UsersRound,
 } from "lucide-react"
@@ -32,6 +33,7 @@ type QuizzesListProps = {
     onPreview: (quiz: Quiz) => void
     onLaunch: (quiz: Quiz) => void
     onDelete: (quiz: Quiz) => void
+    onPrint: (quiz: Quiz) => void
     onOpenSession: (session: QuizSession) => void
     page: number
     totalPages: number
@@ -53,6 +55,7 @@ export function QuizzesList({
     onPreview,
     onLaunch,
     onDelete,
+    onPrint,
     onOpenSession,
     page,
     totalPages,
@@ -143,6 +146,7 @@ export function QuizzesList({
                                             onPreview={() => onPreview(quiz)}
                                             onLaunch={() => onLaunch(quiz)}
                                             onDelete={() => onDelete(quiz)}
+                                            onPrint={() => onPrint(quiz)}
                                         />
                                     ))}
                                 </ul>
@@ -228,12 +232,14 @@ function QuizCard({
     onPreview,
     onLaunch,
     onDelete,
+    onPrint,
 }: {
     quiz: Quiz
     onEdit: () => void
     onPreview: () => void
     onLaunch: () => void
     onDelete: () => void
+    onPrint: () => void
 }) {
     const { t } = useTranslation()
     return (
@@ -306,6 +312,15 @@ function QuizCard({
                     .join(" · ")}
             </p>
             <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onPrint}
+                >
+                    <Printer />
+                    {t("print-exams")}
+                </Button>
                 <Button type="button" size="sm" onClick={onLaunch}>
                     <Play />
                     {t("launch-quiz")}
