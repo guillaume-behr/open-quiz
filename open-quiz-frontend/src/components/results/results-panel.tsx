@@ -523,19 +523,44 @@ export function ResultsPanel({
                                             key={result.id}
                                             className="flex flex-col rounded-2xl border bg-background p-5 shadow-sm transition-shadow hover:shadow-md"
                                         >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                                                    <CheckCircle2 className="size-5" />
-                                                </div>
+                                            <div className="flex justify-end">
                                                 <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                                                     {t("result-students", {
                                                         count: result.participant_count,
                                                     })}
                                                 </span>
                                             </div>
-                                            <h3 className="mt-4 text-lg font-bold">
-                                                {result.quiz_title}
-                                            </h3>
+                                            <div className="mt-4 flex items-center gap-3">
+                                                <div
+                                                    role="img"
+                                                    aria-label={t(
+                                                        result.grades_published_at
+                                                            ? "grades-published"
+                                                            : "grades-not-published"
+                                                    )}
+                                                    className={cn(
+                                                        "shrink-0 rounded-xl p-2.5",
+                                                        result.grades_published_at
+                                                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                                            : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                                    )}
+                                                >
+                                                    {result.grades_published_at ? (
+                                                        <CheckCircle2
+                                                            className="size-5"
+                                                            aria-hidden="true"
+                                                        />
+                                                    ) : (
+                                                        <TriangleAlert
+                                                            className="size-5"
+                                                            aria-hidden="true"
+                                                        />
+                                                    )}
+                                                </div>
+                                                <h3 className="min-w-0 text-lg font-bold">
+                                                    {result.quiz_title}
+                                                </h3>
+                                            </div>
                                             <div className="mt-3 space-y-2 text-sm text-muted-foreground">
                                                 <p className="flex items-center gap-2">
                                                     <CalendarDays className="size-4 shrink-0" />
@@ -815,7 +840,21 @@ export function ResultsPanel({
                                                 )}
                                             >
                                                 <div className="flex min-w-0 items-center gap-3">
-                                                    <div className="rounded-full bg-primary/10 p-2 text-primary">
+                                                    <div
+                                                        data-grading-status={
+                                                            participant.pending_manual_grading_count >
+                                                            0
+                                                                ? "pending"
+                                                                : "complete"
+                                                        }
+                                                        className={cn(
+                                                            "rounded-full p-2",
+                                                            participant.pending_manual_grading_count >
+                                                                0
+                                                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                                                : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                                        )}
+                                                    >
                                                         <UserRound className="size-4" />
                                                     </div>
                                                     <div className="min-w-0">

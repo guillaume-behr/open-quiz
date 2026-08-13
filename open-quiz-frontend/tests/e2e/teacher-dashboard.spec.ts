@@ -1752,6 +1752,20 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
         hasText: "Science checkpoint",
     })
     await expect(resultCard.getByText("Class 8B")).toBeVisible()
+    const resultStatusIcon = resultCard.getByRole("img", {
+        name: "Grades not published",
+    })
+    const resultTitle = resultCard.getByRole("heading", {
+        name: "Science checkpoint",
+    })
+    await expect(resultStatusIcon).toHaveClass(/text-amber-700/)
+    const resultStatusIconBox = await resultStatusIcon.boundingBox()
+    const resultTitleBox = await resultTitle.boundingBox()
+    expect(resultStatusIconBox).not.toBeNull()
+    expect(resultTitleBox).not.toBeNull()
+    expect(resultStatusIconBox!.x + resultStatusIconBox!.width).toBeLessThan(
+        resultTitleBox!.x
+    )
     await page.getByRole("button", { name: "Schedule" }).click()
     await expect(
         page.getByRole("button", { name: "Previous week" })
@@ -1819,6 +1833,10 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await expect(pendingGradingIndicator).toBeVisible()
     const participantRow = resultDialog.locator('[data-participant-id="91"]')
     await expect(participantRow).toHaveClass(/bg-amber-500\/10/)
+    const participantGradingStatus = participantRow.locator(
+        '[data-grading-status="pending"]'
+    )
+    await expect(participantGradingStatus).toHaveClass(/text-amber-700/)
     await pendingGradingIndicator.hover()
     await expect(
         page.getByRole("tooltip").getByText("1 to grade")
@@ -1845,6 +1863,9 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await answersDialog.getByRole("button", { name: "Close" }).click()
     await expect(participantRow).not.toHaveClass(/bg-amber-500\/10/)
     await expect(
+        participantRow.locator('[data-grading-status="complete"]')
+    ).toHaveClass(/text-emerald-700/)
+    await expect(
         resultDialog.getByRole("button", { name: "1 to grade" })
     ).toHaveCount(0)
     await expect(aboveMedianIndicator).toBeVisible()
@@ -1861,6 +1882,9 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
         )
     ).toBe(true)
     await resultDialog.getByRole("button", { name: "Close" }).click()
+    await expect(
+        resultCard.getByRole("img", { name: "Grades published" })
+    ).toHaveClass(/text-emerald-700/)
 
     await page.getByRole("button", { name: "Export results" }).click()
     const exportDialog = page.getByRole("dialog", { name: "Export results" })
