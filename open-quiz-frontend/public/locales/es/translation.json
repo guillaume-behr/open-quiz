@@ -552,7 +552,7 @@
     "result-score": "Puntuación",
     "result-score-total": "Puntos / total posible",
     "result-median-maximum": "Mediana de puntos disponibles",
-    "result-maximum-median-gap": "Los puntos disponibles difieren de la mediana en al menos 3 puntos",
+    "result-maximum-median-gap": "Los puntos disponibles de este alumno ({{maximum}}) difieren al menos 3 puntos de la mediana del grupo ({{median}}). Una selección de preguntas diferente puede explicar la diferencia.",
     "result-no-participants": "Ningún estudiante participó en este cuestionario.",
     "quiz-paused": "Cuestionario en pausa",
     "quiz-cancelled": "Cuestionario cancelado",

@@ -604,7 +604,7 @@
     "result-score": "النتيجة",
     "result-score-total": "النقاط / المجموع الممكن",
     "result-median-maximum": "وسيط النقاط المتاحة",
-    "result-maximum-median-gap": "تختلف النقاط المتاحة عن الوسيط بما لا يقل عن 3 نقاط",
+    "result-maximum-median-gap": "تختلف النقاط المتاحة لهذا الطالب ({{maximum}}) عن وسيط المجموعة ({{median}}) بما لا يقل عن 3 نقاط. قد يفسر اختلاف مجموعة الأسئلة هذا الفارق.",
     "result-no-participants": "لم يشارك أي طالب في هذا الاختبار.",
     "quiz-paused": "الاختبار متوقف مؤقتًا",
     "quiz-cancelled": "تم إلغاء الاختبار",

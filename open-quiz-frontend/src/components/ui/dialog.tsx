@@ -32,18 +32,22 @@ export function Dialog({
     className,
 }: DialogProps) {
     const { t } = useTranslation()
-    const currentContent = { title, description, children }
+    const currentContent = { title, description, children, size, className }
     const [openContent, setOpenContent] = useState(currentContent)
     if (
         open &&
         (openContent.title !== title ||
             openContent.description !== description ||
-            openContent.children !== children)
+            openContent.children !== children ||
+            openContent.size !== size ||
+            openContent.className !== className)
     ) {
         setOpenContent({
             title,
             description,
             children,
+            size,
+            className,
         })
     }
     const content = open ? currentContent : openContent
@@ -55,8 +59,8 @@ export function Dialog({
                 <DialogPrimitive.Popup
                     className={cn(
                         "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-2xl transition-[scale,opacity] duration-200 ease-out data-ending-style:scale-95 data-ending-style:opacity-0 data-ending-style:duration-150 data-ending-style:ease-in data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none",
-                        dialogSizes[size],
-                        className
+                        dialogSizes[content.size],
+                        content.className
                     )}
                 >
                     <div className="flex shrink-0 items-start justify-between gap-4 border-b px-5 py-4">

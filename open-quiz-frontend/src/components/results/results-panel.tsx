@@ -524,14 +524,7 @@ export function ResultsPanel({
                                             key={result.id}
                                             className="flex flex-col rounded-2xl border bg-background p-5 shadow-sm transition-shadow hover:shadow-md"
                                         >
-                                            <div className="flex justify-end">
-                                                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                                                    {t("result-students", {
-                                                        count: result.participant_count,
-                                                    })}
-                                                </span>
-                                            </div>
-                                            <div className="mt-4 flex items-center gap-3">
+                                            <div className="flex items-center gap-3">
                                                 <div
                                                     role="img"
                                                     aria-label={t(
@@ -558,9 +551,14 @@ export function ResultsPanel({
                                                         />
                                                     )}
                                                 </div>
-                                                <h3 className="min-w-0 text-lg font-bold">
+                                                <h3 className="min-w-0 flex-1 truncate text-lg font-bold">
                                                     {result.quiz_title}
                                                 </h3>
+                                                <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold whitespace-nowrap text-primary">
+                                                    {t("result-students", {
+                                                        count: result.participant_count,
+                                                    })}
+                                                </span>
                                             </div>
                                             <div className="mt-3 space-y-2 text-sm text-muted-foreground">
                                                 <p className="flex items-center gap-2">
@@ -885,36 +883,49 @@ export function ResultsPanel({
                                                         selectedResult.total_questions
                                                     }
                                                 </p>
-                                                <p className="flex items-center justify-end gap-1 text-right font-bold text-primary tabular-nums md:whitespace-nowrap">
+                                                <div className="flex items-center justify-between gap-2 text-right font-bold text-primary tabular-nums md:justify-end md:whitespace-nowrap">
                                                     <span className="font-normal text-foreground md:hidden">
                                                         {t(
                                                             "result-score-total"
                                                         )}{" "}
                                                         :{" "}
                                                     </span>
-                                                    {Math.abs(
-                                                        participant.maximum_score -
-                                                            selectedResult.median_maximum_score
-                                                    ) >= 3 && (
-                                                        <ResultIndicator
-                                                            label={t(
-                                                                "result-maximum-median-gap"
-                                                            )}
-                                                        />
-                                                    )}
-                                                    <span>
-                                                        {formatScore(
-                                                            participant.score,
-                                                            i18n.language
-                                                        )}{" "}
-                                                        /{" "}
-                                                        {formatScore(
-                                                            participant.maximum_score,
-                                                            i18n.language
-                                                        )}{" "}
-                                                        {t("points-short")}
+                                                    <span className="inline-flex items-center justify-end gap-1">
+                                                        {Math.abs(
+                                                            participant.maximum_score -
+                                                                selectedResult.median_maximum_score
+                                                        ) >= 3 && (
+                                                            <ResultIndicator
+                                                                label={t(
+                                                                    "result-maximum-median-gap",
+                                                                    {
+                                                                        maximum:
+                                                                            formatScore(
+                                                                                participant.maximum_score,
+                                                                                i18n.language
+                                                                            ),
+                                                                        median: formatScore(
+                                                                            selectedResult.median_maximum_score,
+                                                                            i18n.language
+                                                                        ),
+                                                                    }
+                                                                )}
+                                                            />
+                                                        )}
+                                                        <span>
+                                                            {formatScore(
+                                                                participant.score,
+                                                                i18n.language
+                                                            )}{" "}
+                                                            /{" "}
+                                                            {formatScore(
+                                                                participant.maximum_score,
+                                                                i18n.language
+                                                            )}{" "}
+                                                            {t("points-short")}
+                                                        </span>
                                                     </span>
-                                                </p>
+                                                </div>
                                                 <div className="flex items-center gap-2">
                                                     {participant.pending_manual_grading_count >
                                                         0 && (

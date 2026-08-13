@@ -552,7 +552,7 @@
     "result-score": "Score",
     "result-score-total": "Points / total possible",
     "result-median-maximum": "Médiane des points disponibles",
-    "result-maximum-median-gap": "Barème éloigné de la médiane d’au moins 3 points",
+    "result-maximum-median-gap": "Le barème de cet élève ({{maximum}} points) diffère d’au moins 3 points de la médiane du groupe ({{median}} points). Cette différence peut s’expliquer par un tirage de questions différent.",
     "result-no-participants": "Aucun élève n’a participé à ce quiz.",
     "quiz-paused": "Quiz en pause",
     "quiz-cancelled": "Quiz annulé",

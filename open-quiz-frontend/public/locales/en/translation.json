@@ -552,7 +552,7 @@
     "result-score": "Score",
     "result-score-total": "Points / possible total",
     "result-median-maximum": "Median available points",
-    "result-maximum-median-gap": "Available points differ from the median by at least 3 points",
+    "result-maximum-median-gap": "This student's available points ({{maximum}}) differ from the group median ({{median}}) by at least 3 points. A different question selection may explain the difference.",
     "result-no-participants": "No students participated in this quiz.",
     "quiz-paused": "Quiz paused",
     "quiz-cancelled": "Quiz cancelled",

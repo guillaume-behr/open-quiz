@@ -552,7 +552,7 @@
     "result-score": "分数",
     "result-score-total": "得分 / 总分",
     "result-median-maximum": "可用分数中位数",
-    "result-maximum-median-gap": "可用分数与中位数相差至少 3 分",
+    "result-maximum-median-gap": "该学生的可用分数（{{maximum}}）与小组中位数（{{median}}）相差至少 3 分。不同的题目组合可能导致这一差异。",
     "result-no-participants": "没有学生参加此测验。",
     "quiz-paused": "测验已暂停",
     "quiz-cancelled": "测验已取消",
