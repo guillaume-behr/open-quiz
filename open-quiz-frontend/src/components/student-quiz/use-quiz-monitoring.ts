@@ -5,7 +5,14 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 const MONITORING_GRACE_PERIOD_MS = 1500
 
 type ViolationType =
-    "fullscreen_exit" | "pointer_exit" | "window_blur" | "page_hidden"
+    | "fullscreen_exit"
+    | "pointer_exit"
+    | "window_blur"
+    | "page_hidden"
+    | "copy_attempt"
+    | "paste_attempt"
+    | "context_menu"
+    | "print_attempt"
 
 export function useQuizMonitoring(
     session: StudentQuizSession | null,
@@ -17,7 +24,7 @@ export function useQuizMonitoring(
     )
     const monitoringArmedAt = useRef<number | null>(null)
     const wasMonitoredFullscreen = useRef(false)
-    const lastViolationAt = useRef(0)
+    const lastViolationAt = useRef<Partial<Record<ViolationType, number>>>({})
     const monitoredJoinCode =
         session?.status === "in_progress" && session.question
             ? session.join_code
@@ -50,11 +57,12 @@ export function useQuizMonitoring(
             if (
                 armedAt === null ||
                 now - armedAt < MONITORING_GRACE_PERIOD_MS ||
-                now - lastViolationAt.current < MONITORING_GRACE_PERIOD_MS
+                now - (lastViolationAt.current[eventType] ?? 0) <
+                    MONITORING_GRACE_PERIOD_MS
             )
                 return
 
-            lastViolationAt.current = now
+            lastViolationAt.current[eventType] = now
             void reportStudentQuizViolation(
                 monitoredJoinCode,
                 participantToken,
@@ -76,9 +84,17 @@ export function useQuizMonitoring(
         const visibilityChanged = () => {
             if (document.hidden) report("page_hidden")
         }
+        const copied = () => report("copy_attempt")
+        const pasted = () => report("paste_attempt")
+        const contextMenuOpened = () => report("context_menu")
+        const printing = () => report("print_attempt")
         document.documentElement.addEventListener("mouseleave", pointerLeft)
         window.addEventListener("blur", blurred)
         document.addEventListener("visibilitychange", visibilityChanged)
+        document.addEventListener("copy", copied)
+        document.addEventListener("paste", pasted)
+        document.addEventListener("contextmenu", contextMenuOpened)
+        window.addEventListener("beforeprint", printing)
         return () => {
             document.documentElement.removeEventListener(
                 "mouseleave",
@@ -86,6 +102,10 @@ export function useQuizMonitoring(
             )
             window.removeEventListener("blur", blurred)
             document.removeEventListener("visibilitychange", visibilityChanged)
+            document.removeEventListener("copy", copied)
+            document.removeEventListener("paste", pasted)
+            document.removeEventListener("contextmenu", contextMenuOpened)
+            window.removeEventListener("beforeprint", printing)
         }
     }, [isFullscreen, isLeavingQuiz, monitoredJoinCode, participantToken])
 

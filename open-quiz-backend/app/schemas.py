@@ -725,6 +725,8 @@ class StudentQuizJoinResponse(StudentQuizStateResponse):
 
 
 class StudentQuizAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     selected_choice_ids: list[int] | None = Field(
         default=None, min_length=1, max_length=12
     )
@@ -781,15 +783,23 @@ class TrainingHistoryItem(BaseModel):
 
 
 class StudentQuizNavigation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     question_number: int = Field(ge=1)
 
 
 class StudentQuizViolation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     event_type: Literal[
         "fullscreen_exit",
         "pointer_exit",
         "window_blur",
         "page_hidden",
+        "copy_attempt",
+        "paste_attempt",
+        "context_menu",
+        "print_attempt",
     ]
 
 

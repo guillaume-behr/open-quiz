@@ -343,7 +343,14 @@ export function reportStudentQuizViolation(
     joinCode: string,
     participantToken: string,
     eventType:
-        "fullscreen_exit" | "pointer_exit" | "window_blur" | "page_hidden"
+        | "fullscreen_exit"
+        | "pointer_exit"
+        | "window_blur"
+        | "page_hidden"
+        | "copy_attempt"
+        | "paste_attempt"
+        | "context_menu"
+        | "print_attempt"
 ): Promise<void> {
     return request<void>(
         `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/violation`,

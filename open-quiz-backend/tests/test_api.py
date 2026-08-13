@@ -2599,6 +2599,14 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             json={"event_type": "fullscreen_exit"},
         )
         assert waiting_violation.status_code == 204
+        assert (
+            client.post(
+                f"{student_state_url}/violation",
+                headers=student_headers,
+                json={"event_type": "copy_attempt", "forged_count": 100},
+            ).status_code
+            == 422
+        )
         waiting_participant = client.get(
             f"/api/quizzes/sessions/{quiz_session['id']}",
             headers=teacher_headers,

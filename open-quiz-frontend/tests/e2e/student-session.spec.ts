@@ -530,6 +530,14 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
     await expect
         .poll(() => violations)
         .toEqual([{ event_type: "pointer_exit" }])
+
+    // Different signals must not suppress one another when they happen in the
+    // same debounce window.
+    await page.locator("body").dispatchEvent("copy")
+    await expect.poll(() => violations).toEqual([
+        { event_type: "pointer_exit" },
+        { event_type: "copy_attempt" },
+    ])
 })
 
 test("student session state is updated through its live socket", async ({
