@@ -1,6 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL ?? ""
 const REFRESH_PROOF_STORAGE_KEY = "open-quiz-refresh-proof"
 const REQUEST_TIMEOUT_MS = 30_000
+const LARGE_REQUEST_TIMEOUT_MS = 120_000
 
 function requestSignal(signal?: AbortSignal | null): AbortSignal {
     return signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
@@ -86,10 +87,11 @@ async function refreshAccessToken(): Promise<boolean> {
             headers: { "X-Refresh-Proof": refreshProof },
         })
             .then(async (response) => {
-                if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
                     clearSessionTokens()
                     return false
                 }
+                if (!response.ok) throw await errorFrom(response)
                 const result = (await response.json()) as TokenResponse
                 setSessionTokens(result.access_token, result.refresh_proof)
                 return true
@@ -135,6 +137,10 @@ export function apiWebSocketUrl(path: string): string {
 
 export function refreshProofHeaders(): HeadersInit {
     return refreshProof ? { "X-Refresh-Proof": refreshProof } : {}
+}
+
+export function largeRequestSignal(): AbortSignal {
+    return AbortSignal.timeout(LARGE_REQUEST_TIMEOUT_MS)
 }
 
 function requestHeaders(
@@ -218,9 +224,12 @@ export async function requestBlob(
     allowRefresh = true,
     includeAccessToken = true
 ): Promise<Blob> {
+    const requestOptions = options.signal
+        ? options
+        : { ...options, signal: largeRequestSignal() }
     const response = await authenticatedFetch(
         path,
-        options,
+        requestOptions,
         allowRefresh,
         includeAccessToken
     )

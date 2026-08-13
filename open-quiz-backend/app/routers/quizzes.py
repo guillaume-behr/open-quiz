@@ -111,6 +111,7 @@ VIOLATION_DEDUPLICATION_SECONDS = 2
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 MAX_TRAINING_QUESTIONS = 200
 LIVE_HEARTBEAT_SECONDS = 25
+LIVE_TEACHER_RECONCILIATION_SECONDS = 2
 
 
 def publish_quiz_update(
@@ -159,14 +160,22 @@ async def accept_live_socket(websocket: WebSocket) -> str | None:
     if not websocket_origin_allowed(websocket):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return None
-    await websocket.accept()
-    try:
-        credentials = await wait_for(websocket.receive_json(), timeout=5)
-    except TimeoutError, WebSocketDisconnect, ValueError:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+    hub = websocket.app.state.live_quiz_hub
+    if not hub.begin_authentication():
+        await websocket.accept()
+        await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         return None
+    try:
+        await websocket.accept()
+        try:
+            credentials = await wait_for(websocket.receive_json(), timeout=5)
+        except TimeoutError, WebSocketDisconnect, ValueError:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return None
+    finally:
+        hub.end_authentication()
     token = credentials.get("token") if isinstance(credentials, dict) else None
-    if not isinstance(token, str) or not token:
+    if not isinstance(token, str) or not token or len(token) > 2048:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return None
     return token
@@ -184,8 +193,13 @@ async def async_live_professor_id(websocket: WebSocket, token: str) -> int | Non
     return await to_thread(authenticated_live_professor_id, websocket, token)
 
 
-async def wait_for_live_update(queue: Queue[None], ends_at: datetime | None) -> bool:
-    timeout = LIVE_HEARTBEAT_SECONDS
+async def wait_for_live_update(
+    queue: Queue[None],
+    ends_at: datetime | None,
+    *,
+    reconcile_after: float | None = None,
+) -> bool:
+    timeout = min(LIVE_HEARTBEAT_SECONDS, reconcile_after or LIVE_HEARTBEAT_SECONDS)
     expires_during_wait = False
     if ends_at is not None:
         if ends_at.tzinfo is None:
@@ -198,7 +212,7 @@ async def wait_for_live_update(queue: Queue[None], ends_at: datetime | None) -> 
         await wait_for(queue.get(), timeout=timeout)
         return True
     except TimeoutError:
-        return expires_during_wait
+        return expires_during_wait or reconcile_after is not None
 
 
 def safe_spreadsheet_cell(value: str) -> str:
@@ -2305,8 +2319,12 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
         async with hub.subscribe(topic) as updates:
             refresh_state = True
             next_ends_at: datetime | None = None
+            last_sessions: list[dict[str, object]] | None = None
             while True:
                 if refresh_state:
+                    if await async_live_professor_id(websocket, token) != professor_id:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
                     sessions, next_ends_at = await to_thread(
                         live_teacher_active_sessions_snapshot,
                         websocket,
@@ -2315,13 +2333,19 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
                     if sessions is None:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
-                    await websocket.send_json(
-                        {
-                            "type": "active_sessions",
-                            "data": sessions,
-                        }
-                    )
-                refresh_state = await wait_for_live_update(updates, next_ends_at)
+                    if sessions != last_sessions:
+                        await websocket.send_json(
+                            {
+                                "type": "active_sessions",
+                                "data": sessions,
+                            }
+                        )
+                        last_sessions = sessions
+                refresh_state = await wait_for_live_update(
+                    updates,
+                    next_ends_at,
+                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
+                )
                 if not refresh_state:
                     if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -2350,8 +2374,12 @@ async def live_teacher_quiz_session(
         async with hub.subscribe(topic) as updates:
             refresh_state = True
             ends_at: datetime | None = None
+            last_state: dict[str, object] | None = None
             while True:
                 if refresh_state:
+                    if await async_live_professor_id(websocket, token) != professor_id:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
                     state, ends_at, terminal = await to_thread(
                         live_teacher_session_snapshot,
                         websocket,
@@ -2362,11 +2390,17 @@ async def live_teacher_quiz_session(
                         await websocket.send_json({"type": "deleted"})
                         await websocket.close()
                         return
-                    await websocket.send_json({"type": "session", "data": state})
+                    if state != last_state:
+                        await websocket.send_json({"type": "session", "data": state})
+                        last_state = state
                     if terminal:
                         await websocket.close()
                         return
-                refresh_state = await wait_for_live_update(updates, ends_at)
+                refresh_state = await wait_for_live_update(
+                    updates,
+                    ends_at,
+                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
+                )
                 if not refresh_state:
                     if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -2400,6 +2434,7 @@ async def live_student_quiz_session(
         async with hub.subscribe(topic) as updates:
             refresh_state = True
             ends_at: datetime | None = None
+            last_state: dict[str, object] | None = None
             while True:
                 if refresh_state:
                     snapshot = await to_thread(
@@ -2412,11 +2447,17 @@ async def live_student_quiz_session(
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
                     state, ends_at, terminal = snapshot
-                    await websocket.send_json({"type": "session", "data": state})
+                    if state != last_state:
+                        await websocket.send_json({"type": "session", "data": state})
+                        last_state = state
                     if terminal:
                         await websocket.close()
                         return
-                refresh_state = await wait_for_live_update(updates, ends_at)
+                refresh_state = await wait_for_live_update(
+                    updates,
+                    ends_at,
+                    reconcile_after=LIVE_HEARTBEAT_SECONDS,
+                )
                 if not refresh_state:
                     if not await to_thread(
                         live_participant_is_authenticated,
@@ -2446,8 +2487,12 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
     try:
         async with hub.subscribe(topic) as updates:
             refresh_state = True
+            last_sessions: list[dict[str, object]] | None = None
             while True:
                 if refresh_state:
+                    if await async_live_professor_id(websocket, token) != professor_id:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
                     sessions = await to_thread(
                         live_makeup_sessions_snapshot,
                         websocket,
@@ -2456,13 +2501,19 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
                     if sessions is None:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
-                    await websocket.send_json(
-                        {
-                            "type": "makeup_sessions",
-                            "data": sessions,
-                        }
-                    )
-                refresh_state = await wait_for_live_update(updates, None)
+                    if sessions != last_sessions:
+                        await websocket.send_json(
+                            {
+                                "type": "makeup_sessions",
+                                "data": sessions,
+                            }
+                        )
+                        last_sessions = sessions
+                refresh_state = await wait_for_live_update(
+                    updates,
+                    None,
+                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
+                )
                 if not refresh_state:
                     if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

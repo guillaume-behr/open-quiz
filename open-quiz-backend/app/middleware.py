@@ -9,7 +9,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.dependencies import authenticated_user_from_token
 from app.models import User
 
-LARGE_QUESTION_BODY_BYTES = 64 * 1024 * 1024
+# JSON imports base64-encode up to 64 MiB of decoded images. Reserve enough
+# request space for that 4:3 expansion plus the surrounding question data.
+LARGE_QUESTION_BODY_BYTES = 96 * 1024 * 1024
 
 
 class RequestBodyTooLarge(Exception):

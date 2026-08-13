@@ -212,3 +212,10 @@ Le fichier `docker-compose.yml` situé à la racine du dépôt démarre le backe
 sur un réseau interne, conserve SQLite dans un volume dédié et fait passer
 `/api` par Caddy. L'origine publique configurée dans `FRONTEND_ORIGIN` doit
 correspondre exactement à l'adresse utilisée par le navigateur.
+
+Le conteneur backend reste volontairement limité à un seul worker : la
+diffusion temps réel est stockée en mémoire dans le processus. Sa limite de
+1 024 connexions couvre une classe importée de 500 élèves ainsi que les
+connexions enseignantes et les requêtes HTTP. N'activez pas plusieurs workers
+sans remplacer ce bus par un mécanisme partagé (Redis, notifications PostgreSQL
+ou équivalent) et sans tester la charge de bout en bout.

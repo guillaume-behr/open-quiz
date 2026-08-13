@@ -1,4 +1,4 @@
-import { request, requestBlob, requestPage } from "./client"
+import { largeRequestSignal, request, requestBlob, requestPage } from "./client"
 import type {
     NewQuestion,
     NewQuestionBank,
@@ -88,6 +88,7 @@ export function createQuestion(
         {
             method: "POST",
             body: formData,
+            signal: largeRequestSignal(),
         }
     )
 }
@@ -105,6 +106,7 @@ export function updateQuestion(
         {
             method: "POST",
             body: formData,
+            signal: largeRequestSignal(),
         }
     )
 }
@@ -131,5 +133,6 @@ export async function importQuestionBatch(
     return request<QuestionBankImportResult>("/api/question-banks/import", {
         method: "POST",
         body: await readJsonImportFile(file),
+        signal: largeRequestSignal(),
     })
 }

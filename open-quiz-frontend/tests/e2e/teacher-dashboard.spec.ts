@@ -1542,6 +1542,87 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
     ])
 })
 
+test("teacher waiting room updates when a student joins", async ({ page }) => {
+    await mockTeacherApi(page)
+    const waitingSession = {
+        id: 80,
+        quiz_id: 31,
+        quiz_title: "Science checkpoint",
+        class_id: 11,
+        class_name: "Class 8B",
+        join_code: "LIVE80",
+        status: "waiting",
+        participant_count: 0,
+        participants: [],
+        total_questions: 10,
+        created_at: "2026-01-06T10:00:00Z",
+        started_at: null,
+        ends_at: null,
+        grades_published_at: null,
+    }
+    await page.route("**/api/quizzes/31/launch", (route) =>
+        route.fulfill({ status: 201, json: waitingSession })
+    )
+    let resolveSocket: (socket: WebSocketRoute) => void = () => undefined
+    const socketReady = new Promise<WebSocketRoute>((resolve) => {
+        resolveSocket = resolve
+    })
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/teacher\/sessions\/80$/,
+        (socket) => {
+            socket.onMessage(() => resolveSocket(socket))
+        }
+    )
+
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Exam quizzes", exact: true })
+        .click()
+    await page.getByRole("button", { name: "Launch" }).click()
+    const launchDialog = page.getByRole("dialog", { name: "Launch" })
+    await launchDialog.getByLabel("Class").selectOption("11")
+    await launchDialog
+        .getByRole("button", { name: "Open waiting room" })
+        .click()
+
+    const sessionDialog = page.getByRole("dialog", {
+        name: "Science checkpoint",
+    })
+    await expect(
+        sessionDialog.getByText("No students have joined the quiz yet.")
+    ).toBeVisible()
+    const socket = await socketReady
+    await socket.send(
+        JSON.stringify({
+            type: "session",
+            data: {
+                ...waitingSession,
+                participant_count: 1,
+                participants: [
+                    {
+                        id: 81,
+                        student_identifier: "alex-8b",
+                        student_display_name: "Alex Example",
+                        answered_count: 0,
+                        score: 0,
+                        maximum_score: 10,
+                        pending_manual_grading_count: 0,
+                        violation_count: 0,
+                        last_violation_type: null,
+                        last_violation_at: null,
+                        joined_at: "2026-01-06T10:02:00Z",
+                    },
+                ],
+            },
+        })
+    )
+
+    await expect(sessionDialog.getByText("Alex Example")).toBeVisible()
+    await expect(
+        sessionDialog.getByText("No students have joined the quiz yet.")
+    ).toHaveCount(0)
+})
+
 test("question bank import identifies JSON syntax and validation locations", async ({
     page,
 }) => {

@@ -12,6 +12,8 @@ type LiveSocketOptions<T> = {
 }
 
 const MAX_RECONNECT_DELAY_MS = 10_000
+const CONNECTION_TIMEOUT_MS = 10_000
+const RECONNECT_JITTER = 0.25
 
 export function connectLiveUpdates<T>({
     path,
@@ -23,37 +25,70 @@ export function connectLiveUpdates<T>({
     let stopped = false
     let socket: WebSocket | null = null
     let reconnectTimer: number | null = null
+    let connectionTimer: number | null = null
+    let isGettingToken = false
     let attempts = 0
     let refreshAttempted = false
     let forceRefresh = false
 
     const scheduleReconnect = () => {
-        if (stopped) return
-        const delay = Math.min(
+        if (stopped || reconnectTimer !== null || socket || isGettingToken)
+            return
+        const baseDelay = Math.min(
             MAX_RECONNECT_DELAY_MS,
             500 * 2 ** Math.min(attempts, 5)
         )
+        const delay = Math.round(
+            baseDelay *
+                (1 - RECONNECT_JITTER + Math.random() * RECONNECT_JITTER * 2)
+        )
         attempts += 1
-        reconnectTimer = window.setTimeout(() => void connect(), delay)
+        reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null
+            void connect()
+        }, delay)
     }
 
     const connect = async () => {
+        if (stopped || socket || isGettingToken) return
+        isGettingToken = true
         let token: string | null
         try {
             token = await getToken(forceRefresh)
         } catch {
             forceRefresh = false
+            isGettingToken = false
             scheduleReconnect()
             return
         }
         forceRefresh = false
+        isGettingToken = false
         if (stopped) return
         if (!token) {
             onUnavailable()
             return
         }
-        const currentSocket = new WebSocket(apiWebSocketUrl(path))
+        let currentSocket: WebSocket
+        try {
+            currentSocket = new WebSocket(apiWebSocketUrl(path))
+        } catch {
+            scheduleReconnect()
+            return
+        }
         socket = currentSocket
+        connectionTimer = window.setTimeout(() => {
+            connectionTimer = null
+            if (socket === currentSocket) {
+                // Some browsers throw when closing a socket that never left
+                // CONNECTING, so recover explicitly in that case.
+                try {
+                    currentSocket.close(1013, "Live connection timed out")
+                } catch {
+                    socket = null
+                    scheduleReconnect()
+                }
+            }
+        }, CONNECTION_TIMEOUT_MS)
         currentSocket.addEventListener("open", () => {
             currentSocket.send(JSON.stringify({ token }))
         })
@@ -65,8 +100,13 @@ export function connectLiveUpdates<T>({
             } catch {
                 return
             }
+            if (connectionTimer !== null) {
+                window.clearTimeout(connectionTimer)
+                connectionTimer = null
+            }
             if (message.type === "ping") {
                 attempts = 0
+                refreshAttempted = false
                 return
             }
             if (message.type === "deleted") {
@@ -81,6 +121,10 @@ export function connectLiveUpdates<T>({
         })
         currentSocket.addEventListener("close", (event) => {
             if (socket === currentSocket) socket = null
+            if (connectionTimer !== null) {
+                window.clearTimeout(connectionTimer)
+                connectionTimer = null
+            }
             if (stopped || event.code === 1000) return
             if (event.code === 1008) {
                 if (!refreshAttempted) {
@@ -97,10 +141,23 @@ export function connectLiveUpdates<T>({
         currentSocket.addEventListener("error", () => currentSocket.close())
     }
 
+    const reconnectWhenOnline = () => {
+        if (stopped) return
+        attempts = 0
+        if (reconnectTimer !== null) {
+            window.clearTimeout(reconnectTimer)
+            reconnectTimer = null
+        }
+        void connect()
+    }
+
+    window.addEventListener("online", reconnectWhenOnline)
     void connect()
     return () => {
         stopped = true
         if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
+        if (connectionTimer !== null) window.clearTimeout(connectionTimer)
+        window.removeEventListener("online", reconnectWhenOnline)
         socket?.close(1000)
     }
 }

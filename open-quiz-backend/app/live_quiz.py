@@ -18,9 +18,22 @@ class _Subscriber:
 class LiveQuizHub:
     """Thread-safe in-process fan-out for live quiz state changes."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_pending_authentications: int = 64) -> None:
         self._lock = Lock()
         self._subscribers: dict[str, set[_Subscriber]] = defaultdict(set)
+        self._pending_authentications = 0
+        self._max_pending_authentications = max_pending_authentications
+
+    def begin_authentication(self) -> bool:
+        with self._lock:
+            if self._pending_authentications >= self._max_pending_authentications:
+                return False
+            self._pending_authentications += 1
+            return True
+
+    def end_authentication(self) -> None:
+        with self._lock:
+            self._pending_authentications = max(0, self._pending_authentications - 1)
 
     @asynccontextmanager
     async def subscribe(self, topic: str) -> AsyncIterator[Queue[None]]:

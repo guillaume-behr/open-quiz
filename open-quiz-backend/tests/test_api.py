@@ -24,7 +24,8 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.config import Settings, secure_private_file
 from app.database import legacy_difficulty_counts
-from app.middleware import RequestBodyLimitMiddleware
+from app.live_quiz import LiveQuizHub
+from app.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
     ProblemReport,
@@ -4139,6 +4140,8 @@ def test_streamed_request_body_is_limited_without_buffering() -> None:
 
 
 def test_elevated_body_limit_only_matches_large_question_routes() -> None:
+    assert LARGE_QUESTION_BODY_BYTES >= 64 * 1024 * 1024 * 4 // 3
+
     elevated_paths = (
         "/api/question-banks/import",
         "/api/question-banks/12/questions",
@@ -4433,6 +4436,58 @@ def test_live_quiz_websockets_push_session_transitions(tmp_path: Path) -> None:
                 assert_student_exam_payload_hides_answers(pushed_student_state)
 
 
+def test_live_teacher_session_pushes_student_join(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(settings_for(tmp_path / "live-student-join.db")) as client:
+        environment = exam_environment(client)
+        launched = client.post(
+            f"/api/quizzes/{environment['quiz']['id']}/launch",
+            headers=environment["teacher_headers"],
+            json={"class_id": environment["student_class"]["id"]},
+        )
+        assert launched.status_code == status.HTTP_201_CREATED
+        launched_session = launched.json()
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+        monkeypatch.setattr(
+            "app.routers.quizzes.LIVE_TEACHER_RECONCILIATION_SECONDS",
+            0.01,
+        )
+
+        with client.websocket_connect(
+            f"/api/quizzes/live/teacher/sessions/{launched_session['id']}",
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as teacher_socket:
+            teacher_socket.send_json({"token": teacher_token})
+            initial = teacher_socket.receive_json()
+            assert initial["type"] == "session"
+            assert initial["data"]["participants"] == []
+
+            # Simulate a notification handled by another worker. The teacher
+            # socket must still reconcile its snapshot from the shared DB.
+            monkeypatch.setattr(
+                client.app.state.live_quiz_hub,
+                "publish",
+                lambda _topic: None,
+            )
+            joined = client.post(
+                "/api/quizzes/join",
+                headers=environment["student_headers"],
+                json={"join_code": launched_session["join_code"]},
+            )
+            assert joined.status_code == status.HTTP_201_CREATED
+
+            pushed = teacher_socket.receive_json()
+            assert pushed["type"] == "session"
+            assert pushed["data"]["participant_count"] == 1
+            assert [
+                participant["student_identifier"]
+                for participant in pushed["data"]["participants"]
+            ] == [environment["account"]["identifier"]]
+
+
 def test_live_teacher_session_list_pushes_launch_and_removal(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "live-session-list.db")) as client:
         environment = exam_environment(client)
@@ -4495,6 +4550,17 @@ def test_live_quiz_websocket_rejects_untrusted_origin_and_token(
             with pytest.raises(WebSocketDisconnect) as rejected:
                 socket.receive_json()
             assert rejected.value.code == status.WS_1008_POLICY_VIOLATION
+
+
+def test_live_socket_authentication_gate_is_bounded() -> None:
+    hub = LiveQuizHub(max_pending_authentications=2)
+
+    assert hub.begin_authentication()
+    assert hub.begin_authentication()
+    assert not hub.begin_authentication()
+
+    hub.end_authentication()
+    assert hub.begin_authentication()
 
 
 def test_join_and_start_race_never_strands_a_participant(tmp_path: Path) -> None:

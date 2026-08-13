@@ -10,6 +10,28 @@ test.beforeEach(async ({ page }) => {
     })
 })
 
+test("temporary refresh failures preserve the recoverable session", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        sessionStorage.setItem("open-quiz-refresh-proof", "recoverable-proof")
+    })
+    await page.route("**/api/auth/refresh", async (route) => {
+        await route.fulfill({ status: 503, body: "{}" })
+    })
+
+    await page.goto("/teacher/dashboard")
+
+    await expect(page.getByLabel("Username")).toBeVisible()
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                sessionStorage.getItem("open-quiz-refresh-proof")
+            )
+        )
+        .toBe("recoverable-proof")
+})
+
 test("teacher sees a login error returned by the API", async ({ page }) => {
     await page.route("**/api/auth/login", async (route) => {
         await route.fulfill({
