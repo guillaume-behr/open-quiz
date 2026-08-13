@@ -2,7 +2,7 @@
 
 Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
-## 0.2.0 — En développement
+## 0.2.1 — En développement
 
 ### Sécurité et corrections
 

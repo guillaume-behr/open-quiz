@@ -8,7 +8,7 @@ pour l’entraînement de chaque classe. Les élèves se connectent à leur tabl
 bord pour rejoindre un examen ou démarrer un entraînement.
 
 > [!IMPORTANT]
-> **Préversion 0.2.0.** Le projet est fonctionnel et testé, mais son schéma de
+> **Préversion 0.2.1.** Le projet est fonctionnel et testé, mais son schéma de
 > données et ses interfaces peuvent évoluer avant la version 1.0. Sauvegardez
 > vos données avant chaque mise à jour.
 

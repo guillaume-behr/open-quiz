@@ -62,7 +62,7 @@ test("legal notice reports unavailable instance information", async ({
 test("footer links open each public information page", async ({ page }) => {
     await page.goto("/student/login")
 
-    await expect(page.locator("footer")).toContainText("0.2.0")
+    await expect(page.locator("footer")).toContainText("0.2.1")
 
     const destinations = [
         ["Personal data", "/privacy"],
