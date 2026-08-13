@@ -10,6 +10,7 @@ import {
 import type { StudentQuizSession } from "@/api/types"
 import { JoinQuizForm } from "@/components/forms/join-quiz-form"
 import { NavbarAction } from "@/components/navigation/navbar-action"
+import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
 import { LogOut } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
@@ -291,9 +292,7 @@ export function StudentQuiz({
         )
     }
 
-    const requiresFullscreen = ["waiting", "in_progress", "paused"].includes(
-        session.status
-    )
+    const requiresFullscreen = isActiveSessionStatus(session.status)
 
     if (!isFullscreen && requiresFullscreen) {
         return (

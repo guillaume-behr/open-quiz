@@ -1,5 +1,6 @@
 import type { GradeLevel, Quiz, QuizSession } from "@/api/types"
 import { GradeLevelSelect } from "@/components/grade-level-select"
+import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -65,14 +66,17 @@ export function QuizzesList({
     const sortedQuizzes = [...quizzes].sort((first, second) =>
         naturalCompare(first.title, second.title)
     )
+    const activeSessions = sessions.filter((session) =>
+        isActiveSessionStatus(session.status)
+    )
 
     return (
         <>
-            {sessions.length > 0 && (
+            {activeSessions.length > 0 && (
                 <div className="mb-5 rounded-xl border bg-primary/5 p-4">
-                    <h3 className="font-semibold">{t("recent-sessions")}</h3>
+                    <h3 className="font-semibold">{t("active-sessions")}</h3>
                     <div className="mt-3 flex flex-wrap gap-2">
-                        {sessions.slice(0, 6).map((session) => (
+                        {activeSessions.map((session) => (
                             <Button
                                 key={session.id}
                                 type="button"

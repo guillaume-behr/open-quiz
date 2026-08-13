@@ -9,6 +9,11 @@ import { StudentQuestionForm } from "@/components/student-quiz/student-question-
 import { Button } from "@/components/ui/button"
 import { PageLoader } from "@/components/ui/page-loader"
 import { NavbarAction } from "@/components/navigation/navbar-action"
+import {
+    TRAINING_SESSION_STORAGE_KEY,
+    clearStoredStudentSession,
+    readStoredStudentSession,
+} from "@/lib/student-session-storage"
 import { isRtlLanguage } from "@/lib/utils"
 import { ArrowLeft, CheckCircle2, Info, Scale, XCircle } from "lucide-react"
 import { type FormEvent, useEffect, useRef, useState } from "react"
@@ -26,21 +31,7 @@ function storedTraining(): {
     joinCode: string
     participantToken: string
 } | null {
-    try {
-        const value = JSON.parse(
-            sessionStorage.getItem("open-quiz-training-session") ?? "null"
-        ) as { joinCode?: unknown; participantToken?: unknown } | null
-        return value &&
-            typeof value.joinCode === "string" &&
-            typeof value.participantToken === "string"
-            ? {
-                  joinCode: value.joinCode,
-                  participantToken: value.participantToken,
-              }
-            : null
-    } catch {
-        return null
-    }
+    return readStoredStudentSession(TRAINING_SESSION_STORAGE_KEY)
 }
 
 export function TrainingPage() {
@@ -297,9 +288,5 @@ function TrainingCorrection({
 }
 
 function clearStoredTraining() {
-    try {
-        sessionStorage.removeItem("open-quiz-training-session")
-    } catch {
-        /* State is also cleared in memory. */
-    }
+    clearStoredStudentSession(TRAINING_SESSION_STORAGE_KEY)
 }

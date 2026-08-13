@@ -103,6 +103,69 @@ export function QuizPreviewDialog({
     )
 }
 
+function QuizClassField({
+    id,
+    classes,
+    selectedClassId,
+    mode,
+    onSelectedClassIdChange,
+}: {
+    id: string
+    classes: StudentClass[]
+    selectedClassId: string
+    mode: "launch" | "print"
+    onSelectedClassIdChange: (value: string) => void
+}) {
+    const { t } = useTranslation()
+    const selectedClass = classes.find(
+        (studentClass) => String(studentClass.id) === selectedClassId
+    )
+    const requiresStudents = mode === "print"
+
+    return (
+        <Field>
+            <FieldLabel htmlFor={id}>{t("class-name")}</FieldLabel>
+            <select
+                id={id}
+                className={NATIVE_SELECT_CLASS_NAME}
+                value={selectedClassId}
+                onChange={(event) =>
+                    onSelectedClassIdChange(event.target.value)
+                }
+                required
+            >
+                <option value="" disabled>
+                    {t("choose-class")}
+                </option>
+                {classes.map((studentClass) => {
+                    const studentCount = requiresStudents
+                        ? studentClass.students.length
+                        : studentClass.student_count
+                    return (
+                        <option
+                            key={studentClass.id}
+                            value={studentClass.id}
+                            disabled={requiresStudents && studentCount === 0}
+                        >
+                            {formatClassName(
+                                studentClass.grade_level,
+                                studentClass.name
+                            )}{" "}
+                            ({studentCount})
+                        </option>
+                    )
+                })}
+            </select>
+            {classes.length === 0 && (
+                <FieldError>{t("quiz-needs-class")}</FieldError>
+            )}
+            {requiresStudents && selectedClass?.students.length === 0 && (
+                <FieldError>{t("quiz-print-empty-class")}</FieldError>
+            )}
+        </Field>
+    )
+}
+
 export function LaunchQuizDialog({
     quiz,
     classes,
@@ -135,39 +198,13 @@ export function LaunchQuizDialog({
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup>
-                    <Field>
-                        <FieldLabel htmlFor="quiz-class-name">
-                            {t("class-name")}
-                        </FieldLabel>
-                        <select
-                            id="quiz-class-name"
-                            className={NATIVE_SELECT_CLASS_NAME}
-                            value={selectedClassId}
-                            onChange={(event) =>
-                                onSelectedClassIdChange(event.target.value)
-                            }
-                            required
-                        >
-                            <option value="" disabled>
-                                {t("choose-class")}
-                            </option>
-                            {classes.map((studentClass) => (
-                                <option
-                                    key={studentClass.id}
-                                    value={studentClass.id}
-                                >
-                                    {formatClassName(
-                                        studentClass.grade_level,
-                                        studentClass.name
-                                    )}{" "}
-                                    ({studentClass.student_count})
-                                </option>
-                            ))}
-                        </select>
-                        {classes.length === 0 && (
-                            <FieldError>{t("quiz-needs-class")}</FieldError>
-                        )}
-                    </Field>
+                    <QuizClassField
+                        id="quiz-class-name"
+                        classes={classes}
+                        selectedClassId={selectedClassId}
+                        mode="launch"
+                        onSelectedClassIdChange={onSelectedClassIdChange}
+                    />
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2">
                         <Button
@@ -231,48 +268,13 @@ export function PrintQuizDialog({
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup>
-                    <Field>
-                        <FieldLabel htmlFor="print-quiz-class">
-                            {t("class-name")}
-                        </FieldLabel>
-                        <select
-                            id="print-quiz-class"
-                            className={NATIVE_SELECT_CLASS_NAME}
-                            value={selectedClassId}
-                            onChange={(event) =>
-                                onSelectedClassIdChange(event.target.value)
-                            }
-                            required
-                        >
-                            <option value="" disabled>
-                                {t("choose-class")}
-                            </option>
-                            {classes.map((studentClass) => (
-                                <option
-                                    key={studentClass.id}
-                                    value={studentClass.id}
-                                    disabled={
-                                        studentClass.students.length === 0
-                                    }
-                                >
-                                    {formatClassName(
-                                        studentClass.grade_level,
-                                        studentClass.name
-                                    )}{" "}
-                                    ({studentClass.students.length})
-                                </option>
-                            ))}
-                        </select>
-                        {classes.length === 0 && (
-                            <FieldError>{t("quiz-needs-class")}</FieldError>
-                        )}
-                        {selectedClass &&
-                            selectedClass.students.length === 0 && (
-                                <FieldError>
-                                    {t("quiz-print-empty-class")}
-                                </FieldError>
-                            )}
-                    </Field>
+                    <QuizClassField
+                        id="print-quiz-class"
+                        classes={classes}
+                        selectedClassId={selectedClassId}
+                        mode="print"
+                        onSelectedClassIdChange={onSelectedClassIdChange}
+                    />
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2">
                         <Button

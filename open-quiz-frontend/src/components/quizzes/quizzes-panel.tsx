@@ -1,6 +1,11 @@
 import { getAllStudentClasses } from "@/api/classes"
 import { ApiError } from "@/api/client"
-import { getAllQuestionBanks, getQuestions } from "@/api/question-banks"
+import {
+    getAllQuestionBanks,
+    getChoiceImage,
+    getQuestionImage,
+    getQuestions,
+} from "@/api/question-banks"
 import {
     cancelQuizSession,
     createQuiz,
@@ -34,6 +39,7 @@ import {
     SessionActionDialog,
 } from "@/components/quizzes/quiz-secondary-dialogs"
 import { QuizzesList } from "@/components/quizzes/quizzes-list"
+import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
 import { Toast } from "@/components/ui/toast"
 import { Dialog } from "@/components/ui/dialog"
@@ -51,6 +57,10 @@ type QuizzesPanelProps = {
 
 const difficultyKeys = ["easy", "medium", "hard"] as const
 const PAGE_SIZE = 8
+
+function isActiveSession(session: QuizSession): boolean {
+    return isActiveSessionStatus(session.status)
+}
 
 function pageContaining(items: Quiz[], id: number): number {
     const index = items.findIndex((item) => item.id === id)
@@ -154,7 +164,7 @@ export function QuizzesPanel({
             .then(([loadedBanks, loadedSessions, loadedClasses]) => {
                 if (!isActive) return
                 setBanks(loadedBanks)
-                setSessions(loadedSessions)
+                setSessions(loadedSessions.filter(isActiveSession))
                 setClasses(loadedClasses)
                 setSupportLoadFailed(false)
             })
@@ -194,9 +204,7 @@ export function QuizzesPanel({
         if (
             !activeSessionId ||
             isSessionMutating ||
-            !["waiting", "in_progress", "paused"].includes(
-                activeSessionStatus ?? ""
-            )
+            !isActiveSessionStatus(activeSessionStatus)
         )
             return
         let isActive = true
@@ -215,9 +223,11 @@ export function QuizzesPanel({
                     setActiveSessionError(null)
                     setActiveSession(session)
                     setSessions((current) =>
-                        current.map((item) =>
-                            item.id === session.id ? session : item
-                        )
+                        isActiveSession(session)
+                            ? current.map((item) =>
+                                  item.id === session.id ? session : item
+                              )
+                            : current.filter((item) => item.id !== session.id)
                     )
                 })
                 .catch(() => {
@@ -332,13 +342,7 @@ export function QuizzesPanel({
             }
             return result
         }
-        const doc = printWindow.document
-        doc.documentElement.lang = i18n.resolvedLanguage ?? "fr"
-        doc.title = quiz.title
-        const style = doc.createElement("style")
-        style.textContent = `@page{size:A4;margin:0}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.subject{width:210mm;min-height:297mm;padding:15mm;break-after:page}.subject:last-child{break-after:auto}header{position:relative;min-height:27mm;border-bottom:2px solid #111;margin-bottom:8mm;padding:1mm 0 4mm 75mm}h1{font-size:20pt;margin:0 0 3mm}.class-name{font-size:10pt;margin:0}.identity{position:absolute;top:0;left:0;width:68mm;border:1.5px solid #111;padding:3mm;font-size:10pt}.identity-line{display:flex;align-items:flex-end;gap:2mm;height:8mm}.identity-blank{flex:1;border-bottom:1px solid #111}.question{break-inside:avoid;margin:0 0 8mm}.question h2{font-size:12pt;margin:0 0 3mm}.choice{margin:2mm 0}.box{display:inline-block;width:4mm;height:4mm;border:1px solid;margin-right:2mm;vertical-align:middle}.writing{height:35mm;border-bottom:1px dotted #777;background:repeating-linear-gradient(transparent,transparent 8mm,#ddd 8.2mm)}@media print{button,nav{display:none!important}}`
-        doc.head.append(style)
-        studentClass.students.forEach((_, copyIndex) => {
+        const copies = studentClass.students.map((_, copyIndex) => {
             const random = seeded(
                 quiz.id * 1000003 + studentClass.id * 1009 + copyIndex
             )
@@ -350,6 +354,89 @@ export function QuizzesPanel({
                     random
                 ).slice(0, quiz[`${difficulty}_question_count`])
             )
+            return shuffle(selected, random).map((question) => ({
+                question,
+                choices:
+                    question.answer_mode === "written"
+                        ? []
+                        : shuffle(question.choices, random),
+            }))
+        })
+        const printedQuestions = copies.flatMap((copy) =>
+            copy.map(({ question }) => question)
+        )
+        const questionImageIds = [
+            ...new Set(
+                printedQuestions
+                    .filter((question) => question.has_image)
+                    .map((question) => question.id)
+            ),
+        ]
+        const choiceImageIds = [
+            ...new Set(
+                printedQuestions.flatMap((question) =>
+                    question.choices
+                        .filter((choice) => choice.has_image)
+                        .map((choice) => choice.id)
+                )
+            ),
+        ]
+        const objectUrls: string[] = []
+        let urlsReleased = false
+        const releaseObjectUrls = () => {
+            if (urlsReleased) return
+            urlsReleased = true
+            objectUrls.forEach((url) => URL.revokeObjectURL(url))
+        }
+        const loadImages = async (
+            ids: number[],
+            loader: (id: number) => Promise<Blob>
+        ) =>
+            new Map(
+                await Promise.all(
+                    ids.map(async (id) => {
+                        const url = URL.createObjectURL(await loader(id))
+                        objectUrls.push(url)
+                        return [id, url] as const
+                    })
+                )
+            )
+        let questionImages: Map<number, string>
+        let choiceImages: Map<number, string>
+        try {
+            ;[questionImages, choiceImages] = await Promise.all([
+                loadImages(questionImageIds, getQuestionImage),
+                loadImages(choiceImageIds, getChoiceImage),
+            ])
+        } catch (error) {
+            releaseObjectUrls()
+            throw error
+        }
+        const doc = printWindow.document
+        doc.documentElement.lang = i18n.resolvedLanguage ?? "fr"
+        doc.title = quiz.title
+        const style = doc.createElement("style")
+        style.textContent = `@page{size:A4;margin:0}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.subject{width:210mm;min-height:297mm;padding:15mm;break-after:page}.subject:last-child{break-after:auto}header{position:relative;min-height:27mm;border-bottom:2px solid #111;margin-bottom:8mm;padding:1mm 0 4mm 75mm}h1{font-size:20pt;margin:0 0 3mm}.class-name{font-size:10pt;margin:0}.identity{position:absolute;top:0;left:0;width:68mm;border:1.5px solid #111;padding:3mm;font-size:10pt}.identity-line{display:flex;align-items:flex-end;gap:2mm;height:8mm}.identity-blank{flex:1;border-bottom:1px solid #111}.question{break-inside:avoid;margin:0 0 8mm}.question h2{font-size:12pt;margin:0 0 3mm}.question-image{display:block;max-width:100%;max-height:65mm;object-fit:contain;margin:3mm 0}.choice{margin:2mm 0}.choice-content{display:inline}.choice-image{display:block;max-width:85%;max-height:45mm;object-fit:contain;margin:2mm 0 3mm 6mm}.box{display:inline-block;width:4mm;height:4mm;border:1px solid;margin-right:2mm;vertical-align:middle}pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #bbb;border-radius:2mm;background:#f5f5f5;padding:3mm;margin:3mm 0;font:9pt/1.35 monospace}.code-language{display:block;color:#555;font:8pt Arial,sans-serif;margin-bottom:1mm}.writing{height:35mm;border-bottom:1px dotted #777;background:repeating-linear-gradient(transparent,transparent 8mm,#ddd 8.2mm)}@media print{button,nav{display:none!important}}`
+        doc.head.append(style)
+        const appendCode = (
+            parent: HTMLElement,
+            content: string | null,
+            language: string | null
+        ) => {
+            if (!content) return
+            const pre = doc.createElement("pre")
+            if (language) {
+                const label = doc.createElement("span")
+                label.className = "code-language"
+                label.textContent = language
+                pre.append(label)
+            }
+            const code = doc.createElement("code")
+            code.textContent = content
+            pre.append(code)
+            parent.append(pre)
+        }
+        copies.forEach((copy) => {
             const section = doc.createElement("section")
             section.className = "subject"
             const header = doc.createElement("header")
@@ -374,23 +461,52 @@ export function QuizzesPanel({
             }
             header.append(identity)
             section.append(header)
-            shuffle(selected, random).forEach((question, index) => {
+            copy.forEach(({ question, choices }, index) => {
                 const article = doc.createElement("article")
                 article.className = "question"
                 const heading = doc.createElement("h2")
                 heading.textContent = `${index + 1}. ${question.prompt}`
                 article.append(heading)
+                const questionImageUrl = questionImages.get(question.id)
+                if (questionImageUrl) {
+                    const image = doc.createElement("img")
+                    image.className = "question-image"
+                    image.src = questionImageUrl
+                    image.alt = ""
+                    article.append(image)
+                }
+                appendCode(
+                    article,
+                    question.code_content,
+                    question.code_language
+                )
                 if (question.answer_mode === "written") {
                     const writing = doc.createElement("div")
                     writing.className = "writing"
                     article.append(writing)
                 } else
-                    shuffle(question.choices, random).forEach((choice) => {
+                    choices.forEach((choice) => {
                         const row = doc.createElement("div")
                         row.className = "choice"
                         const box = doc.createElement("span")
                         box.className = "box"
-                        row.append(box, doc.createTextNode(choice.label))
+                        const content = doc.createElement("span")
+                        content.className = "choice-content"
+                        content.textContent = choice.label
+                        row.append(box, content)
+                        const choiceImageUrl = choiceImages.get(choice.id)
+                        if (choiceImageUrl) {
+                            const image = doc.createElement("img")
+                            image.className = "choice-image"
+                            image.src = choiceImageUrl
+                            image.alt = ""
+                            row.append(image)
+                        }
+                        appendCode(
+                            row,
+                            choice.code_content,
+                            choice.code_language
+                        )
                         article.append(row)
                     })
                 section.append(article)
@@ -398,6 +514,24 @@ export function QuizzesPanel({
             doc.body.append(section)
         })
         doc.close()
+        await Promise.all(
+            Array.from(doc.images).map(
+                (image) =>
+                    new Promise<void>((resolve) => {
+                        if (image.complete) return resolve()
+                        image.addEventListener("load", () => resolve(), {
+                            once: true,
+                        })
+                        image.addEventListener("error", () => resolve(), {
+                            once: true,
+                        })
+                    })
+            )
+        )
+        printWindow.addEventListener("afterprint", releaseObjectUrls, {
+            once: true,
+        })
+        printWindow.setTimeout(releaseObjectUrls, 120_000)
         printWindow.focus()
         printWindow.setTimeout(() => printWindow.print(), 100)
     }

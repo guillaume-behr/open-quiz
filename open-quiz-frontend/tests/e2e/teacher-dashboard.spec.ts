@@ -1229,6 +1229,52 @@ test("teacher can sign out and return to the login form", async ({ page }) => {
 
 test("teacher can review configured quizzes", async ({ page }) => {
     await mockTeacherApi(page)
+    await page.route(
+        "http://127.0.0.1:4173/api/question-banks/21/questions",
+        (route) =>
+            route.fulfill({
+                json: [
+                    {
+                        id: 71,
+                        question_bank_id: 21,
+                        prompt: "What does this program print?",
+                        points: 1,
+                        difficulty: "easy",
+                        answer_mode: "single",
+                        answer_mode_disclosed: true,
+                        response_language: null,
+                        has_image: true,
+                        code_language: "python",
+                        code_content: 'print("energy")',
+                        choices: [
+                            {
+                                id: 72,
+                                label: "energy",
+                                is_correct: true,
+                                points: 1,
+                                position: 0,
+                                has_image: true,
+                                code_language: "text",
+                                code_content: "energy",
+                            },
+                        ],
+                        created_at: "2026-01-06T12:00:00Z",
+                    },
+                ],
+            })
+    )
+    const pixel = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64"
+    )
+    for (const path of [
+        "/api/question-banks/questions/71/image",
+        "/api/question-banks/choices/72/image",
+    ]) {
+        await page.route(`http://127.0.0.1:4173${path}`, (route) =>
+            route.fulfill({ contentType: "image/png", body: pixel })
+        )
+    }
     await page.goto("/teacher/dashboard")
     await page
         .getByRole("button", { name: "Exam quizzes", exact: true })
@@ -1267,7 +1313,61 @@ test("teacher can review configured quizzes", async ({ page }) => {
     )
     await expect(printPage.locator(".identity")).toContainText("Last name")
     await expect(printPage.locator(".identity")).toContainText("First name")
+    await expect(printPage.locator(".question-image")).toHaveCount(
+        existingClass.students.length
+    )
+    await expect(printPage.locator(".choice-image")).toHaveCount(
+        existingClass.students.length
+    )
+    await expect(printPage.locator("pre").first()).toContainText(
+        'print("energy")'
+    )
     await printPage.close()
+})
+
+test("finished quiz sessions disappear from the active quiz list", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    const waitingSession = {
+        id: 79,
+        quiz_id: 31,
+        quiz_title: "Running checkpoint",
+        class_id: 11,
+        class_name: "Class 8B",
+        join_code: "RUN079",
+        status: "waiting",
+        participant_count: 0,
+        participants: [],
+        current_question_number: null,
+        total_questions: 10,
+        current_submission_count: 0,
+        created_at: "2026-01-06T10:00:00Z",
+        started_at: null,
+        ends_at: null,
+    }
+    await page.route("**/api/quizzes/sessions/active", async (route) => {
+        await route.fulfill({ json: [waitingSession] })
+    })
+    await page.route("**/api/quizzes/sessions/79", async (route) => {
+        await route.fulfill({
+            json: { ...waitingSession, status: "finished" },
+        })
+    })
+
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Exam quizzes", exact: true })
+        .click()
+    await expect(
+        page.getByRole("heading", { name: "Active quizzes" })
+    ).toBeVisible()
+    await page.getByRole("button", { name: /Running checkpoint/ }).click()
+
+    await expect(
+        page.getByRole("heading", { name: "Active quizzes" })
+    ).toHaveCount(0)
+    await expect(page.getByText("Recent sessions")).toHaveCount(0)
 })
 
 test("teacher assigns existing question banks to a training class", async ({

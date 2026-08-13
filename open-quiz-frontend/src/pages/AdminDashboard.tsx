@@ -13,8 +13,7 @@ import type {
     User,
 } from "@/api/types"
 import { ProblemReportsPanel } from "@/components/admin/problem-reports-panel"
-import { DashboardLogin } from "@/components/forms/dashboard-login"
-import { TwoFactorForm } from "@/components/forms/two-factor-form"
+import { DashboardAuthentication } from "@/components/forms/dashboard-authentication"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -225,21 +224,14 @@ export function AdminDashboard() {
 
     if (!currentUser) {
         return (
-            <div className="flex flex-1 items-center justify-center px-4">
-                {challenge ? (
-                    <TwoFactorForm
-                        challenge={challenge}
-                        onVerify={handleTwoFactor}
-                        onCancel={() => setChallenge(null)}
-                    />
-                ) : (
-                    <DashboardLogin
-                        onLogin={handleLogin}
-                        title={t("admin-login")}
-                        instructions={t("admin-login-instructions")}
-                    />
-                )}
-            </div>
+            <DashboardAuthentication
+                challenge={challenge}
+                title={t("admin-login")}
+                instructions={t("admin-login-instructions")}
+                onLogin={handleLogin}
+                onVerify={handleTwoFactor}
+                onCancelChallenge={() => setChallenge(null)}
+            />
         )
     }
 

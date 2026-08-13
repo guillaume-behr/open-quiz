@@ -5,8 +5,7 @@ import {
     getGradeLevels,
 } from "@/api/grade-levels"
 import type { GradeLevel, TwoFactorChallenge, User } from "@/api/types"
-import { DashboardLogin } from "@/components/forms/dashboard-login"
-import { TwoFactorForm } from "@/components/forms/two-factor-form"
+import { DashboardAuthentication } from "@/components/forms/dashboard-authentication"
 import {
     DashboardShell,
     type DashboardEntry,
@@ -236,20 +235,13 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
 
     if (page === "login" && !currentUser) {
         return (
-            <div className="flex flex-1 items-center justify-center px-4">
-                {challenge ? (
-                    <TwoFactorForm
-                        challenge={challenge}
-                        onVerify={handleTwoFactor}
-                        onCancel={() => setChallenge(null)}
-                    />
-                ) : (
-                    <DashboardLogin
-                        onLogin={handleLogin}
-                        title={t("professor-space")}
-                    />
-                )}
-            </div>
+            <DashboardAuthentication
+                challenge={challenge}
+                title={t("professor-space")}
+                onLogin={handleLogin}
+                onVerify={handleTwoFactor}
+                onCancelChallenge={() => setChallenge(null)}
+            />
         )
     }
 

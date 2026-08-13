@@ -1,5 +1,6 @@
 import type { QuizSession } from "@/api/types"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
+import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
@@ -123,9 +124,7 @@ export function ActiveQuizSessionDialog({
                                 {t("resume-quiz")}
                             </Button>
                         )}
-                        {["waiting", "in_progress", "paused"].includes(
-                            session.status
-                        ) && (
+                        {isActiveSessionStatus(session.status) && (
                             <Button
                                 type="button"
                                 variant="destructive"

@@ -7,6 +7,7 @@ import {
     getMakeupSessions,
 } from "@/api/quizzes"
 import type { MakeupSession, Quiz, StudentClass } from "@/api/types"
+import { isActiveSessionStatus } from "@/lib/session-status"
 import { formatClassName } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Toast } from "@/components/ui/toast"
@@ -61,7 +62,7 @@ export function MakeupSessionsPanel() {
         : quizOptions
 
     const hasActiveSession = sessions.some((item) =>
-        ["waiting", "in_progress", "paused"].includes(item.status)
+        isActiveSessionStatus(item.status)
     )
 
     useEffect(() => {

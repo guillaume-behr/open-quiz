@@ -10,6 +10,10 @@ import type {
 } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
+import {
+    TRAINING_SESSION_STORAGE_KEY,
+    storeStudentSession,
+} from "@/lib/student-session-storage"
 import { naturalCompare } from "@/lib/utils"
 import { BarChart3, Dumbbell, LoaderCircle, Play } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -57,17 +61,10 @@ export function TrainingQuizzesPanel({
         try {
             const joined = await startTrainingQuiz(bank.id, token)
             const { participant_token: participantToken, ...session } = joined
-            try {
-                sessionStorage.setItem(
-                    "open-quiz-training-session",
-                    JSON.stringify({
-                        joinCode: session.join_code,
-                        participantToken,
-                    })
-                )
-            } catch {
-                // Route state keeps the current training usable without storage.
-            }
+            storeStudentSession(TRAINING_SESSION_STORAGE_KEY, {
+                joinCode: session.join_code,
+                participantToken,
+            })
             navigate("/student/training", {
                 state: { student, token, session, participantToken },
             })
