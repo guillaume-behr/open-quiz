@@ -2,6 +2,7 @@ import csv
 import io
 import json
 from collections import defaultdict
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from math import ceil, comb
@@ -54,7 +55,8 @@ from app.models import (
     TrainingQuizProfile,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
-from app.routers.question_banks import question_response
+from app.question_responses import load_question_responses
+from app.quiz_session_records import delete_quiz_session_records
 from app.routers.student_auth import current_student
 from app.schemas import (
     MakeupQuizOption,
@@ -88,6 +90,7 @@ from app.schemas import (
     TrainingQuestionBankItem,
     TrainingQuestionBankSelection,
 )
+from app.session_status import ACTIVE_SESSION_STATUSES
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 randomizer = SystemRandom()
@@ -235,10 +238,10 @@ def difficulty_counts_for_banks(
 def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
     bank_ids = quiz_bank_ids(quiz.id, session)
     requested = difficulty_counts_for_banks(quiz, bank_ids, session)
-    candidates_by_difficulty = {
+    candidate_ids_by_difficulty = {
         difficulty: list(
             session.scalars(
-                select(Question).where(
+                select(Question.id).where(
                     Question.question_bank_id.in_(bank_ids),
                     Question.difficulty == difficulty,
                 )
@@ -247,15 +250,14 @@ def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
         for difficulty, count in requested.items()
         if count > 0
     }
-    selected: list[Question] = []
+    selected_ids: list[int] = []
     for difficulty, count in requested.items():
         if count > 0:
-            selected.extend(
-                randomizer.sample(candidates_by_difficulty[difficulty], count)
+            selected_ids.extend(
+                randomizer.sample(candidate_ids_by_difficulty[difficulty], count)
             )
-    question_ids = [question.id for question in selected]
-    randomizer.shuffle(question_ids)
-    return question_ids
+    randomizer.shuffle(selected_ids)
+    return selected_ids
 
 
 def draw_unique_question_ids(
@@ -282,44 +284,6 @@ def draw_unique_question_ids(
     # If the banks contain only one possible combination, every student still
     # receives an independent draw even though the resulting sets must match.
     return draw_question_ids(quiz, session)
-
-
-def load_question_responses(
-    question_ids: list[int],
-    session: DbSession,
-) -> list[QuestionResponse]:
-    if not question_ids:
-        return []
-    questions_by_id = {
-        question.id: question
-        for question in session.scalars(
-            select(Question)
-            .options(defer(Question.image_data))
-            .where(Question.id.in_(question_ids))
-        )
-    }
-    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
-    for choice in session.scalars(
-        select(QuestionChoice)
-        .options(defer(QuestionChoice.image_data))
-        .where(QuestionChoice.question_id.in_(question_ids))
-        .order_by(QuestionChoice.question_id, QuestionChoice.position)
-    ):
-        choices_by_question[choice.question_id].append(choice)
-    codes_by_question = {
-        code.question_id: code
-        for code in session.scalars(
-            select(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
-        )
-    }
-    return [
-        question_response(
-            questions_by_id[question_id],
-            choices_by_question[question_id],
-            codes_by_question.get(question_id),
-        )
-        for question_id in question_ids
-    ]
 
 
 def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:
@@ -675,7 +639,7 @@ def session_response(
     participant_query = select(QuizParticipant).where(
         QuizParticipant.session_id == quiz_session.id
     )
-    if quiz_session.status in {"waiting", "in_progress", "paused"}:
+    if quiz_session.status in ACTIVE_SESSION_STATUSES:
         participant_query = participant_query.where(QuizParticipant.left_at.is_(None))
     participants = list(
         session.scalars(
@@ -765,6 +729,202 @@ def session_response(
     )
 
 
+def finished_session_responses(
+    rows: list[tuple[QuizSession, Quiz]],
+    session: DbSession,
+) -> list[QuizSessionResponse]:
+    """Build finished-session responses with a fixed number of queries."""
+    if not rows:
+        return []
+    session_ids = [quiz_session.id for quiz_session, _ in rows]
+
+    participants_by_session: dict[int, list[QuizParticipant]] = defaultdict(list)
+    participants = list(
+        session.scalars(
+            select(QuizParticipant)
+            .where(QuizParticipant.session_id.in_(session_ids))
+            .order_by(
+                QuizParticipant.session_id,
+                QuizParticipant.joined_at,
+                QuizParticipant.id,
+            )
+        )
+    )
+    for participant in participants:
+        participants_by_session[participant.session_id].append(participant)
+
+    answer_statistics = {
+        (session_id, participant_id): (
+            answered_count,
+            float(score),
+            pending_count or 0,
+        )
+        for session_id, participant_id, answered_count, score, pending_count in session.execute(
+            select(
+                QuizAnswer.session_id,
+                QuizAnswer.participant_id,
+                func.count(QuizAnswer.id),
+                func.coalesce(func.sum(QuizAnswer.score), 0),
+                func.sum(case((QuizAnswer.is_graded.is_(False), 1), else_=0)),
+            )
+            .where(QuizAnswer.session_id.in_(session_ids))
+            .group_by(QuizAnswer.session_id, QuizAnswer.participant_id)
+        )
+    }
+
+    common_by_session: dict[int, list[int]] = defaultdict(list)
+    for session_id, question_id in session.execute(
+        select(
+            QuizSessionQuestion.session_id,
+            QuizSessionQuestion.question_id,
+        )
+        .where(QuizSessionQuestion.session_id.in_(session_ids))
+        .order_by(QuizSessionQuestion.session_id, QuizSessionQuestion.position)
+    ):
+        common_by_session[session_id].append(question_id)
+
+    personalized_by_student: dict[tuple[int, int], list[int]] = defaultdict(list)
+    personalized_by_identifier: dict[tuple[int, str], list[int]] = defaultdict(list)
+    personalized_counts: dict[int, int] = {}
+    assigned_question_ids = {
+        question_id
+        for question_ids in common_by_session.values()
+        for question_id in question_ids
+    }
+    for session_id, student_id, student_identifier, question_id in session.execute(
+        select(
+            QuizSessionStudentQuestion.session_id,
+            QuizSessionStudentQuestion.student_id,
+            QuizSessionStudentQuestion.student_identifier,
+            QuizSessionStudentQuestion.question_id,
+        )
+        .where(QuizSessionStudentQuestion.session_id.in_(session_ids))
+        .order_by(
+            QuizSessionStudentQuestion.session_id,
+            QuizSessionStudentQuestion.student_identifier,
+            QuizSessionStudentQuestion.position,
+        )
+    ):
+        if student_id is not None:
+            personalized_by_student[(session_id, student_id)].append(question_id)
+        identifier_key = (session_id, student_identifier)
+        personalized_by_identifier[identifier_key].append(question_id)
+        personalized_counts.setdefault(
+            session_id, len(personalized_by_identifier[identifier_key])
+        )
+        personalized_counts[session_id] = max(
+            personalized_counts[session_id],
+            len(personalized_by_identifier[identifier_key]),
+        )
+        assigned_question_ids.add(question_id)
+
+    maximums = question_maximum_scores(list(assigned_question_ids), session)
+    student_ids = {
+        participant.student_id
+        for participant in participants
+        if participant.student_id is not None
+    }
+    students_by_id = {
+        student.id: student
+        for student in session.scalars(
+            select(Student).where(Student.id.in_(student_ids))
+        )
+    }
+    class_ids = {
+        quiz_session.class_id
+        for quiz_session, _ in rows
+        if quiz_session.class_id is not None
+    }
+    classes_by_id = {
+        student_class.id: student_class
+        for student_class in session.scalars(
+            select(StudentClass).where(StudentClass.id.in_(class_ids))
+        )
+    }
+
+    responses: list[QuizSessionResponse] = []
+    for quiz_session, quiz in rows:
+        session_participants = participants_by_session[quiz_session.id]
+        participant_maximums: dict[int, float] = {}
+        for participant in session_participants:
+            question_ids = (
+                personalized_by_student.get(
+                    (quiz_session.id, participant.student_id), []
+                )
+                if participant.student_id is not None
+                else []
+            )
+            if not question_ids:
+                question_ids = personalized_by_identifier.get(
+                    (quiz_session.id, participant.student_identifier),
+                    common_by_session[quiz_session.id],
+                )
+            participant_maximums[participant.id] = round(
+                sum(maximums.get(question_id, 0) for question_id in question_ids),
+                2,
+            )
+        class_name = quiz_session.class_name
+        if quiz_session.class_id in classes_by_id:
+            student_class = classes_by_id[quiz_session.class_id]
+            class_name = format_class_name(
+                student_class.grade_level, student_class.name
+            )
+        responses.append(
+            QuizSessionResponse(
+                id=quiz_session.id,
+                quiz_id=quiz.id,
+                quiz_title=quiz_session.quiz_title or quiz.title,
+                class_id=quiz_session.class_id,
+                class_name=class_name,
+                join_code=quiz_session.join_code,
+                status=quiz_session.status,
+                participant_count=len(session_participants),
+                median_maximum_score=(
+                    float(median(participant_maximums.values()))
+                    if participant_maximums
+                    else 0
+                ),
+                participants=[
+                    QuizParticipantResponse(
+                        id=participant.id,
+                        student_identifier=participant.student_identifier,
+                        student_display_name=(
+                            students_by_id[participant.student_id].display_name
+                            if participant.student_id in students_by_id
+                            else participant.student_display_name
+                        ),
+                        answered_count=answer_statistics.get(
+                            (quiz_session.id, participant.id), (0, 0, 0)
+                        )[0],
+                        score=answer_statistics.get(
+                            (quiz_session.id, participant.id), (0, 0, 0)
+                        )[1],
+                        maximum_score=participant_maximums[participant.id],
+                        pending_manual_grading_count=answer_statistics.get(
+                            (quiz_session.id, participant.id), (0, 0, 0)
+                        )[2],
+                        violation_count=participant.violation_count,
+                        last_violation_type=participant.last_violation_type,
+                        last_violation_at=participant.last_violation_at,
+                        joined_at=participant.joined_at,
+                    )
+                    for participant in session_participants
+                ],
+                current_question_number=None,
+                total_questions=(
+                    len(common_by_session[quiz_session.id])
+                    or personalized_counts.get(quiz_session.id, 0)
+                ),
+                current_submission_count=0,
+                created_at=quiz_session.created_at,
+                started_at=quiz_session.started_at,
+                ends_at=quiz_ends_at(quiz_session, quiz),
+                grades_published_at=quiz_session.grades_published_at,
+            )
+        )
+    return responses
+
+
 def student_session_response(
     quiz_session: QuizSession,
     quiz: Quiz,
@@ -839,29 +999,6 @@ def expire_owned_quiz_sessions(
     )
     for quiz_session, quiz in rows:
         expire_quiz_session(quiz_session, quiz, session)
-
-
-def delete_quiz_session_records(
-    session_ids: list[int],
-    session: DbSession,
-) -> None:
-    if not session_ids:
-        return
-    session.execute(delete(QuizAnswer).where(QuizAnswer.session_id.in_(session_ids)))
-    session.execute(
-        delete(QuizParticipant).where(QuizParticipant.session_id.in_(session_ids))
-    )
-    session.execute(
-        delete(QuizSessionQuestion).where(
-            QuizSessionQuestion.session_id.in_(session_ids)
-        )
-    )
-    session.execute(
-        delete(QuizSessionStudentQuestion).where(
-            QuizSessionStudentQuestion.session_id.in_(session_ids)
-        )
-    )
-    session.execute(delete(QuizSession).where(QuizSession.id.in_(session_ids)))
 
 
 def delete_makeup_session_records(
@@ -1038,7 +1175,7 @@ def student_question_response(
     participant: QuizParticipant,
     session: DbSession,
 ) -> StudentQuizQuestionResponse:
-    question = session.get(Question, question_id)
+    question = session.get(Question, question_id, options=[defer(Question.image_data)])
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1194,12 +1331,16 @@ def training_result(
     questions = {
         question.id: question
         for question in session.scalars(
-            select(Question).where(Question.id.in_(question_ids))
+            select(Question)
+            .options(defer(Question.image_data))
+            .where(Question.id.in_(question_ids))
         )
     }
     choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
     for choice in session.scalars(
-        select(QuestionChoice).where(QuestionChoice.question_id.in_(question_ids))
+        select(QuestionChoice)
+        .options(defer(QuestionChoice.image_data))
+        .where(QuestionChoice.question_id.in_(question_ids))
     ):
         choices_by_question[choice.question_id].append(choice)
     answers = {
@@ -1365,7 +1506,7 @@ def list_active_sessions(
         .where(
             Quiz.owner_id == professor.id,
             Quiz.mode == "exam",
-            QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
         .limit(20)
@@ -1409,21 +1550,21 @@ def list_quiz_results(
         or 0
     )
     set_pagination_headers(response, page=page, page_size=page_size, total=total)
-    rows = session.execute(
-        select(QuizSession, Quiz)
-        .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(*filters)
-        .order_by(
-            QuizSession.started_at.desc(),
-            QuizSession.created_at.desc(),
-            QuizSession.id.desc(),
+    rows = list(
+        session.execute(
+            select(QuizSession, Quiz)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(*filters)
+            .order_by(
+                QuizSession.started_at.desc(),
+                QuizSession.created_at.desc(),
+                QuizSession.id.desc(),
+            )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
-        .offset((page - 1) * page_size)
-        .limit(page_size)
     )
-    return [
-        session_response(quiz_session, quiz, session) for quiz_session, quiz in rows
-    ]
+    return finished_session_responses(rows, session)
 
 
 @router.get("/sessions/results/export")
@@ -1444,71 +1585,97 @@ def export_quiz_results(
     if student_class is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    filters = [
-        Quiz.owner_id == professor.id,
-        Quiz.mode == "exam",
-        QuizSession.class_id == class_id,
-        QuizSession.status == "finished",
-    ]
     if quiz_id is not None:
         quiz = session.scalar(
             select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
         )
         if quiz is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        filters.append(QuizSession.quiz_id == quiz_id)
+    owner_id = professor.id
+    session_factory = request.app.state.session_factory
 
-    rows = session.execute(
-        select(QuizSession, Quiz)
-        .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(*filters)
-        .order_by(
-            QuizSession.started_at.desc(),
-            QuizSession.created_at.desc(),
-            QuizSession.id.desc(),
+    def stream_export() -> Iterator[str]:
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "class",
+                "quiz",
+                "date",
+                "student_identifier",
+                "student_name",
+                "questions_answered",
+                "total_questions",
+                "score",
+                "pending_manual_grading",
+                "violations",
+            ]
         )
-    )
-    output = io.StringIO(newline="")
-    output.write("\ufeff")
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "class",
-            "quiz",
-            "date",
-            "student_identifier",
-            "student_name",
-            "questions_answered",
-            "total_questions",
-            "score",
-            "pending_manual_grading",
-            "violations",
-        ]
-    )
-    for quiz_session, quiz in rows:
-        result = session_response(quiz_session, quiz, session)
-        result_date = result.started_at or result.created_at
-        for participant in result.participants:
-            writer.writerow(
-                [
-                    safe_spreadsheet_cell(result.class_name or ""),
-                    safe_spreadsheet_cell(result.quiz_title),
-                    result_date.isoformat(),
-                    safe_spreadsheet_cell(participant.student_identifier),
-                    safe_spreadsheet_cell(participant.student_display_name or ""),
-                    participant.answered_count,
-                    result.total_questions,
-                    participant.score,
-                    participant.pending_manual_grading_count,
-                    participant.violation_count,
-                ]
+        yield "\ufeff" + output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        with session_factory() as export_session:
+            export_filters = [
+                Quiz.owner_id == owner_id,
+                Quiz.mode == "exam",
+                QuizSession.class_id == class_id,
+                QuizSession.status == "finished",
+            ]
+            if quiz_id is not None:
+                export_filters.append(QuizSession.quiz_id == quiz_id)
+            ordered_session_ids = list(
+                export_session.scalars(
+                    select(QuizSession.id)
+                    .join(Quiz, Quiz.id == QuizSession.quiz_id)
+                    .where(*export_filters)
+                    .order_by(
+                        QuizSession.started_at.desc(),
+                        QuizSession.created_at.desc(),
+                        QuizSession.id.desc(),
+                    )
+                )
             )
+            for offset in range(0, len(ordered_session_ids), 50):
+                batch_ids = ordered_session_ids[offset : offset + 50]
+                batch_rows = list(
+                    export_session.execute(
+                        select(QuizSession, Quiz)
+                        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+                        .where(QuizSession.id.in_(batch_ids))
+                    )
+                )
+                rows_by_id = {row[0].id: row for row in batch_rows}
+                ordered_rows = [rows_by_id[session_id] for session_id in batch_ids]
+                for result in finished_session_responses(ordered_rows, export_session):
+                    result_date = result.started_at or result.created_at
+                    for participant in result.participants:
+                        writer.writerow(
+                            [
+                                safe_spreadsheet_cell(result.class_name or ""),
+                                safe_spreadsheet_cell(result.quiz_title),
+                                result_date.isoformat(),
+                                safe_spreadsheet_cell(participant.student_identifier),
+                                safe_spreadsheet_cell(
+                                    participant.student_display_name or ""
+                                ),
+                                participant.answered_count,
+                                result.total_questions,
+                                participant.score,
+                                participant.pending_manual_grading_count,
+                                participant.violation_count,
+                            ]
+                        )
+                    if output.tell():
+                        yield output.getvalue()
+                        output.seek(0)
+                        output.truncate(0)
 
     safe_class_id = student_class.id
     safe_quiz = f"-quiz-{quiz_id}" if quiz_id is not None else "-tous-les-quiz"
     filename = f"resultats-classe-{safe_class_id}{safe_quiz}.csv"
     return StreamingResponse(
-        iter([output.getvalue()]),
+        stream_export(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
@@ -1668,33 +1835,96 @@ def list_student_quiz_history(
             .order_by(QuizSession.started_at.desc(), QuizSession.id.desc())
         )
     )
+    session_ids = [quiz_session.id for quiz_session, _ in rows]
+    participant_ids = [participant.id for _, participant in rows]
+    common_by_session: dict[int, list[int]] = defaultdict(list)
+    for session_id, question_id in session.execute(
+        select(
+            QuizSessionQuestion.session_id,
+            QuizSessionQuestion.question_id,
+        )
+        .where(QuizSessionQuestion.session_id.in_(session_ids))
+        .order_by(QuizSessionQuestion.session_id, QuizSessionQuestion.position)
+    ):
+        common_by_session[session_id].append(question_id)
+    personalized_by_student: dict[tuple[int, int], list[int]] = defaultdict(list)
+    personalized_by_identifier: dict[tuple[int, str], list[int]] = defaultdict(list)
+    for session_id, student_id, student_identifier, question_id in session.execute(
+        select(
+            QuizSessionStudentQuestion.session_id,
+            QuizSessionStudentQuestion.student_id,
+            QuizSessionStudentQuestion.student_identifier,
+            QuizSessionStudentQuestion.question_id,
+        )
+        .where(QuizSessionStudentQuestion.session_id.in_(session_ids))
+        .order_by(
+            QuizSessionStudentQuestion.session_id,
+            QuizSessionStudentQuestion.student_identifier,
+            QuizSessionStudentQuestion.position,
+        )
+    ):
+        if student_id is not None:
+            personalized_by_student[(session_id, student_id)].append(question_id)
+        personalized_by_identifier[(session_id, student_identifier)].append(question_id)
+    question_ids_by_participant: dict[int, list[int]] = {}
+    all_question_ids: set[int] = set()
+    for quiz_session, participant in rows:
+        question_ids = (
+            personalized_by_student.get((quiz_session.id, participant.student_id), [])
+            if participant.student_id is not None
+            else []
+        )
+        if not question_ids:
+            question_ids = personalized_by_identifier.get(
+                (quiz_session.id, participant.student_identifier),
+                common_by_session[quiz_session.id],
+            )
+        question_ids_by_participant[participant.id] = question_ids
+        all_question_ids.update(question_ids)
+    questions_by_id = {
+        question.id: question
+        for question in session.scalars(
+            select(Question)
+            .options(defer(Question.image_data))
+            .where(Question.id.in_(all_question_ids))
+        )
+    }
+    answers_by_participant_question = {
+        (answer.participant_id, answer.question_id): answer
+        for answer in session.scalars(
+            select(QuizAnswer).where(QuizAnswer.participant_id.in_(participant_ids))
+        )
+    }
+    question_points = question_maximum_scores(list(all_question_ids), session)
+    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
+    for choice in session.scalars(
+        select(QuestionChoice)
+        .options(defer(QuestionChoice.image_data))
+        .where(QuestionChoice.question_id.in_(all_question_ids))
+        .order_by(QuestionChoice.position, QuestionChoice.id)
+    ):
+        choices_by_question[choice.question_id].append(choice)
+    class_ids = {
+        quiz_session.class_id
+        for quiz_session, _ in rows
+        if quiz_session.class_id is not None
+    }
+    classes_by_id = {
+        student_class.id: student_class
+        for student_class in session.scalars(
+            select(StudentClass).where(StudentClass.id.in_(class_ids))
+        )
+    }
+
     history: list[StudentQuizHistoryItem] = []
     for quiz_session, participant in rows:
-        question_ids = session_question_ids(quiz_session, session, participant)
-        questions_by_id = {
-            question.id: question
-            for question in session.scalars(
-                select(Question).where(Question.id.in_(question_ids))
-            )
-        }
+        question_ids = question_ids_by_participant[participant.id]
         answers_by_question = {
-            answer.question_id: answer
-            for answer in session.scalars(
-                select(QuizAnswer).where(
-                    QuizAnswer.session_id == quiz_session.id,
-                    QuizAnswer.participant_id == participant.id,
-                )
+            question_id: answers_by_participant_question.get(
+                (participant.id, question_id)
             )
+            for question_id in question_ids
         }
-        question_points = session_question_points(quiz_session, session, participant)
-        choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
-        if question_ids:
-            for choice in session.scalars(
-                select(QuestionChoice)
-                .where(QuestionChoice.question_id.in_(question_ids))
-                .order_by(QuestionChoice.position, QuestionChoice.id)
-            ):
-                choices_by_question[choice.question_id].append(choice)
         answers = []
         for position, question_id in enumerate(question_ids):
             question = questions_by_id.get(question_id)
@@ -1756,18 +1986,33 @@ def list_student_quiz_history(
             StudentQuizHistoryItem(
                 session_id=quiz_session.id,
                 quiz_title=quiz_session.quiz_title or "Quiz",
-                class_name=quiz_session_class_name(quiz_session, session),
+                class_name=(
+                    format_class_name(
+                        classes_by_id[quiz_session.class_id].grade_level,
+                        classes_by_id[quiz_session.class_id].name,
+                    )
+                    if quiz_session.class_id in classes_by_id
+                    else quiz_session.class_name
+                ),
                 started_at=quiz_session.started_at,
                 score=(
                     round(
-                        sum(answer.score for answer in answers_by_question.values()), 2
+                        sum(
+                            answer.score
+                            for answer in answers_by_question.values()
+                            if answer is not None
+                        ),
+                        2,
                     )
                     if quiz_session.grades_published_at is not None
                     else None
                 ),
                 maximum_score=(
                     round(
-                        sum(question_points.values()),
+                        sum(
+                            question_points.get(question_id, 0)
+                            for question_id in question_ids
+                        ),
                         2,
                     )
                     if quiz_session.grades_published_at is not None
@@ -1993,7 +2238,7 @@ def delete_quiz(
         select(QuizSession.id)
         .where(
             QuizSession.quiz_id == quiz.id,
-            QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
         .limit(1)
     )
@@ -2119,7 +2364,7 @@ def cancel_quiz_session(
 ) -> None:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
     expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status not in {"waiting", "in_progress", "paused"}:
+    if quiz_session.status not in ACTIVE_SESSION_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette session ne peut plus être annulée",
@@ -2996,7 +3241,7 @@ def update_quiz(
         select(QuizSession.id)
         .where(
             QuizSession.quiz_id == quiz.id,
-            QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+            QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
         .limit(1)
     )
@@ -3173,7 +3418,7 @@ def join_quiz(
             update(QuizSession)
             .where(
                 QuizSession.id == quiz_session.id,
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
             .values(status=QuizSession.status)
             .execution_options(synchronize_session=False)
@@ -3324,7 +3569,7 @@ def submit_student_answer(
             status_code=status.HTTP_409_CONFLICT,
             detail="Aucune question en cours",
         )
-    question = session.get(Question, question_id)
+    question = session.get(Question, question_id, options=[defer(Question.image_data)])
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -3333,6 +3578,7 @@ def submit_student_answer(
     choices = list(
         session.scalars(
             select(QuestionChoice)
+            .options(defer(QuestionChoice.image_data))
             .where(QuestionChoice.question_id == question_id)
             .order_by(QuestionChoice.position)
         )

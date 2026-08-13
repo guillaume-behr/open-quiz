@@ -7,7 +7,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
-from app.grade_levels import ensure_grade_level
+from app.grade_levels import ensure_grade_level, grade_level_import_context
 from app.models import (
     ClassTrainingQuestionBank,
     GradeLevel,
@@ -22,7 +22,6 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
-from app.routers.students import generated_student_password
 from app.schemas import (
     ClassBatchImport,
     ClassBatchImportResponse,
@@ -31,6 +30,8 @@ from app.schemas import (
     StudentResponse,
 )
 from app.security import encrypt_student_password, hash_password
+from app.session_status import ACTIVE_SESSION_STATUSES
+from app.student_accounts import generated_student_password, owned_student_account
 from app.student_memberships import (
     delete_student_membership,
     delete_unfinished_training_sessions,
@@ -44,17 +45,8 @@ def download_class_import_example(
     professor: ProfessorUser,
     session: DbSession,
 ) -> Response:
-    available_grade_levels = list(
-        session.scalars(
-            select(GradeLevel.name)
-            .where(GradeLevel.owner_id == professor.id)
-            .order_by(GradeLevel.name, GradeLevel.id)
-        )
-    )
-    grade_level_comment = (
-        f"Niveaux de classe disponibles : {', '.join(available_grade_levels)}."
-        if available_grade_levels
-        else "Aucun niveau de classe n’est encore défini."
+    available_grade_levels, grade_level_comment = grade_level_import_context(
+        professor.id, session
     )
     example = {
         "classes": [
@@ -193,7 +185,7 @@ def class_has_active_exam_session(class_id: int, session: DbSession) -> bool:
             .where(
                 QuizSession.class_id == class_id,
                 Quiz.mode == "exam",
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
         )
         is not None
@@ -453,7 +445,7 @@ def delete_class(
         session.scalar(
             select(MakeupSession.id).where(
                 MakeupSession.class_id == class_id,
-                MakeupSession.status.in_(["waiting", "in_progress", "paused"]),
+                MakeupSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
         )
         is not None
@@ -507,14 +499,7 @@ def assign_student_account(
     session: DbSession,
 ) -> StudentClassResponse:
     student_class = owned_class(class_id, professor, session)
-    account = session.scalar(
-        select(StudentAccount).where(
-            StudentAccount.id == account_id,
-            StudentAccount.owner_id == professor.id,
-        )
-    )
-    if account is None:
-        raise HTTPException(status_code=404, detail="Compte élève introuvable")
+    account = owned_student_account(account_id, professor.id, session)
     membership = session.scalar(select(Student).where(Student.account_id == account.id))
     if membership is not None:
         if membership.class_id == class_id:
@@ -525,7 +510,7 @@ def assign_student_account(
             .where(
                 QuizSession.class_id.in_([membership.class_id, class_id]),
                 Quiz.mode == "exam",
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
             .limit(1)
         )

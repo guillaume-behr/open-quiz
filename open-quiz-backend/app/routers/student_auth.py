@@ -10,7 +10,6 @@ from app.audit import audit_event
 from app.dependencies import DbSession
 from app.models import StudentAccount
 from app.routers.auth import auth_error, enforce_global_auth_limit, validate_origin
-from app.routers.students import account_response
 from app.schemas import (
     StudentAccountResponse,
     StudentLoginRequest,
@@ -23,6 +22,7 @@ from app.security import (
     decode_student_access_token,
     verify_password,
 )
+from app.student_accounts import student_account_response
 
 router = APIRouter(prefix="/api/student-auth", tags=["student authentication"])
 student_bearer = HTTPBearer(auto_error=False)
@@ -110,7 +110,7 @@ def login_student(
         ),
     )
     return StudentLoginResponse(
-        access_token=token, student=account_response(account, session)
+        access_token=token, student=student_account_response(account, session)
     )
 
 
@@ -119,4 +119,4 @@ def student_me(
     account: Annotated[StudentAccount, Depends(current_student)],
     session: DbSession,
 ) -> StudentAccountResponse:
-    return account_response(account, session)
+    return student_account_response(account, session)

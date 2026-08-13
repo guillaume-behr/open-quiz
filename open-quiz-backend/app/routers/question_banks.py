@@ -19,10 +19,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import defer
 
 from app.dependencies import DbSession, ProfessorUser
-from app.grade_levels import ensure_grade_level
+from app.grade_levels import ensure_grade_level, grade_level_import_context
 from app.images import (
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
@@ -31,14 +30,11 @@ from app.images import (
 )
 from app.models import (
     ClassTrainingQuestionBank,
-    GradeLevel,
     Question,
     QuestionBank,
     QuestionChoice,
     QuestionCode,
     Quiz,
-    QuizAnswer,
-    QuizParticipant,
     QuizQuestionBank,
     QuizSession,
     QuizSessionQuestion,
@@ -46,6 +42,8 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.question_responses import load_question_responses, question_response
+from app.quiz_session_records import delete_quiz_session_records
 from app.schemas import (
     MAX_QUESTIONS_PER_BANK,
     QuestionBankCreate,
@@ -350,59 +348,7 @@ def discard_training_sessions_using_question(
     )
     if not training_session_ids:
         return
-    session.execute(
-        delete(QuizAnswer).where(QuizAnswer.session_id.in_(training_session_ids))
-    )
-    session.execute(
-        delete(QuizParticipant).where(
-            QuizParticipant.session_id.in_(training_session_ids)
-        )
-    )
-    session.execute(
-        delete(QuizSessionQuestion).where(
-            QuizSessionQuestion.session_id.in_(training_session_ids)
-        )
-    )
-    session.execute(
-        delete(QuizSessionStudentQuestion).where(
-            QuizSessionStudentQuestion.session_id.in_(training_session_ids)
-        )
-    )
-    session.execute(delete(QuizSession).where(QuizSession.id.in_(training_session_ids)))
-
-
-def question_response(
-    question: Question,
-    choices: list[QuestionChoice],
-    code: QuestionCode | None = None,
-) -> QuestionResponse:
-    return QuestionResponse(
-        id=question.id,
-        question_bank_id=question.question_bank_id,
-        prompt=question.prompt,
-        difficulty=question.difficulty,
-        answer_mode=question.answer_mode,
-        answer_mode_disclosed=question.answer_mode_disclosed,
-        response_language=question.response_language,
-        allow_code_execution=question.allow_code_execution,
-        has_image=question.image_content_type is not None,
-        code_language=code.language if code else None,
-        code_content=code.content if code else None,
-        choices=[
-            {
-                "id": choice.id,
-                "label": choice.label,
-                "is_correct": choice.is_correct,
-                "points": choice.points,
-                "position": choice.position,
-                "has_image": choice.image_content_type is not None,
-                "code_language": choice.code_language,
-                "code_content": choice.code_content,
-            }
-            for choice in choices
-        ],
-        created_at=question.created_at,
-    )
+    delete_quiz_session_records(training_session_ids, session)
 
 
 def add_question(
@@ -478,41 +424,14 @@ def list_questions(
 ) -> list[QuestionResponse]:
     """Return the questions in one of the professor's banks."""
     owned_question_bank(question_bank_id, professor, session)
-    questions = list(
+    question_ids = list(
         session.scalars(
-            select(Question)
-            .options(defer(Question.image_data))
+            select(Question.id)
             .where(Question.question_bank_id == question_bank_id)
             .order_by(Question.prompt, Question.id)
         )
     )
-    if not questions:
-        return []
-    question_ids = [question.id for question in questions]
-    choices_by_question: dict[int, list[QuestionChoice]] = {
-        question_id: [] for question_id in question_ids
-    }
-    for choice in session.scalars(
-        select(QuestionChoice)
-        .options(defer(QuestionChoice.image_data))
-        .where(QuestionChoice.question_id.in_(question_ids))
-        .order_by(QuestionChoice.question_id, QuestionChoice.position)
-    ):
-        choices_by_question[choice.question_id].append(choice)
-    codes_by_question = {
-        code.question_id: code
-        for code in session.scalars(
-            select(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
-        )
-    }
-    return [
-        question_response(
-            question,
-            choices_by_question[question.id],
-            codes_by_question.get(question.id),
-        )
-        for question in questions
-    ]
+    return load_question_responses(question_ids, session)
 
 
 @router.get("/example")
@@ -521,17 +440,8 @@ def download_import_example(
     session: DbSession,
 ) -> Response:
     """Download a complete versioned example of the question batch format."""
-    available_grade_levels = list(
-        session.scalars(
-            select(GradeLevel.name)
-            .where(GradeLevel.owner_id == professor.id)
-            .order_by(GradeLevel.name, GradeLevel.id)
-        )
-    )
-    grade_level_comment = (
-        f"Niveaux de classe disponibles : {', '.join(available_grade_levels)}."
-        if available_grade_levels
-        else "Aucun niveau de classe n’est encore défini."
+    available_grade_levels, grade_level_comment = grade_level_import_context(
+        professor.id, session
     )
     example = {
         "version": 1,

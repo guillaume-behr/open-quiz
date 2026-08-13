@@ -1,7 +1,5 @@
 import re
 import unicodedata
-from secrets import choice
-from string import digits
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
@@ -31,6 +29,13 @@ from app.security import (
     encrypt_student_password,
     hash_password,
 )
+from app.session_status import ACTIVE_SESSION_STATUSES
+from app.student_accounts import (
+    generated_student_password,
+    owned_student_account,
+    student_account_response,
+    student_account_response_from_membership,
+)
 from app.student_memberships import (
     delete_student_membership,
     revoke_student_participations,
@@ -38,19 +43,7 @@ from app.student_memberships import (
 
 router = APIRouter(prefix="/api/students", tags=["student accounts"])
 
-READABLE_CONSONANTS = "BCDFGHJKMNPRSTVWXYZ"
-READABLE_VOWELS = "AEU"
 STUDENT_IDENTIFIER_MAX_LENGTH = 20
-
-
-def generated_student_password() -> str:
-    # Pronounceable letters plus digits: 19^4 * 3^4 * 10^2 (~30 bits) while
-    # staying easy for young students to copy.
-    letters = "".join(
-        choice(READABLE_CONSONANTS if index % 2 == 0 else READABLE_VOWELS)
-        for index in range(8)
-    )
-    return f"{letters}{choice(digits)}{choice(digits)}"
 
 
 def identifier_part(value: str) -> str:
@@ -79,50 +72,6 @@ def generated_student_identifier(
         identifier = f"{base[:base_length].rstrip('.')}.{suffix_text}"
         suffix += 1
     return identifier
-
-
-def account_response(
-    account: StudentAccount, session: DbSession
-) -> StudentAccountResponse:
-    membership = session.execute(
-        select(Student.class_id, StudentClass.name, StudentClass.grade_level)
-        .join(StudentClass, StudentClass.id == Student.class_id)
-        .where(Student.account_id == account.id)
-    ).first()
-    return account_response_from_membership(
-        account,
-        (membership[0], membership[1], membership[2]) if membership else None,
-    )
-
-
-def account_response_from_membership(
-    account: StudentAccount,
-    membership: tuple[int, str, str] | None,
-) -> StudentAccountResponse:
-    return StudentAccountResponse(
-        id=account.id,
-        identifier=account.identifier,
-        display_name=account.display_name,
-        is_active=account.is_active,
-        class_id=membership[0] if membership else None,
-        class_name=membership[1] if membership else None,
-        grade_level=membership[2] if membership else None,
-        created_at=account.created_at,
-    )
-
-
-def owned_account(
-    account_id: int, professor: ProfessorUser, session: DbSession
-) -> StudentAccount:
-    account = session.scalar(
-        select(StudentAccount).where(
-            StudentAccount.id == account_id,
-            StudentAccount.owner_id == professor.id,
-        )
-    )
-    if account is None:
-        raise HTTPException(status_code=404, detail="Compte élève introuvable")
-    return account
 
 
 def credential_response(
@@ -212,7 +161,7 @@ def list_student_accounts(
         .limit(page_size)
     )
     return [
-        account_response_from_membership(
+        student_account_response_from_membership(
             account,
             (class_id, class_name, grade_level)
             if (
@@ -328,7 +277,7 @@ def create_student_account(
         professor_id=professor.id,
         account_id=account.id,
     )
-    response = account_response(account, session)
+    response = student_account_response(account, session)
     return StudentAccountCreatedResponse(
         **response.model_dump(), generated_password=password
     )
@@ -342,7 +291,7 @@ def update_student_account(
     session: DbSession,
     request: Request,
 ) -> StudentAccountResponse:
-    account = owned_account(account_id, professor, session)
+    account = owned_student_account(account_id, professor.id, session)
     credentials_changed = payload.password is not None or (
         account.is_active and not payload.is_active
     )
@@ -373,7 +322,7 @@ def update_student_account(
         professor_id=professor.id,
         account_id=account.id,
     )
-    return account_response(account, session)
+    return student_account_response(account, session)
 
 
 @router.delete("/{account_id}", status_code=204)
@@ -382,7 +331,7 @@ def delete_student_account(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    account = owned_account(account_id, professor, session)
+    account = owned_student_account(account_id, professor.id, session)
     membership = session.scalar(select(Student).where(Student.account_id == account.id))
     if membership is not None:
         active = session.scalar(
@@ -391,7 +340,7 @@ def delete_student_account(
             .where(
                 QuizSession.class_id == membership.class_id,
                 Quiz.mode == "exam",
-                QuizSession.status.in_(["waiting", "in_progress", "paused"]),
+                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
         )
         if active is not None:

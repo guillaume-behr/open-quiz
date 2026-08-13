@@ -6,6 +6,24 @@ from app.models import GradeLevel
 DEFAULT_GRADE_LEVELS = ("1ere", "2nd", "Tle")
 
 
+def grade_level_import_context(
+    owner_id: int, session: Session
+) -> tuple[list[str], str]:
+    names = list(
+        session.scalars(
+            select(GradeLevel.name)
+            .where(GradeLevel.owner_id == owner_id)
+            .order_by(GradeLevel.name, GradeLevel.id)
+        )
+    )
+    comment = (
+        f"Niveaux de classe disponibles : {', '.join(names)}."
+        if names
+        else "Aucun niveau de classe n’est encore défini."
+    )
+    return names, comment
+
+
 def ensure_grade_level(owner_id: int, name: str, session: Session) -> GradeLevel:
     with session.no_autoflush:
         grade_level = session.scalar(

@@ -5,13 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     MakeupSessionSelection,
-    QuizAnswer,
     QuizParticipant,
     QuizSession,
-    QuizSessionQuestion,
-    QuizSessionStudentQuestion,
     Student,
 )
+from app.quiz_session_records import delete_quiz_session_records
+from app.session_status import ACTIVE_SESSION_STATUSES
 
 
 def delete_unfinished_training_sessions(
@@ -36,25 +35,7 @@ def delete_unfinished_training_sessions(
     )
     if not training_session_ids:
         return
-    session.execute(
-        delete(QuizAnswer).where(QuizAnswer.session_id.in_(training_session_ids))
-    )
-    session.execute(
-        delete(QuizParticipant).where(
-            QuizParticipant.session_id.in_(training_session_ids)
-        )
-    )
-    session.execute(
-        delete(QuizSessionQuestion).where(
-            QuizSessionQuestion.session_id.in_(training_session_ids)
-        )
-    )
-    session.execute(
-        delete(QuizSessionStudentQuestion).where(
-            QuizSessionStudentQuestion.session_id.in_(training_session_ids)
-        )
-    )
-    session.execute(delete(QuizSession).where(QuizSession.id.in_(training_session_ids)))
+    delete_quiz_session_records(training_session_ids, session)
 
 
 def revoke_student_participations(
@@ -68,7 +49,7 @@ def revoke_student_participations(
         .values(access_token_hash=None)
     )
     active_session_ids = select(QuizSession.id).where(
-        QuizSession.status.in_(["waiting", "in_progress", "paused"])
+        QuizSession.status.in_(ACTIVE_SESSION_STATUSES)
     )
     session.execute(
         update(QuizParticipant)
