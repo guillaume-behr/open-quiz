@@ -755,5 +755,22 @@
     "training-history-score": "النتيجة: {{score}} / {{maximum}} ({{percent}}%)",
     "training-potential-score": "النتيجة المحتملة: {{score}} / {{maximum}}",
     "training-potential-score-help": "This score is provisional and only includes automatically graded answers.",
-    "training-manual-review": "قارن مع التصحيح"
+    "training-manual-review": "قارن مع التصحيح",
+    "training-question-count-title": "إعداد بنك الأسئلة",
+    "training-question-count-help": "يحتوي {{bank}} على {{count}} سؤالًا متاحًا.",
+    "training-question-count": "عدد الأسئلة",
+    "training-question-count-error": "أدخل عددًا صحيحًا بين 1 و{{count}}.",
+    "classes-import": "استيراد الفصول",
+    "classes-import-help": "اختر ملف JSON. تتم عملية الاستيراد بالكامل أو لا تتم.",
+    "classes-import-file": "ملف JSON",
+    "classes-import-example": "مثال على التنسيق المقبول",
+    "classes-import-preview": "معاينة",
+    "classes-import-summary": "{{classes}} فصل، {{students}} طالب",
+    "classes-import-invalid": "ملف JSON غير صالح أو يحتوي على تكرارات.",
+    "classes-import-conflict": "تعذر الاستيراد: تحقق من المستويات والفصول والمعرفات.",
+    "classes-import-success": "تم استيراد {{classes}} فصل و{{students}} طالب.",
+    "print-exams": "طباعة الاختبارات",
+    "student-name-placeholder": "الاسم: ____________________",
+    "import": "استيراد",
+    "save": "حفظ"
 }

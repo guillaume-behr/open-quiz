@@ -36,6 +36,15 @@ export function createStudentClass(
     })
 }
 
+export function importStudentClasses(
+    payload: unknown
+): Promise<{ class_count: number; student_count: number }> {
+    return request("/api/classes/import", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    })
+}
+
 export function deleteStudentClass(classId: number): Promise<void> {
     return request<void>(`/api/classes/${classId}`, { method: "DELETE" })
 }

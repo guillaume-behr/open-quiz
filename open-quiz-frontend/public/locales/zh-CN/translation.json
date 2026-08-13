@@ -695,5 +695,22 @@
     "training-history-score": "结果：{{score}} / {{maximum}}（{{percent}}%）",
     "training-potential-score": "潜在得分：{{score}} / {{maximum}}",
     "training-potential-score-help": "This score is provisional and only includes automatically graded answers.",
-    "training-manual-review": "与参考答案比较"
+    "training-manual-review": "与参考答案比较",
+    "training-question-count-title": "配置题库",
+    "training-question-count-help": "{{bank}} 有 {{count}} 道可用题目。",
+    "training-question-count": "题目数量",
+    "training-question-count-error": "请输入 1 到 {{count}} 之间的整数。",
+    "classes-import": "导入班级",
+    "classes-import-help": "选择 JSON 文件。导入是原子操作，发生错误时不会创建任何数据。",
+    "classes-import-file": "JSON 文件",
+    "classes-import-example": "接受格式示例",
+    "classes-import-preview": "预览",
+    "classes-import-summary": "{{classes}} 个班级，{{students}} 名学生",
+    "classes-import-invalid": "JSON 文件无效或包含重复项。",
+    "classes-import-conflict": "无法导入：请检查现有年级、班级和标识符。",
+    "classes-import-success": "已导入 {{classes}} 个班级和 {{students}} 名学生。",
+    "print-exams": "打印试卷",
+    "student-name-placeholder": "姓名：____________________",
+    "import": "导入",
+    "save": "保存"
 }

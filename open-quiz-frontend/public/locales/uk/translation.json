@@ -725,5 +725,22 @@
     "training-history-score": "Результат: {{score}} / {{maximum}} ({{percent}}%)",
     "training-potential-score": "Потенційна оцінка: {{score}} / {{maximum}}",
     "training-potential-score-help": "This score is provisional and only includes automatically graded answers.",
-    "training-manual-review": "Порівняйте з виправленням"
+    "training-manual-review": "Порівняйте з виправленням",
+    "training-question-count-title": "Налаштувати банк",
+    "training-question-count-help": "{{bank}} містить {{count}} доступних запитань.",
+    "training-question-count": "Кількість запитань",
+    "training-question-count-error": "Введіть ціле число від 1 до {{count}}.",
+    "classes-import": "Імпортувати класи",
+    "classes-import-help": "Виберіть файл JSON. Імпорт є атомарним.",
+    "classes-import-file": "Файл JSON",
+    "classes-import-example": "Приклад прийнятного формату",
+    "classes-import-preview": "Попередній перегляд",
+    "classes-import-summary": "{{classes}} клас(и), {{students}} учень(ні)",
+    "classes-import-invalid": "Файл JSON недійсний або містить дублікати.",
+    "classes-import-conflict": "Імпорт неможливий: перевірте рівні, класи та ідентифікатори.",
+    "classes-import-success": "Імпортовано {{classes}} клас(и) і {{students}} учень(ні).",
+    "print-exams": "Друкувати роботи",
+    "student-name-placeholder": "Ім’я: ____________________",
+    "import": "Імпортувати",
+    "save": "Зберегти"
 }

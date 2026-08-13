@@ -85,13 +85,13 @@ export function getClassTrainingQuestionBanks(
 
 export function updateClassTrainingQuestionBanks(
     classId: number,
-    questionBankIds: number[]
+    questionBanks: { question_bank_id: number; question_count: number }[]
 ): Promise<QuestionBank[]> {
     return request<QuestionBank[]>(
         `/api/quizzes/training/classes/${classId}/question-banks`,
         {
             method: "PUT",
-            body: JSON.stringify({ question_bank_ids: questionBankIds }),
+            body: JSON.stringify({ question_banks: questionBanks }),
         }
     )
 }

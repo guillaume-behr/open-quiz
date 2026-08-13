@@ -7,6 +7,10 @@ import {
 import type { QuestionBank, StudentClass } from "@/api/types"
 import { formatClassName } from "@/lib/utils"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { FieldError } from "@/components/ui/field"
+import { Dialog } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Toast } from "@/components/ui/toast"
 import { LibraryBig, LoaderCircle, School } from "lucide-react"
@@ -20,6 +24,10 @@ export function ClassTrainingBanksPanel() {
     const [selectedClassId, setSelectedClassId] = useState("")
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
     const [savedBankIds, setSavedBankIds] = useState<number[]>([])
+    const [counts, setCounts] = useState(new Map<number, number>())
+    const [pendingBank, setPendingBank] = useState<QuestionBank | null>(null)
+    const [pendingCount, setPendingCount] = useState("")
+    const [countError, setCountError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [isClassLoading, setIsClassLoading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
@@ -61,6 +69,14 @@ export function ClassTrainingBanksPanel() {
                 confirmedBankIds.current.set(Number(selectedClassId), ids)
                 setSelectedBankIds(ids)
                 setSavedBankIds(ids)
+                setCounts(
+                    new Map(
+                        assignedBanks.map((bank) => [
+                            bank.id,
+                            bank.training_question_count ?? bank.question_count,
+                        ])
+                    )
+                )
             })
             .catch(() => active && setError(t("training-settings-load-error")))
             .finally(() => active && setIsClassLoading(false))
@@ -81,7 +97,10 @@ export function ClassTrainingBanksPanel() {
         ? banks.filter((bank) => bank.grade_level === selectedClass.grade_level)
         : []
 
-    function changeSelection(nextIds: number[]) {
+    function changeSelection(
+        nextIds: number[],
+        nextCounts: Map<number, number>
+    ) {
         if (!selectedClassId) return
         const classId = Number(selectedClassId)
         const version = ++saveVersion.current
@@ -92,13 +111,24 @@ export function ClassTrainingBanksPanel() {
             try {
                 const assigned = await updateClassTrainingQuestionBanks(
                     classId,
-                    nextIds
+                    nextIds.map((id) => ({
+                        question_bank_id: id,
+                        question_count: nextCounts.get(id) ?? 1,
+                    }))
                 )
                 const ids = assigned.map((bank) => bank.id)
                 confirmedBankIds.current.set(classId, ids)
                 if (version !== saveVersion.current) return
                 setSelectedBankIds(ids)
                 setSavedBankIds(ids)
+                setCounts(
+                    new Map(
+                        assigned.map((bank) => [
+                            bank.id,
+                            bank.training_question_count ?? bank.question_count,
+                        ])
+                    )
+                )
                 setToast({
                     message: t("training-settings-saved"),
                     variant: "success",
@@ -116,6 +146,50 @@ export function ClassTrainingBanksPanel() {
                 if (version === saveVersion.current) setIsSaving(false)
             }
         })
+    }
+
+    function openBankConfiguration(bank: QuestionBank) {
+        setPendingBank(bank)
+        setPendingCount(
+            String(counts.get(bank.id) ?? Math.min(bank.question_count, 10))
+        )
+        setCountError(null)
+    }
+
+    function saveBankConfiguration() {
+        if (!pendingBank) return
+        const value = Number(pendingCount)
+        if (
+            !Number.isInteger(value) ||
+            value < 1 ||
+            value > pendingBank.question_count
+        ) {
+            setCountError(
+                t("training-question-count-error", {
+                    count: pendingBank.question_count,
+                })
+            )
+            return
+        }
+        const nextIds = selectedBankIds.includes(pendingBank.id)
+            ? selectedBankIds
+            : [...selectedBankIds, pendingBank.id]
+        const nextCounts = new Map(counts).set(pendingBank.id, value)
+        setCounts(nextCounts)
+        setPendingBank(null)
+        changeSelection(nextIds, nextCounts)
+    }
+
+    function removePendingBank() {
+        if (!pendingBank) return
+        const nextCounts = new Map(counts)
+        nextCounts.delete(pendingBank.id)
+        setCounts(nextCounts)
+        setPendingBank(null)
+        changeSelection(
+            selectedBankIds.filter((id) => id !== pendingBank.id),
+            nextCounts
+        )
     }
 
     if (isLoading) {
@@ -245,16 +319,7 @@ export function ClassTrainingBanksPanel() {
                                         className="mt-1 accent-primary"
                                         checked={selected}
                                         onChange={() =>
-                                            changeSelection(
-                                                selected
-                                                    ? selectedBankIds.filter(
-                                                          (id) => id !== bank.id
-                                                      )
-                                                    : [
-                                                          ...selectedBankIds,
-                                                          bank.id,
-                                                      ]
-                                            )
+                                            openBankConfiguration(bank)
                                         }
                                     />
                                     <span className="min-w-0">
@@ -274,6 +339,55 @@ export function ClassTrainingBanksPanel() {
                     </div>
                 )}
             </section>
+            <Dialog
+                open={pendingBank !== null}
+                onOpenChange={(open) => !open && setPendingBank(null)}
+                title={t("training-question-count-title")}
+                description={t("training-question-count-help", {
+                    bank: pendingBank?.chapter ?? "",
+                    count: pendingBank?.question_count ?? 0,
+                })}
+            >
+                <Field>
+                    <FieldLabel htmlFor="training-question-count">
+                        {t("training-question-count")}
+                    </FieldLabel>
+                    <Input
+                        id="training-question-count"
+                        type="number"
+                        min={1}
+                        max={pendingBank?.question_count}
+                        step={1}
+                        value={pendingCount}
+                        onChange={(event) =>
+                            setPendingCount(event.target.value)
+                        }
+                    />
+                    {countError && <FieldError>{countError}</FieldError>}
+                </Field>
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
+                    {pendingBank &&
+                        selectedBankIds.includes(pendingBank.id) && (
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={removePendingBank}
+                            >
+                                {t("delete")}
+                            </Button>
+                        )}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setPendingBank(null)}
+                    >
+                        {t("cancel")}
+                    </Button>
+                    <Button type="button" onClick={saveBankConfiguration}>
+                        {t("save")}
+                    </Button>
+                </div>
+            </Dialog>
             {toast && <Toast {...toast} />}
         </div>
     )

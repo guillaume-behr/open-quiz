@@ -695,5 +695,22 @@
     "training-history-score": "{{score}} / {{maximum}} ({{percent}}%)",
     "training-potential-score": "Potential score: {{score}} / {{maximum}}",
     "training-potential-score-help": "This score is provisional and only includes automatically graded answers. Written answers must be compared with the correction manually.",
-    "training-manual-review": "Compare with the correction"
+    "training-manual-review": "Compare with the correction",
+    "training-question-count-title": "Configure question bank",
+    "training-question-count-help": "{{bank}} contains {{count}} available questions.",
+    "training-question-count": "Number of questions",
+    "training-question-count-error": "Enter a whole number between 1 and {{count}}.",
+    "classes-import": "Import classes",
+    "classes-import-help": "Select a JSON file. The import is atomic: no data is created if an error occurs.",
+    "classes-import-file": "JSON file",
+    "classes-import-example": "Accepted format example",
+    "classes-import-preview": "Preview",
+    "classes-import-summary": "{{classes}} class(es), {{students}} student(s)",
+    "classes-import-invalid": "The JSON file is invalid or contains duplicates.",
+    "classes-import-conflict": "Import failed: check existing levels, classes, and identifiers.",
+    "classes-import-success": "Imported {{classes}} class(es) and {{students}} student(s).",
+    "print-exams": "Print exam papers",
+    "student-name-placeholder": "Name: ____________________",
+    "import": "Import",
+    "save": "Save"
 }

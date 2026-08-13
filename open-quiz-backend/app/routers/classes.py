@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -9,6 +9,7 @@ from app.dependencies import DbSession, ProfessorUser
 from app.grade_levels import ensure_grade_level
 from app.models import (
     ClassTrainingQuestionBank,
+    GradeLevel,
     MakeupSession,
     MakeupSessionSelection,
     QuestionBank,
@@ -20,13 +21,113 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
-from app.schemas import StudentClassCreate, StudentClassResponse, StudentResponse
+from app.routers.students import generated_student_password
+from app.schemas import (
+    ClassBatchImport,
+    ClassBatchImportResponse,
+    StudentClassCreate,
+    StudentClassResponse,
+    StudentResponse,
+)
+from app.security import encrypt_student_password, hash_password
 from app.student_memberships import (
     delete_student_membership,
     delete_unfinished_training_sessions,
 )
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
+
+
+@router.post("/import", response_model=ClassBatchImportResponse, status_code=201)
+def import_classes(
+    payload: ClassBatchImport,
+    request: Request,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> ClassBatchImportResponse:
+    class_names = [item.name.casefold() for item in payload.classes]
+    identifiers = [
+        student.identifier for item in payload.classes for student in item.students
+    ]
+    if len(class_names) != len(set(class_names)) or len(identifiers) != len(
+        set(identifiers)
+    ):
+        raise HTTPException(status_code=422, detail="Le fichier contient des doublons")
+    existing_levels = set(
+        session.scalars(
+            select(GradeLevel.name).where(GradeLevel.owner_id == professor.id)
+        )
+    )
+    invalid_levels = sorted(
+        {item.grade_level for item in payload.classes} - existing_levels
+    )
+    if invalid_levels:
+        raise HTTPException(
+            status_code=422, detail=f"Niveau invalide : {', '.join(invalid_levels)}"
+        )
+    if (
+        session.scalar(
+            select(StudentClass.id)
+            .where(
+                StudentClass.owner_id == professor.id,
+                func.lower(StudentClass.name).in_(class_names),
+            )
+            .limit(1)
+        )
+        is not None
+    ):
+        raise HTTPException(status_code=409, detail="Une classe existe déjà")
+    if (
+        identifiers
+        and session.scalar(
+            select(StudentAccount.id)
+            .where(StudentAccount.identifier.in_(identifiers))
+            .limit(1)
+        )
+        is not None
+    ):
+        raise HTTPException(
+            status_code=409, detail="Un identifiant élève est déjà utilisé"
+        )
+    try:
+        for item in payload.classes:
+            student_class = StudentClass(
+                owner_id=professor.id, name=item.name, grade_level=item.grade_level
+            )
+            session.add(student_class)
+            session.flush()
+            for imported in item.students:
+                password = generated_student_password()
+                account = StudentAccount(
+                    owner_id=professor.id,
+                    identifier=imported.identifier,
+                    display_name=imported.display_name,
+                    password_hash=hash_password(password),
+                    encrypted_password=encrypt_student_password(
+                        password,
+                        request.app.state.settings.student_credential_encryption_key,
+                    ),
+                    is_active=True,
+                )
+                session.add(account)
+                session.flush()
+                session.add(
+                    Student(
+                        class_id=student_class.id,
+                        account_id=account.id,
+                        identifier=account.identifier,
+                        display_name=account.display_name,
+                    )
+                )
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=409, detail="Conflit avec les données existantes"
+        ) from None
+    return ClassBatchImportResponse(
+        class_count=len(payload.classes), student_count=len(identifiers)
+    )
 
 
 def commit_unique_class(session: DbSession) -> None:

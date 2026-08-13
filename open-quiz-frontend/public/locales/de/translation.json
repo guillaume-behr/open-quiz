@@ -695,5 +695,22 @@
     "training-history-score": "Ergebnis: {{score}} / {{maximum}} ({{percent}}%)",
     "training-potential-score": "Mögliche Punktzahl: {{score}} / {{maximum}}",
     "training-potential-score-help": "Diese Punktzahl ist vorläufig und enthält nur automatisch bewertete Antworten.",
-    "training-manual-review": "Mit der Lösung vergleichen"
+    "training-manual-review": "Mit der Lösung vergleichen",
+    "training-question-count-title": "Fragenbank konfigurieren",
+    "training-question-count-help": "{{bank}} enthält {{count}} verfügbare Fragen.",
+    "training-question-count": "Anzahl der Fragen",
+    "training-question-count-error": "Geben Sie eine ganze Zahl zwischen 1 und {{count}} ein.",
+    "classes-import": "Klassen importieren",
+    "classes-import-help": "Wählen Sie eine JSON-Datei. Der Import erfolgt atomar.",
+    "classes-import-file": "JSON-Datei",
+    "classes-import-example": "Beispiel für das akzeptierte Format",
+    "classes-import-preview": "Vorschau",
+    "classes-import-summary": "{{classes}} Klasse(n), {{students}} Schüler",
+    "classes-import-invalid": "Die JSON-Datei ist ungültig oder enthält Duplikate.",
+    "classes-import-conflict": "Import nicht möglich: Stufen, Klassen und Kennungen prüfen.",
+    "classes-import-success": "{{classes}} Klasse(n) und {{students}} Schüler importiert.",
+    "print-exams": "Prüfungen drucken",
+    "student-name-placeholder": "Name der Schülerin/des Schülers: ____________________",
+    "import": "Importieren",
+    "save": "Speichern"
 }

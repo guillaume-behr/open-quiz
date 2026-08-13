@@ -269,6 +269,34 @@ class StudentClassResponse(BaseModel):
     created_at: datetime
 
 
+class ClassImportStudent(BaseModel):
+    identifier: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
+    display_name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("identifier")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class ClassImportItem(StudentClassCreate):
+    students: list[ClassImportStudent] = Field(max_length=500)
+
+
+class ClassBatchImport(BaseModel):
+    classes: list[ClassImportItem] = Field(min_length=1, max_length=100)
+
+
+class ClassBatchImportResponse(BaseModel):
+    class_count: int
+    student_count: int
+
+
 class QuestionBankCreate(BaseModel):
     grade_level: str = Field(min_length=1, max_length=80)
     chapter: str = Field(min_length=1, max_length=160)
@@ -297,21 +325,42 @@ class QuestionBankResponse(BaseModel):
     easy_question_count: int = 0
     medium_question_count: int = 0
     hard_question_count: int = 0
+    training_question_count: int | None = None
+
+
+class TrainingQuestionBankItem(BaseModel):
+    question_bank_id: int = Field(ge=1)
+    question_count: int = Field(ge=1, le=200)
 
 
 class TrainingQuestionBankSelection(BaseModel):
-    question_bank_ids: list[int] = Field(max_length=100)
+    question_banks: list[TrainingQuestionBankItem] = Field(
+        default_factory=list, max_length=100
+    )
+    question_bank_ids: list[int] = Field(default_factory=list, max_length=100)
 
-    @field_validator("question_bank_ids")
+    @field_validator("question_banks")
     @classmethod
-    def validate_unique_question_banks(cls, value: list[int]) -> list[int]:
-        if any(question_bank_id < 1 for question_bank_id in value):
-            raise ValueError("Les banques de questions sélectionnées sont invalides")
-        if len(value) != len(set(value)):
+    def validate_unique_question_banks(
+        cls, value: list[TrainingQuestionBankItem]
+    ) -> list[TrainingQuestionBankItem]:
+        ids = [item.question_bank_id for item in value]
+        if len(ids) != len(set(ids)):
             raise ValueError(
                 "Chaque banque de questions ne peut être sélectionnée qu’une fois"
             )
         return value
+
+    @model_validator(mode="after")
+    def validate_legacy_or_current(self) -> TrainingQuestionBankSelection:
+        if self.question_banks and self.question_bank_ids:
+            raise ValueError("Utilisez un seul format de sélection")
+        ids = self.question_bank_ids or [
+            item.question_bank_id for item in self.question_banks
+        ]
+        if any(item < 1 for item in ids) or len(ids) != len(set(ids)):
+            raise ValueError("Les banques de questions sélectionnées sont invalides")
+        return self
 
 
 CodeLanguage = Literal[

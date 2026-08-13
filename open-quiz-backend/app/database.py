@@ -130,6 +130,27 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
             column["name"]
             for column in inspect(connection).get_columns("student_accounts")
         }
+        training_bank_columns = {
+            column["name"]
+            for column in inspect(connection).get_columns(
+                "class_training_question_banks"
+            )
+        }
+        if "question_count" not in training_bank_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE class_training_question_banks ADD COLUMN question_count INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE class_training_question_banks "
+                    "SET question_count = MAX(1, ("
+                    "SELECT MIN(200, COUNT(*)) FROM questions "
+                    "WHERE questions.question_bank_id = "
+                    "class_training_question_banks.question_bank_id))"
+                )
+            )
         if "encrypted_password" not in student_account_columns:
             connection.execute(
                 text("ALTER TABLE student_accounts ADD COLUMN encrypted_password TEXT")

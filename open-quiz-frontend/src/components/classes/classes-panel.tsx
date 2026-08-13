@@ -5,6 +5,7 @@ import {
     getStudentClasses,
     unassignStudentAccount,
     updateStudentClass,
+    importStudentClasses,
 } from "@/api/classes"
 import {
     createStudentAccount,
@@ -37,6 +38,7 @@ import {
     UserMinus,
     UserPlus,
     UsersRound,
+    Upload,
 } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -84,6 +86,110 @@ export function ClassesPanel({
     const [loadError, setLoadError] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [deleteToast, setDeleteToast] = useState<string | null>(null)
+    const [importOpen, setImportOpen] = useState(false)
+    const [importPayload, setImportPayload] = useState<{
+        classes: {
+            name: string
+            grade_level: string
+            students: { identifier: string; display_name: string }[]
+        }[]
+    } | null>(null)
+    const [importError, setImportError] = useState<string | null>(null)
+    const [importToast, setImportToast] = useState<string | null>(null)
+
+    const importExample = JSON.stringify(
+        {
+            classes: [
+                {
+                    name: "TG1",
+                    grade_level: gradeLevels[0]?.name ?? "Tle",
+                    students: [
+                        {
+                            identifier: "martin.l",
+                            display_name: "Lucas Martin",
+                        },
+                        { identifier: "dupont.e", display_name: "Emma Dupont" },
+                    ],
+                },
+            ],
+        },
+        null,
+        2
+    )
+
+    useEffect(() => {
+        if (!importToast) return
+        const timeout = window.setTimeout(() => setImportToast(null), 3500)
+        return () => window.clearTimeout(timeout)
+    }, [importToast])
+
+    async function readImportFile(file: File) {
+        setImportError(null)
+        setImportPayload(null)
+        try {
+            if (!file.name.toLowerCase().endsWith(".json")) throw new Error()
+            const parsed: unknown = JSON.parse(await file.text())
+            if (
+                !parsed ||
+                typeof parsed !== "object" ||
+                !Array.isArray((parsed as { classes?: unknown }).classes)
+            )
+                throw new Error()
+            const value = parsed as typeof importPayload
+            if (
+                !value ||
+                value.classes.length === 0 ||
+                value.classes.some(
+                    (item) =>
+                        !item ||
+                        typeof item.name !== "string" ||
+                        typeof item.grade_level !== "string" ||
+                        !Array.isArray(item.students) ||
+                        item.students.some(
+                            (student) =>
+                                !student ||
+                                typeof student.identifier !== "string" ||
+                                typeof student.display_name !== "string"
+                        )
+                )
+            )
+                throw new Error()
+            const identifiers = value.classes.flatMap((item) =>
+                item.students.map((student) =>
+                    student.identifier.trim().toLowerCase()
+                )
+            )
+            if (new Set(identifiers).size !== identifiers.length)
+                throw new Error()
+            setImportPayload(value)
+        } catch {
+            setImportError(t("classes-import-invalid"))
+        }
+    }
+
+    async function confirmImport() {
+        if (!importPayload) return
+        setIsBusy(true)
+        setImportError(null)
+        try {
+            const result = await importStudentClasses(importPayload)
+            setImportOpen(false)
+            setImportPayload(null)
+            setReloadKey((value) => value + 1)
+            setDeleteToast(null)
+            setError(null)
+            setImportToast(
+                t("classes-import-success", {
+                    classes: result.class_count,
+                    students: result.student_count,
+                })
+            )
+        } catch {
+            setImportError(t("classes-import-conflict"))
+        } finally {
+            setIsBusy(false)
+        }
+    }
 
     useEffect(() => {
         let active = true
@@ -397,6 +503,7 @@ export function ClassesPanel({
     return (
         <div className="mt-6">
             {deleteToast && <Toast message={deleteToast} variant="error" />}
+            {importToast && <Toast message={importToast} variant="success" />}
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
                 <aside className="h-fit rounded-xl border bg-background p-4">
                     <h3 className="font-semibold">{t("filters")}</h3>
@@ -448,7 +555,21 @@ export function ClassesPanel({
                     </FieldGroup>
                 </aside>
                 <div className="min-w-0">
-                    <h3 className="mb-4 font-semibold">{t("classes")}</h3>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <h3 className="font-semibold">{t("classes")}</h3>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                setImportOpen(true)
+                                setImportError(null)
+                                setImportPayload(null)
+                            }}
+                        >
+                            <Upload />
+                            {t("classes-import")}
+                        </Button>
+                    </div>
                     {isLoading ? (
                         <div
                             className="flex min-h-40 items-center justify-center"
@@ -569,6 +690,71 @@ export function ClassesPanel({
                 </div>
             </div>
 
+            <Dialog
+                open={importOpen}
+                onOpenChange={setImportOpen}
+                title={t("classes-import")}
+                description={t("classes-import-help")}
+            >
+                <Field>
+                    <FieldLabel htmlFor="classes-import-file">
+                        {t("classes-import-file")}
+                    </FieldLabel>
+                    <Input
+                        id="classes-import-file"
+                        type="file"
+                        accept="application/json,.json"
+                        onChange={(event) => {
+                            const file = event.target.files?.[0]
+                            if (file) void readImportFile(file)
+                        }}
+                    />
+                </Field>
+                <div className="mt-4">
+                    <p className="text-sm font-medium">
+                        {t("classes-import-example")}
+                    </p>
+                    <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-muted p-3 text-xs">
+                        <code>{importExample}</code>
+                    </pre>
+                </div>
+                {importPayload && (
+                    <div className="mt-4 rounded-lg border p-3 text-sm">
+                        <p className="font-semibold">
+                            {t("classes-import-preview")}
+                        </p>
+                        <p>
+                            {t("classes-import-summary", {
+                                classes: importPayload.classes.length,
+                                students: importPayload.classes.reduce(
+                                    (sum, item) => sum + item.students.length,
+                                    0
+                                ),
+                            })}
+                        </p>
+                    </div>
+                )}
+                {importError && (
+                    <FieldError className="mt-3">{importError}</FieldError>
+                )}
+                <div className="mt-5 flex justify-end gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setImportOpen(false)}
+                    >
+                        {t("cancel")}
+                    </Button>
+                    <Button
+                        type="button"
+                        disabled={!importPayload || isBusy}
+                        onClick={() => void confirmImport()}
+                    >
+                        {isBusy && <LoaderCircle className="animate-spin" />}
+                        {t("import")}
+                    </Button>
+                </div>
+            </Dialog>
             <ClassFormDialog
                 open={isCreateDialogOpen || editing !== null}
                 editingClass={editing}

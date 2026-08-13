@@ -133,6 +133,7 @@ class ClassTrainingQuestionBank(Base):
     question_bank_id: Mapped[int] = mapped_column(
         ForeignKey("question_banks.id"), primary_key=True
     )
+    question_count: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )

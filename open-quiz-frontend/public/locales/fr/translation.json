@@ -699,5 +699,22 @@
     "training-history-score": "{{score}} / {{maximum}} ({{percent}} %) ",
     "training-potential-score": "Note potentielle : {{score}} / {{maximum}}",
     "training-potential-score-help": "Cette note est provisoire et ne porte que sur les réponses corrigées automatiquement. Les réponses rédactionnelles doivent être comparées manuellement avec la correction.",
-    "training-manual-review": "À comparer avec la correction"
+    "training-manual-review": "À comparer avec la correction",
+    "training-question-count-title": "Configurer la banque",
+    "training-question-count-help": "{{bank}} contient {{count}} questions disponibles.",
+    "training-question-count": "Nombre de questions",
+    "training-question-count-error": "Saisissez un entier compris entre 1 et {{count}}.",
+    "classes-import": "Importer des classes",
+    "classes-import-help": "Sélectionnez un fichier JSON. L’import est atomique : aucune donnée ne sera créée en cas d’erreur.",
+    "classes-import-file": "Fichier JSON",
+    "classes-import-example": "Exemple de format accepté",
+    "classes-import-preview": "Aperçu",
+    "classes-import-summary": "{{classes}} classe(s), {{students}} élève(s)",
+    "classes-import-invalid": "Le fichier JSON est invalide ou contient des doublons.",
+    "classes-import-conflict": "L’import est impossible : vérifiez les niveaux, classes et identifiants existants.",
+    "classes-import-success": "{{classes}} classe(s) et {{students}} élève(s) importés.",
+    "print-exams": "Imprimer les sujets",
+    "student-name-placeholder": "Nom : ____________________",
+    "import": "Importer",
+    "save": "Enregistrer"
 }

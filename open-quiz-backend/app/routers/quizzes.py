@@ -85,6 +85,7 @@ from app.schemas import (
     StudentQuizViolation,
     TrainingFeedback,
     TrainingHistoryItem,
+    TrainingQuestionBankItem,
     TrainingQuestionBankSelection,
 )
 
@@ -2164,9 +2165,12 @@ def list_class_training_question_banks(
     )
     if student_class is None:
         raise HTTPException(status_code=404, detail="Classe introuvable")
-    bank_ids = list(
-        session.scalars(
-            select(ClassTrainingQuestionBank.question_bank_id)
+    assignments = list(
+        session.execute(
+            select(
+                ClassTrainingQuestionBank.question_bank_id,
+                ClassTrainingQuestionBank.question_count,
+            )
             .join(
                 QuestionBank,
                 QuestionBank.id == ClassTrainingQuestionBank.question_bank_id,
@@ -2177,7 +2181,12 @@ def list_class_training_question_banks(
             )
         )
     )
-    return question_bank_responses(bank_ids, session)
+    responses = question_bank_responses([row[0] for row in assignments], session)
+    counts = dict(assignments)
+    return [
+        item.model_copy(update={"training_question_count": counts[item.id]})
+        for item in responses
+    ]
 
 
 @router.put(
@@ -2198,15 +2207,18 @@ def update_class_training_question_banks(
     )
     if student_class is None:
         raise HTTPException(status_code=404, detail="Classe introuvable")
+    bank_ids = payload.question_bank_ids or [
+        item.question_bank_id for item in payload.question_banks
+    ]
     banks = list(
         session.scalars(
             select(QuestionBank).where(
-                QuestionBank.id.in_(payload.question_bank_ids),
+                QuestionBank.id.in_(bank_ids),
                 QuestionBank.owner_id == professor.id,
             )
         )
     )
-    if len(banks) != len(payload.question_bank_ids):
+    if len(banks) != len(bank_ids):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Une ou plusieurs banques de questions sont invalides",
@@ -2218,6 +2230,30 @@ def update_class_training_question_banks(
                 "Les banques d’entraînement doivent correspondre au niveau de la classe"
             ),
         )
+    available = dict(
+        session.execute(
+            select(Question.question_bank_id, func.count(Question.id))
+            .where(Question.question_bank_id.in_(bank_ids))
+            .group_by(Question.question_bank_id)
+        ).all()
+    )
+    configured_items = payload.question_banks or [
+        TrainingQuestionBankItem(
+            question_bank_id=bank_id,
+            question_count=max(
+                1, min(MAX_TRAINING_QUESTIONS, available.get(bank_id, 0))
+            ),
+        )
+        for bank_id in bank_ids
+    ]
+    if payload.question_banks and any(
+        item.question_count > available.get(item.question_bank_id, 0)
+        for item in configured_items
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Le nombre demandé dépasse les questions disponibles",
+        )
     session.execute(
         delete(ClassTrainingQuestionBank).where(
             ClassTrainingQuestionBank.class_id == class_id
@@ -2226,12 +2262,18 @@ def update_class_training_question_banks(
     session.add_all(
         ClassTrainingQuestionBank(
             class_id=class_id,
-            question_bank_id=question_bank_id,
+            question_bank_id=item.question_bank_id,
+            question_count=item.question_count,
         )
-        for question_bank_id in payload.question_bank_ids
+        for item in configured_items
     )
     session.commit()
-    return question_bank_responses(payload.question_bank_ids, session)
+    responses = question_bank_responses(bank_ids, session)
+    counts = {item.question_bank_id: item.question_count for item in configured_items}
+    return [
+        item.model_copy(update={"training_question_count": counts[item.id]})
+        for item in responses
+    ]
 
 
 @router.get("/training", response_model=list[QuestionBankResponse])
@@ -2324,8 +2366,8 @@ def start_training_quiz(
             detail="L’élève doit être affecté à une classe",
         )
     class_student, student_class = membership
-    bank = session.scalar(
-        select(QuestionBank)
+    assigned = session.execute(
+        select(QuestionBank, ClassTrainingQuestionBank.question_count)
         .join(
             ClassTrainingQuestionBank,
             ClassTrainingQuestionBank.question_bank_id == QuestionBank.id,
@@ -2336,10 +2378,11 @@ def start_training_quiz(
             QuestionBank.grade_level == student_class.grade_level,
             ClassTrainingQuestionBank.class_id == student_class.id,
         )
-    )
-    if bank is None:
+    ).first()
+    if assigned is None:
         raise HTTPException(status_code=404, detail="Entraînement introuvable")
-    question_ids = draw_training_question_ids(bank.id, session)
+    bank, configured_count = assigned
+    question_ids = draw_training_question_ids(bank.id, session)[:configured_count]
     if not question_ids:
         raise HTTPException(
             status_code=409,
