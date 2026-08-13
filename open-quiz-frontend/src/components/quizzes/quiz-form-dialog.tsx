@@ -31,6 +31,7 @@ type QuizFormDialogProps = {
     selectedBankIds: number[]
     allowPreviousQuestions: boolean
     allowNegativePoints: boolean
+    sameQuestionsForAll: boolean
     difficultyCounts: DifficultyValues
     availableByDifficulty: DifficultyValues
     isBusy: boolean
@@ -42,6 +43,7 @@ type QuizFormDialogProps = {
     onSelectedBankIdsChange: (ids: number[]) => void
     onAllowPreviousQuestionsChange: (value: boolean) => void
     onAllowNegativePointsChange: (value: boolean) => void
+    onSameQuestionsForAllChange: (value: boolean) => void
     onDifficultyCountsChange: (values: DifficultyValues) => void
     onClose: () => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -58,6 +60,7 @@ export function QuizFormDialog({
     selectedBankIds,
     allowPreviousQuestions,
     allowNegativePoints,
+    sameQuestionsForAll,
     difficultyCounts,
     availableByDifficulty,
     isBusy,
@@ -69,6 +72,7 @@ export function QuizFormDialog({
     onSelectedBankIdsChange,
     onAllowPreviousQuestionsChange,
     onAllowNegativePointsChange,
+    onSameQuestionsForAllChange,
     onDifficultyCountsChange,
     onClose,
     onSubmit,
@@ -180,6 +184,23 @@ export function QuizFormDialog({
                                         onAllowPreviousQuestionsChange
                                     }
                                     aria-label={t("allow-previous-questions")}
+                                />
+                            </label>
+                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
+                                <span>
+                                    <span className="block font-medium">
+                                        {t("same-questions-for-all")}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {t("same-questions-for-all-help")}
+                                    </span>
+                                </span>
+                                <Switch
+                                    checked={sameQuestionsForAll}
+                                    onCheckedChange={
+                                        onSameQuestionsForAllChange
+                                    }
+                                    aria-label={t("same-questions-for-all")}
                                 />
                             </label>
                             <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">

@@ -4403,6 +4403,51 @@ def launch_and_join(
     return launched.json(), participant_headers
 
 
+def test_quiz_can_assign_the_same_draw_to_every_student(tmp_path: Path) -> None:
+    database_path = tmp_path / "common-quiz.db"
+    with make_client(settings_for(database_path)) as client:
+        environment = exam_environment(client)
+        quiz = environment["quiz"]
+        updated = client.post(
+            f"/api/quizzes/{quiz['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "title": quiz["title"],
+                "source_language": quiz["source_language"],
+                "question_bank_ids": [bank["id"] for bank in quiz["question_banks"]],
+                "duration_seconds": quiz["duration_seconds"],
+                "allow_previous_questions": quiz["allow_previous_questions"],
+                "allow_negative_points": quiz["allow_negative_points"],
+                "same_questions_for_all": True,
+                "easy_question_count": quiz["easy_question_count"],
+                "medium_question_count": quiz["medium_question_count"],
+                "hard_question_count": quiz["hard_question_count"],
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["same_questions_for_all"] is True
+
+        launched = client.post(
+            f"/api/quizzes/{quiz['id']}/launch",
+            headers=environment["teacher_headers"],
+            json={"class_id": environment["student_class"]["id"]},
+        )
+        assert launched.status_code == 201
+
+        with sqlite3.connect(database_path) as connection:
+            common_count = connection.execute(
+                "SELECT COUNT(*) FROM quiz_session_questions WHERE session_id = ?",
+                (launched.json()["id"],),
+            ).fetchone()[0]
+            personalized_count = connection.execute(
+                "SELECT COUNT(*) FROM quiz_session_student_questions "
+                "WHERE session_id = ?",
+                (launched.json()["id"],),
+            ).fetchone()[0]
+        assert common_count == quiz["question_count"]
+        assert personalized_count == 0
+
+
 def test_live_quiz_websockets_push_session_transitions(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "live-quiz.db")) as client:
         environment = exam_environment(client)

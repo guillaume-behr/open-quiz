@@ -520,6 +520,8 @@
     "allow-previous-questions": "Ermöglicht die Rückkehr zu vorherigen Fragen",
     "allow-negative-points": "Negative Antwortpunkte aktivieren",
     "allow-previous-questions-help": "Die Studierenden können ihre bereits aufgezeichneten Antworten überprüfen und ändern.",
+    "same-questions-for-all": "Gleiche Fragen für alle",
+    "same-questions-for-all-help": "Alle erhalten dieselben zufällig ausgewählten Fragen in derselben Reihenfolge.",
     "student-navigation-error": "Ich kann nicht zu dieser Frage zurückkehren.",
     "student-answered-progress_one": "{{count}} Frage beantwortet am {{total}}",
     "student-answered-progress_other": "{{count}} Fragen beantwortet am {{total}}",

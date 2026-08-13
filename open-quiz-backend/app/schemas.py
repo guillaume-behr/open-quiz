@@ -564,7 +564,6 @@ class QuizCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_question_counts(self) -> QuizCreate:
-        self.same_questions_for_all = False
         if self.question_count < 1:
             raise ValueError("Le quiz doit contenir au moins une question")
         if self.question_count > 200:

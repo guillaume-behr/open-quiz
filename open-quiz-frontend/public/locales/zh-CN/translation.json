@@ -520,6 +520,8 @@
     "allow-previous-questions": "允许返回之前的问题",
     "allow-negative-points": "启用答案负分",
     "allow-previous-questions-help": "学生将能够查看和修改他们已经记录的答案。",
+    "same-questions-for-all": "所有人使用相同题目",
+    "same-questions-for-all-help": "每位学生都会收到相同的随机题目，顺序也相同。",
     "student-navigation-error": "无法返回此问题。",
     "student-answered-progress_one": "{{count}} 问题已于 {{total}} 回答",
     "student-answered-progress_other": "{{count}} 已于 {{total}} 回答问题",

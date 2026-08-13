@@ -520,6 +520,8 @@
     "allow-previous-questions": "Allow return to previous questions",
     "allow-negative-points": "Enable negative answer points",
     "allow-previous-questions-help": "Students will be able to review and modify their already recorded answers.",
+    "same-questions-for-all": "Same questions for everyone",
+    "same-questions-for-all-help": "Every student receives the same randomly selected questions in the same order.",
     "student-navigation-error": "Cannot return to this question.",
     "student-answered-progress_one": "{{count}} of {{total}} question answered",
     "student-answered-progress_other": "{{count}} of {{total}} questions answered",

@@ -560,6 +560,8 @@
     "allow-previous-questions": "السماح بالعودة إلى الأسئلة السابقة",
     "allow-negative-points": "تفعيل النقاط السلبية للإجابات",
     "allow-previous-questions-help": "سيتمكن الطلاب من مراجعة وتعديل إجاباتهم المسجلة بالفعل.",
+    "same-questions-for-all": "الأسئلة نفسها للجميع",
+    "same-questions-for-all-help": "يتلقى جميع الطلاب الأسئلة العشوائية نفسها وبالترتيب نفسه.",
     "student-navigation-error": "لا يمكن العودة إلى هذا السؤال.",
     "student-answered-progress_one": "{{count}} تمت الإجابة على السؤال في {{total}}",
     "student-answered-progress_other": "{{count}} تمت الإجابة على الأسئلة في {{total}}",

@@ -540,6 +540,8 @@
     "allow-previous-questions": "Дозволити повернутися до попередніх питань",
     "allow-negative-points": "Увімкнути від’ємні бали за відповіді",
     "allow-previous-questions-help": "Студенти зможуть переглядати та змінювати свої вже записані відповіді.",
+    "same-questions-for-all": "Однакові запитання для всіх",
+    "same-questions-for-all-help": "Усі отримують однакові випадково вибрані запитання в однаковому порядку.",
     "student-navigation-error": "Не можу повернутися до цього запитання.",
     "student-answered-progress_one": "Відповідь на {{count}} запитання дано {{total}}",
     "student-answered-progress_other": "{{count}} запитань, відповідь на {{total}}",

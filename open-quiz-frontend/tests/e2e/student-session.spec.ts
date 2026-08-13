@@ -531,13 +531,37 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
         .poll(() => violations)
         .toEqual([{ event_type: "pointer_exit" }])
 
-    // Different signals must not suppress one another when they happen in the
-    // same debounce window.
+    // Normal editor operations are allowed. Only an unusually large paste is
+    // reported, and different signals do not suppress one another.
     await page.locator("body").dispatchEvent("copy")
-    await expect.poll(() => violations).toEqual([
-        { event_type: "pointer_exit" },
-        { event_type: "copy_attempt" },
-    ])
+    await page.locator("body").evaluate((element) => {
+        const clipboard = new DataTransfer()
+        clipboard.setData("text/plain", "short paste")
+        element.dispatchEvent(
+            new ClipboardEvent("paste", {
+                bubbles: true,
+                clipboardData: clipboard,
+            })
+        )
+    })
+    await page.waitForTimeout(100)
+    expect(violations).toEqual([{ event_type: "pointer_exit" }])
+    await page.locator("body").evaluate((element) => {
+        const clipboard = new DataTransfer()
+        clipboard.setData("text/plain", "x".repeat(500))
+        element.dispatchEvent(
+            new ClipboardEvent("paste", {
+                bubbles: true,
+                clipboardData: clipboard,
+            })
+        )
+    })
+    await expect
+        .poll(() => violations)
+        .toEqual([
+            { event_type: "pointer_exit" },
+            { event_type: "paste_attempt" },
+        ])
 })
 
 test("student session state is updated through its live socket", async ({

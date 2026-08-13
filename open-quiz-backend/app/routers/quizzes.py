@@ -1570,7 +1570,7 @@ def create_quiz(
         duration_seconds=payload.duration_seconds,
         allow_previous_questions=payload.allow_previous_questions,
         allow_negative_points=payload.allow_negative_points,
-        same_questions_for_all=False,
+        same_questions_for_all=payload.same_questions_for_all,
         easy_question_count=payload.easy_question_count,
         medium_question_count=payload.medium_question_count,
         hard_question_count=payload.hard_question_count,
@@ -3674,7 +3674,7 @@ def update_quiz(
     quiz.duration_seconds = payload.duration_seconds
     quiz.allow_previous_questions = payload.allow_previous_questions
     quiz.allow_negative_points = payload.allow_negative_points
-    quiz.same_questions_for_all = False
+    quiz.same_questions_for_all = payload.same_questions_for_all
     quiz.easy_question_count = payload.easy_question_count
     quiz.medium_question_count = payload.medium_question_count
     quiz.hard_question_count = payload.hard_question_count
@@ -3740,7 +3740,7 @@ def launch_quiz(
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
         allow_negative_points=quiz.allow_negative_points,
-        same_questions_for_all=False,
+        same_questions_for_all=quiz.same_questions_for_all,
         class_id=student_class.id,
         class_name=format_class_name(student_class.grade_level, student_class.name),
         join_code=generate_join_code(session),
@@ -3748,21 +3748,31 @@ def launch_quiz(
     )
     session.add(quiz_session)
     session.flush()
-    assignments: list[QuizSessionStudentQuestion] = []
-    used_draws: set[tuple[int, ...]] = set()
-    for student in students:
-        assigned_question_ids = draw_unique_question_ids(quiz, session, used_draws)
-        assignments.extend(
-            QuizSessionStudentQuestion(
+    if quiz.same_questions_for_all:
+        session.add_all(
+            QuizSessionQuestion(
                 session_id=quiz_session.id,
-                student_id=student.id,
-                student_identifier=student.identifier,
                 question_id=question_id,
                 position=position,
             )
-            for position, question_id in enumerate(assigned_question_ids)
+            for position, question_id in enumerate(draw_question_ids(quiz, session))
         )
-    session.add_all(assignments)
+    else:
+        assignments: list[QuizSessionStudentQuestion] = []
+        used_draws: set[tuple[int, ...]] = set()
+        for student in students:
+            assigned_question_ids = draw_unique_question_ids(quiz, session, used_draws)
+            assignments.extend(
+                QuizSessionStudentQuestion(
+                    session_id=quiz_session.id,
+                    student_id=student.id,
+                    student_identifier=student.identifier,
+                    question_id=question_id,
+                    position=position,
+                )
+                for position, question_id in enumerate(assigned_question_ids)
+            )
+        session.add_all(assignments)
     session.commit()
     session.refresh(quiz_session)
     publish_active_quiz_sessions_update(request, professor.id)

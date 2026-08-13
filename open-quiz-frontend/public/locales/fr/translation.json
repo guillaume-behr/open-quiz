@@ -520,6 +520,8 @@
     "allow-previous-questions": "Autoriser le retour aux questions précédentes",
     "allow-negative-points": "Activer les points négatifs des réponses",
     "allow-previous-questions-help": "Les élèves pourront revoir et modifier leurs réponses déjà enregistrées.",
+    "same-questions-for-all": "Mêmes questions pour tous",
+    "same-questions-for-all-help": "Chaque élève reçoit les mêmes questions tirées au sort, dans le même ordre.",
     "student-navigation-error": "Impossible de revenir à cette question.",
     "student-answered-progress_one": "{{count}} question répondue sur {{total}}",
     "student-answered-progress_other": "{{count}} questions répondues sur {{total}}",
