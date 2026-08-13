@@ -296,7 +296,8 @@ export function ResultsPanel({
     }
 
     async function handleGrade(answer: QuizAnswerReview): Promise<void> {
-        if (!selectedResult) return
+        if (!selectedResult || selectedResult.grades_published_at !== null)
+            return
         const score = Number(scoreDrafts[answer.id])
         if (!Number.isFinite(score)) return
         setGradingAnswerId(answer.id)
@@ -959,6 +960,7 @@ export function ResultsPanel({
                 hasError={answersError}
                 scoreDrafts={scoreDrafts}
                 gradingAnswerId={gradingAnswerId}
+                isReadOnly={selectedResult?.grades_published_at != null}
                 locale={i18n.language}
                 onClose={() => {
                     setSelectedParticipant(null)

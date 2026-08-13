@@ -1873,6 +1873,12 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await expect(
         resultDialog.getByRole("button", { name: "Grades published" })
     ).toBeDisabled()
+    await resultDialog.getByRole("button", { name: "View answers" }).click()
+    await expect(answersDialog.getByLabel("Awarded score")).toBeDisabled()
+    await expect(
+        answersDialog.getByRole("button", { name: "Update score" })
+    ).toBeDisabled()
+    await answersDialog.getByRole("button", { name: "Close" }).click()
     expect(
         requests.some(
             (request) =>

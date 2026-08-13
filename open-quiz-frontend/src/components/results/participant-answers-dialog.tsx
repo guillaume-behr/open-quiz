@@ -13,6 +13,7 @@ type ParticipantAnswersDialogProps = {
     hasError: boolean
     scoreDrafts: Record<number, string>
     gradingAnswerId: number | null
+    isReadOnly: boolean
     locale: string
     onClose: () => void
     onScoreDraftChange: (answerId: number, score: string) => void
@@ -26,6 +27,7 @@ export function ParticipantAnswersDialog({
     hasError,
     scoreDrafts,
     gradingAnswerId,
+    isReadOnly,
     locale,
     onClose,
     onScoreDraftChange,
@@ -67,6 +69,7 @@ export function ParticipantAnswersDialog({
                             answer={answer}
                             scoreDraft={scoreDrafts[answer.id] ?? ""}
                             isGrading={gradingAnswerId === answer.id}
+                            isReadOnly={isReadOnly}
                             locale={locale}
                             onScoreDraftChange={(score) =>
                                 onScoreDraftChange(answer.id, score)
@@ -84,6 +87,7 @@ function AnswerReview({
     answer,
     scoreDraft,
     isGrading,
+    isReadOnly,
     locale,
     onScoreDraftChange,
     onGrade,
@@ -91,6 +95,7 @@ function AnswerReview({
     answer: QuizAnswerReview
     scoreDraft: string
     isGrading: boolean
+    isReadOnly: boolean
     locale: string
     onScoreDraftChange: (score: string) => void
     onGrade: () => void
@@ -137,6 +142,7 @@ function AnswerReview({
                                 max={answer.max_score}
                                 step="0.25"
                                 value={scoreDraft}
+                                disabled={isReadOnly}
                                 onChange={(event) =>
                                     onScoreDraftChange(event.target.value)
                                 }
@@ -150,7 +156,7 @@ function AnswerReview({
                     <Button
                         type="button"
                         size="sm"
-                        disabled={isGrading}
+                        disabled={isGrading || isReadOnly}
                         onClick={onGrade}
                     >
                         {isGrading ? (
