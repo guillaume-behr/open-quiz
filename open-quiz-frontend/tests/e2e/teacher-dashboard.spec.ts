@@ -1816,13 +1816,27 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     expect(participantScoreBox).not.toBeNull()
     expect(participantScoreBox!.x).toBeCloseTo(scoreHeadingBox!.x, 0)
     expect(participantScoreBox!.width).toBeCloseTo(scoreHeadingBox!.width, 0)
-    const aboveMedianIndicator = resultDialog.getByRole("button", {
-        name: "Available points above the median",
+    const medianGapIndicator = resultDialog.getByRole("button", {
+        name: "Available points differ from the median by at least 3 points",
     })
-    await expect(aboveMedianIndicator).toBeVisible()
-    await aboveMedianIndicator.hover()
+    await expect(medianGapIndicator).toBeVisible()
+    const medianGapIndicatorBox = await medianGapIndicator.boundingBox()
+    const participantScoreValueBox = await participantScore
+        .locator("span")
+        .last()
+        .boundingBox()
+    expect(medianGapIndicatorBox).not.toBeNull()
+    expect(participantScoreValueBox).not.toBeNull()
+    expect(
+        medianGapIndicatorBox!.x + medianGapIndicatorBox!.width
+    ).toBeLessThan(participantScoreValueBox!.x)
+    await medianGapIndicator.hover()
     await expect(
-        page.getByRole("tooltip").getByText("Available points above the median")
+        page
+            .getByRole("tooltip")
+            .getByText(
+                "Available points differ from the median by at least 3 points"
+            )
     ).toBeVisible()
     await expect(
         resultDialog.getByText("alex-8b", { exact: true })
@@ -1868,7 +1882,7 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await expect(
         resultDialog.getByRole("button", { name: "1 to grade" })
     ).toHaveCount(0)
-    await expect(aboveMedianIndicator).toBeVisible()
+    await expect(medianGapIndicator).toBeVisible()
     await resultDialog.getByRole("button", { name: "Publish grades" }).click()
     await expect(
         resultDialog.getByRole("button", { name: "Grades published" })

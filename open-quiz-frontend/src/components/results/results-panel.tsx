@@ -885,31 +885,35 @@ export function ResultsPanel({
                                                         selectedResult.total_questions
                                                     }
                                                 </p>
-                                                <p className="text-right font-bold text-primary tabular-nums md:whitespace-nowrap">
+                                                <p className="flex items-center justify-end gap-1 text-right font-bold text-primary tabular-nums md:whitespace-nowrap">
                                                     <span className="font-normal text-foreground md:hidden">
                                                         {t(
                                                             "result-score-total"
                                                         )}{" "}
                                                         :{" "}
                                                     </span>
-                                                    {formatScore(
-                                                        participant.score,
-                                                        i18n.language
-                                                    )}{" "}
-                                                    /{" "}
-                                                    {formatScore(
-                                                        participant.maximum_score,
-                                                        i18n.language
-                                                    )}{" "}
-                                                    {t("points-short")}
-                                                    {participant.maximum_score >
-                                                        selectedResult.median_maximum_score && (
+                                                    {Math.abs(
+                                                        participant.maximum_score -
+                                                            selectedResult.median_maximum_score
+                                                    ) >= 3 && (
                                                         <ResultIndicator
                                                             label={t(
-                                                                "result-maximum-above-median"
+                                                                "result-maximum-median-gap"
                                                             )}
                                                         />
                                                     )}
+                                                    <span>
+                                                        {formatScore(
+                                                            participant.score,
+                                                            i18n.language
+                                                        )}{" "}
+                                                        /{" "}
+                                                        {formatScore(
+                                                            participant.maximum_score,
+                                                            i18n.language
+                                                        )}{" "}
+                                                        {t("points-short")}
+                                                    </span>
                                                 </p>
                                                 <div className="flex items-center gap-2">
                                                     {participant.pending_manual_grading_count >

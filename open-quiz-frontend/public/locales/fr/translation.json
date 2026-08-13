@@ -553,7 +553,7 @@
     "result-score": "Score",
     "result-score-total": "Points / total possible",
     "result-median-maximum": "Médiane des points disponibles",
-    "result-maximum-above-median": "Barème supérieur à la médiane",
+    "result-maximum-median-gap": "Barème éloigné de la médiane d’au moins 3 points",
     "result-no-participants": "Aucun élève n’a participé à ce quiz.",
     "quiz-paused": "Quiz en pause",
     "quiz-cancelled": "Quiz annulé",
