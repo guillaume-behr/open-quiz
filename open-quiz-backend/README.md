@@ -50,8 +50,8 @@ la rotation des sessions d’authentification.
 - les élèves s’authentifient sur `/api/student-auth/login` avant de rejoindre un
   examen avec son code ;
 - les quiz `exam` sont notés et lancés par l’enseignant, tandis que les banques
-  d’entraînement sont autorisées par classe puis tirées et démarrées librement
-  par l’élève ;
+  d’entraînement sont autorisées par classe avec une quantité de questions,
+  puis tirées sans doublon et démarrées librement par l’élève ;
 - les entraînements fournissent une correction immédiate et conservent un
   historique de scores potentiels pour l’élève ;
 - les sessions de rattrapage permettent à une classe de repasser une sélection
@@ -61,6 +61,42 @@ la rotation des sessions d’authentification.
 - les questions sont tirées individuellement au lancement pour chaque élève ;
 - le tirage, l’ordre et le réglage des points négatifs sont enregistrés dans la
   session pour préserver la notation historique.
+
+La table d’association `class_training_question_banks` conserve dans
+`question_count` la quantité à tirer pour chaque couple classe–banque. La
+création d’une session d’entraînement effectue le tirage une seule fois et
+persiste ses questions ordonnées ; naviguer ou recharger la session ne provoque
+donc aucun nouveau tirage.
+
+## Import JSON des classes
+
+`GET /api/classes/example` télécharge un exemple utilisant un niveau configuré
+par l’enseignant. `POST /api/classes/import` valide puis crée l’ensemble des
+classes, comptes élèves et affectations dans une seule transaction. Une erreur
+de structure, un niveau inconnu, un doublon ou un conflit existant annule tout
+l’import.
+
+Le format accepté utilise les propriétés réelles du modèle :
+
+```json
+{
+  "classes": [
+    {
+      "name": "TG1",
+      "grade_level": "Tle",
+      "students": [
+        {
+          "identifier": "martin.l",
+          "display_name": "Lucas Martin"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Les mots de passe sont générés lors de l’import, hachés pour l’authentification
+et chiffrés pour rester imprimables depuis la gestion de la classe.
 
 Chaque quiz conserve dans `source_language` la langue d’interface utilisée lors
 de sa création. Cette valeur est renvoyée dans les réponses destinées à l’élève

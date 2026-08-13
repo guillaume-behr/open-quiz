@@ -36,7 +36,25 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - tirage individuel des questions au lancement pour chaque élève ;
 - ordre aléatoire propre à chaque élève ;
 - quantités explicites de questions par difficulté, limitées par les banques ;
-- barème défini sur chaque proposition de réponse.
+- barème défini sur chaque proposition de réponse ;
+- import JSON atomique de plusieurs classes et de leurs comptes élèves, avec
+  aperçu et exemple téléchargeable ;
+- quantité de questions configurable pour chaque banque d’entraînement d’une
+  classe ;
+- impression A4 de sujets d’examen nominatifs avec randomisation déterministe.
+
+### Interface
+
+- les questions d’une banque sont triées par difficulté par défaut, repliables
+  avec animation et conservent la position de liste après édition ;
+- la progression d’un quiz affiche uniquement `Question X sur Z` ;
+- la navigation entre questions défile horizontalement à gauche du bouton de
+  validation, qui reste aligné à droite ;
+- les énoncés et réponses rédactionnelles utilisent toute la largeur disponible ;
+- les contrôles non rédactionnels n’affichent plus de curseur de saisie ;
+- l’écran de passage d’un entraînement n’affiche plus d’icône de mode ;
+- les imports de classes et de banques utilisent des boutons de sélection de
+  fichier cohérents et accessibles.
 
 ### Modifications incompatibles
 

@@ -82,7 +82,7 @@ Pour la première configuration, utilisez directement l’espace adapté :
    négatives si nécessaire.
 4. Il crée les examens en indiquant le nombre de questions voulu pour chaque
    difficulté et choisit, pour chaque classe, les banques accessibles en
-   entraînement.
+   entraînement ainsi que le nombre de questions à tirer dans chacune.
 5. Pour un examen, il choisit si les points négatifs doivent être pris en
    compte, configure le tirage, sélectionne une classe et ouvre la salle
    d’attente.
@@ -96,7 +96,9 @@ barème sont mémorisés dans la session afin de préserver la correction
 historique.
 
 Une banque autorisée est disponible à tout moment dans le tableau de bord des
-élèves de la classe. Un nouveau tirage est effectué à chaque démarrage, la bonne
+élèves de la classe. Un nouveau tirage sans doublon, limité à la quantité
+configurée par l’enseignant, est effectué à chaque démarrage. Ce tirage reste
+stable pendant toute la session, y compris après un rafraîchissement. La bonne
 réponse apparaît après chaque question et le tableau de bord conserve
 l’historique des scores potentiels obtenus.
 
@@ -128,6 +130,8 @@ absente ou expirée.
 
 - création, modification, désactivation et suppression des comptes élèves ;
 - gestion séparée des classes et affectation d’un compte élève à une classe ;
+- import JSON atomique d’une ou plusieurs classes avec leurs élèves, avec
+  validation préalable et exemple téléchargeable ;
 - banques de questions à choix unique, choix multiple ou réponse rédactionnelle ;
 - images privées, extraits de code et réponses attendues dans un langage donné ;
 - examens créés dans leur onglet et banques d’entraînement affectées par classe ;
@@ -136,6 +140,8 @@ absente ou expirée.
 - barème défini réponse par réponse ; les réponses sélectionnées sont
   additionnées et les valeurs négatives sont activées par quiz ;
 - tirage individuel effectué au lancement pour chaque élève ;
+- génération de sujets papier nominatifs avec ordre déterministe des questions
+  et des réponses, mise en page A4 et zones de réponse rédactionnelle ;
 - sessions chronométrées avec pause, reprise et retour optionnel aux questions ;
 - notation automatique et correction manuelle des réponses rédactionnelles ;
 - export CSV des résultats d’une classe, pour un quiz précis ou pour tous ses

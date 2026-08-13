@@ -70,7 +70,19 @@ aux **Classes**, les **Examens** et les **Entraînements**. Le formulaire d’ex
 demande des quantités faciles, moyennes et difficiles plafonnées par les banques
 sélectionnées. Dans l’onglet
 **Entraînements**, l’enseignant choisit une classe puis les banques que ses élèves
-pourront utiliser.
+pourront utiliser. Le clic sur une banque ouvre une modale demandant le nombre
+de questions à tirer ; aucune association n’est enregistrée avant la validation
+explicite de cette modale.
+
+L’onglet **Classes** permet aussi d’importer atomiquement plusieurs classes et
+leurs élèves depuis un fichier JSON. Un exemple conforme au format accepté est
+téléchargeable à côté du bouton d’import. Les sélecteurs de fichiers des classes
+et des banques utilisent un bouton accessible et affichent le nom du fichier
+choisi.
+
+Les actions d’un examen proposent l’impression de sujets nominatifs. Le rendu
+A4 retire l’interface de navigation et randomise les questions et propositions
+de manière déterministe pour chaque élève.
 
 Le tableau de bord élève propose trois activités :
 
@@ -82,7 +94,14 @@ Le tableau de bord élève propose trois activités :
   repasser un examen éligible.
 
 Le backend fournit à chaque élève un tirage individuel et un ordre stable pour
-sa session.
+sa session. Pour un entraînement, le tirage respecte la quantité configurée pour
+la banque, ne contient aucun doublon et n’est pas recalculé pendant la session.
+
+Dans l’éditeur de banque, les questions sont triées par difficulté par défaut et
+peuvent être repliées avec une animation accessible. L’édition conserve les
+filtres, le tri et la position dans la liste. Pendant un quiz, la progression
+affiche la position courante (`Question X sur Z`) ; la navigation horizontale se
+place à gauche du bouton de validation, qui reste ancré à droite.
 
 Les jetons d’accès élève, les reprises d’examen ou d’entraînement et les jetons
 de participation sont conservés dans `sessionStorage` pour permettre un
