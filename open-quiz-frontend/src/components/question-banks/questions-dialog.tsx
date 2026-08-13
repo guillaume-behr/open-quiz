@@ -352,12 +352,12 @@ function QuestionCard({
             className="overflow-hidden rounded-xl border bg-background"
         >
             <div className="flex flex-col sm:flex-row sm:items-stretch">
-                <CollapsiblePrimitive.Trigger className="group flex min-w-0 flex-1 cursor-pointer items-start gap-2 p-4 text-left font-semibold break-words transition-colors select-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset">
-                    <ChevronDown className="mt-0.5 size-4 shrink-0 transition-transform duration-200 ease-out group-data-panel-open:rotate-180 motion-reduce:transition-none" />
-                    <span>
+                <CollapsiblePrimitive.Trigger className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-e-xl p-4 text-left font-semibold break-words transition-colors select-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset">
+                    <ChevronDown className="size-4 shrink-0 transition-transform duration-200 ease-out group-data-panel-open:rotate-180 motion-reduce:transition-none" />
+                    <span className="min-w-0 flex-1">
                         {index + 1}. {question.prompt}
                     </span>
-                    <span className="ms-auto rounded-full bg-muted px-2 py-1 text-xs font-normal whitespace-nowrap">
+                    <span className="rounded-full bg-muted px-2 py-1 text-xs font-normal whitespace-nowrap">
                         {t(`difficulty-${question.difficulty}`)}
                     </span>
                     <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold whitespace-nowrap text-primary">
