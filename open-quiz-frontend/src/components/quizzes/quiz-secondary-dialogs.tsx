@@ -166,16 +166,7 @@ function QuizClassField({
     )
 }
 
-export function LaunchQuizDialog({
-    quiz,
-    classes,
-    selectedClassId,
-    isBusy,
-    error,
-    onSelectedClassIdChange,
-    onClose,
-    onSubmit,
-}: {
+type QuizClassDialogProps = {
     quiz: Quiz | null
     classes: StudentClass[]
     selectedClassId: string
@@ -184,25 +175,46 @@ export function LaunchQuizDialog({
     onSelectedClassIdChange: (value: string) => void
     onClose: () => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
-}) {
+}
+
+function QuizClassDialog({
+    mode,
+    quiz,
+    classes,
+    selectedClassId,
+    isBusy,
+    error,
+    onSelectedClassIdChange,
+    onClose,
+    onSubmit,
+}: QuizClassDialogProps & { mode: "launch" | "print" }) {
     const { t } = useTranslation()
+    const selectedClass = classes.find(
+        (studentClass) => String(studentClass.id) === selectedClassId
+    )
+    const isPrint = mode === "print"
+    const submitDisabled =
+        isBusy ||
+        !selectedClassId ||
+        (isPrint && (!selectedClass || selectedClass.students.length === 0))
+    const SubmitIcon = isPrint ? Printer : Play
     return (
         <Dialog
             open={quiz !== null}
             onOpenChange={(open) => {
                 if (!open && !isBusy) onClose()
             }}
-            title={t("launch-quiz")}
+            title={t(isPrint ? "print-exams" : "launch-quiz")}
             description={quiz?.title}
             size="sm"
         >
             <form onSubmit={onSubmit}>
                 <FieldGroup>
                     <QuizClassField
-                        id="quiz-class-name"
+                        id={isPrint ? "print-quiz-class" : "quiz-class-name"}
                         classes={classes}
                         selectedClassId={selectedClassId}
-                        mode="launch"
+                        mode={mode}
                         onSelectedClassIdChange={onSelectedClassIdChange}
                     />
                     {error && <FieldError>{error}</FieldError>}
@@ -217,14 +229,20 @@ export function LaunchQuizDialog({
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isBusy || !selectedClassId}
+                            disabled={submitDisabled}
                         >
                             {isBusy ? (
                                 <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                             ) : (
-                                <Play />
+                                <SubmitIcon />
                             )}
-                            {t("open-waiting-room")}
+                            {t(
+                                isPrint
+                                    ? isBusy
+                                        ? "preparing-print"
+                                        : "print-exams"
+                                    : "open-waiting-room"
+                            )}
                         </Button>
                     </div>
                 </FieldGroup>
@@ -233,78 +251,12 @@ export function LaunchQuizDialog({
     )
 }
 
-export function PrintQuizDialog({
-    quiz,
-    classes,
-    selectedClassId,
-    isBusy,
-    error,
-    onSelectedClassIdChange,
-    onClose,
-    onSubmit,
-}: {
-    quiz: Quiz | null
-    classes: StudentClass[]
-    selectedClassId: string
-    isBusy: boolean
-    error: string | null
-    onSelectedClassIdChange: (value: string) => void
-    onClose: () => void
-    onSubmit: (event: FormEvent<HTMLFormElement>) => void
-}) {
-    const { t } = useTranslation()
-    const selectedClass = classes.find(
-        (studentClass) => String(studentClass.id) === selectedClassId
-    )
-    return (
-        <Dialog
-            open={quiz !== null}
-            onOpenChange={(open) => {
-                if (!open && !isBusy) onClose()
-            }}
-            title={t("print-exams")}
-            description={quiz?.title}
-            size="sm"
-        >
-            <form onSubmit={onSubmit}>
-                <FieldGroup>
-                    <QuizClassField
-                        id="print-quiz-class"
-                        classes={classes}
-                        selectedClassId={selectedClassId}
-                        mode="print"
-                        onSelectedClassIdChange={onSelectedClassIdChange}
-                    />
-                    {error && <FieldError>{error}</FieldError>}
-                    <div className="flex justify-end gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isBusy}
-                            onClick={onClose}
-                        >
-                            {t("cancel")}
-                        </Button>
-                        <Button
-                            type="submit"
-                            disabled={
-                                isBusy ||
-                                !selectedClass ||
-                                selectedClass.students.length === 0
-                            }
-                        >
-                            {isBusy ? (
-                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                            ) : (
-                                <Printer />
-                            )}
-                            {t(isBusy ? "preparing-print" : "print-exams")}
-                        </Button>
-                    </div>
-                </FieldGroup>
-            </form>
-        </Dialog>
-    )
+export function LaunchQuizDialog(props: QuizClassDialogProps) {
+    return <QuizClassDialog {...props} mode="launch" />
+}
+
+export function PrintQuizDialog(props: QuizClassDialogProps) {
+    return <QuizClassDialog {...props} mode="print" />
 }
 
 export function SessionActionDialog({
