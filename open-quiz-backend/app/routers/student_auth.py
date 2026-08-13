@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.audit import audit_event
 from app.dependencies import DbSession
 from app.models import StudentAccount
-from app.routers.auth import enforce_global_auth_limit, validate_origin
+from app.routers.auth import auth_error, enforce_global_auth_limit, validate_origin
 from app.routers.students import account_response
 from app.schemas import (
     StudentAccountResponse,
@@ -85,7 +85,7 @@ def login_student(
     if retry_after:
         raise HTTPException(
             status_code=429,
-            detail="Trop de tentatives de connexion",
+            detail=auth_error("AUTH_RATE_LIMITED"),
             headers={"Retry-After": str(retry_after)},
         )
     account = session.scalar(
@@ -98,7 +98,8 @@ def login_student(
     if account is None or not account.is_active or not password_valid:
         audit_event("student_auth.login_failed")
         raise HTTPException(
-            status_code=401, detail="Identifiant ou mot de passe incorrect"
+            status_code=401,
+            detail=auth_error("AUTH_INVALID_CREDENTIALS"),
         )
     limiter.clear_subject(session, subject)
     token = create_student_access_token(

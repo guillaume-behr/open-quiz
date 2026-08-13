@@ -45,6 +45,11 @@ REFRESH_COOKIE = "open_quiz_refresh"
 REFRESH_PROOF_HEADER = "X-Refresh-Proof"
 
 
+def auth_error(code: str) -> dict[str, str]:
+    """Return a stable, language-neutral authentication error payload."""
+    return {"code": code}
+
+
 def validate_origin(request: Request) -> None:
     origin = request.headers.get("origin")
     settings = request.app.state.settings
@@ -69,7 +74,8 @@ def validate_origin(request: Request) -> None:
             origin=origin or "<missing>",
         )
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Origine non autorisée"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=auth_error("AUTH_ORIGIN_REJECTED"),
         )
 
 
@@ -117,7 +123,7 @@ def enforce_global_auth_limit(request: Request, session: DbSession) -> None:
     if retry_after:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Trop de tentatives de connexion",
+            detail=auth_error("AUTH_RATE_LIMITED"),
             headers={"Retry-After": str(retry_after)},
         )
 
@@ -283,7 +289,7 @@ def login(
         audit_event("auth.login_rate_limited")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Trop de tentatives de connexion",
+            detail=auth_error("AUTH_RATE_LIMITED"),
             headers={"Retry-After": str(retry_after)},
         )
     encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
@@ -292,7 +298,7 @@ def login(
         audit_event("auth.login_failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Identifiant ou mot de passe incorrect",
+            detail=auth_error("AUTH_INVALID_CREDENTIALS"),
         )
     limiter.clear_subject(session, rate_subject)
     if payload.audience == "professor" and user.is_admin:
@@ -303,7 +309,7 @@ def login(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Les comptes administrateurs ne peuvent pas accéder à l’espace enseignant",
+            detail=auth_error("AUTH_PROFESSOR_ACCOUNT_REQUIRED"),
         )
     if payload.audience == "admin" and not user.is_admin:
         audit_event(
@@ -313,7 +319,7 @@ def login(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès administrateur requis",
+            detail=auth_error("AUTH_ADMIN_ACCOUNT_REQUIRED"),
         )
     settings = request.app.state.settings
     two_factor = session.get(TwoFactorCredential, user.id)
@@ -380,7 +386,7 @@ def verify_two_factor(
     except jwt.PyJWTError, ValueError, KeyError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Demande de double authentification invalide ou expirée",
+            detail=auth_error("AUTH_2FA_CHALLENGE_INVALID"),
         ) from None
 
     user = session.get(User, user_id)
@@ -405,7 +411,7 @@ def verify_two_factor(
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Demande de double authentification invalide ou expirée",
+            detail=auth_error("AUTH_2FA_CHALLENGE_INVALID"),
         )
 
     limiter = request.app.state.login_rate_limiter
@@ -415,7 +421,7 @@ def verify_two_factor(
         audit_event("auth.two_factor_rate_limited", user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Trop de tentatives de vérification",
+            detail=auth_error("AUTH_2FA_RATE_LIMITED"),
             headers={"Retry-After": str(retry_after)},
         )
 
@@ -428,7 +434,7 @@ def verify_two_factor(
         audit_event("auth.two_factor_secret_invalid", user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="La double authentification est indisponible",
+            detail=auth_error("AUTH_2FA_UNAVAILABLE"),
         ) from None
 
     matched_counter = verify_totp_code(
@@ -440,7 +446,7 @@ def verify_two_factor(
         audit_event("auth.two_factor_failed", user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Code d’authentification incorrect",
+            detail=auth_error("AUTH_2FA_CODE_INVALID"),
         )
 
     counter_result = session.execute(
@@ -459,7 +465,7 @@ def verify_two_factor(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Code d’authentification incorrect ou déjà utilisé",
+            detail=auth_error("AUTH_2FA_CODE_USED"),
         )
     challenge_result = session.execute(
         update(AuthenticationChallenge)
@@ -474,7 +480,7 @@ def verify_two_factor(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Demande de double authentification invalide ou déjà utilisée",
+            detail=auth_error("AUTH_2FA_CHALLENGE_INVALID"),
         )
     limiter.clear_subject(session, rate_subject)
     audit_event("auth.two_factor_succeeded", user_id=user.id)

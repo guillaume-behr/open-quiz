@@ -744,6 +744,7 @@ def complete_first_login(
         },
     )
     assert invalid.status_code == 401
+    assert invalid.json()["detail"]["code"] == "AUTH_2FA_CODE_INVALID"
 
     verified = client.post(
         "/api/auth/2fa/verify",
@@ -1099,6 +1100,17 @@ def test_professor_manages_student_accounts_and_class_assignments(
             },
         )
         assert logged_in.status_code == 200
+        invalid_student_login = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": "lea.dupont",
+                "password": "incorrect-password",
+            },
+        )
+        assert invalid_student_login.status_code == 401
+        assert (
+            invalid_student_login.json()["detail"]["code"] == "AUTH_INVALID_CREDENTIALS"
+        )
         student_headers = {
             "Authorization": f"Bearer {logged_in.json()['access_token']}"
         }
@@ -3354,17 +3366,17 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 },
             )
             assert failed_login.status_code == 401
-        assert (
-            client.post(
-                "/api/auth/login",
-                json={
-                    "username": "teacher.one",
-                    "password": "incorrect-password",
-                    "audience": "professor",
-                },
-            ).status_code
-            == 429
+            assert failed_login.json()["detail"]["code"] == "AUTH_INVALID_CREDENTIALS"
+        rate_limited_login = client.post(
+            "/api/auth/login",
+            json={
+                "username": "teacher.one",
+                "password": "incorrect-password",
+                "audience": "professor",
+            },
         )
+        assert rate_limited_login.status_code == 429
+        assert rate_limited_login.json()["detail"]["code"] == "AUTH_RATE_LIMITED"
         reset_access = client.post(
             f"/api/admin/users/{created.json()['id']}/credentials",
             headers=headers,

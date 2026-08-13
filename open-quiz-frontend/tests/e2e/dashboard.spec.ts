@@ -15,7 +15,9 @@ test("teacher sees a login error returned by the API", async ({ page }) => {
         await route.fulfill({
             status: 401,
             contentType: "application/json",
-            body: JSON.stringify({ detail: "Invalid credentials" }),
+            body: JSON.stringify({
+                detail: { code: "AUTH_INVALID_CREDENTIALS" },
+            }),
         })
     })
     await page.goto("/teacher/login")
@@ -32,7 +34,9 @@ test("teacher sees a login error returned by the API", async ({ page }) => {
     ).toBe("existing-proof")
     await page.getByRole("button", { name: "Sign in" }).click()
 
-    await expect(page.getByRole("alert")).toHaveText("Unable to sign in.")
+    await expect(page.getByRole("alert")).toHaveText(
+        "Incorrect ID or password."
+    )
     await expect
         .poll(() =>
             page.evaluate(() =>

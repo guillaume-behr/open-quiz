@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
-import { errorMessage } from "@/lib/errors"
+import { localizedAuthErrorMessage } from "@/lib/errors"
 import { LoaderCircle } from "lucide-react"
 import { useState, type SyntheticEvent } from "react"
 import { useTranslation } from "react-i18next"
@@ -33,7 +33,7 @@ export function DashboardLogin({
                 String(form.get("password"))
             )
         } catch (caught) {
-            setError(errorMessage(caught, t("login-error")))
+            setError(localizedAuthErrorMessage(caught, t, t("login-error")))
         } finally {
             setIsSubmitting(false)
         }

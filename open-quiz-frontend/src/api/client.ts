@@ -18,12 +18,20 @@ type TokenResponse = {
 export class ApiError extends Error {
     readonly status: number
     readonly detail: unknown
+    readonly code: string | null
 
     constructor(message: string, status: number, detail?: unknown) {
         super(message)
         this.name = "ApiError"
         this.status = status
         this.detail = detail
+        this.code =
+            typeof detail === "object" &&
+            detail !== null &&
+            "code" in detail &&
+            typeof detail.code === "string"
+                ? detail.code
+                : null
     }
 }
 
@@ -54,8 +62,15 @@ async function errorFrom(response: Response): Promise<Error> {
     }
     // FastAPI validation failures return `detail` as an array of issues.
     const detail = typeof body.detail === "string" ? body.detail : null
+    const code =
+        typeof body.detail === "object" &&
+        body.detail !== null &&
+        "code" in body.detail &&
+        typeof body.detail.code === "string"
+            ? body.detail.code
+            : null
     return new ApiError(
-        detail ?? "Une erreur est survenue.",
+        detail ?? code ?? "Une erreur est survenue.",
         response.status,
         body.detail
     )

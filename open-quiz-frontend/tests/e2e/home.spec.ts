@@ -29,6 +29,23 @@ test("the root redirects to the student login", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled()
 })
 
+test("student login shows the localized API error type", async ({ page }) => {
+    await page.route("**/api/student-auth/login", async (route) => {
+        await route.fulfill({
+            status: 429,
+            json: { detail: { code: "AUTH_RATE_LIMITED" } },
+        })
+    })
+    await page.goto("/student/login")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Password", { exact: true }).fill("incorrect")
+    await page.getByRole("button", { name: "Sign in" }).click()
+
+    await expect(page.getByRole("alert")).toHaveText(
+        "Too many sign-in attempts. Please wait before trying again."
+    )
+})
+
 test("a signed-in student enters exam mode from the dashboard", async ({
     page,
 }) => {

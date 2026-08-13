@@ -25,6 +25,7 @@ import { PageLoader } from "@/components/ui/page-loader"
 import { ClipboardPenLine, Dumbbell, History, RotateCcw } from "lucide-react"
 import { lazy, type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { localizedAuthErrorMessage } from "@/lib/errors"
 import { useLocation, useNavigate } from "react-router"
 
 type StudentRouteState = {
@@ -173,8 +174,10 @@ export function HomePage({
                 replace: true,
                 state: { student: result.student, token: result.token },
             })
-        } catch {
-            setError(t("student-login-error"))
+        } catch (caught) {
+            setError(
+                localizedAuthErrorMessage(caught, t, t("student-login-error"))
+            )
         } finally {
             setIsBusy(false)
         }
