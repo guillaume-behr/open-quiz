@@ -92,7 +92,7 @@ export function StudentLogin({
                     {isBusy && (
                         <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                     )}
-                    {t(isBusy ? "signing-in" : "login")}
+                    {t(isBusy ? "signing-in" : "sign-in")}
                 </Button>
             </FieldGroup>
         </form>
