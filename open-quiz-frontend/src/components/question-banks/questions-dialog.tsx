@@ -10,13 +10,14 @@ import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import {
     ImageIcon,
+    ChevronDown,
     LoaderCircle,
     Pencil,
     Plus,
     Settings2,
     Trash2,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChoiceImage } from "./choice-image"
 import { CodeBlock } from "./code-block"
@@ -41,7 +42,9 @@ export function QuestionsManager({
     onDelete,
 }: QuestionsManagerProps) {
     const { t } = useTranslation()
-    const [sort, setSort] = useState("default")
+    const [sort, setSort] = useState("difficulty-asc")
+    const listRef = useRef<HTMLOListElement>(null)
+    const savedScrollTop = useRef<number | null>(null)
     const [minimumPoints, setMinimumPoints] = useState("")
     const [maximumPoints, setMaximumPoints] = useState("")
     const [minimumDifficulty, setMinimumDifficulty] = useState("")
@@ -111,6 +114,12 @@ export function QuestionsManager({
         answerModes.length
     )
 
+    useLayoutEffect(() => {
+        if (savedScrollTop.current === null || !listRef.current) return
+        listRef.current.scrollTop = savedScrollTop.current
+        savedScrollTop.current = null
+    }, [questions])
+
     function toggleAnswerMode(mode: AnswerMode) {
         setAnswerModes((current) =>
             current.includes(mode)
@@ -135,7 +144,7 @@ export function QuestionsManager({
             <CollapsibleFilters
                 className="mt-5"
                 activeCount={
-                    Number(sort !== "default") +
+                    Number(sort !== "difficulty-asc") +
                     Number(Boolean(minimumPoints)) +
                     Number(Boolean(maximumPoints)) +
                     Number(Boolean(minimumDifficulty)) +
@@ -294,13 +303,20 @@ export function QuestionsManager({
                         {t("no-question")}
                     </p>
                 ) : (
-                    <ol className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
+                    <ol
+                        ref={listRef}
+                        className="max-h-[32rem] space-y-3 overflow-y-auto pr-1"
+                    >
                         {visibleQuestions.map((question, index) => (
                             <QuestionCard
                                 key={question.id}
                                 question={question}
                                 index={index}
-                                onEdit={() => onEdit(question)}
+                                onEdit={() => {
+                                    savedScrollTop.current =
+                                        listRef.current?.scrollTop ?? null
+                                    onEdit(question)
+                                }}
                                 onDelete={() => onDelete(question)}
                             />
                         ))}
@@ -328,12 +344,25 @@ function QuestionCard({
     onDelete: () => void
 }) {
     const { t } = useTranslation()
+    const [expanded, setExpanded] = useState(false)
+    const detailsId = `question-details-${question.id}`
     return (
         <li className="rounded-xl border bg-background p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <p className="min-w-0 font-semibold break-words">
-                    {index + 1}. {question.prompt}
-                </p>
+                <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-start gap-2 rounded text-left font-semibold break-words outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                    aria-expanded={expanded}
+                    aria-controls={detailsId}
+                    onClick={() => setExpanded((value) => !value)}
+                >
+                    <ChevronDown
+                        className={`mt-0.5 size-4 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
+                    />
+                    <span>
+                        {index + 1}. {question.prompt}
+                    </span>
+                </button>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                     <span className="rounded-full bg-muted px-2 py-1 text-xs whitespace-nowrap">
                         {t(`difficulty-${question.difficulty}`)}
@@ -368,78 +397,87 @@ function QuestionCard({
                     </Button>
                 </div>
             </div>
-            {question.has_image && (
-                <>
-                    <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                        <ImageIcon className="size-3.5" />
-                        {t("image-attached")}
-                    </div>
-                    <QuestionImage
-                        questionId={question.id}
-                        alt={question.prompt}
-                    />
-                </>
-            )}
-            {question.code_content && question.code_language && (
-                <div className="mt-3">
-                    <CodeBlock
-                        code={question.code_content}
-                        language={question.code_language}
-                    />
+            {expanded && (
+                <div id={detailsId}>
+                    {question.has_image && (
+                        <>
+                            <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                                <ImageIcon className="size-3.5" />
+                                {t("image-attached")}
+                            </div>
+                            <QuestionImage
+                                questionId={question.id}
+                                alt={question.prompt}
+                            />
+                        </>
+                    )}
+                    {question.code_content && question.code_language && (
+                        <div className="mt-3">
+                            <CodeBlock
+                                code={question.code_content}
+                                language={question.code_language}
+                            />
+                        </div>
+                    )}
+                    <ul
+                        className={`mt-3 grid gap-2 ${
+                            question.answer_mode === "written"
+                                ? ""
+                                : "sm:grid-cols-2"
+                        }`}
+                    >
+                        {question.choices.map((choice) => (
+                            <li
+                                key={choice.id}
+                                className="rounded-lg bg-muted/60 px-3 py-2 text-sm"
+                            >
+                                <div className="flex items-center gap-2">
+                                    {question.answer_mode !== "written" && (
+                                        <span
+                                            className={
+                                                choice.is_correct
+                                                    ? "text-primary"
+                                                    : "text-muted-foreground"
+                                            }
+                                        >
+                                            {choice.is_correct ? "✓" : "○"}
+                                        </span>
+                                    )}
+                                    <span className="min-w-0 flex-1 whitespace-pre-wrap">
+                                        {question.answer_mode === "written" && (
+                                            <span className="mb-1 block text-xs font-semibold text-muted-foreground">
+                                                {t("expected-written-answer")}
+                                            </span>
+                                        )}
+                                        {choice.label}
+                                    </span>
+                                    <span className="font-semibold">
+                                        {t("points-count", {
+                                            count: choice.points,
+                                        })}
+                                    </span>
+                                </div>
+                                {choice.has_image && (
+                                    <ChoiceImage
+                                        choiceId={choice.id}
+                                        alt={choice.label}
+                                    />
+                                )}
+                                {choice.code_content &&
+                                    choice.code_language && (
+                                        <div className="mt-2">
+                                            <CodeBlock
+                                                code={choice.code_content}
+                                                language={choice.code_language}
+                                            />
+                                        </div>
+                                    )}
+                            </li>
+                        ))}
+                    </ul>
+                    <QuestionMetadata question={question} />
                 </div>
             )}
-            <ul
-                className={`mt-3 grid gap-2 ${
-                    question.answer_mode === "written" ? "" : "sm:grid-cols-2"
-                }`}
-            >
-                {question.choices.map((choice) => (
-                    <li
-                        key={choice.id}
-                        className="rounded-lg bg-muted/60 px-3 py-2 text-sm"
-                    >
-                        <div className="flex items-center gap-2">
-                            {question.answer_mode !== "written" && (
-                                <span
-                                    className={
-                                        choice.is_correct
-                                            ? "text-primary"
-                                            : "text-muted-foreground"
-                                    }
-                                >
-                                    {choice.is_correct ? "✓" : "○"}
-                                </span>
-                            )}
-                            <span className="min-w-0 flex-1 whitespace-pre-wrap">
-                                {question.answer_mode === "written" && (
-                                    <span className="mb-1 block text-xs font-semibold text-muted-foreground">
-                                        {t("expected-written-answer")}
-                                    </span>
-                                )}
-                                {choice.label}
-                            </span>
-                            <span className="font-semibold">
-                                {t("points-count", { count: choice.points })}
-                            </span>
-                        </div>
-                        {choice.has_image && (
-                            <ChoiceImage
-                                choiceId={choice.id}
-                                alt={choice.label}
-                            />
-                        )}
-                        {choice.code_content && choice.code_language && (
-                            <div className="mt-2">
-                                <CodeBlock
-                                    code={choice.code_content}
-                                    language={choice.code_language}
-                                />
-                            </div>
-                        )}
-                    </li>
-                ))}
-            </ul>
-            <QuestionMetadata question={question} />
         </li>
     )
 }
