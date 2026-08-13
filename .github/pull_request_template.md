@@ -1,6 +1,6 @@
 ## Problème
 
-Décrivez le besoin ou l’issue liée.
+Décrivez le besoin et liez l’issue concernée (`Closes #…`) si elle existe.
 
 ## Solution
 
@@ -8,15 +8,31 @@ Résumez le changement et les décisions importantes.
 
 ## Vérifications
 
-- [ ] lint et formatage backend
-- [ ] tests backend
-- [ ] lint, formatage et traductions frontend
-- [ ] typecheck et build frontend
-- [ ] vérification Docker si le déploiement change
+- [ ] lint, sécurité et formatage backend, ou sans objet
+- [ ] tests backend, ou sans objet
+- [ ] lint, formatage et catalogues frontend, ou sans objet
+- [ ] typecheck et build frontend, ou sans objet
+- [ ] tests E2E si un parcours utilisateur change, ou sans objet
+- [ ] validation Docker si le déploiement change, ou sans objet
+- [ ] documentation et changelog mis à jour, ou sans objet
 
 Indiquez les commandes réellement exécutées et leurs résultats.
+
+## Données et compatibilité
+
+- [ ] aucun secret, jeton ou donnée personnelle n’est inclus
+- [ ] les migrations SQLite et changements d’API sont documentés, ou sans objet
+- [ ] les nouvelles chaînes existent dans les huit catalogues, ou sans objet
+
+Décrivez les migrations ou changements incompatibles. Écrivez « sans objet »
+pour les cases qui ne concernent pas cette pull request.
 
 ## Risques
 
 Décrivez les migrations, changements d’API, effets de sécurité, d’accessibilité
 ou de performance. Ajoutez une capture si le changement visuel le justifie.
+
+## Captures
+
+Ajoutez des captures avant/après pour un changement visuel, ou indiquez « sans
+objet ».

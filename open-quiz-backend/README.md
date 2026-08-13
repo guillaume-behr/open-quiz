@@ -1,221 +1,328 @@
-# Open Quiz Backend
+# API Open Quiz
 
-## Technologies utilisées
+Backend FastAPI d’Open Quiz. Il centralise l’authentification, les autorisations,
+les tirages de questions, la notation, les sessions temps réel et la persistance
+SQLite.
 
-- Python 3.14 ou supérieur
-- FastAPI avec ses dépendances standard
-- SQLAlchemy avec SQLite
-- Authentification JWT et mots de passe hachés avec Argon2
-- uv pour la gestion de l'environnement, des dépendances et du verrouillage des versions
+Consultez aussi le [README principal](../README.md), le
+[guide de déploiement](../docs/deployment.md) et le
+[guide de contribution](../CONTRIBUTING.md).
 
-## Démarrage
+## Technologies
 
-Prérequis : Python 3.14 et `uv`.
+- Python 3.14 et uv ;
+- FastAPI et Uvicorn ;
+- SQLAlchemy avec SQLite en mode WAL ;
+- Argon2, JWT, TOTP et Fernet pour les mécanismes d’authentification ;
+- pytest, Ruff et pip-audit pour la qualité et la sécurité.
 
-Copiez `.env.example` vers `.env`, puis renseignez deux secrets aléatoires
-distincts d'au moins 32 caractères pour les jetons JWT et le chiffrement TOTP,
-ainsi qu'un mot de passe administrateur robuste. Le compte administrateur est
-créé au premier démarrage. Son identifiant interne est ensuite enregistré comme
-état de sécurité : modifier `ADMIN_USERNAME` renomme ce même compte au lieu de
-créer un second administrateur. Ses droits, son état et son mot de passe restent
-synchronisés avec `.env`.
+## Démarrage local
 
-Sous Linux et macOS, protégez le fichier avant le premier démarrage avec
-`chmod 600 .env`. L'application réapplique cette permission à `.env` ainsi
-qu'aux fichiers SQLite locaux à chaque démarrage.
+### Prérequis
+
+- Python 3.14 ou supérieur ;
+- [uv](https://docs.astral.sh/uv/).
+
+Créez la configuration locale :
+
+```shell
+cp .env.example .env
+chmod 600 .env
+```
+
+Remplacez les **quatre** valeurs commençant par `replace-with-` :
+
+- `JWT_SECRET` ;
+- `TOTP_ENCRYPTION_KEY` ;
+- `STUDENT_CREDENTIAL_ENCRYPTION_KEY` ;
+- `ADMIN_PASSWORD`.
+
+Les trois secrets cryptographiques doivent contenir au moins 32 caractères,
+être suffisamment variés et rester distincts. Le mot de passe administrateur
+doit contenir entre 16 et 256 caractères.
+
+Installez les dépendances et démarrez l’API :
 
 ```shell
 uv sync
 uv run fastapi dev main.py
 ```
 
-La documentation interactive est disponible sur `http://localhost:8000/docs`.
+L’API répond sur `http://localhost:8000`. En développement, les interfaces
+OpenAPI sont disponibles sur :
 
-## Vérifications
+- Swagger UI : `http://localhost:8000/docs` ;
+- ReDoc : `http://localhost:8000/redoc` ;
+- schéma JSON : `http://localhost:8000/openapi.json`.
 
-```shell
-uv run ruff check .
-uv run ruff format --check app tests main.py scripts
-uv run pytest -q
-```
+Ces trois routes sont désactivées en production.
 
-La suite teste les parcours d’administration et d’enseignement, la participation
-des élèves, la notation, la migration du schéma SQLite, les limites de débit et
-la rotation des sessions d’authentification.
+## Configuration
 
-## Modèle fonctionnel 0.2
+Les valeurs sont chargées depuis `.env`. Ce fichier et la base SQLite locale
+sont protégés en mode `0600` sur les systèmes POSIX.
 
-- les enseignants créent des comptes élèves indépendamment des classes, puis
-  affectent chaque compte à une classe ;
-- les élèves s’authentifient sur `/api/student-auth/login` avant de rejoindre un
-  examen avec son code ;
-- les quiz `exam` sont notés et lancés par l’enseignant, tandis que les banques
-  d’entraînement sont autorisées par classe avec une quantité de questions,
-  puis tirées sans doublon et démarrées librement par l’élève ;
-- les entraînements fournissent une correction immédiate et conservent un
-  historique de scores potentiels pour l’élève ;
-- les sessions de rattrapage permettent à une classe de repasser une sélection
-  de quiz déjà effectués au moyen d’un code temporaire ;
-- chaque proposition porte son propre nombre de points. Un quiz choisit si les
-  points négatifs sont appliqués ou ramenés à zéro lors de la correction ;
-- les questions sont tirées individuellement au lancement pour chaque élève ;
-- le tirage, l’ordre et le réglage des points négatifs sont enregistrés dans la
-  session pour préserver la notation historique.
+### Variables principales
 
-La table d’association `class_training_question_banks` conserve dans
-`question_count` la quantité à tirer pour chaque couple classe–banque. La
-création d’une session d’entraînement effectue le tirage une seule fois et
-persiste ses questions ordonnées ; naviguer ou recharger la session ne provoque
-donc aucun nouveau tirage.
+| Variable                            | Requise | Défaut                       | Contraintes principales                  |
+| ----------------------------------- | ------- | ---------------------------- | ---------------------------------------- |
+| `DATABASE_URL`                      | non     | `sqlite:///./open-quiz.db`   | URL SQLAlchemy                           |
+| `JWT_SECRET`                        | oui     | —                            | au moins 32 caractères                   |
+| `TOTP_ENCRYPTION_KEY`               | oui     | —                            | distincte de `JWT_SECRET`, 32 caractères |
+| `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | oui     | —                            | distincte des deux autres, 32 caractères |
+| `ADMIN_USERNAME`                    | oui     | `admin` dans l’exemple       | 1 à 80 caractères                        |
+| `ADMIN_PASSWORD`                    | oui     | —                            | 16 à 256 caractères                      |
+| `FRONTEND_ORIGIN`                   | non     | `http://localhost:5173`      | origine exacte sans chemin ni `/` final  |
+| `APP_ENV`                           | oui     | `development` dans l’exemple | `development`, `test` ou `production`    |
 
-## Import JSON des classes
+En production, `FRONTEND_ORIGIN` doit utiliser HTTPS. Le compte administrateur
+est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` et
+`ADMIN_PASSWORD`. Un changement de mot de passe révoque ses sessions actives.
 
-`GET /api/classes/example` télécharge un exemple utilisant un niveau configuré
-par l’enseignant. `POST /api/classes/import` valide puis crée l’ensemble des
-classes, comptes élèves et affectations dans une seule transaction. Une erreur
-de structure, un niveau inconnu, un doublon ou un conflit existant annule tout
-l’import.
+### Sessions, limites et conservation
 
-Le format accepté utilise les propriétés réelles du modèle :
+| Variable                        | Défaut  | Valeurs acceptées |
+| ------------------------------- | ------- | ----------------- |
+| `ACCESS_TOKEN_MINUTES`          | `15`    | 1 à 30            |
+| `REFRESH_TOKEN_DAYS`            | `7`     | 1 à 30            |
+| `LOGIN_ATTEMPTS`                | `5`     | 3 à 20            |
+| `LOGIN_WINDOW_SECONDS`          | `900`   | 60 minimum        |
+| `GLOBAL_LOGIN_ATTEMPTS`         | `500`   | 50 à 100 000      |
+| `GLOBAL_LOGIN_WINDOW_SECONDS`   | `60`    | 10 à 3 600        |
+| `QUIZ_JOIN_ATTEMPTS`            | `20`    | 5 à 100           |
+| `QUIZ_PARTICIPANT_ATTEMPTS`     | `240`   | 30 à 1 000        |
+| `QUIZ_VIOLATION_ATTEMPTS`       | `20`    | 5 à 100           |
+| `QUIZ_RATE_WINDOW_SECONDS`      | `60`    | 10 à 3 600        |
+| `QUIZ_RESULT_RETENTION_DAYS`    | `365`   | 1 à 3 650 jours   |
+| `PROBLEM_REPORT_ATTEMPTS`       | `30`    | 1 à 1 000         |
+| `PROBLEM_REPORT_WINDOW_SECONDS` | `900`   | 60 à 86 400       |
+| `PROBLEM_REPORT_RETENTION_DAYS` | `90`    | 1 à 365 jours     |
+| `MAX_REQUEST_BODY_BYTES`        | `65536` | 1 024 à 1 048 576 |
+
+Le modèle de production réduit volontairement
+`PROBLEM_REPORT_ATTEMPTS` à `5`. Ce quota concerne toute l’instance et évite
+d’utiliser l’adresse IP comme identifiant de limitation.
+
+`MAX_REQUEST_BODY_BYTES` s’applique aux requêtes ordinaires. Après
+authentification d’un enseignant, la création, la modification et l’import de
+questions acceptent jusqu’à 96 Mio afin de transporter les images encodées. Un
+import peut contenir jusqu’à 64 Mio d’images décodées et chaque image jusqu’à
+20 Mio. Un reverse proxy placé devant l’API doit conserver une exception
+équivalente pour ces routes.
+
+Les variables légales et d’accessibilité sont décrites dans le
+[guide de déploiement](../docs/deployment.md#renseigner-les-informations-publiques).
+
+## Vue d’ensemble de l’API
+
+La documentation OpenAPI locale reste la source la plus précise pour les
+schémas de requête et de réponse.
+
+| Préfixe                   | Responsabilité                                               |
+| ------------------------- | ------------------------------------------------------------ |
+| `/api/health`             | disponibilité du processus et de la base                     |
+| `/api/public-information` | informations légales publiques de l’instance                 |
+| `/api/auth`               | connexion, TOTP et renouvellement des comptes privilégiés    |
+| `/api/student-auth`       | connexion et session des élèves                              |
+| `/api/admin`              | administration des comptes enseignants                       |
+| `/api/users`              | profil et opérations sur le compte courant                   |
+| `/api/students`           | comptes élèves et export des identifiants                    |
+| `/api/classes`            | classes, affectations et import groupé                       |
+| `/api/grade-levels`       | niveaux utilisés par les classes et banques                  |
+| `/api/question-banks`     | banques, questions, images et import/export                  |
+| `/api/quizzes`            | examens, entraînements, rattrapages et résultats             |
+| `/api/problem-reports`    | création publique et gestion administrative des signalements |
+
+### Authentification
+
+| Contexte                     | Mécanisme                                                 |
+| ---------------------------- | --------------------------------------------------------- |
+| Enseignant ou administrateur | `Authorization: Bearer <access-token>`                    |
+| Élève                        | `Authorization: Bearer <student-access-token>`            |
+| Participation à un quiz      | en-tête `X-Quiz-Token` après l’inscription à la session   |
+| Renouvellement privilégié    | cookie HttpOnly et en-tête `X-Refresh-Proof`              |
+| WebSocket temps réel         | premier message JSON `{ "token": "..." }` sous 5 secondes |
+
+Les jetons d’accès enseignant et administrateur sont courts. Leur session
+longue utilise un cookie HttpOnly rotatif et une nouvelle validation TOTP est
+requise au plus tard après sept jours par défaut, ou sur un nouvel appareil.
+Les jetons élève expirent après 12 heures et n’utilisent ni TOTP ni cookie de
+renouvellement.
+
+### Pagination
+
+Les collections paginées acceptent `page` et `page_size`. La taille vaut 8 par
+défaut et 100 au maximum. Les réponses exposent :
+
+- `X-Page` ;
+- `X-Page-Size` ;
+- `X-Total-Count`.
+
+### Mises à jour temps réel
+
+Les routes `/api/quizzes/live/*` diffusent les changements de sessions aux
+enseignants et aux élèves. L’origine WebSocket est validée, le premier message
+authentifie la connexion et le serveur vérifie régulièrement que le jeton reste
+valide.
+
+Le bus temps réel est conservé en mémoire. Le conteneur utilise donc un seul
+worker Uvicorn. N’activez pas plusieurs workers sans remplacer ce bus par un
+mécanisme partagé et tester le comportement en charge.
+
+## Modèle fonctionnel
+
+- l’administrateur crée et gère les comptes enseignants ;
+- chaque enseignant possède ses comptes élèves, ses classes et ses banques ;
+- un compte élève existe indépendamment de son affectation à une classe ;
+- les examens sont lancés par l’enseignant, tandis que les entraînements sont
+  démarrés librement par l’élève depuis les banques autorisées ;
+- les rattrapages permettent de repasser une sélection d’examens déjà effectués ;
+- un examen peut partager le même tirage entre tous les élèves ou attribuer un
+  tirage individuel à chacun ;
+- chaque proposition porte son propre nombre de points et le quiz décide si les
+  valeurs négatives sont appliquées ;
+- les questions rédactionnelles restent en attente d’une correction manuelle ;
+- les questions, leur ordre et le barème sont figés dans la session pour
+  préserver les résultats historiques.
+
+Les notes publiées sont verrouillées. Les alertes de surveillance envoyées par
+le navigateur sont informatives, non exhaustives et falsifiables ; elles ne
+doivent jamais déclencher seules une sanction ou une décision automatique.
+
+## Imports et exports
+
+### Classes et élèves
+
+`GET /api/classes/example` télécharge un exemple adapté aux niveaux configurés.
+`POST /api/classes/import` valide puis crée les classes, comptes élèves et
+affectations dans une transaction unique. Une erreur de structure, un niveau
+inconnu, un doublon ou un conflit annule tout l’import.
+
+Exemple minimal :
 
 ```json
 {
-  "classes": [
-    {
-      "name": "TG1",
-      "grade_level": "Tle",
-      "students": [
+    "classes": [
         {
-          "identifier": "martin.l",
-          "display_name": "Lucas Martin"
+            "name": "TG1",
+            "grade_level": "Tle",
+            "students": [
+                {
+                    "identifier": "martin.l",
+                    "display_name": "Lucas Martin"
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }
 ```
 
-Les mots de passe sont générés lors de l’import, hachés pour l’authentification
-et chiffrés pour rester imprimables depuis la gestion de la classe.
+Les mots de passe générés sont hachés pour l’authentification et chiffrés pour
+rester imprimables par l’enseignant propriétaire.
 
-Chaque quiz conserve dans `source_language` la langue d’interface utilisée lors
-de sa création. Cette valeur est renvoyée dans les réponses destinées à l’élève
-afin que le frontend puisse proposer une traduction lorsque sa propre langue
-diffère. Le backend ne traduit aucun contenu et ne transmet aucune question à
-un service de traduction. Lors de la migration d’une base SQLite existante, les
-anciens quiz reçoivent la valeur par défaut `fr`.
+### Banques de questions
 
-Le point `/api/health` vérifie à la fois le processus HTTP et l’accès réel à la
-base de données. Il doit être utilisé pour les contrôles de disponibilité.
+- `GET /api/question-banks/example` fournit le format JSON versionné ;
+- `GET /api/question-banks/{id}/export` exporte une banque complète ;
+- `POST /api/question-banks/import` importe atomiquement une banque et ses
+  questions.
 
-Les jetons d’accès enseignant et administrateur expirent rapidement et restent
-uniquement en mémoire dans le navigateur. Leurs sessions longues utilisent un
-cookie HttpOnly rotatif et révocable. Chaque appareil reste reconnu pendant
-7 jours au maximum à partir de la dernière validation 2FA, sans prolongation
-glissante lors de l’utilisation. Après cette échéance, ou sur un nouvel
-appareil, une nouvelle validation 2FA est obligatoire. La réutilisation d’un
-ancien jeton révoque toute sa famille de sessions.
+Les images JPEG, PNG, WebP et GIF sont décodées, contrôlées puis réencodées
+avant stockage. Les métadonnées et les trames d’animation ne sont pas
+conservées. Une image destinée à un élève n’est accessible qu’avec le jeton de
+sa participation et pendant une session valide.
 
-Les comptes élèves n’utilisent pas TOTP ni le cookie de renouvellement. Ils
-reçoivent après vérification du mot de passe un jeton Bearer de 12 heures,
-invalidé par un changement de mot de passe ou de `JWT_SECRET`. Les jetons de
-participation à un quiz restent distincts et limités à leur session.
+## Stockage, migrations et conservation
 
-Un changement de mot de passe administrateur révoque ses sessions et invalide
-immédiatement ses jetons d’accès. Un changement de `JWT_SECRET` révoque toutes
-les sessions. Les enseignants et administrateurs doivent configurer une
-application d’authentification TOTP lors de leur première connexion. Les secrets
-TOTP sont chiffrés dans SQLite avec `TOTP_ENCRYPTION_KEY`. Sauvegardez cette
-clé : si elle est perdue ou remplacée, chaque enseignant et administrateur devra
-réinitialiser son inscription 2FA.
+En local, la base par défaut se trouve dans
+`open-quiz-backend/open-quiz.db`. Dans le conteneur, elle se trouve dans
+`/data/open-quiz.db`, sur le volume persistant `open-quiz-data`.
 
-Les mots de passe élèves restent hachés pour l’authentification. Une copie
-récupérable est chiffrée avec `STUDENT_CREDENTIAL_ENCRYPTION_KEY` afin que seul
-le professeur propriétaire puisse les consulter ou les exporter. Les comptes
-créés avant cette fonctionnalité nécessitent une réinitialisation de mot de
-passe avant que celui-ci puisse être affiché.
+SQLite utilise le mode WAL, les clés étrangères, une attente sur verrou et un
+contrôle de disponibilité. Les migrations sont appliquées automatiquement au
+démarrage. Sauvegardez toujours la base avant une mise à jour, en particulier
+depuis la série `0.1.x`, puis consultez [CHANGELOG.md](../CHANGELOG.md).
 
-Si un utilisateur perd son authentificateur, réinitialisez son inscription 2FA
-et révoquez ses sessions actives depuis l'espace d'administration en utilisant
-« Récupérer l'accès ». Cette action définit un nouveau mot de passe, révoque les
-sessions et impose une nouvelle inscription 2FA. L'outil de secours en ligne de
-commande reste disponible avec :
+La purge des résultats et signalements expirés s’exécute au démarrage puis
+toutes les heures. Un enseignant peut aussi supprimer immédiatement un résultat
+et toutes ses participations, réponses et alertes associées.
+
+Pour une procédure de sauvegarde cohérente avec SQLite WAL, consultez le
+[guide d’exploitation](../docs/deployment.md#sauvegarder-les-données).
+
+## Sécurité et exploitation
+
+- tous les mots de passe sont hachés avec Argon2 ;
+- les secrets TOTP et les copies récupérables des mots de passe élèves sont
+  chiffrés avec deux clés distinctes ;
+- les changements de mot de passe et de secret JWT révoquent les sessions
+  concernées ;
+- les routes sensibles utilisent des limites de débit persistées en base ;
+- les événements d’audit sont écrits en JSON sur la sortie d’erreur standard ;
+- les réponses API ne sont pas mises en cache et reçoivent des en-têtes de
+  sécurité ;
+- en production, l’API force HTTPS et désactive OpenAPI.
+
+Le conteneur limite Uvicorn à 1 024 connexions concurrentes, mais ce nombre
+n’est pas une garantie de capacité. Dimensionnez et testez l’instance selon la
+machine, la taille des classes, les images et le trafic attendu.
+
+## Scripts d’administration
+
+### Réinitialiser le TOTP d’un compte
+
+Cette commande révoque les sessions et impose une nouvelle inscription TOTP :
 
 ```shell
 uv run python -m scripts.reset_two_factor identifiant
 ```
 
-Pour renouveler le secret JWT et le mot de passe administrateur locaux sans les
-afficher dans le terminal, tout en révoquant immédiatement les sessions
-existantes :
+Dans Docker :
+
+```shell
+docker compose exec open-quiz-backend \
+    /app/.venv/bin/python -m scripts.reset_two_factor identifiant
+```
+
+Privilégiez toutefois l’action **Récupérer l’accès** dans l’espace
+administrateur : elle remplace également le mot de passe du compte ciblé.
+
+### Renouveler les secrets locaux
+
+Pour remplacer `JWT_SECRET` et `ADMIN_PASSWORD` sans les afficher :
 
 ```shell
 uv run python scripts/rotate_local_secrets.py
 ```
 
-`APP_ENV` est obligatoire. En production, utilisez `APP_ENV=production` et une
-origine frontend HTTPS exacte.
-Les cookies deviennent alors automatiquement sécurisés, la documentation
-interactive est désactivée et les requêtes HTTP sont redirigées vers HTTPS.
+Le script révoque les sessions longues et crée dans le répertoire backend une
+sauvegarde `.env.env.<horodatage>.bak` contenant les anciens secrets. Cette
+sauvegarde n’est pas ignorée par Git : déplacez-la immédiatement vers un espace
+protégé ou supprimez-la dès qu’elle n’est plus utile. Redémarrez ensuite l’API
+pour charger les nouvelles valeurs.
 
-La limitation d'authentification réserve chaque tentative atomiquement en base
-de données avant le calcul Argon2 ou la vérification TOTP et fonctionne donc
-avec plusieurs processus. `LOGIN_ATTEMPTS` limite les tentatives par nom
-d'utilisateur normalisé, sans dépendre de l'adresse IP transmise par le reverse
-proxy. Configurez tout de même le reverse proxy comme seule entrée vers le
-backend et n'acceptez les en-têtes `Forwarded` que de ce proxy. Le conteneur
-fourni respecte cette contrainte grâce au réseau Docker interne.
+Ce script vise une installation locale. En production Compose, modifiez le
+fichier `.env` de l’hôte, protégez l’ancienne copie puis recréez le service.
 
-`MAX_REQUEST_BODY_BYTES` limite la taille des requêtes applicatives. Le
-conteneur Uvicorn ajoute également une limite de concurrence et des délais de
-connexion courts. Conservez des limites équivalentes sur le reverse proxy
-externe.
+## Vérifications
 
-Les résultats terminés sont supprimés automatiquement lorsqu'un professeur
-consulte ses résultats et qu'ils dépassent `QUIZ_RESULT_RETENTION_DAYS`
-(365 jours par défaut). Un professeur peut aussi supprimer immédiatement un
-résultat depuis son tableau de bord. Cette suppression efface la session, les
-participants, les réponses et les alertes associées.
+Installez les dépendances de développement puis reproduisez les contrôles CI :
 
-SQLite est configuré en mode WAL avec vérification des clés étrangères, attente
-sur verrou et contrôle de disponibilité. Le volume `/data` doit rester
-persistant et être sauvegardé avec un outil compatible SQLite WAL ou pendant un
-arrêt contrôlé.
+```shell
+uv sync --frozen --dev
+uv run --frozen ruff check app tests main.py scripts
+uv run --frozen ruff check --select S app main.py scripts
+uv run --frozen ruff format --check app tests main.py scripts
+uv run --frozen pytest -q
+uv run --frozen pip-audit
+```
 
-Lors du premier démarrage en `0.2.0`, la migration supprime les anciens élèves
-sans compte et convertit les répartitions en pourcentages vers des quantités par
-difficulté. Une migration ultérieure reporte le barème historique de chaque
-question sur ses bonnes réponses. Sauvegardez la base avant toute migration.
+Appliquez le formatage avec :
 
-Les images de questions sont décodées, limitées en dimensions puis réencodées
-avant stockage. Les métadonnées et les trames d'animation ne sont pas
-conservées. Une image destinée à un élève n’est accessible qu’avec son jeton de
-participation, pour sa question courante et pendant que la session est
-effectivement en cours.
+```shell
+uv run ruff format app tests main.py scripts
+```
 
-Les événements de sécurité sont émis en JSON sur la sortie standard avec un
-horodatage UTC. En production, envoyez-les vers un collecteur central en
-écriture seule pour l'application, avec contrôle d'accès, alertes et politique
-de rétention. Alertez notamment sur `auth.refresh_reuse_detected`,
-`auth.login_rate_limited` et les événements `security.*`.
-
-Les limitations de débit utilisent uniquement des sujets bornés connus du
-serveur (compte, session, participant ou quota global). Une adresse IP peut
-figurer dans un événement d’audit, mais elle n’est jamais une clé de limitation.
-
-Les alertes de surveillance d’un quiz sont des déclarations du navigateur de
-l’élève. Elles aident un enseignant à interpréter une session, mais elles ne
-sont ni exhaustives ni résistantes à la falsification et ne doivent jamais
-servir seules à une sanction ou à une décision automatique.
-
-Le fichier `docker-compose.yml` situé à la racine du dépôt démarre le backend
-sur un réseau interne, conserve SQLite dans un volume dédié et fait passer
-`/api` par Caddy. L'origine publique configurée dans `FRONTEND_ORIGIN` doit
-correspondre exactement à l'adresse utilisée par le navigateur.
-
-Le conteneur backend reste volontairement limité à un seul worker : la
-diffusion temps réel est stockée en mémoire dans le processus. Sa limite de
-1 024 connexions couvre une classe importée de 500 élèves ainsi que les
-connexions enseignantes et les requêtes HTTP. N'activez pas plusieurs workers
-sans remplacer ce bus par un mécanisme partagé (Redis, notifications PostgreSQL
-ou équivalent) et sans tester la charge de bout en bout.
+Avant de contribuer, consultez [CONTRIBUTING.md](../CONTRIBUTING.md). Signalez
+les vulnérabilités selon [SECURITY.md](../SECURITY.md), jamais dans une issue
+publique. Open Quiz est distribué sous [licence MIT](../LICENSE).

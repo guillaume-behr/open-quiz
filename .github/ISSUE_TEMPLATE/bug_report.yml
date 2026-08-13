@@ -7,7 +7,16 @@ body:
   - type: markdown
     attributes:
       value: |
-        Merci de ne publier ici aucun secret, aucune donnée d’élève et aucune vulnérabilité. Consultez SECURITY.md pour un signalement privé.
+        Merci de ne publier ici aucun secret, aucune donnée d’élève et aucune vulnérabilité. Consultez la [politique de sécurité](https://github.com/guillaume-behr/open-quiz/blob/master/SECURITY.md) pour un signalement privé.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Vérifications préalables
+      options:
+        - label: J’ai recherché les issues existantes pour éviter un doublon.
+          required: true
+        - label: J’ai retiré les secrets, jetons et données personnelles de ce rapport.
+          required: true
   - type: textarea
     id: description
     attributes:
@@ -29,7 +38,7 @@ body:
     id: version
     attributes:
       label: Version ou commit
-      placeholder: 0.1.0 ou identifiant du commit
+      placeholder: Version affichée ou identifiant du commit
     validations:
       required: true
   - type: textarea

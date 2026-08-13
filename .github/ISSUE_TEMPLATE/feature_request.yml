@@ -4,6 +4,15 @@ title: "[Évolution] "
 labels:
   - enhancement
 body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Vérifications préalables
+      options:
+        - label: J’ai recherché les propositions existantes pour éviter un doublon.
+          required: true
+        - label: Cette demande ne contient aucun secret ni aucune donnée personnelle.
+          required: true
   - type: textarea
     id: problem
     attributes:
@@ -27,3 +36,8 @@ body:
     attributes:
       label: Compatibilité et impact
       description: Signalez les effets possibles sur les données, l’API, l’accessibilité, la sécurité ou les traductions.
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Exemple d’utilisation
+      description: Décrivez un scénario concret permettant de vérifier que le besoin est satisfait.

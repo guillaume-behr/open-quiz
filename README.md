@@ -1,60 +1,118 @@
 <h1><img src=".github/assets/open-quiz-wordmark.svg" alt="Open Quiz" width="230"></h1>
 
-Plateforme libre et auto-hébergeable pour organiser des quiz en classe.
+[![CI](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml/badge.svg)](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
-Les enseignants créent les comptes élèves, leurs classes et leurs questions,
-lancent des examens chronométrés et rendent des banques de questions disponibles
-pour l’entraînement de chaque classe. Les élèves se connectent à leur tableau de
-bord pour rejoindre un examen ou démarrer un entraînement.
+Plateforme libre et auto-hébergeable pour créer des quiz, organiser des examens
+en classe et proposer des entraînements aux élèves.
+
+Open Quiz réunit trois espaces dans une même application : l’administrateur
+gère les enseignants, les enseignants préparent les contenus et les sessions,
+et les élèves passent leurs examens ou s’entraînent depuis leur tableau de bord.
 
 > [!IMPORTANT]
 > **Préversion 0.2.1.** Le projet est fonctionnel et testé, mais son schéma de
-> données et ses interfaces peuvent évoluer avant la version 1.0. Sauvegardez
-> vos données avant chaque mise à jour.
+> données et ses interfaces peuvent encore évoluer avant la version 1.0.
+> Sauvegardez vos données avant chaque mise à jour et consultez le
+> [journal des versions](CHANGELOG.md).
 
-Consultez le [journal des versions](CHANGELOG.md) pour les nouveautés et les
-changements incompatibles.
+## Sommaire
 
-## 🧭 Sommaire
-
+- [Pourquoi Open Quiz](#pourquoi-open-quiz)
 - [Démarrage rapide](#démarrage-rapide)
-- [Fonctionnement](#fonctionnement)
-- [Routes de l’interface](#routes-de-linterface)
-- [Fonctionnalités](#fonctionnalités)
+- [Premiers pas](#premiers-pas)
+- [Déploiement avec Docker](#déploiement-avec-docker)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
-- [Tests et qualité](#tests-et-qualité)
-- [Déploiement](#déploiement)
-- [Exploitation et sauvegardes](#exploitation-et-sauvegardes)
-- [Dépannage](#dépannage)
-- [Contribution, sécurité et licence](#contribution-sécurité-et-licence)
+- [Développement et qualité](#développement-et-qualité)
+- [Documentation et contribution](#documentation-et-contribution)
 
-## 🚀 Démarrage rapide
+## Pourquoi Open Quiz
+
+### Examens et entraînements
+
+- examens chronométrés avec salle d’attente, pause, reprise et rattrapage ;
+- banques d’entraînement attribuées par classe et relançables librement ;
+- tirage commun à la classe ou individuel, selon le quiz ;
+- sujets papier nominatifs avec mise en page A4 et tirage déterministe.
+
+### Questions et correction
+
+- choix unique, choix multiple et réponse rédactionnelle ;
+- images privées, extraits de code et réponses attendues dans un langage donné ;
+- barème défini réponse par réponse, avec points négatifs facultatifs ;
+- correction automatique ou manuelle, publication des notes et export CSV.
+
+### Expérience élève
+
+- compte personnel et tableau de bord dédié ;
+- correction immédiate et historique de progression pour les entraînements ;
+- interface claire ou sombre disponible en huit langues ;
+- traduction locale facultative des quiz lorsque le navigateur la prend en
+  charge ;
+- exécution locale de courts extraits Python avec Pyodide.
+
+### Hébergement maîtrisé
+
+- déploiement autonome avec Docker Compose, Caddy et SQLite ;
+- mots de passe Argon2, TOTP pour les comptes privilégiés et cookies HttpOnly ;
+- limites de débit, journaux de sécurité et données persistantes sauvegardables.
+
+Le déroulement général reste simple :
+
+1. l’administrateur crée les comptes enseignants ;
+2. l’enseignant crée ses élèves, ses classes et ses banques de questions ;
+3. il prépare un examen ou ouvre des banques à l’entraînement ;
+4. les élèves se connectent et rejoignent leur activité ;
+5. l’enseignant corrige les réponses rédactionnelles puis publie ou exporte les
+   résultats.
+
+## Démarrage rapide
+
+Cette procédure lance l’application en local pour le développement ou
+l’évaluation. Pour une instance accessible en ligne, passez directement au
+[déploiement avec Docker](#déploiement-avec-docker).
 
 ### Prérequis
 
 - Python 3.14 et [uv](https://docs.astral.sh/uv/) ;
 - Node.js 24, Corepack et pnpm 11 ;
-- Docker avec le plugin Compose, uniquement pour le déploiement conteneurisé.
+- Git.
 
-### 1. Démarrer l’API
+### 1. Récupérer le projet
 
-Copiez `open-quiz-backend/.env.example` vers `open-quiz-backend/.env`, puis
-remplacez les trois valeurs `replace-with-...`.
+```shell
+git clone https://github.com/guillaume-behr/open-quiz.git
+cd open-quiz
+```
+
+### 2. Démarrer l’API
 
 ```shell
 cd open-quiz-backend
+cp .env.example .env
 chmod 600 .env
+```
+
+Ouvrez `.env` et remplacez les **quatre** valeurs commençant par
+`replace-with-` : trois secrets distincts d’au moins 32 caractères et un mot de
+passe administrateur d’au moins 16 caractères.
+
+```shell
 uv sync
 uv run fastapi dev main.py
 ```
 
-L’API est disponible sur `http://localhost:8000`. Sa documentation OpenAPI se
-trouve sur `http://localhost:8000/docs` en développement.
+L’API répond sur `http://localhost:8000` et sa documentation interactive est
+disponible sur `http://localhost:8000/docs`.
 
-### 2. Démarrer l’interface
+> [!NOTE]
+> Sous Windows, ignorez la commande `chmod` et protégez le fichier `.env` avec
+> les permissions du système.
 
-Dans un second terminal :
+### 3. Démarrer l’interface
+
+Dans un second terminal, depuis la racine du dépôt :
 
 ```shell
 cd open-quiz-frontend
@@ -63,327 +121,54 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Ouvrez `http://localhost:5173`. La racine redirige vers la connexion élève. Le
-serveur Vite transmet automatiquement les requêtes `/api` au backend.
+Ouvrez `http://localhost:5173`. Le serveur de développement transmet
+automatiquement les requêtes `/api` au backend.
 
-Pour la première configuration, utilisez directement l’espace adapté :
+## Premiers pas
 
-- enseignant : `http://localhost:5173/teacher/login` ;
-- administrateur : `http://localhost:5173/admin/dashboard` ;
-- élève : `http://localhost:5173/student/login`.
+| Espace         | Adresse locale                          | Première action                                                                      |
+| -------------- | --------------------------------------- | ------------------------------------------------------------------------------------ |
+| Administration | `http://localhost:5173/admin/dashboard` | Se connecter avec les identifiants de `.env`, configurer TOTP et créer un enseignant |
+| Enseignant     | `http://localhost:5173/teacher/login`   | Configurer TOTP, puis créer les élèves, classes et banques                           |
+| Élève          | `http://localhost:5173/student/login`   | Se connecter avec le compte fourni par l’enseignant                                  |
 
-## 🎯 Fonctionnement
-
-1. L’administrateur se connecte, configure TOTP et crée les comptes enseignants.
-2. L’enseignant configure TOTP, crée les comptes dans l’onglet **Élèves**, puis
-   les affecte depuis l’onglet **Classes**.
-3. Il alimente ses banques avec des questions faciles, moyennes ou difficiles.
-   Il attribue les points directement à chaque réponse, y compris des valeurs
-   négatives si nécessaire.
-4. Il crée les examens en indiquant le nombre de questions voulu pour chaque
-   difficulté et choisit, pour chaque classe, les banques accessibles en
-   entraînement ainsi que le nombre de questions à tirer dans chacune.
-5. Pour un examen, il choisit si les points négatifs doivent être pris en
-   compte, configure le tirage, sélectionne une classe et ouvre la salle
-   d’attente.
-6. L’élève se connecte à son compte et saisit uniquement le code de l’examen.
-7. L’enseignant démarre la session, consulte les résultats, corrige les réponses
-   rédactionnelles et peut exporter les notes au format CSV.
-
-Les questions sont tirées au lancement, jamais lors de la création du quiz.
-Chaque élève reçoit un tirage individuel ; l’ensemble choisi, l’ordre et le
-barème sont mémorisés dans la session afin de préserver la correction
-historique.
-
-Une banque autorisée est disponible à tout moment dans le tableau de bord des
-élèves de la classe. Un nouveau tirage sans doublon, limité à la quantité
-configurée par l’enseignant, est effectué à chaque démarrage. Ce tirage reste
-stable pendant toute la session, y compris après un rafraîchissement. La bonne
-réponse apparaît après chaque question et le tableau de bord conserve
-l’historique des scores potentiels obtenus.
-
-Un enseignant peut aussi ouvrir une session de rattrapage donnant à une classe
-un code temporaire pour repasser un ou plusieurs examens déjà effectués.
-
-Si la langue d’un élève diffère de celle du quiz, il peut demander une
-traduction automatique ou conserver le texte original.
-
-## 🧭 Routes de l’interface
-
-| Espace | Route | Usage |
-| --- | --- | --- |
-| Élève | `/student/login` | Connexion par identifiant et mot de passe |
-| Élève | `/student/dashboard` | Accès aux examens et aux entraînements |
-| Élève | `/student/exam` | Participation à un examen avec son code |
-| Élève | `/student/training` | Exécution d’un entraînement libre |
-| Enseignant | `/teacher/login` | Connexion enseignant et validation TOTP |
-| Enseignant | `/teacher/dashboard` | Élèves, classes, quiz, banques et résultats |
-| Administrateur | `/admin/dashboard` | Gestion des comptes enseignants |
-
-La route `/` redirige vers `/student/login`. Les tableaux de bord protégés
-renvoient vers leur écran de connexion lorsque la session correspondante est
+La racine de l’application redirige vers la connexion élève. Les tableaux de
+bord protégés renvoient vers leur écran de connexion lorsque la session est
 absente ou expirée.
 
-## ✨ Fonctionnalités
+Les questions sont tirées au lancement d’une session, pas à la création du
+quiz. L’enseignant peut choisir un tirage commun à la classe ou un tirage
+individuel. Les questions, leur ordre et le barème sont ensuite figés pour
+préserver la correction historique, même si la banque évolue.
 
-### Pour les enseignants
+## Déploiement avec Docker
 
-- création, modification, désactivation et suppression des comptes élèves ;
-- gestion séparée des classes et affectation d’un compte élève à une classe ;
-- import JSON atomique d’une ou plusieurs classes avec leurs élèves, avec
-  validation préalable et exemple téléchargeable ;
-- banques de questions à choix unique, choix multiple ou réponse rédactionnelle ;
-- images privées, extraits de code et réponses attendues dans un langage donné ;
-- examens créés dans leur onglet et banques d’entraînement affectées par classe ;
-- composition par quantité de questions faciles, moyennes et difficiles, avec
-  plafonnement selon la disponibilité des banques sélectionnées ;
-- barème défini réponse par réponse ; les réponses sélectionnées sont
-  additionnées et les valeurs négatives sont activées par quiz ;
-- tirage individuel effectué au lancement pour chaque élève ;
-- génération de sujets papier nominatifs avec ordre déterministe des questions
-  et des réponses, mise en page A4 et zones de réponse rédactionnelle ;
-- sessions chronométrées avec pause, reprise et retour optionnel aux questions ;
-- notation automatique et correction manuelle des réponses rédactionnelles ;
-- export CSV des résultats d’une classe, pour un quiz précis ou pour tous ses
-  quiz terminés.
+Cette section couvre le premier démarrage. Pour les sauvegardes, les mises à
+jour, la rotation des secrets et le dépannage, consultez le
+[guide de déploiement et d’exploitation](docs/deployment.md).
 
-L’export des résultats contient une ligne par participation : classe, quiz,
-date, identifiant et nom de l’élève, progression, score, corrections manuelles
-en attente et nombre d’incidents. Les fichiers UTF-8 sont directement
-exploitables dans un tableur.
+### Prérequis
 
-### Pour les élèves
+- Docker avec le plugin Compose ;
+- un nom de domaine et un reverse proxy HTTPS pour une instance publique.
 
-- connexion avec un compte créé par l’enseignant ;
-- tableau de bord séparant l’entrée en examen des entraînements disponibles ;
-- entrée en examen avec le seul code de session après authentification ;
-- entraînements relançables librement, avec correction immédiate, score
-  potentiel et historique de progression ;
-- accès aux rattrapages autorisés par l’enseignant au moyen d’un code dédié ;
-- interface claire ou sombre ;
-- français, anglais, allemand, espagnol, portugais, ukrainien, arabe et chinois
-  simplifié ;
-- traduction facultative des quiz ;
-- exécution locale et interrompable de courts extraits Python avec Pyodide.
+### Lancer les conteneurs
 
-### Sécurité et hébergement
-
-- mots de passe Argon2 pour tous les comptes et TOTP obligatoire pour les
-  enseignants et administrateurs ;
-- jetons d’accès courts et cookies HttpOnly rotatifs ;
-- limites de débit sur les routes sensibles ;
-- déploiement Docker derrière Caddy avec SQLite persistant.
-
-### Traduction automatique
-
-La langue utilisée par l’enseignant lors de la création devient la langue
-d’origine du quiz. Les anciens quiz sans langue enregistrée sont considérés
-comme français.
-
-La traduction :
-
-- démarre uniquement à la demande de l’élève ;
-- couvre le titre, les questions et les réponses, mais jamais le code ;
-- peut être désactivée à tout moment pour retrouver le texte original ;
-- s’exécute localement avec l’API `Translator` du navigateur.
-
-Le navigateur peut télécharger un modèle de langue lors de la première
-utilisation. Aucun service de traduction externe n’est configuré par Open Quiz.
-Si le navigateur ou la paire de langues n’est pas compatible, le quiz reste
-inchangé. Consultez la
-[documentation Chrome](https://developer.chrome.com/docs/ai/translator-api) et
-la [compatibilité MDN](https://developer.mozilla.org/docs/Web/API/Translator).
-
-## ⚙️ Configuration
-
-Les secrets sont stockés dans `open-quiz-backend/.env`, ignoré par Git. Les
-fichiers d’exemple ne contiennent aucune vraie donnée sensible.
-
-### Paramètres essentiels
-
-| Variable | Description | Valeur locale |
-| --- | --- | --- |
-| `DATABASE_URL` | URL SQLAlchemy de la base | `sqlite:///./open-quiz.db` |
-| `JWT_SECRET` | Signature des jetons, 32 caractères minimum | obligatoire |
-| `TOTP_ENCRYPTION_KEY` | Chiffrement TOTP, distinct du secret JWT | obligatoire |
-| `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | Chiffrement des mots de passe élèves récupérables, distinct des autres secrets | obligatoire |
-| `ADMIN_USERNAME` | Identifiant administrateur, 80 caractères maximum | `admin` |
-| `ADMIN_PASSWORD` | Mot de passe administrateur, 16 à 256 caractères | obligatoire |
-| `FRONTEND_ORIGIN` | Origine HTTP(S) exacte, sans `/` final | `http://localhost:5173` |
-| `APP_ENV` | `development`, `test` ou `production` | `development` |
-
-Le frontend accepte aussi `VITE_API_URL`. Laissez-la vide avec le proxy Vite
-ou le déploiement Caddy fourni. Utilisez une URL absolue uniquement si l’API
-est servie séparément, avec une configuration CORS correspondante. Pour Docker,
-transmettez cette même origine avec `--build-arg VITE_API_URL=https://api.example.com`
-afin que la politique CSP Caddy autorise les requêtes API.
-
-<details>
-<summary><strong>Durées, limites de débit et conservation</strong></summary>
-
-| Variable | Description | Défaut |
-| --- | --- | --- |
-| `ACCESS_TOKEN_MINUTES` | Durée d’un jeton d’accès, de 1 à 30 min | `15` |
-| `REFRESH_TOKEN_DAYS` | Durée maximale d’une session, de 1 à 30 jours | `7` |
-| `LOGIN_ATTEMPTS` | Connexions admises par fenêtre | `5` |
-| `LOGIN_WINDOW_SECONDS` | Fenêtre de limitation des connexions | `900` |
-| `QUIZ_JOIN_ATTEMPTS` | Tentatives pour rejoindre un quiz | `20` |
-| `QUIZ_PARTICIPANT_ATTEMPTS` | Requêtes d’un participant par fenêtre | `240` |
-| `QUIZ_VIOLATION_ATTEMPTS` | Alertes de surveillance par fenêtre | `20` |
-| `QUIZ_RATE_WINDOW_SECONDS` | Fenêtre des limites publiques | `60` |
-| `QUIZ_RESULT_RETENTION_DAYS` | Conservation des résultats terminés | `365` |
-| `PROBLEM_REPORT_ATTEMPTS` | Signalements admis par fenêtre (instance entière) | `30` |
-| `PROBLEM_REPORT_WINDOW_SECONDS` | Fenêtre de limitation des signalements | `900` |
-| `PROBLEM_REPORT_RETENTION_DAYS` | Conservation maximale des signalements | `90` |
-| `MAX_REQUEST_BODY_BYTES` | Taille des requêtes ordinaires | `65536` |
-
-</details>
-
-<details>
-<summary><strong>Informations légales et publiques de l’instance</strong></summary>
-
-Les pages `/legal-notice`, `/privacy`, `/accessibility` et `/cookie-settings`
-chargent ces informations depuis l’API. Une valeur absente ne bloque pas le
-démarrage, mais affiche un avertissement public.
-
-| Variable | Information à faire valider |
-| --- | --- |
-| `LEGAL_HOST_NAME` | Nom ou raison sociale de l’hébergeur |
-| `LEGAL_HOST_ADDRESS` | Adresse de l’hébergeur |
-| `LEGAL_HOST_PHONE` | Numéro de téléphone de l’hébergeur |
-| `PRIVACY_CONTROLLER_NAME` | Responsable du traitement |
-| `PRIVACY_CONTROLLER_CONTACT` | Contact pour l’exercice des droits |
-| `PRIVACY_DPO_CONTACT` | Contact du DPO compétent |
-| `PRIVACY_LEGAL_BASIS` | Base légale validée avec le DPO |
-| `PRIVACY_RECIPIENTS` | Destinataires et sous-traitants autorisés |
-| `PRIVACY_TEACHER_DATA_RETENTION` | Conservation des comptes enseignants |
-| `PRIVACY_STUDENT_DATA_RETENTION` | Conservation des données élèves |
-| `PRIVACY_SECURITY_LOG_RETENTION` | Conservation des journaux de sécurité |
-| `ACCESSIBILITY_CONTACT` | Contact pour une alternative accessible |
-| `ACCESSIBILITY_SCHEME_URL` | URL du schéma pluriannuel d’accessibilité |
-| `ACCESSIBILITY_ACTION_PLAN_URL` | URL du plan d’action annuel |
-
-Le modèle fourni suit le régime de l’édition non professionnelle anonyme. Les
-contacts RGPD et accessibilité doivent être institutionnels ou fonctionnels,
-jamais personnels.
-
-Conservez la mention « Accessibilité : non conforme » tant qu’aucun audit RGAA
-complet et valide n’a été réalisé. Des tests automatisés ne remplacent pas cet
-audit.
-
-Dans l’Éducation nationale, l’hébergement ne vaut pas homologation. Consultez
-le DPO, inscrivez le traitement au registre, documentez sa base légale,
-encadrez les sous-traitants et informez les élèves et représentants légaux.
-
-Références :
-[traitements éducatifs](https://eduscol.education.fr/4920/interfaces-entre-les-applications-nationales-et-les-solutions-numeriques-tierces-pour-l-education),
-[DPO de l’Éducation nationale](https://eduscol.education.fr/4935/delegues-la-protection-des-donnees-dpd),
-[RGAA 4.1.2](https://accessibilite.numerique.gouv.fr/) et
-[cookies et traceurs](https://www.cnil.fr/fr/cookies-et-autres-traceurs/que-dit-la-loi).
-
-</details>
-
-## 🏗️ Architecture
-
-| Partie | Technologies |
-| --- | --- |
-| API | Python 3.14, FastAPI, SQLAlchemy, SQLite |
-| Interface | React 19, TypeScript, Vite, Tailwind CSS |
-| Sécurité | JWT, cookies HttpOnly, TOTP, Argon2, Fernet |
-| Python navigateur | Pyodide dans un Web Worker |
-| Production | Docker Compose et Caddy |
-| Qualité | pytest, Ruff, ESLint, Prettier, TypeScript |
-
-```text
-Navigateur
-  ├─ espace élève
-  ├─ espace enseignant
-  └─ espace administrateur
-          │ HTTPS / JSON
-          ▼
-Caddy (SPA, CSP, fichiers statiques, proxy /api)
-          │ réseau Docker interne
-          ▼
-FastAPI (authentification, métier, limites de débit)
-          │
-          ▼
-SQLite en mode WAL (volume persistant)
-```
-
-Le backend applique les autorisations, effectue les tirages, fige le barème de
-chaque session, calcule les notes et limite le débit. Le frontend conserve les
-jetons d’accès enseignant en mémoire. Les cookies de session enseignant sont
-HttpOnly et rotatifs ; les jetons d’authentification et de participation élève
-restent dans `sessionStorage` le temps de l’onglet.
-
-### Structure du dépôt
-
-```text
-.
-├── .github/                 CI, Dependabot et modèles de contribution
-├── open-quiz-backend/
-│   ├── app/                 configuration, modèles, sécurité et routes API
-│   ├── scripts/             récupération 2FA et rotation des secrets
-│   └── tests/               tests API, sécurité et migrations SQLite
-├── open-quiz-frontend/
-│   ├── public/locales/      huit catalogues de traduction
-│   ├── public/pyodide/      runtime Python hors ligne
-│   ├── scripts/             validations frontend
-│   └── src/                 API cliente, pages et composants React
-├── CHANGELOG.md             nouveautés et changements incompatibles
-├── docker-compose.yml       déploiement autonome
-├── update.ps1               mise à jour Windows
-└── update.sh                mise à jour Unix
-```
-
-## ✅ Tests et qualité
-
-### Backend
+Depuis la racine du dépôt :
 
 ```shell
-cd open-quiz-backend
-uv run ruff check app tests main.py scripts
-uv run ruff format --check app tests main.py scripts
-uv run pytest -q
+cp open-quiz-backend/.env.production.example open-quiz-backend/.env
+chmod 600 open-quiz-backend/.env
 ```
 
-Appliquez le formatage avec `uv run ruff format app tests main.py scripts`.
+Dans `open-quiz-backend/.env` :
 
-### Frontend
+1. remplacez les quatre valeurs `replace-with-` ;
+2. définissez `FRONTEND_ORIGIN` avec l’origine HTTPS exacte, sans `/` final ;
+3. renseignez les informations légales, de confidentialité et d’accessibilité
+   applicables à votre instance.
 
-```shell
-cd open-quiz-frontend
-pnpm lint
-pnpm format:check
-pnpm test
-pnpm typecheck
-pnpm test:e2e
-pnpm build
-pnpm audit --audit-level low
-```
-
-`pnpm test` vérifie notamment les huit catalogues de traduction et leurs
-variables d’interpolation. `pnpm format` applique Prettier.
-
-## 📦 Déploiement
-
-### Compiler le frontend localement
-
-```shell
-cd open-quiz-frontend
-pnpm build
-pnpm preview
-```
-
-La compilation écrit les fichiers dans `open-quiz-frontend/dist`.
-
-### Déployer avec Docker
-
-1. Copiez `open-quiz-backend/.env.production.example` vers
-   `open-quiz-backend/.env`.
-2. Configurez l’origine HTTPS et les quatre secrets robustes.
-3. Sauvegardez `TOTP_ENCRYPTION_KEY` et `STUDENT_CREDENTIAL_ENCRYPTION_KEY` dans un gestionnaire de secrets.
-4. Validez et démarrez les conteneurs.
+Validez ensuite la configuration et démarrez les services :
 
 ```shell
 docker compose config --quiet
@@ -392,7 +177,7 @@ docker compose ps
 ```
 
 Le frontend écoute uniquement sur `127.0.0.1:7800`. Publiez-le derrière un
-reverse proxy HTTPS :
+reverse proxy HTTPS, par exemple avec Caddy :
 
 ```caddyfile
 quiz.example.com {
@@ -400,65 +185,163 @@ quiz.example.com {
 }
 ```
 
-Vérifiez ensuite l’état de l’API :
+Vérifiez ensuite l’instance :
 
 ```shell
 curl --fail --show-error https://quiz.example.com/api/health
 ```
 
-La réponse attendue est `{"status":"ok"}`. Appliquez les mises à jour en
-avance rapide avec `update.ps1` sous Windows ou `sh ./update.sh` sous Unix.
+La réponse attendue est `{"status":"ok"}`.
 
-## 💾 Exploitation et sauvegardes
+### Mises à jour et sauvegardes
 
-### Migration de 0.1.x vers 0.2.0
-
-Effectuez une sauvegarde de la base avant le premier démarrage en `0.2.0`. La
-migration SQLite est automatique, mais elle comporte volontairement des
-changements incompatibles avec l’ancien fonctionnement :
-
-- les anciens élèves dépourvus de compte sont supprimés ;
-- les répartitions de quiz en pourcentages sont converties en nombres de
-  questions par difficulté ;
-- le barème historique d’une question est reporté sur ses bonnes réponses lors
-  de la migration vers la notation réponse par réponse.
-
-Les nouvelles sessions utilisent des instantanés du tirage, de l’ordre et du
-réglage des points négatifs afin qu’une modification ultérieure du quiz ne
-change pas leurs notes.
-
-- surveillez `/api/health`, l’espace disque et le certificat TLS ;
+- utilisez `sh ./update.sh` sous Unix ou `./update.ps1` sous PowerShell pour
+  appliquer une mise à jour en avance rapide et reconstruire les conteneurs ;
 - sauvegardez régulièrement le volume `open-quiz-data` avec un outil compatible
   SQLite WAL, ou pendant un arrêt contrôlé ;
-- conservez `TOTP_ENCRYPTION_KEY` : sa perte impose une nouvelle inscription
-  TOTP pour chaque compte ;
-- conservez `STUDENT_CREDENTIAL_ENCRYPTION_KEY` : sa perte rend les mots de
-  passe élèves enregistrés irrécupérables et impose leur réinitialisation ;
-- centralisez les événements JSON `security.*`, `auth.login_rate_limited` et
-  `auth.refresh_reuse_detected` ;
-- testez une restauration avant de considérer une sauvegarde comme valide.
+- conservez `TOTP_ENCRYPTION_KEY` et `STUDENT_CREDENTIAL_ENCRYPTION_KEY` dans un
+  gestionnaire de secrets ;
+- testez la restauration de vos sauvegardes ;
+- sauvegardez impérativement la base avant une migration de version.
 
-## 🛠️ Dépannage
+La migration depuis la série `0.1.x` comporte des changements incompatibles,
+notamment la suppression des anciens élèves sans compte. Consultez le
+[journal des versions](CHANGELOG.md) avant la première mise à jour vers
+`0.2.x`.
 
-| Problème | Solution |
-| --- | --- |
-| L’API refuse de démarrer | Vérifiez les secrets, `APP_ENV` et l’absence de `/` final dans `FRONTEND_ORIGIN`. |
-| Le navigateur bloque l’API | Faites correspondre exactement l’origine visible et `FRONTEND_ORIGIN`. |
-| Un enseignant a perdu son authentificateur | Utilisez « Récupérer l’accès », `uv run python -m scripts.reset_two_factor identifiant` ou, en Docker, `docker compose exec open-quiz-backend python -m scripts.reset_two_factor identifiant`. |
-| Le frontend ne trouve pas le backend | Démarrez l’API sur le port 8000 ou configurez `VITE_API_URL`. |
-| La traduction est indisponible | Utilisez un navigateur et une paire de langues compatibles avec `Translator`. |
-| Docker ne devient pas sain | Consultez `docker compose ps`, puis `docker compose logs open-quiz-backend open-quiz-frontend`. |
+## Configuration
 
-## 🤝 Contribution, sécurité et licence
+Les secrets du backend sont stockés dans `open-quiz-backend/.env`, ignoré par
+Git. Les principales variables sont :
 
-Lisez [CONTRIBUTING.md](CONTRIBUTING.md) avant de proposer un changement.
+| Variable                            | Rôle                                               | Valeur locale              |
+| ----------------------------------- | -------------------------------------------------- | -------------------------- |
+| `DATABASE_URL`                      | Base SQLAlchemy                                    | `sqlite:///./open-quiz.db` |
+| `JWT_SECRET`                        | Signature des jetons, 32 caractères minimum        | obligatoire                |
+| `TOTP_ENCRYPTION_KEY`               | Chiffrement TOTP, distinct du secret JWT           | obligatoire                |
+| `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | Chiffrement des mots de passe élèves récupérables  | obligatoire                |
+| `ADMIN_USERNAME`                    | Identifiant administrateur                         | `admin`                    |
+| `ADMIN_PASSWORD`                    | Mot de passe administrateur, 16 caractères minimum | obligatoire                |
+| `FRONTEND_ORIGIN`                   | Origine HTTP(S) exacte, sans `/` final             | `http://localhost:5173`    |
+| `APP_ENV`                           | `development`, `test` ou `production`              | `development`              |
 
-Ne publiez jamais une vulnérabilité dans une issue. Utilisez la procédure
-privée décrite dans [SECURITY.md](SECURITY.md).
+Les fichiers [`open-quiz-backend/.env.example`](open-quiz-backend/.env.example)
+et
+[`open-quiz-backend/.env.production.example`](open-quiz-backend/.env.production.example)
+listent toutes les variables disponibles. Le
+[guide de déploiement](docs/deployment.md#configurer-la-conservation-et-les-limites)
+explique les limites et les durées de conservation.
+
+Le frontend accepte aussi `VITE_API_URL`. Laissez cette variable vide avec le
+proxy Vite ou le déploiement Caddy fourni. Utilisez une URL absolue uniquement
+si l’API est servie sur une autre origine, avec la configuration CORS et CSP
+correspondante.
+
+> [!CAUTION]
+> L’auto-hébergement ne vaut ni homologation, ni conformité automatique. Avant
+> une mise en service, faites valider la base légale, les durées de conservation,
+> les sous-traitants et l’information des utilisateurs par l’établissement ou
+> son DPO. Conservez la mention « Accessibilité : non conforme » tant qu’aucun
+> audit RGAA complet n’a été réalisé.
+
+## Architecture
+
+| Partie            | Technologies principales                               |
+| ----------------- | ------------------------------------------------------ |
+| API               | Python 3.14, FastAPI, SQLAlchemy, SQLite               |
+| Interface         | React 19, TypeScript, Vite, Tailwind CSS               |
+| Sécurité          | JWT, cookies HttpOnly, TOTP, Argon2, Fernet            |
+| Python navigateur | Pyodide dans un Web Worker                             |
+| Production        | Docker Compose et Caddy                                |
+| Qualité           | pytest, Ruff, ESLint, Prettier, TypeScript, Playwright |
+
+```text
+Navigateur (élève, enseignant ou administrateur)
+          │ HTTPS
+          ▼
+Reverse proxy TLS de l’hôte
+          │ HTTP sur 127.0.0.1:7800
+          ▼
+Caddy (SPA, CSP, fichiers statiques, proxy /api)
+          │ réseau Docker interne
+          ▼
+FastAPI (authentification, règles métier, limites de débit)
+          │
+          ▼
+SQLite en mode WAL (volume persistant)
+```
+
+### Structure du dépôt
+
+```text
+.
+├── .github/                 CI, Dependabot et modèles de contribution
+├── docs/                    guides de déploiement et d’exploitation
+├── open-quiz-backend/       API FastAPI, scripts et tests
+├── open-quiz-frontend/      application React, traductions et tests E2E
+├── CHANGELOG.md             historique des versions
+├── CONTRIBUTING.md          guide de contribution
+├── docker-compose.yml       déploiement autonome
+├── SECURITY.md              signalement privé des vulnérabilités
+├── update.ps1               mise à jour sous PowerShell
+└── update.sh                mise à jour sous Unix
+```
+
+## Développement et qualité
+
+### Backend
+
+```shell
+cd open-quiz-backend
+uv sync --frozen --dev
+uv run ruff check app tests main.py scripts
+uv run ruff format --check app tests main.py scripts
+uv run pytest -q
+```
+
+### Frontend
+
+```shell
+cd open-quiz-frontend
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm format:check
+pnpm test
+pnpm typecheck
+pnpm build
+```
+
+Les tests navigateur sont disponibles séparément :
+
+```shell
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+Les mêmes contrôles principaux sont exécutés par
+[GitHub Actions](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml).
+
+## Documentation et contribution
+
+| Ressource                                              | Contenu                                            |
+| ------------------------------------------------------ | -------------------------------------------------- |
+| [Déploiement et exploitation](docs/deployment.md)      | production, sauvegardes, mises à jour et dépannage |
+| [Documentation backend](open-quiz-backend/README.md)   | API, sécurité, stockage et exploitation            |
+| [Documentation frontend](open-quiz-frontend/README.md) | interface, routes, traduction et tests navigateur  |
+| [Journal des versions](CHANGELOG.md)                   | nouveautés et migrations incompatibles             |
+| [Guide de contribution](CONTRIBUTING.md)               | conventions et vérifications attendues             |
+| [Politique de sécurité](SECURITY.md)                   | procédure privée de signalement                    |
+
+Les corrections ciblées, tests, traductions et améliorations de documentation
+sont les bienvenues. Pour une évolution importante, ouvrez d’abord une issue afin
+d’échanger sur le besoin et l’approche.
+
+Ne publiez jamais une vulnérabilité, un secret ou des données d’élève dans une
+issue publique. Suivez la procédure décrite dans [SECURITY.md](SECURITY.md).
 
 Open Quiz est distribué sous [licence MIT](LICENSE).
 
-## 🙏 Remerciements
+## Remerciements
 
-Le projet s’appuie notamment sur FastAPI, React, Pyodide, Caddy et les nombreux
-projets libres référencés dans les fichiers de verrouillage.
+Open Quiz s’appuie notamment sur FastAPI, React, Pyodide, Caddy et les nombreux
+projets libres référencés dans ses fichiers de verrouillage.

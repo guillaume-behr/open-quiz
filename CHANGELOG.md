@@ -8,7 +8,7 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 - la limitation des signalements anonymes n'utilise plus jamais l'adresse IP :
   le budget est désormais global à l'instance (`PROBLEM_REPORT_ATTEMPTS`, 30
-  par défaut) ;
+  par défaut en développement et 5 dans l’exemple de production) ;
 - la connexion élève vérifie toujours le mot de passe, même pour un
   identifiant inconnu, afin de ne pas révéler les comptes existants par le
   temps de réponse ;
@@ -17,11 +17,16 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   compte élève ;
 - les réponses envoyées simultanément ne peuvent plus créer de doublons ni
   provoquer d'erreur 500 (écriture atomique) ;
+- les démarrages, réponses, corrections et suppressions concurrents sont
+  sérialisés afin de préserver l’état des sessions et des résultats ;
 - la fin d'un rattrapage termine aussi les sessions en pause et la reprise
   tolère les durées de pause héritées ;
 - l'historique élève couvre toutes les classes du compte ;
 - le cookie de session est supprimé avec les mêmes attributs qu'à sa création ;
 - audit des créations, modifications et suppressions de comptes élèves ;
+- validation renforcée des connexions HTTP et WebSocket, avec authentification
+  bornée, contrôle d’origine et reconnexion progressive ;
+- test réseau conteneurisé couvrant l’API, le proxy et les WebSockets ;
 - Dependabot activé pour GitHub Actions, Docker, uv et npm.
 
 ### Ajouts
@@ -34,6 +39,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - score potentiel et historique de progression des entraînements ;
 - sessions de rattrapage limitées à des examens déjà passés par la classe ;
 - tirage individuel des questions au lancement pour chaque élève ;
+- option permettant de partager exactement le même tirage entre tous les
+  élèves d’une session ;
 - ordre aléatoire propre à chaque élève ;
 - quantités explicites de questions par difficulté, limitées par les banques ;
 - barème défini sur chaque proposition de réponse ;
@@ -41,7 +48,11 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   aperçu et exemple téléchargeable ;
 - quantité de questions configurable pour chaque banque d’entraînement d’une
   classe ;
-- impression A4 de sujets d’examen nominatifs avec randomisation déterministe.
+- impression A4 de sujets d’examen nominatifs avec randomisation déterministe ;
+- mises à jour temps réel des sessions actives, rattrapages, participants et
+  résultats par WebSocket authentifié ;
+- publication des notes après correction complète et historique consultable
+  par l’élève.
 
 ### Interface
 
@@ -54,7 +65,12 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - les contrôles non rédactionnels n’affichent plus de curseur de saisie ;
 - l’écran de passage d’un entraînement n’affiche plus d’icône de mode ;
 - les imports de classes et de banques utilisent des boutons de sélection de
-  fichier cohérents et accessibles.
+  fichier cohérents et accessibles ;
+- les résultats indiquent les corrections en attente et les barèmes atypiques
+  directement à côté du nom de l’élève ;
+- une note publiée ne peut plus être modifiée ;
+- les alertes de surveillance distinguent les collages importants des saisies
+  ordinaires et couvrent aussi les tentatives d’impression.
 
 ### Modifications incompatibles
 
@@ -64,6 +80,17 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - les points sont désormais définis sur les propositions des banques de questions ;
 - l’ancien écran public permettant de rejoindre un quiz est remplacé par la
   connexion élève.
+
+### Documentation
+
+- réorganisation du README principal autour du démarrage rapide, du premier
+  parcours et du déploiement ;
+- ajout d’un guide d’exploitation couvrant HTTPS, sauvegardes, restauration,
+  mises à jour, secrets, conservation et dépannage ;
+- mise à jour des documentations backend et frontend à partir des commandes,
+  routes et contraintes réellement présentes dans le dépôt ;
+- enrichissement des guides de contribution et de sécurité ainsi que des
+  modèles d’issues et de pull request.
 
 ## 0.1.0 — 2026-08-02
 
