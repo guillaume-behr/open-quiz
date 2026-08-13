@@ -4138,6 +4138,28 @@ def test_streamed_request_body_is_limited_without_buffering() -> None:
     assert response_start["status"] == 413
 
 
+def test_elevated_body_limit_only_matches_large_question_routes() -> None:
+    elevated_paths = (
+        "/api/question-banks/import",
+        "/api/question-banks/12/questions",
+        "/api/question-banks/questions/34/update",
+    )
+    for path in elevated_paths:
+        assert RequestBodyLimitMiddleware._uses_elevated_limit(
+            {"type": "http", "method": "POST", "path": path}
+        )
+
+    regular_paths = (
+        "/api/question-banks/12/update",
+        "/api/question-banks-extra/import",
+        "/api/question-banks/questions/not-an-id/update",
+    )
+    for path in regular_paths:
+        assert not RequestBodyLimitMiddleware._uses_elevated_limit(
+            {"type": "http", "method": "POST", "path": path}
+        )
+
+
 def test_production_redirects_to_https_before_body_authentication(
     tmp_path: Path,
 ) -> None:
@@ -4435,9 +4457,7 @@ def test_live_teacher_session_list_pushes_launch_and_removal(tmp_path: Path) -> 
             launched_session = launched.json()
             pushed = socket.receive_json()
             assert pushed["type"] == "active_sessions"
-            assert [item["id"] for item in pushed["data"]] == [
-                launched_session["id"]
-            ]
+            assert [item["id"] for item in pushed["data"]] == [launched_session["id"]]
 
             cancelled = client.post(
                 f"/api/quizzes/sessions/{launched_session['id']}/cancel",
@@ -4528,6 +4548,53 @@ def test_join_and_start_race_never_strands_a_participant(tmp_path: Path) -> None
         else:
             assert state.json()["status"] == "waiting"
             assert state.json()["question"] is None
+
+
+def test_concurrent_session_reads_finalize_an_expired_quiz_once(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "concurrent-expiry.db")) as client:
+        environment = exam_environment(client)
+        launched, participant_headers = launch_and_join(client, environment)
+        started = client.post(
+            f"/api/quizzes/sessions/{launched['id']}/start",
+            headers=environment["teacher_headers"],
+        )
+        assert started.status_code == status.HTTP_200_OK
+        with client.app.state.session_factory() as session:
+            quiz_session = session.get(QuizSession, launched["id"])
+            assert quiz_session is not None
+            quiz_session.started_at = datetime.now(UTC) - timedelta(hours=1)
+            session.commit()
+
+        barrier = Barrier(2)
+
+        def teacher_state() -> tuple[int, str]:
+            barrier.wait()
+            response = client.get(
+                f"/api/quizzes/sessions/{launched['id']}",
+                headers=environment["teacher_headers"],
+            )
+            return response.status_code, response.json()["status"]
+
+        def student_state() -> tuple[int, str]:
+            barrier.wait()
+            response = client.get(
+                f"/api/quizzes/student/sessions/{launched['join_code']}",
+                headers=participant_headers,
+            )
+            return response.status_code, response.json()["status"]
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = [
+                future.result()
+                for future in (
+                    pool.submit(teacher_state),
+                    pool.submit(student_state),
+                )
+            ]
+
+        assert results == [(status.HTTP_200_OK, "finished")] * 2
 
 
 def correct_choice_id(question: dict[str, Any]) -> int:

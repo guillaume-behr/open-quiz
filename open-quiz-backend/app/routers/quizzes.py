@@ -1,7 +1,7 @@
 import csv
 import io
 import json
-from asyncio import Queue, wait_for
+from asyncio import Queue, to_thread, wait_for
 from collections import defaultdict
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -151,9 +151,7 @@ def publish_makeup_update(request: HTTPConnection, owner_id: int) -> None:
     request.app.state.live_quiz_hub.publish(makeup_sessions_topic(owner_id))
 
 
-def publish_active_quiz_sessions_update(
-    request: HTTPConnection, owner_id: int
-) -> None:
+def publish_active_quiz_sessions_update(request: HTTPConnection, owner_id: int) -> None:
     request.app.state.live_quiz_hub.publish(active_quiz_sessions_topic(owner_id))
 
 
@@ -180,6 +178,10 @@ def authenticated_live_professor_id(websocket: WebSocket, token: str) -> int | N
         if professor is None or professor.is_admin:
             return None
         return professor.id
+
+
+async def async_live_professor_id(websocket: WebSocket, token: str) -> int | None:
+    return await to_thread(authenticated_live_professor_id, websocket, token)
 
 
 async def wait_for_live_update(queue: Queue[None], ends_at: datetime | None) -> bool:
@@ -1069,7 +1071,20 @@ def expire_quiz_session(
         and ends_at is not None
         and datetime.now(UTC) >= ends_at
     ):
-        quiz_session.status = "finished"
+        transition = session.execute(
+            update(QuizSession)
+            .where(
+                QuizSession.id == quiz_session.id,
+                QuizSession.status == "in_progress",
+            )
+            .values(status="finished")
+            .execution_options(synchronize_session=False)
+        )
+        if transition.rowcount != 1:
+            session.rollback()
+            session.refresh(quiz_session)
+            return
+        session.refresh(quiz_session)
         for participant in session.scalars(
             select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
         ):
@@ -2178,13 +2193,108 @@ def grade_written_answer(
     return answer_review(answer, question, position, choices, max_score)
 
 
+def live_teacher_active_sessions_snapshot(
+    websocket: WebSocket,
+    professor_id: int,
+) -> tuple[list[dict[str, object]] | None, datetime | None]:
+    with websocket.app.state.session_factory() as session:
+        professor = session.get(User, professor_id)
+        if professor is None or not professor.is_active:
+            return None, None
+        sessions = active_session_responses(professor, session)
+    next_ends_at = min(
+        (
+            item.ends_at
+            for item in sessions
+            if item.status == "in_progress" and item.ends_at is not None
+        ),
+        default=None,
+    )
+    return [item.model_dump(mode="json") for item in sessions], next_ends_at
+
+
+def live_teacher_session_snapshot(
+    websocket: WebSocket,
+    professor_id: int,
+    session_id: int,
+) -> tuple[dict[str, object] | None, datetime | None, bool]:
+    with websocket.app.state.session_factory() as session:
+        row = session.execute(
+            select(QuizSession, Quiz)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                QuizSession.id == session_id,
+                Quiz.owner_id == professor_id,
+            )
+        ).first()
+        if row is None:
+            return None, None, False
+        quiz_session, quiz = row
+        previous_status = quiz_session.status
+        state = session_response(quiz_session, quiz, session)
+        if quiz_session.status != previous_status:
+            publish_quiz_update(websocket, quiz_session, session)
+    return (
+        state.model_dump(mode="json"),
+        state.ends_at if state.status == "in_progress" else None,
+        state.status in {"finished", "cancelled"},
+    )
+
+
+def live_participant_is_authenticated(
+    websocket: WebSocket,
+    join_code: str,
+    token: str,
+) -> bool:
+    with websocket.app.state.session_factory() as session:
+        try:
+            authenticated_participant(join_code, token, websocket, session)
+        except HTTPException:
+            return False
+    return True
+
+
+def live_student_session_snapshot(
+    websocket: WebSocket,
+    join_code: str,
+    token: str,
+) -> tuple[dict[str, object], datetime | None, bool] | None:
+    with websocket.app.state.session_factory() as session:
+        try:
+            quiz_session, quiz, participant = authenticated_participant(
+                join_code, token, websocket, session
+            )
+        except HTTPException:
+            return None
+        previous_status = quiz_session.status
+        state = student_state_response(quiz_session, quiz, participant, session)
+        if quiz_session.status != previous_status:
+            publish_quiz_update(websocket, quiz_session, session)
+    return (
+        state.model_dump(mode="json"),
+        state.ends_at if state.status == "in_progress" else None,
+        state.status in {"finished", "cancelled"},
+    )
+
+
+def live_makeup_sessions_snapshot(
+    websocket: WebSocket,
+    professor_id: int,
+) -> list[dict[str, object]] | None:
+    with websocket.app.state.session_factory() as session:
+        professor = session.get(User, professor_id)
+        if professor is None or not professor.is_active:
+            return None
+        sessions = list_makeup_sessions(professor, session)
+    return [item.model_dump(mode="json") for item in sessions]
+
+
 @router.websocket("/live/teacher/sessions")
 async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
     token = await accept_live_socket(websocket)
     if token is None:
         return
-    session_factory = websocket.app.state.session_factory
-    professor_id = authenticated_live_professor_id(websocket, token)
+    professor_id = await async_live_professor_id(websocket, token)
     if professor_id is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -2197,37 +2307,23 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
             next_ends_at: datetime | None = None
             while True:
                 if refresh_state:
-                    with session_factory() as session:
-                        professor = session.get(User, professor_id)
-                        if professor is None or not professor.is_active:
-                            await websocket.close(
-                                code=status.WS_1008_POLICY_VIOLATION
-                            )
-                            return
-                        sessions = active_session_responses(professor, session)
+                    sessions, next_ends_at = await to_thread(
+                        live_teacher_active_sessions_snapshot,
+                        websocket,
+                        professor_id,
+                    )
+                    if sessions is None:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
                     await websocket.send_json(
                         {
                             "type": "active_sessions",
-                            "data": [
-                                item.model_dump(mode="json") for item in sessions
-                            ],
+                            "data": sessions,
                         }
-                    )
-                    next_ends_at = min(
-                        (
-                            item.ends_at
-                            for item in sessions
-                            if item.status == "in_progress"
-                            and item.ends_at is not None
-                        ),
-                        default=None,
                     )
                 refresh_state = await wait_for_live_update(updates, next_ends_at)
                 if not refresh_state:
-                    if (
-                        authenticated_live_professor_id(websocket, token)
-                        != professor_id
-                    ):
+                    if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
                     await websocket.send_json({"type": "ping"})
@@ -2243,8 +2339,7 @@ async def live_teacher_quiz_session(
     token = await accept_live_socket(websocket)
     if token is None:
         return
-    session_factory = websocket.app.state.session_factory
-    professor_id = authenticated_live_professor_id(websocket, token)
+    professor_id = await async_live_professor_id(websocket, token)
     if professor_id is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -2257,38 +2352,23 @@ async def live_teacher_quiz_session(
             ends_at: datetime | None = None
             while True:
                 if refresh_state:
-                    with session_factory() as session:
-                        row = session.execute(
-                            select(QuizSession, Quiz)
-                            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-                            .where(
-                                QuizSession.id == session_id,
-                                Quiz.owner_id == professor_id,
-                            )
-                        ).first()
-                        if row is None:
-                            await websocket.send_json({"type": "deleted"})
-                            await websocket.close()
-                            return
-                        quiz_session, quiz = row
-                        previous_status = quiz_session.status
-                        expire_quiz_session(quiz_session, quiz, session)
-                        if quiz_session.status != previous_status:
-                            publish_quiz_update(websocket, quiz_session, session)
-                        state = session_response(quiz_session, quiz, session)
-                    await websocket.send_json(
-                        {"type": "session", "data": state.model_dump(mode="json")}
+                    state, ends_at, terminal = await to_thread(
+                        live_teacher_session_snapshot,
+                        websocket,
+                        professor_id,
+                        session_id,
                     )
-                    ends_at = state.ends_at if state.status == "in_progress" else None
-                    if state.status in {"finished", "cancelled"}:
+                    if state is None:
+                        await websocket.send_json({"type": "deleted"})
+                        await websocket.close()
+                        return
+                    await websocket.send_json({"type": "session", "data": state})
+                    if terminal:
                         await websocket.close()
                         return
                 refresh_state = await wait_for_live_update(updates, ends_at)
                 if not refresh_state:
-                    if (
-                        authenticated_live_professor_id(websocket, token)
-                        != professor_id
-                    ):
+                    if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
                     await websocket.send_json({"type": "ping"})
@@ -2305,13 +2385,14 @@ async def live_student_quiz_session(
     if token is None:
         return
     normalized_code = join_code.strip().upper()
-    session_factory = websocket.app.state.session_factory
-    with session_factory() as session:
-        try:
-            authenticated_participant(normalized_code, token, websocket, session)
-        except HTTPException:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
+    if not await to_thread(
+        live_participant_is_authenticated,
+        websocket,
+        normalized_code,
+        token,
+    ):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     topic = student_session_topic(normalized_code)
     hub = websocket.app.state.live_quiz_hub
@@ -2321,38 +2402,30 @@ async def live_student_quiz_session(
             ends_at: datetime | None = None
             while True:
                 if refresh_state:
-                    with session_factory() as session:
-                        try:
-                            quiz_session, quiz, participant = authenticated_participant(
-                                normalized_code, token, websocket, session
-                            )
-                        except HTTPException:
-                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                            return
-                        previous_status = quiz_session.status
-                        expire_quiz_session(quiz_session, quiz, session)
-                        if quiz_session.status != previous_status:
-                            publish_quiz_update(websocket, quiz_session, session)
-                        state = student_state_response(
-                            quiz_session, quiz, participant, session
-                        )
-                    await websocket.send_json(
-                        {"type": "session", "data": state.model_dump(mode="json")}
+                    snapshot = await to_thread(
+                        live_student_session_snapshot,
+                        websocket,
+                        normalized_code,
+                        token,
                     )
-                    ends_at = state.ends_at if state.status == "in_progress" else None
-                    if state.status in {"finished", "cancelled"}:
+                    if snapshot is None:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                    state, ends_at, terminal = snapshot
+                    await websocket.send_json({"type": "session", "data": state})
+                    if terminal:
                         await websocket.close()
                         return
                 refresh_state = await wait_for_live_update(updates, ends_at)
                 if not refresh_state:
-                    with session_factory() as session:
-                        try:
-                            authenticated_participant(
-                                normalized_code, token, websocket, session
-                            )
-                        except HTTPException:
-                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                            return
+                    if not await to_thread(
+                        live_participant_is_authenticated,
+                        websocket,
+                        normalized_code,
+                        token,
+                    ):
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
                     await websocket.send_json({"type": "ping"})
     except WebSocketDisconnect, RuntimeError:
         return
@@ -2363,8 +2436,7 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
     token = await accept_live_socket(websocket)
     if token is None:
         return
-    session_factory = websocket.app.state.session_factory
-    professor_id = authenticated_live_professor_id(websocket, token)
+    professor_id = await async_live_professor_id(websocket, token)
     if professor_id is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -2376,24 +2448,23 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
             refresh_state = True
             while True:
                 if refresh_state:
-                    with session_factory() as session:
-                        professor = session.get(User, professor_id)
-                        if professor is None or not professor.is_active:
-                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                            return
-                        sessions = list_makeup_sessions(professor, session)
+                    sessions = await to_thread(
+                        live_makeup_sessions_snapshot,
+                        websocket,
+                        professor_id,
+                    )
+                    if sessions is None:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
                     await websocket.send_json(
                         {
                             "type": "makeup_sessions",
-                            "data": [item.model_dump(mode="json") for item in sessions],
+                            "data": sessions,
                         }
                     )
                 refresh_state = await wait_for_live_update(updates, None)
                 if not refresh_state:
-                    if (
-                        authenticated_live_professor_id(websocket, token)
-                        != professor_id
-                    ):
+                    if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
                     await websocket.send_json({"type": "ping"})

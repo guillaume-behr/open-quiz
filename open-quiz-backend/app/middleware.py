@@ -1,3 +1,4 @@
+from asyncio import to_thread
 from collections.abc import Callable
 
 from fastapi import Request
@@ -31,11 +32,20 @@ class RequestBodyLimitMiddleware:
 
     @staticmethod
     def _uses_elevated_limit(scope: Scope) -> bool:
-        path = scope.get("path", "")
+        if scope.get("method") != "POST":
+            return False
+        parts = scope.get("path", "").strip("/").split("/")
+        if parts[:2] != ["api", "question-banks"]:
+            return False
         return (
-            scope.get("method") == "POST"
-            and path.startswith("/api/question-banks")
-            and path.endswith(("/questions", "/import", "/update"))
+            parts == ["api", "question-banks", "import"]
+            or (len(parts) == 4 and parts[2].isdigit() and parts[3] == "questions")
+            or (
+                len(parts) == 5
+                and parts[2] == "questions"
+                and parts[3].isdigit()
+                and parts[4] == "update"
+            )
         )
 
     def _authenticated_user(self, scope: Scope) -> User | None:
@@ -72,7 +82,7 @@ class RequestBodyLimitMiddleware:
 
         elevated = self._uses_elevated_limit(scope)
         if elevated:
-            user = self._authenticated_user(scope)
+            user = await to_thread(self._authenticated_user, scope)
             if user is None:
                 await self._respond(
                     scope,

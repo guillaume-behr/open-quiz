@@ -76,7 +76,7 @@ def downloadable_json(content: object, filename: str) -> Response:
     )
 
 
-async def normalized_uploaded_image(
+def normalized_uploaded_image(
     image: UploadFile | None,
 ) -> tuple[bytes | None, str | None]:
     """Validate and normalize an optional uploaded question image."""
@@ -87,7 +87,7 @@ async def normalized_uploaded_image(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Format d’image non pris en charge",
         )
-    image_data = await image.read(MAX_IMAGE_BYTES + 1)
+    image_data = image.file.read(MAX_IMAGE_BYTES + 1)
     if len(image_data) > MAX_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -796,7 +796,7 @@ def import_question_bank(
     response_model=QuestionResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_question(
+def create_question(
     question_bank_id: int,
     professor: ProfessorUser,
     session: DbSession,
@@ -823,7 +823,7 @@ async def create_question(
             detail="Question invalide",
         ) from None
 
-    image_data, image_content_type = await normalized_uploaded_image(image)
+    image_data, image_content_type = normalized_uploaded_image(image)
 
     choice_images = [
         decode_image_payload(choice.image) for choice in question_payload.choices
@@ -854,7 +854,7 @@ async def create_question(
     "/questions/{question_id}/update",
     response_model=QuestionResponse,
 )
-async def update_question(
+def update_question(
     question_id: int,
     professor: ProfessorUser,
     session: DbSession,
@@ -876,7 +876,7 @@ async def update_question(
             detail="Question invalide",
         ) from None
 
-    image_data, image_content_type = await normalized_uploaded_image(image)
+    image_data, image_content_type = normalized_uploaded_image(image)
 
     question.prompt = question_payload.prompt
     question.difficulty = question_payload.difficulty
