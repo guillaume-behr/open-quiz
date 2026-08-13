@@ -39,26 +39,19 @@ export function StudentQuestionForm({
     onSubmit,
 }: StudentQuestionFormProps) {
     const { t } = useTranslation()
+    const questionNumber = session.question_number ?? 1
     const progress =
         session.total_questions === 0
             ? 0
-            : Math.round(
-                  (session.answered_count / session.total_questions) * 100
-              )
+            : Math.round((questionNumber / session.total_questions) * 100)
 
     return (
         <form className="space-y-6" onSubmit={onSubmit}>
-            <div className="max-w-5xl space-y-2">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="space-y-2">
+                <div className="flex items-baseline">
                     <p className="text-sm font-semibold text-primary">
                         {t("student-question-progress", {
-                            current: session.question_number,
-                            total: session.total_questions,
-                        })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {t("student-answered-progress", {
-                            count: session.answered_count,
+                            current: questionNumber,
                             total: session.total_questions,
                         })}
                     </p>
@@ -66,11 +59,11 @@ export function StudentQuestionForm({
                 <div
                     className="h-2 overflow-hidden rounded-full bg-muted"
                     role="progressbar"
-                    aria-valuenow={session.answered_count}
-                    aria-valuemin={0}
+                    aria-valuenow={questionNumber}
+                    aria-valuemin={1}
                     aria-valuemax={session.total_questions}
-                    aria-label={t("student-answered-progress", {
-                        count: session.answered_count,
+                    aria-label={t("student-question-progress", {
+                        current: questionNumber,
                         total: session.total_questions,
                     })}
                 >
@@ -81,7 +74,7 @@ export function StudentQuestionForm({
                 </div>
             </div>
             <h2
-                className="max-w-5xl text-2xl leading-relaxed font-bold text-balance"
+                className="w-full text-2xl leading-relaxed font-bold text-balance"
                 dir={contentDirection}
             >
                 {question.prompt}
@@ -118,9 +111,52 @@ export function StudentQuestionForm({
                 />
             )}
             {error && <FieldError>{error}</FieldError>}
-            <div className="flex justify-end border-t pt-5">
+            <div className="flex min-w-0 items-center gap-3 border-t pt-5">
+                {session.allow_previous_questions && (
+                    <nav
+                        className="min-w-0 flex-1 overflow-x-auto"
+                        aria-label={t("student-question-progress", {
+                            current: questionNumber,
+                            total: session.total_questions,
+                        })}
+                    >
+                        <div className="flex w-max gap-2 py-1">
+                            {session.accessible_question_numbers.map(
+                                (number) => {
+                                    const isCurrent = number === questionNumber
+                                    return (
+                                        <Button
+                                            key={number}
+                                            className="size-10 shrink-0 p-0"
+                                            type="button"
+                                            variant={
+                                                isCurrent
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            aria-current={
+                                                isCurrent ? "step" : undefined
+                                            }
+                                            aria-label={t(
+                                                "student-question-progress",
+                                                {
+                                                    current: number,
+                                                    total: session.total_questions,
+                                                }
+                                            )}
+                                            disabled={isBusy || isCurrent}
+                                            onClick={() => onNavigate(number)}
+                                        >
+                                            {number}
+                                        </Button>
+                                    )
+                                }
+                            )}
+                        </div>
+                    </nav>
+                )}
                 <Button
-                    className="w-full sm:w-auto sm:min-w-64"
+                    className="shrink-0 sm:min-w-64"
                     size="lg"
                     type="submit"
                     disabled={
@@ -136,36 +172,6 @@ export function StudentQuestionForm({
                     {t("student-submit-answer")}
                 </Button>
             </div>
-            {session.allow_previous_questions && (
-                <nav
-                    className="flex flex-wrap justify-center gap-2 border-t pt-5"
-                    aria-label={t("student-question-progress", {
-                        current: session.question_number,
-                        total: session.total_questions,
-                    })}
-                >
-                    {session.accessible_question_numbers.map((number) => {
-                        const isCurrent = number === session.question_number
-                        return (
-                            <Button
-                                key={number}
-                                className="size-10 p-0"
-                                type="button"
-                                variant={isCurrent ? "default" : "outline"}
-                                aria-current={isCurrent ? "step" : undefined}
-                                aria-label={t("student-question-progress", {
-                                    current: number,
-                                    total: session.total_questions,
-                                })}
-                                disabled={isBusy || isCurrent}
-                                onClick={() => onNavigate(number)}
-                            >
-                                {number}
-                            </Button>
-                        )
-                    })}
-                </nav>
-            )}
         </form>
     )
 }
@@ -197,7 +203,7 @@ function WrittenAnswer({
                     : t("plain-text-response")}
             </p>
             {responseLanguage ? (
-                <div className="mx-auto max-w-5xl">
+                <div className="w-full">
                     <CodeBlock
                         code={answer}
                         language={responseLanguage}
@@ -210,7 +216,7 @@ function WrittenAnswer({
                 </div>
             ) : (
                 <textarea
-                    className="mx-auto block min-h-64 w-full max-w-5xl resize-y rounded-xl border bg-background p-4 text-base leading-7 shadow-xs transition-shadow outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:min-h-80"
+                    className="block min-h-64 w-full resize-y rounded-xl border bg-background p-4 text-base leading-7 shadow-xs transition-shadow outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:min-h-80"
                     value={answer}
                     aria-label={t("written-answer")}
                     spellCheck
@@ -276,7 +282,7 @@ function ChoiceAnswers({
                         <label
                             key={choice.id}
                             className={cn(
-                                "flex min-h-24 cursor-pointer items-start gap-3 rounded-xl border bg-background p-4 shadow-xs transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50 hover:bg-primary/5",
+                                "flex min-h-24 cursor-pointer items-start gap-3 rounded-xl border bg-background p-4 caret-transparent shadow-xs transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50 hover:bg-primary/5",
                                 checked &&
                                     "border-primary bg-primary/10 ring-1 ring-primary/30"
                             )}
