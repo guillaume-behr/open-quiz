@@ -12,7 +12,6 @@ import { Dialog } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
-import { Toast } from "@/components/ui/toast"
 import { LibraryBig, LoaderCircle, School } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -32,10 +31,6 @@ export function ClassTrainingBanksPanel() {
     const [isClassLoading, setIsClassLoading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [toast, setToast] = useState<{
-        message: string
-        variant: "success" | "error"
-    } | null>(null)
     const saveVersion = useRef(0)
     const saveQueue = useRef<Promise<void>>(Promise.resolve())
     const confirmedBankIds = useRef(new Map<number, number[]>())
@@ -85,11 +80,6 @@ export function ClassTrainingBanksPanel() {
         }
     }, [selectedClassId, t])
 
-    useEffect(() => {
-        if (!toast) return
-        const timeout = window.setTimeout(() => setToast(null), 3500)
-        return () => window.clearTimeout(timeout)
-    }, [toast])
     const selectedClass = classes.find(
         (studentClass) => String(studentClass.id) === selectedClassId
     )
@@ -106,6 +96,7 @@ export function ClassTrainingBanksPanel() {
         const version = ++saveVersion.current
         setSelectedBankIds(nextIds)
         setIsSaving(true)
+        setError(null)
         saveQueue.current = saveQueue.current.then(async () => {
             if (version !== saveVersion.current) return
             try {
@@ -129,19 +120,12 @@ export function ClassTrainingBanksPanel() {
                         ])
                     )
                 )
-                setToast({
-                    message: t("training-settings-saved"),
-                    variant: "success",
-                })
             } catch {
                 if (version !== saveVersion.current) return
                 setSelectedBankIds(
                     confirmedBankIds.current.get(classId) ?? savedBankIds
                 )
-                setToast({
-                    message: t("training-settings-save-error"),
-                    variant: "error",
-                })
+                setError(t("training-settings-save-error"))
             } finally {
                 if (version === saveVersion.current) setIsSaving(false)
             }
@@ -388,7 +372,6 @@ export function ClassTrainingBanksPanel() {
                     </Button>
                 </div>
             </Dialog>
-            {toast && <Toast {...toast} />}
         </div>
     )
 }

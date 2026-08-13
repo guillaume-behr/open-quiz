@@ -2,9 +2,8 @@ import type { GradeLevel } from "@/api/types"
 import { ApiError } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
-import { Toast } from "@/components/ui/toast"
 import { Trash2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 type GradeLevelSelectProps = {
@@ -34,12 +33,6 @@ export function GradeLevelSelect({
     const [levelToDelete, setLevelToDelete] = useState<GradeLevel | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
-    useEffect(() => {
-        if (!deleteError) return
-        const timeout = window.setTimeout(() => setDeleteError(null), 5000)
-        return () => window.clearTimeout(timeout)
-    }, [deleteError])
-
     async function confirmDelete(): Promise<void> {
         if (!levelToDelete) return
         setIsDeleting(true)
@@ -60,41 +53,47 @@ export function GradeLevelSelect({
     }
 
     return (
-        <div className="flex min-w-0 flex-1 gap-2">
-            {deleteError && <Toast message={deleteError} variant="error" />}
-            <select
-                id={id}
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                disabled={disabled}
-                className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                required={required}
-            >
-                <option value="" disabled={required}>
-                    {placeholder ?? t("choose-grade-level")}
-                </option>
-                {levels.map((level) => (
-                    <option key={level.id} value={level.name}>
-                        {level.name}
-                    </option>
-                ))}
-            </select>
-            {selected && (
-                <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setLevelToDelete(selected)}
+        <div className="min-w-0 flex-1">
+            <div className="flex gap-2">
+                <select
+                    id={id}
+                    value={value}
+                    onChange={(event) => onChange(event.target.value)}
                     disabled={disabled}
-                    aria-label={t("delete-grade-level", {
-                        level: selected.name,
-                    })}
-                    title={t("delete-grade-level", {
-                        level: selected.name,
-                    })}
+                    className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    required={required}
                 >
-                    <Trash2 />
-                </Button>
+                    <option value="" disabled={required}>
+                        {placeholder ?? t("choose-grade-level")}
+                    </option>
+                    {levels.map((level) => (
+                        <option key={level.id} value={level.name}>
+                            {level.name}
+                        </option>
+                    ))}
+                </select>
+                {selected && (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setLevelToDelete(selected)}
+                        disabled={disabled}
+                        aria-label={t("delete-grade-level", {
+                            level: selected.name,
+                        })}
+                        title={t("delete-grade-level", {
+                            level: selected.name,
+                        })}
+                    >
+                        <Trash2 />
+                    </Button>
+                )}
+            </div>
+            {deleteError && (
+                <p role="alert" className="mt-2 text-sm text-destructive">
+                    {deleteError}
+                </p>
             )}
             <Dialog
                 open={levelToDelete !== null}

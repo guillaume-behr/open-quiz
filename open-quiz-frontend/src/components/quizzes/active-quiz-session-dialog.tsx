@@ -161,7 +161,7 @@ function SessionSummary({ session }: { session: QuizSession }) {
             <p className="text-sm text-muted-foreground">
                 {t("quiz-join-code")}
             </p>
-            <p className="mt-1 text-4xl font-black tracking-[0.2em] text-primary">
+            <p className="mt-1 font-mono text-4xl font-black tracking-[0.2em] text-primary slashed-zero">
                 {session.join_code}
             </p>
             {session.status === "in_progress" && (

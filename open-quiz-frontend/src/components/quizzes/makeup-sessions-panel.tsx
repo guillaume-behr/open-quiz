@@ -9,7 +9,6 @@ import type { MakeupSession, Quiz, StudentClass } from "@/api/types"
 import { connectLiveUpdates } from "@/lib/live-updates"
 import { formatClassName } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Toast } from "@/components/ui/toast"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { useEffect, useState, type FormEvent } from "react"
@@ -118,7 +117,14 @@ export function MakeupSessionsPanel() {
 
     return (
         <div className="mt-6 grid gap-6">
-            {error && <Toast message={error} variant="error" />}
+            {error && (
+                <p
+                    role="alert"
+                    className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                >
+                    {error}
+                </p>
+            )}
             <form
                 onSubmit={create}
                 className="w-full max-w-md rounded-2xl border bg-card p-5"
@@ -232,7 +238,10 @@ export function MakeupSessionsPanel() {
                         <div className="flex flex-wrap justify-between gap-3">
                             <div>
                                 <h3 className="font-bold">
-                                    {item.class_name} · {item.join_code}
+                                    {item.class_name} ·{" "}
+                                    <span className="font-mono tracking-wider text-primary slashed-zero">
+                                        {item.join_code}
+                                    </span>
                                 </h3>
                                 <p className="mt-1 text-sm text-muted-foreground">
                                     {t("makeup-session-summary", {

@@ -29,7 +29,6 @@ import { Input } from "@/components/ui/input"
 import { formatClassName } from "@/lib/utils"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
-import { Toast } from "@/components/ui/toast"
 import {
     Check,
     FileJson,
@@ -87,7 +86,6 @@ export function ClassesPanel({
     const [isBusy, setIsBusy] = useState(false)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const [deleteToast, setDeleteToast] = useState<string | null>(null)
     const [importOpen, setImportOpen] = useState(false)
     const [importPayload, setImportPayload] = useState<{
         classes: {
@@ -97,15 +95,8 @@ export function ClassesPanel({
         }[]
     } | null>(null)
     const [importError, setImportError] = useState<string | null>(null)
-    const [importToast, setImportToast] = useState<string | null>(null)
     const [importFileName, setImportFileName] = useState("")
     const importInputRef = useRef<HTMLInputElement>(null)
-
-    useEffect(() => {
-        if (!importToast) return
-        const timeout = window.setTimeout(() => setImportToast(null), 3500)
-        return () => window.clearTimeout(timeout)
-    }, [importToast])
 
     async function readImportFile(file: File) {
         setImportError(null)
@@ -156,18 +147,11 @@ export function ClassesPanel({
         setIsBusy(true)
         setImportError(null)
         try {
-            const result = await importStudentClasses(importPayload)
+            await importStudentClasses(importPayload)
             setImportOpen(false)
             setImportPayload(null)
             setReloadKey((value) => value + 1)
-            setDeleteToast(null)
             setError(null)
-            setImportToast(
-                t("classes-import-success", {
-                    classes: result.class_count,
-                    students: result.student_count,
-                })
-            )
         } catch {
             setImportError(t("classes-import-conflict"))
         } finally {
@@ -406,9 +390,7 @@ export function ClassesPanel({
             setDeleting(null)
             setReloadKey((value) => value + 1)
         } catch {
-            const message = t("class-student-delete-error")
-            setError(message)
-            setDeleteToast(message)
+            setError(t("class-student-delete-error"))
         } finally {
             setIsBusy(false)
         }
@@ -498,8 +480,6 @@ export function ClassesPanel({
 
     return (
         <div className="mt-6">
-            {deleteToast && <Toast message={deleteToast} variant="error" />}
-            {importToast && <Toast message={importToast} variant="success" />}
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
                 <aside className="h-fit rounded-xl border bg-background p-4">
                     <h3 className="font-semibold">{t("filters")}</h3>

@@ -29,7 +29,6 @@ import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
-import { Toast } from "@/components/ui/toast"
 import { formatClassName } from "@/lib/utils"
 import {
     LoaderCircle,
@@ -257,9 +256,6 @@ export function StudentsPanel({
 
     return (
         <div className="mt-6">
-            {deleting && formError && (
-                <Toast message={formError} variant="error" />
-            )}
             {credentialsError && (
                 <p role="alert" className="mb-4 text-sm text-destructive">
                     {credentialsError}

@@ -40,7 +40,6 @@ import { QuizzesList } from "@/components/quizzes/quizzes-list"
 import { isActiveSessionStatus } from "@/lib/session-status"
 import { connectLiveUpdates } from "@/lib/live-updates"
 import { Button } from "@/components/ui/button"
-import { Toast } from "@/components/ui/toast"
 import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
 import { type FormEvent, useEffect, useRef, useState } from "react"
@@ -784,13 +783,6 @@ export function QuizzesPanel({
 
     return (
         <div className="mt-6">
-            {(deleteError ||
-                (sessionActionToConfirm && activeSessionError)) && (
-                <Toast
-                    message={(deleteError || activeSessionError)!}
-                    variant="error"
-                />
-            )}
             <QuizzesList
                 quizzes={quizzes}
                 sessions={sessions}

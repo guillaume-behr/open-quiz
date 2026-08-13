@@ -1406,19 +1406,20 @@ test("teacher assigns existing question banks to a training class", async ({
     await expect(
         page.getByText("Advanced matter", { exact: true })
     ).toHaveCount(0)
-    await expect(
-        page.getByText("The class training question banks have been saved.")
-    ).toBeVisible()
-
-    const saveRequest = requests.find(
-        (request) =>
-            new URL(request.url()).pathname ===
-                "/api/quizzes/training/classes/11/question-banks" &&
-            request.method() === "PUT"
-    )
-    expect(saveRequest?.postDataJSON()).toEqual({
-        question_banks: [{ question_bank_id: 21, question_count: 10 }],
-    })
+    await expect
+        .poll(() =>
+            requests
+                .find(
+                    (request) =>
+                        new URL(request.url()).pathname ===
+                            "/api/quizzes/training/classes/11/question-banks" &&
+                        request.method() === "PUT"
+                )
+                ?.postDataJSON()
+        )
+        .toEqual({
+            question_banks: [{ question_bank_id: 21, question_count: 10 }],
+        })
     await expect(
         page.getByRole("button", { name: "New training quiz" })
     ).toHaveCount(0)
