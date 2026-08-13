@@ -26,7 +26,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import defer
 
 from app.audit import audit_event
 from app.class_names import format_class_name
@@ -55,7 +54,8 @@ from app.models import (
     TrainingQuizProfile,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
-from app.question_responses import load_question_responses
+from app.question_bank_summaries import load_question_bank_summaries
+from app.question_responses import load_question_records, load_question_responses
 from app.quiz_session_records import delete_quiz_session_records
 from app.routers.student_auth import current_student
 from app.schemas import (
@@ -349,38 +349,6 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
     return quiz_responses([quiz], session)[0]
 
 
-def question_bank_responses(
-    question_bank_ids: list[int],
-    session: DbSession,
-) -> list[QuestionBankResponse]:
-    if not question_bank_ids:
-        return []
-    rows = session.execute(
-        select(
-            QuestionBank,
-            func.count(Question.id),
-            func.sum(case((Question.difficulty == "easy", 1), else_=0)),
-            func.sum(case((Question.difficulty == "medium", 1), else_=0)),
-            func.sum(case((Question.difficulty == "hard", 1), else_=0)),
-        )
-        .outerjoin(Question, Question.question_bank_id == QuestionBank.id)
-        .where(QuestionBank.id.in_(question_bank_ids))
-        .group_by(QuestionBank.id)
-        .order_by(QuestionBank.grade_level, QuestionBank.chapter)
-    )
-    return [
-        QuestionBankResponse.model_validate(bank).model_copy(
-            update={
-                "question_count": question_count,
-                "easy_question_count": easy_count or 0,
-                "medium_question_count": medium_count or 0,
-                "hard_question_count": hard_count or 0,
-            }
-        )
-        for bank, question_count, easy_count, medium_count, hard_count in rows
-    ]
-
-
 def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
     quiz = session.scalar(
         select(Quiz)
@@ -492,6 +460,70 @@ def session_question_ids(
             .where(QuizSessionQuestion.session_id == quiz_session.id)
             .order_by(QuizSessionQuestion.position)
         )
+    )
+
+
+def load_session_question_assignments(
+    session_ids: list[int],
+    session: DbSession,
+) -> tuple[
+    dict[int, list[int]],
+    dict[tuple[int, int], list[int]],
+    dict[tuple[int, str], list[int]],
+]:
+    """Load common and personalized question ordering for several sessions."""
+    common_by_session: dict[int, list[int]] = defaultdict(list)
+    for session_id, question_id in session.execute(
+        select(
+            QuizSessionQuestion.session_id,
+            QuizSessionQuestion.question_id,
+        )
+        .where(QuizSessionQuestion.session_id.in_(session_ids))
+        .order_by(QuizSessionQuestion.session_id, QuizSessionQuestion.position)
+    ):
+        common_by_session[session_id].append(question_id)
+
+    personalized_by_student: dict[tuple[int, int], list[int]] = defaultdict(list)
+    personalized_by_identifier: dict[tuple[int, str], list[int]] = defaultdict(list)
+    for session_id, student_id, student_identifier, question_id in session.execute(
+        select(
+            QuizSessionStudentQuestion.session_id,
+            QuizSessionStudentQuestion.student_id,
+            QuizSessionStudentQuestion.student_identifier,
+            QuizSessionStudentQuestion.question_id,
+        )
+        .where(QuizSessionStudentQuestion.session_id.in_(session_ids))
+        .order_by(
+            QuizSessionStudentQuestion.session_id,
+            QuizSessionStudentQuestion.student_identifier,
+            QuizSessionStudentQuestion.position,
+        )
+    ):
+        if student_id is not None:
+            personalized_by_student[(session_id, student_id)].append(question_id)
+        personalized_by_identifier[(session_id, student_identifier)].append(question_id)
+    return (
+        common_by_session,
+        personalized_by_student,
+        personalized_by_identifier,
+    )
+
+
+def assigned_question_ids(
+    session_id: int,
+    student_id: int | None,
+    student_identifier: str,
+    common_by_session: dict[int, list[int]],
+    personalized_by_student: dict[tuple[int, int], list[int]],
+    personalized_by_identifier: dict[tuple[int, str], list[int]],
+) -> list[int]:
+    personalized_ids = (
+        personalized_by_student.get((session_id, student_id), [])
+        if student_id is not None
+        else []
+    )
+    return personalized_ids or personalized_by_identifier.get(
+        (session_id, student_identifier), common_by_session[session_id]
     )
 
 
@@ -772,53 +804,26 @@ def finished_session_responses(
         )
     }
 
-    common_by_session: dict[int, list[int]] = defaultdict(list)
-    for session_id, question_id in session.execute(
-        select(
-            QuizSessionQuestion.session_id,
-            QuizSessionQuestion.question_id,
-        )
-        .where(QuizSessionQuestion.session_id.in_(session_ids))
-        .order_by(QuizSessionQuestion.session_id, QuizSessionQuestion.position)
-    ):
-        common_by_session[session_id].append(question_id)
-
-    personalized_by_student: dict[tuple[int, int], list[int]] = defaultdict(list)
-    personalized_by_identifier: dict[tuple[int, str], list[int]] = defaultdict(list)
+    (
+        common_by_session,
+        personalized_by_student,
+        personalized_by_identifier,
+    ) = load_session_question_assignments(session_ids, session)
     personalized_counts: dict[int, int] = {}
-    assigned_question_ids = {
+    all_assigned_question_ids = {
         question_id
-        for question_ids in common_by_session.values()
+        for question_ids in (
+            *common_by_session.values(),
+            *personalized_by_identifier.values(),
+        )
         for question_id in question_ids
     }
-    for session_id, student_id, student_identifier, question_id in session.execute(
-        select(
-            QuizSessionStudentQuestion.session_id,
-            QuizSessionStudentQuestion.student_id,
-            QuizSessionStudentQuestion.student_identifier,
-            QuizSessionStudentQuestion.question_id,
-        )
-        .where(QuizSessionStudentQuestion.session_id.in_(session_ids))
-        .order_by(
-            QuizSessionStudentQuestion.session_id,
-            QuizSessionStudentQuestion.student_identifier,
-            QuizSessionStudentQuestion.position,
-        )
-    ):
-        if student_id is not None:
-            personalized_by_student[(session_id, student_id)].append(question_id)
-        identifier_key = (session_id, student_identifier)
-        personalized_by_identifier[identifier_key].append(question_id)
-        personalized_counts.setdefault(
-            session_id, len(personalized_by_identifier[identifier_key])
-        )
+    for (session_id, _), question_ids in personalized_by_identifier.items():
         personalized_counts[session_id] = max(
-            personalized_counts[session_id],
-            len(personalized_by_identifier[identifier_key]),
+            personalized_counts.get(session_id, 0), len(question_ids)
         )
-        assigned_question_ids.add(question_id)
 
-    maximums = question_maximum_scores(list(assigned_question_ids), session)
+    maximums = question_maximum_scores(list(all_assigned_question_ids), session)
     student_ids = {
         participant.student_id
         for participant in participants
@@ -847,18 +852,14 @@ def finished_session_responses(
         session_participants = participants_by_session[quiz_session.id]
         participant_maximums: dict[int, float] = {}
         for participant in session_participants:
-            question_ids = (
-                personalized_by_student.get(
-                    (quiz_session.id, participant.student_id), []
-                )
-                if participant.student_id is not None
-                else []
+            question_ids = assigned_question_ids(
+                quiz_session.id,
+                participant.student_id,
+                participant.student_identifier,
+                common_by_session,
+                personalized_by_student,
+                personalized_by_identifier,
             )
-            if not question_ids:
-                question_ids = personalized_by_identifier.get(
-                    (quiz_session.id, participant.student_identifier),
-                    common_by_session[quiz_session.id],
-                )
             participant_maximums[participant.id] = round(
                 sum(maximums.get(question_id, 0) for question_id in question_ids),
                 2,
@@ -1175,20 +1176,14 @@ def student_question_response(
     participant: QuizParticipant,
     session: DbSession,
 ) -> StudentQuizQuestionResponse:
-    question = session.get(Question, question_id, options=[defer(Question.image_data)])
+    questions_by_id, choices_by_question = load_question_records([question_id], session)
+    question = questions_by_id.get(question_id)
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="La question actuelle n’est pas disponible",
         )
-    choices = list(
-        session.scalars(
-            select(QuestionChoice)
-            .options(defer(QuestionChoice.image_data))
-            .where(QuestionChoice.question_id == question.id)
-            .order_by(QuestionChoice.position)
-        )
-    )
+    choices = choices_by_question.get(question.id, [])
     choices.sort(
         key=lambda choice: sha256(
             (f"{quiz_session.id}:{participant.id}:{question.id}:{choice.id}").encode()
@@ -1328,21 +1323,7 @@ def training_result(
     question_ids = session_question_ids(quiz_session, session, participant)
     if not question_ids:
         return 0.0, 0.0, 0
-    questions = {
-        question.id: question
-        for question in session.scalars(
-            select(Question)
-            .options(defer(Question.image_data))
-            .where(Question.id.in_(question_ids))
-        )
-    }
-    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
-    for choice in session.scalars(
-        select(QuestionChoice)
-        .options(defer(QuestionChoice.image_data))
-        .where(QuestionChoice.question_id.in_(question_ids))
-    ):
-        choices_by_question[choice.question_id].append(choice)
+    questions, choices_by_question = load_question_records(question_ids, session)
     answers = {
         answer.question_id: answer
         for answer in session.scalars(
@@ -1837,58 +1818,27 @@ def list_student_quiz_history(
     )
     session_ids = [quiz_session.id for quiz_session, _ in rows]
     participant_ids = [participant.id for _, participant in rows]
-    common_by_session: dict[int, list[int]] = defaultdict(list)
-    for session_id, question_id in session.execute(
-        select(
-            QuizSessionQuestion.session_id,
-            QuizSessionQuestion.question_id,
-        )
-        .where(QuizSessionQuestion.session_id.in_(session_ids))
-        .order_by(QuizSessionQuestion.session_id, QuizSessionQuestion.position)
-    ):
-        common_by_session[session_id].append(question_id)
-    personalized_by_student: dict[tuple[int, int], list[int]] = defaultdict(list)
-    personalized_by_identifier: dict[tuple[int, str], list[int]] = defaultdict(list)
-    for session_id, student_id, student_identifier, question_id in session.execute(
-        select(
-            QuizSessionStudentQuestion.session_id,
-            QuizSessionStudentQuestion.student_id,
-            QuizSessionStudentQuestion.student_identifier,
-            QuizSessionStudentQuestion.question_id,
-        )
-        .where(QuizSessionStudentQuestion.session_id.in_(session_ids))
-        .order_by(
-            QuizSessionStudentQuestion.session_id,
-            QuizSessionStudentQuestion.student_identifier,
-            QuizSessionStudentQuestion.position,
-        )
-    ):
-        if student_id is not None:
-            personalized_by_student[(session_id, student_id)].append(question_id)
-        personalized_by_identifier[(session_id, student_identifier)].append(question_id)
+    (
+        common_by_session,
+        personalized_by_student,
+        personalized_by_identifier,
+    ) = load_session_question_assignments(session_ids, session)
     question_ids_by_participant: dict[int, list[int]] = {}
     all_question_ids: set[int] = set()
     for quiz_session, participant in rows:
-        question_ids = (
-            personalized_by_student.get((quiz_session.id, participant.student_id), [])
-            if participant.student_id is not None
-            else []
+        question_ids = assigned_question_ids(
+            quiz_session.id,
+            participant.student_id,
+            participant.student_identifier,
+            common_by_session,
+            personalized_by_student,
+            personalized_by_identifier,
         )
-        if not question_ids:
-            question_ids = personalized_by_identifier.get(
-                (quiz_session.id, participant.student_identifier),
-                common_by_session[quiz_session.id],
-            )
         question_ids_by_participant[participant.id] = question_ids
         all_question_ids.update(question_ids)
-    questions_by_id = {
-        question.id: question
-        for question in session.scalars(
-            select(Question)
-            .options(defer(Question.image_data))
-            .where(Question.id.in_(all_question_ids))
-        )
-    }
+    questions_by_id, choices_by_question = load_question_records(
+        all_question_ids, session
+    )
     answers_by_participant_question = {
         (answer.participant_id, answer.question_id): answer
         for answer in session.scalars(
@@ -1896,14 +1846,6 @@ def list_student_quiz_history(
         )
     }
     question_points = question_maximum_scores(list(all_question_ids), session)
-    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
-    for choice in session.scalars(
-        select(QuestionChoice)
-        .options(defer(QuestionChoice.image_data))
-        .where(QuestionChoice.question_id.in_(all_question_ids))
-        .order_by(QuestionChoice.position, QuestionChoice.id)
-    ):
-        choices_by_question[choice.question_id].append(choice)
     class_ids = {
         quiz_session.class_id
         for quiz_session, _ in rows
@@ -2426,7 +2368,7 @@ def list_class_training_question_banks(
             )
         )
     )
-    responses = question_bank_responses([row[0] for row in assignments], session)
+    responses = load_question_bank_summaries([row[0] for row in assignments], session)
     counts = dict(assignments)
     return [
         item.model_copy(update={"training_question_count": counts[item.id]})
@@ -2513,7 +2455,7 @@ def update_class_training_question_banks(
         for item in configured_items
     )
     session.commit()
-    responses = question_bank_responses(bank_ids, session)
+    responses = load_question_bank_summaries(bank_ids, session)
     counts = {item.question_bank_id: item.question_count for item in configured_items}
     return [
         item.model_copy(update={"training_question_count": counts[item.id]})
@@ -2541,7 +2483,7 @@ def list_student_training_question_banks(
             )
         )
     )
-    return question_bank_responses(bank_ids, session)
+    return load_question_bank_summaries(bank_ids, session)
 
 
 @router.get(
@@ -3569,20 +3511,14 @@ def submit_student_answer(
             status_code=status.HTTP_409_CONFLICT,
             detail="Aucune question en cours",
         )
-    question = session.get(Question, question_id, options=[defer(Question.image_data)])
+    questions_by_id, choices_by_question = load_question_records([question_id], session)
+    question = questions_by_id.get(question_id)
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="La question actuelle n’est pas disponible",
         )
-    choices = list(
-        session.scalars(
-            select(QuestionChoice)
-            .options(defer(QuestionChoice.image_data))
-            .where(QuestionChoice.question_id == question_id)
-            .order_by(QuestionChoice.position)
-        )
-    )
+    choices = choices_by_question.get(question_id, [])
     choices_by_id = {choice.id: choice for choice in choices}
 
     feedback: TrainingFeedback | None = None
@@ -3795,14 +3731,13 @@ def report_student_violation(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/student/sessions/{join_code}/questions/{question_id}/image")
-def get_student_question_image(
+def active_participant_for_image(
     join_code: str,
-    question_id: int,
+    quiz_token: str | None,
     request: Request,
     session: DbSession,
-    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
-) -> Response:
+    missing_detail: str,
+) -> tuple[QuizSession, QuizParticipant]:
     quiz_session, quiz, participant = authenticated_participant(
         join_code, quiz_token, request, session
     )
@@ -3816,12 +3751,31 @@ def get_student_question_image(
     if quiz_session.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image de la question introuvable",
+            detail=missing_detail,
         )
+    return quiz_session, participant
+
+
+@router.get("/student/sessions/{join_code}/questions/{question_id}/image")
+def get_student_question_image(
+    join_code: str,
+    question_id: int,
+    request: Request,
+    session: DbSession,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
+) -> Response:
+    missing_detail = "Image de la question introuvable"
+    quiz_session, participant = active_participant_for_image(
+        join_code,
+        quiz_token,
+        request,
+        session,
+        missing_detail,
+    )
     if current_question_id(quiz_session, participant, session) != question_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image de la question introuvable",
+            detail=missing_detail,
         )
     question = session.get(Question, question_id)
     if (
@@ -3831,7 +3785,7 @@ def get_student_question_image(
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image de la question introuvable",
+            detail=missing_detail,
         )
     return Response(
         content=question.image_data,
@@ -3847,21 +3801,14 @@ def get_student_choice_image(
     session: DbSession,
     quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> Response:
-    quiz_session, quiz, participant = authenticated_participant(
-        join_code, quiz_token, request, session
-    )
-    enforce_public_rate_limit(
+    missing_detail = "Image de la réponse introuvable"
+    quiz_session, participant = active_participant_for_image(
+        join_code,
+        quiz_token,
         request,
         session,
-        "quiz_participant_rate_limiter",
-        f"participant:{participant.id}",
+        missing_detail,
     )
-    expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status != "in_progress":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image de la réponse introuvable",
-        )
     question_id = current_question_id(quiz_session, participant, session)
     choice = session.scalar(
         select(QuestionChoice).where(
@@ -3872,7 +3819,7 @@ def get_student_choice_image(
     if choice is None or choice.image_data is None or choice.image_content_type is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image de la réponse introuvable",
+            detail=missing_detail,
         )
     return Response(
         content=choice.image_data,

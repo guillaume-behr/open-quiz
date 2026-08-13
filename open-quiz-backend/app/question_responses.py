@@ -7,6 +7,35 @@ from app.models import Question, QuestionChoice, QuestionCode
 from app.schemas import QuestionResponse
 
 
+def load_question_records(
+    question_ids: list[int] | set[int], session: Session
+) -> tuple[dict[int, Question], dict[int, list[QuestionChoice]]]:
+    """Load question metadata and choices without fetching image blobs."""
+    if not question_ids:
+        return {}, {}
+    questions_by_id = {
+        question.id: question
+        for question in session.scalars(
+            select(Question)
+            .options(defer(Question.image_data))
+            .where(Question.id.in_(question_ids))
+        )
+    }
+    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
+    for choice in session.scalars(
+        select(QuestionChoice)
+        .options(defer(QuestionChoice.image_data))
+        .where(QuestionChoice.question_id.in_(question_ids))
+        .order_by(
+            QuestionChoice.question_id,
+            QuestionChoice.position,
+            QuestionChoice.id,
+        )
+    ):
+        choices_by_question[choice.question_id].append(choice)
+    return questions_by_id, choices_by_question
+
+
 def question_response(
     question: Question,
     choices: list[QuestionChoice],
@@ -46,22 +75,7 @@ def load_question_responses(
 ) -> list[QuestionResponse]:
     if not question_ids:
         return []
-    questions_by_id = {
-        question.id: question
-        for question in session.scalars(
-            select(Question)
-            .options(defer(Question.image_data))
-            .where(Question.id.in_(question_ids))
-        )
-    }
-    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
-    for choice in session.scalars(
-        select(QuestionChoice)
-        .options(defer(QuestionChoice.image_data))
-        .where(QuestionChoice.question_id.in_(question_ids))
-        .order_by(QuestionChoice.question_id, QuestionChoice.position)
-    ):
-        choices_by_question[choice.question_id].append(choice)
+    questions_by_id, choices_by_question = load_question_records(question_ids, session)
     codes_by_question = {
         code.question_id: code
         for code in session.scalars(

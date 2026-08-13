@@ -17,7 +17,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
@@ -42,6 +42,10 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.question_bank_summaries import (
+    question_bank_summary_query,
+    question_bank_summary_response,
+)
 from app.question_responses import load_question_responses, question_response
 from app.quiz_session_records import delete_quiz_session_records
 from app.schemas import (
@@ -72,6 +76,34 @@ def downloadable_json(content: object, filename: str) -> Response:
     )
 
 
+async def normalized_uploaded_image(
+    image: UploadFile | None,
+) -> tuple[bytes | None, str | None]:
+    """Validate and normalize an optional uploaded question image."""
+    if image is None:
+        return None, None
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Format d’image non pris en charge",
+        )
+    image_data = await image.read(MAX_IMAGE_BYTES + 1)
+    if len(image_data) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="L’image est trop volumineuse",
+        )
+    if not image_data:
+        return None, None
+    try:
+        return normalize_image(image_data, image.content_type)
+    except InvalidImage as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from None
+
+
 @router.get("", response_model=list[QuestionBankResponse])
 def list_question_banks(
     professor: ProfessorUser,
@@ -94,17 +126,7 @@ def list_question_banks(
     )
     set_pagination_headers(response, page=page, page_size=page_size, total=total)
     rows = session.execute(
-        select(
-            QuestionBank,
-            func.count(Question.id),
-            func.sum(case((Question.difficulty == "easy", 1), else_=0)),
-            func.sum(case((Question.difficulty == "medium", 1), else_=0)),
-            func.sum(case((Question.difficulty == "hard", 1), else_=0)),
-        )
-        .outerjoin(
-            Question,
-            Question.question_bank_id == QuestionBank.id,
-        )
+        question_bank_summary_query()
         .where(*filters)
         .group_by(QuestionBank.id)
         .order_by(QuestionBank.grade_level, QuestionBank.chapter)
@@ -112,13 +134,12 @@ def list_question_banks(
         .limit(page_size)
     )
     return [
-        QuestionBankResponse.model_validate(question_bank).model_copy(
-            update={
-                "question_count": question_count,
-                "easy_question_count": easy_count or 0,
-                "medium_question_count": medium_count or 0,
-                "hard_question_count": hard_count or 0,
-            }
+        question_bank_summary_response(
+            question_bank,
+            question_count,
+            easy_count,
+            medium_count,
+            hard_count,
         )
         for (
             question_bank,
@@ -191,22 +212,12 @@ def update_question_bank(
             detail="Une banque existe déjà pour ce niveau et ce titre",
         ) from None
     session.refresh(question_bank)
-    question_count, easy_count, medium_count, hard_count = session.execute(
-        select(
-            func.count(Question.id),
-            func.sum(case((Question.difficulty == "easy", 1), else_=0)),
-            func.sum(case((Question.difficulty == "medium", 1), else_=0)),
-            func.sum(case((Question.difficulty == "hard", 1), else_=0)),
-        ).where(Question.question_bank_id == question_bank.id)
+    row = session.execute(
+        question_bank_summary_query()
+        .where(QuestionBank.id == question_bank.id)
+        .group_by(QuestionBank.id)
     ).one()
-    return QuestionBankResponse.model_validate(question_bank).model_copy(
-        update={
-            "question_count": question_count,
-            "easy_question_count": easy_count or 0,
-            "medium_question_count": medium_count or 0,
-            "hard_question_count": hard_count or 0,
-        }
-    )
+    return question_bank_summary_response(*row)
 
 
 @router.delete(
@@ -812,33 +823,7 @@ async def create_question(
             detail="Question invalide",
         ) from None
 
-    image_data = None
-    image_content_type = None
-    if image is not None:
-        if image.content_type not in ALLOWED_IMAGE_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail="Format d’image non pris en charge",
-            )
-        image_data = await image.read(MAX_IMAGE_BYTES + 1)
-        if len(image_data) > MAX_IMAGE_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="L’image est trop volumineuse",
-            )
-        if not image_data:
-            image_data = None
-        else:
-            try:
-                image_data, image_content_type = normalize_image(
-                    image_data,
-                    image.content_type,
-                )
-            except InvalidImage as error:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=str(error),
-                ) from None
+    image_data, image_content_type = await normalized_uploaded_image(image)
 
     choice_images = [
         decode_image_payload(choice.image) for choice in question_payload.choices
@@ -891,31 +876,7 @@ async def update_question(
             detail="Question invalide",
         ) from None
 
-    image_data = None
-    image_content_type = None
-    if image is not None:
-        if image.content_type not in ALLOWED_IMAGE_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail="Format d’image non pris en charge",
-            )
-        image_data = await image.read(MAX_IMAGE_BYTES + 1)
-        if len(image_data) > MAX_IMAGE_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="L’image est trop volumineuse",
-            )
-        if image_data:
-            try:
-                image_data, image_content_type = normalize_image(
-                    image_data,
-                    image.content_type,
-                )
-            except InvalidImage as error:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=str(error),
-                ) from None
+    image_data, image_content_type = await normalized_uploaded_image(image)
 
     question.prompt = question_payload.prompt
     question.difficulty = question_payload.difficulty
