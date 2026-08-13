@@ -10,7 +10,14 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
-import { LoaderCircle, Play, RefreshCw, Trash2, XCircle } from "lucide-react"
+import {
+    LoaderCircle,
+    Play,
+    Printer,
+    RefreshCw,
+    Trash2,
+    XCircle,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 export function QuizPreviewDialog({
@@ -181,6 +188,115 @@ export function LaunchQuizDialog({
                                 <Play />
                             )}
                             {t("open-waiting-room")}
+                        </Button>
+                    </div>
+                </FieldGroup>
+            </form>
+        </Dialog>
+    )
+}
+
+export function PrintQuizDialog({
+    quiz,
+    classes,
+    selectedClassId,
+    isBusy,
+    error,
+    onSelectedClassIdChange,
+    onClose,
+    onSubmit,
+}: {
+    quiz: Quiz | null
+    classes: StudentClass[]
+    selectedClassId: string
+    isBusy: boolean
+    error: string | null
+    onSelectedClassIdChange: (value: string) => void
+    onClose: () => void
+    onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+    const { t } = useTranslation()
+    const selectedClass = classes.find(
+        (studentClass) => String(studentClass.id) === selectedClassId
+    )
+    return (
+        <Dialog
+            open={quiz !== null}
+            onOpenChange={(open) => {
+                if (!open && !isBusy) onClose()
+            }}
+            title={t("print-exams")}
+            description={quiz?.title}
+            size="sm"
+        >
+            <form onSubmit={onSubmit}>
+                <FieldGroup>
+                    <Field>
+                        <FieldLabel htmlFor="print-quiz-class">
+                            {t("class-name")}
+                        </FieldLabel>
+                        <select
+                            id="print-quiz-class"
+                            className={NATIVE_SELECT_CLASS_NAME}
+                            value={selectedClassId}
+                            onChange={(event) =>
+                                onSelectedClassIdChange(event.target.value)
+                            }
+                            required
+                        >
+                            <option value="" disabled>
+                                {t("choose-class")}
+                            </option>
+                            {classes.map((studentClass) => (
+                                <option
+                                    key={studentClass.id}
+                                    value={studentClass.id}
+                                    disabled={
+                                        studentClass.students.length === 0
+                                    }
+                                >
+                                    {formatClassName(
+                                        studentClass.grade_level,
+                                        studentClass.name
+                                    )}{" "}
+                                    ({studentClass.students.length})
+                                </option>
+                            ))}
+                        </select>
+                        {classes.length === 0 && (
+                            <FieldError>{t("quiz-needs-class")}</FieldError>
+                        )}
+                        {selectedClass &&
+                            selectedClass.students.length === 0 && (
+                                <FieldError>
+                                    {t("quiz-print-empty-class")}
+                                </FieldError>
+                            )}
+                    </Field>
+                    {error && <FieldError>{error}</FieldError>}
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isBusy}
+                            onClick={onClose}
+                        >
+                            {t("cancel")}
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={
+                                isBusy ||
+                                !selectedClass ||
+                                selectedClass.students.length === 0
+                            }
+                        >
+                            {isBusy ? (
+                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                            ) : (
+                                <Printer />
+                            )}
+                            {t(isBusy ? "preparing-print" : "print-exams")}
                         </Button>
                     </div>
                 </FieldGroup>

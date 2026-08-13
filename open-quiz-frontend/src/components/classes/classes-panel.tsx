@@ -436,10 +436,10 @@ export function ClassesPanel({
             document.documentElement.dir = i18n.dir()
             const style = document.createElement("style")
             style.textContent = `
-                @page { size: A4 portrait; margin: 7mm; }
+                @page { size: A4 portrait; margin: 0; }
                 * { box-sizing: border-box; }
                 body { margin: 0; color: #111; font-family: Arial, sans-serif; }
-                main { display: grid; grid-template-columns: repeat(2, 1fr); }
+                main { display: grid; width: 210mm; min-height: 297mm; padding: 7mm; grid-template-columns: repeat(2, 1fr); }
                 article { min-height: 39mm; padding: 5mm 6mm; border-right: 1px dashed #777; border-bottom: 1px dashed #777; break-inside: avoid; }
                 article:nth-child(2n) { border-right: 0; }
                 .class { margin: 0 0 2mm; color: #555; font-size: 9pt; }

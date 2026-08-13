@@ -1238,8 +1238,36 @@ test("teacher can review configured quizzes", async ({ page }) => {
         page.getByRole("heading", { name: "Science checkpoint" })
     ).toBeVisible()
     await expect(page.getByText("Matter and energy")).toBeVisible()
-    await expect(page.getByRole("button", { name: "Preview" })).toBeVisible()
+    const previewButton = page.getByRole("button", { name: "Preview" })
+    const printButton = page.getByRole("button", {
+        name: "Print exam papers",
+    })
+    await expect(previewButton).toBeVisible()
     await expect(page.getByRole("button", { name: "Launch" })).toBeVisible()
+    await expect(printButton).toBeVisible()
+    expect((await printButton.boundingBox())!.x).toBeGreaterThan(
+        (await previewButton.boundingBox())!.x
+    )
+
+    await printButton.click()
+    const printDialog = page.getByRole("dialog", {
+        name: "Print exam papers",
+    })
+    await expect(printDialog.getByLabel("Class")).toHaveValue("")
+    await printDialog.getByLabel("Class").selectOption("11")
+    const printAction = printDialog.getByRole("button", {
+        name: "Print exam papers",
+    })
+    await expect(printAction).toBeEnabled()
+    const popupPromise = page.waitForEvent("popup")
+    await printAction.click()
+    const printPage = await popupPromise
+    await expect(printPage.locator(".subject")).toHaveCount(
+        existingClass.students.length
+    )
+    await expect(printPage.locator(".identity")).toContainText("Last name")
+    await expect(printPage.locator(".identity")).toContainText("First name")
+    await printPage.close()
 })
 
 test("teacher assigns existing question banks to a training class", async ({

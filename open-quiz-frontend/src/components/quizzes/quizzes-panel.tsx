@@ -29,6 +29,7 @@ import { ActiveQuizSessionDialog } from "@/components/quizzes/active-quiz-sessio
 import { QuizFormDialog } from "@/components/quizzes/quiz-form-dialog"
 import {
     LaunchQuizDialog,
+    PrintQuizDialog,
     QuizPreviewDialog,
     SessionActionDialog,
 } from "@/components/quizzes/quiz-secondary-dialogs"
@@ -117,6 +118,10 @@ export function QuizzesPanel({
     const [selectedClassId, setSelectedClassId] = useState("")
     const [isLaunching, setIsLaunching] = useState(false)
     const [launchError, setLaunchError] = useState<string | null>(null)
+    const [quizToPrint, setQuizToPrint] = useState<Quiz | null>(null)
+    const [printClassId, setPrintClassId] = useState("")
+    const [isPrinting, setIsPrinting] = useState(false)
+    const [printError, setPrintError] = useState<string | null>(null)
     const [activeSession, setActiveSession] = useState<QuizSession | null>(null)
     const [activeSessionError, setActiveSessionError] = useState<string | null>(
         null
@@ -298,107 +303,128 @@ export function QuizzesPanel({
         setCreateError(null)
     }
 
-    async function printExamSubjects(quiz: Quiz) {
-        const printWindow = window.open("", "_blank")
-        if (!printWindow) return
+    async function printExamSubjects(
+        quiz: Quiz,
+        studentClass: StudentClass,
+        printWindow: Window
+    ) {
         printWindow.opener = null
+        const questionGroups = await Promise.all(
+            quiz.question_banks.map((bank) => getQuestions(bank.id))
+        )
+        const questions = questionGroups.flat()
+        const seeded = (seed: number) => () => {
+            seed |= 0
+            seed = (seed + 0x6d2b79f5) | 0
+            let value = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+            value =
+                (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value
+            return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+        }
+        const shuffle = <T,>(items: T[], random: () => number) => {
+            const result = [...items]
+            for (let index = result.length - 1; index > 0; index--) {
+                const target = Math.floor(random() * (index + 1))
+                ;[result[index], result[target]] = [
+                    result[target],
+                    result[index],
+                ]
+            }
+            return result
+        }
+        const doc = printWindow.document
+        doc.documentElement.lang = i18n.resolvedLanguage ?? "fr"
+        doc.title = quiz.title
+        const style = doc.createElement("style")
+        style.textContent = `@page{size:A4;margin:0}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.subject{width:210mm;min-height:297mm;padding:15mm;break-after:page}.subject:last-child{break-after:auto}header{position:relative;min-height:27mm;border-bottom:2px solid #111;margin-bottom:8mm;padding:1mm 0 4mm 75mm}h1{font-size:20pt;margin:0 0 3mm}.class-name{font-size:10pt;margin:0}.identity{position:absolute;top:0;left:0;width:68mm;border:1.5px solid #111;padding:3mm;font-size:10pt}.identity-line{display:flex;align-items:flex-end;gap:2mm;height:8mm}.identity-blank{flex:1;border-bottom:1px solid #111}.question{break-inside:avoid;margin:0 0 8mm}.question h2{font-size:12pt;margin:0 0 3mm}.choice{margin:2mm 0}.box{display:inline-block;width:4mm;height:4mm;border:1px solid;margin-right:2mm;vertical-align:middle}.writing{height:35mm;border-bottom:1px dotted #777;background:repeating-linear-gradient(transparent,transparent 8mm,#ddd 8.2mm)}@media print{button,nav{display:none!important}}`
+        doc.head.append(style)
+        studentClass.students.forEach((_, copyIndex) => {
+            const random = seeded(
+                quiz.id * 1000003 + studentClass.id * 1009 + copyIndex
+            )
+            const selected = difficultyKeys.flatMap((difficulty) =>
+                shuffle(
+                    questions.filter(
+                        (question) => question.difficulty === difficulty
+                    ),
+                    random
+                ).slice(0, quiz[`${difficulty}_question_count`])
+            )
+            const section = doc.createElement("section")
+            section.className = "subject"
+            const header = doc.createElement("header")
+            const title = doc.createElement("h1")
+            title.textContent = quiz.title
+            header.append(title)
+            const className = doc.createElement("p")
+            className.className = "class-name"
+            className.textContent = `${t("class-name")} : ${studentClass.grade_level} ${studentClass.name}`
+            header.append(className)
+            const identity = doc.createElement("div")
+            identity.className = "identity"
+            for (const label of [t("last-name"), t("first-name")]) {
+                const line = doc.createElement("div")
+                line.className = "identity-line"
+                const text = doc.createElement("span")
+                text.textContent = `${label} :`
+                const blank = doc.createElement("span")
+                blank.className = "identity-blank"
+                line.append(text, blank)
+                identity.append(line)
+            }
+            header.append(identity)
+            section.append(header)
+            shuffle(selected, random).forEach((question, index) => {
+                const article = doc.createElement("article")
+                article.className = "question"
+                const heading = doc.createElement("h2")
+                heading.textContent = `${index + 1}. ${question.prompt}`
+                article.append(heading)
+                if (question.answer_mode === "written") {
+                    const writing = doc.createElement("div")
+                    writing.className = "writing"
+                    article.append(writing)
+                } else
+                    shuffle(question.choices, random).forEach((choice) => {
+                        const row = doc.createElement("div")
+                        row.className = "choice"
+                        const box = doc.createElement("span")
+                        box.className = "box"
+                        row.append(box, doc.createTextNode(choice.label))
+                        article.append(row)
+                    })
+                section.append(article)
+            })
+            doc.body.append(section)
+        })
+        doc.close()
+        printWindow.focus()
+        printWindow.setTimeout(() => printWindow.print(), 100)
+    }
+
+    async function handlePrint(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault()
+        if (!quizToPrint) return
+        const studentClass = classes.find(
+            (item) => String(item.id) === printClassId
+        )
+        if (!studentClass || studentClass.students.length === 0) return
+        const printWindow = window.open("", "_blank")
+        if (!printWindow) {
+            setPrintError(t("quiz-print-popup-error"))
+            return
+        }
+        setPrintError(null)
+        setIsPrinting(true)
         try {
-            const [questionGroups, allClasses] = await Promise.all([
-                Promise.all(
-                    quiz.question_banks.map((bank) => getQuestions(bank.id))
-                ),
-                getAllStudentClasses(),
-            ])
-            const questions = questionGroups.flat()
-            const matchingClasses = allClasses.filter(
-                (item) =>
-                    item.grade_level === quiz.question_banks[0]?.grade_level
-            )
-            const candidates = matchingClasses.flatMap((studentClass) =>
-                studentClass.students.map((student) => ({
-                    student,
-                    studentClass,
-                }))
-            )
-            const subjects = candidates.length
-                ? candidates
-                : [{ student: null, studentClass: null }]
-            const seeded = (seed: number) => () => {
-                seed |= 0
-                seed = (seed + 0x6d2b79f5) | 0
-                let value = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-                value =
-                    (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^
-                    value
-                return ((value ^ (value >>> 14)) >>> 0) / 4294967296
-            }
-            const shuffle = <T,>(items: T[], random: () => number) => {
-                const result = [...items]
-                for (let index = result.length - 1; index > 0; index--) {
-                    const target = Math.floor(random() * (index + 1))
-                    ;[result[index], result[target]] = [
-                        result[target],
-                        result[index],
-                    ]
-                }
-                return result
-            }
-            const doc = printWindow.document
-            doc.documentElement.lang = i18n.resolvedLanguage ?? "fr"
-            doc.title = quiz.title
-            const style = doc.createElement("style")
-            style.textContent = `@page{size:A4;margin:15mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.subject{break-after:page}.subject:last-child{break-after:auto}header{border-bottom:2px solid #111;margin-bottom:8mm;padding-bottom:4mm}h1{font-size:20pt;margin:0 0 3mm}.identity{font-size:11pt}.question{break-inside:avoid;margin:0 0 8mm}.question h2{font-size:12pt;margin:0 0 3mm}.choice{margin:2mm 0}.box{display:inline-block;width:4mm;height:4mm;border:1px solid;margin-right:2mm;vertical-align:middle}.writing{height:35mm;border-bottom:1px dotted #777;background:repeating-linear-gradient(transparent,transparent 8mm,#ddd 8.2mm)}@media print{button,nav{display:none!important}}`
-            doc.head.append(style)
-            for (const { student, studentClass } of subjects) {
-                const random = seeded(quiz.id * 1000003 + (student?.id ?? 0))
-                const selected = difficultyKeys.flatMap((difficulty) =>
-                    shuffle(
-                        questions.filter(
-                            (question) => question.difficulty === difficulty
-                        ),
-                        random
-                    ).slice(0, quiz[`${difficulty}_question_count`])
-                )
-                const section = doc.createElement("section")
-                section.className = "subject"
-                const header = doc.createElement("header")
-                const title = doc.createElement("h1")
-                title.textContent = quiz.title
-                header.append(title)
-                const identity = doc.createElement("p")
-                identity.className = "identity"
-                identity.textContent = student
-                    ? `${student.display_name} — ${studentClass?.grade_level} ${studentClass?.name}`
-                    : t("student-name-placeholder")
-                header.append(identity)
-                section.append(header)
-                shuffle(selected, random).forEach((question, index) => {
-                    const article = doc.createElement("article")
-                    article.className = "question"
-                    const heading = doc.createElement("h2")
-                    heading.textContent = `${index + 1}. ${question.prompt}`
-                    article.append(heading)
-                    if (question.answer_mode === "written") {
-                        const writing = doc.createElement("div")
-                        writing.className = "writing"
-                        article.append(writing)
-                    } else
-                        shuffle(question.choices, random).forEach((choice) => {
-                            const row = doc.createElement("div")
-                            row.className = "choice"
-                            const box = doc.createElement("span")
-                            box.className = "box"
-                            row.append(box, doc.createTextNode(choice.label))
-                            article.append(row)
-                        })
-                    section.append(article)
-                })
-                doc.body.append(section)
-            }
-            printWindow.focus()
-            printWindow.setTimeout(() => printWindow.print(), 100)
+            await printExamSubjects(quizToPrint, studentClass, printWindow)
+            setQuizToPrint(null)
+            setPrintClassId("")
         } catch {
             printWindow.close()
+            setPrintError(t("quiz-print-error"))
+        } finally {
+            setIsPrinting(false)
         }
     }
 
@@ -640,7 +666,11 @@ export function QuizzesPanel({
                     setDeleteError(null)
                     setQuizToDelete(quiz)
                 }}
-                onPrint={(quiz) => void printExamSubjects(quiz)}
+                onPrint={(quiz) => {
+                    setPrintError(null)
+                    setPrintClassId("")
+                    setQuizToPrint(quiz)
+                }}
                 onOpenSession={(quizSession) => {
                     setActiveSessionError(null)
                     setActiveSession(quizSession)
@@ -695,6 +725,21 @@ export function QuizzesPanel({
                 onSelectedClassIdChange={setSelectedClassId}
                 onClose={() => setQuizToLaunch(null)}
                 onSubmit={handleLaunch}
+            />
+
+            <PrintQuizDialog
+                quiz={quizToPrint}
+                classes={classes}
+                selectedClassId={printClassId}
+                isBusy={isPrinting}
+                error={printError}
+                onSelectedClassIdChange={setPrintClassId}
+                onClose={() => {
+                    setQuizToPrint(null)
+                    setPrintClassId("")
+                    setPrintError(null)
+                }}
+                onSubmit={(event) => void handlePrint(event)}
             />
 
             <ActiveQuizSessionDialog

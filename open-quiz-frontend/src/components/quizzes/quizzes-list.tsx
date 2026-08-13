@@ -312,28 +312,30 @@ function QuizCard({
                     .join(" · ")}
             </p>
             <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={onPrint}
-                >
-                    <Printer />
-                    {t("print-exams")}
-                </Button>
                 <Button type="button" size="sm" onClick={onLaunch}>
                     <Play />
                     {t("launch-quiz")}
                 </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={onPreview}
-                >
-                    <Eye />
-                    {t("preview-quiz")}
-                </Button>
+                <div className="flex gap-2">
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={onPreview}
+                    >
+                        <Eye />
+                        {t("preview-quiz")}
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={onPrint}
+                    >
+                        <Printer />
+                        {t("print-exams")}
+                    </Button>
+                </div>
             </div>
         </li>
     )
