@@ -56,6 +56,7 @@ type QuizzesPanelProps = {
 
 const difficultyKeys = ["easy", "medium", "hard"] as const
 const PAGE_SIZE = 8
+const PRINT_IMAGE_LOAD_CONCURRENCY = 6
 
 function isActiveSession(session: QuizSession): boolean {
     return isActiveSessionStatus(session.status)
@@ -374,6 +375,7 @@ export function QuizzesPanel({
         ]
         const objectUrls: string[] = []
         let urlsReleased = false
+        let imageLoadFailed = false
         const releaseObjectUrls = () => {
             if (urlsReleased) return
             urlsReleased = true
@@ -382,16 +384,40 @@ export function QuizzesPanel({
         const loadImages = async (
             ids: number[],
             loader: (id: number) => Promise<Blob>
-        ) =>
-            new Map(
-                await Promise.all(
-                    ids.map(async (id) => {
-                        const url = URL.createObjectURL(await loader(id))
-                        objectUrls.push(url)
-                        return [id, url] as const
-                    })
+        ) => {
+            const entries = new Array<readonly [number, string]>(ids.length)
+            let nextIndex = 0
+            const loadNext = async (): Promise<void> => {
+                while (!imageLoadFailed && nextIndex < ids.length) {
+                    const index = nextIndex
+                    nextIndex += 1
+                    const id = ids[index]
+                    let blob: Blob
+                    try {
+                        blob = await loader(id)
+                    } catch (error) {
+                        imageLoadFailed = true
+                        throw error
+                    }
+                    if (imageLoadFailed) return
+                    const url = URL.createObjectURL(blob)
+                    objectUrls.push(url)
+                    entries[index] = [id, url]
+                }
+            }
+            await Promise.all(
+                Array.from(
+                    {
+                        length: Math.min(
+                            ids.length,
+                            PRINT_IMAGE_LOAD_CONCURRENCY
+                        ),
+                    },
+                    () => loadNext()
                 )
             )
+            return new Map(entries)
+        }
         let questionImages: Map<number, string>
         let choiceImages: Map<number, string>
         try {
@@ -400,6 +426,7 @@ export function QuizzesPanel({
                 loadImages(choiceImageIds, getChoiceImage),
             ])
         } catch (error) {
+            imageLoadFailed = true
             releaseObjectUrls()
             throw error
         }
@@ -539,6 +566,7 @@ export function QuizzesPanel({
             setPrintError(t("quiz-print-popup-error"))
             return
         }
+        printWindow.opener = null
         setPrintError(null)
         setIsPrinting(true)
         try {
