@@ -227,10 +227,7 @@ function QuizClassDialog({
                         >
                             {t("cancel")}
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={submitDisabled}
-                        >
+                        <Button type="submit" disabled={submitDisabled}>
                             {isBusy ? (
                                 <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                             ) : (

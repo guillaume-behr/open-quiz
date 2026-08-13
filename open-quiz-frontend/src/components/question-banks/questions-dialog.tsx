@@ -351,8 +351,8 @@ function QuestionCard({
             render={<li />}
             className="overflow-hidden rounded-xl border bg-background"
         >
-            <div className="flex flex-col sm:flex-row sm:items-stretch">
-                <CollapsiblePrimitive.Trigger className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-e-xl p-4 text-left font-semibold break-words transition-colors select-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset">
+            <div className="flex flex-col gap-1 p-2 sm:flex-row sm:items-stretch">
+                <CollapsiblePrimitive.Trigger className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-left font-semibold break-words transition-colors select-none hover:bg-muted/70 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset data-panel-open:bg-muted/40">
                     <ChevronDown className="size-4 shrink-0 transition-transform duration-200 ease-out group-data-panel-open:rotate-180 motion-reduce:transition-none" />
                     <span className="min-w-0 flex-1">
                         {index + 1}. {question.prompt}
@@ -370,7 +370,7 @@ function QuestionCard({
                         })}
                     </span>
                 </CollapsiblePrimitive.Trigger>
-                <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pb-4 sm:py-3 sm:ps-0">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 px-2 pt-1 pb-1 sm:p-1">
                     <Button
                         type="button"
                         size="sm"
