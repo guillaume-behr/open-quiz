@@ -242,6 +242,7 @@ export function HomePage({
             loadingLabel={t("page-loading")}
             onSelect={selectSection}
             onSignOut={logout}
+            showActiveEntryIcon={activeTab !== "makeup"}
         >
             {activeTab === "exam" ? (
                 <div className="mt-6 flex justify-center">

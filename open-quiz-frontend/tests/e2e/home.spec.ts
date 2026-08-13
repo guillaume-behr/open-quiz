@@ -427,6 +427,9 @@ test("a student joins a retake room and selects an eligible quiz", async ({
     await expect(
         page.getByRole("heading", { name: "Retake", exact: true })
     ).toBeVisible()
+    await expect(
+        page.locator('section[aria-labelledby="makeup-title"] svg')
+    ).toHaveCount(0)
     await page.getByLabel("Session code").fill("retake1")
     await page.getByRole("button", { name: "Join" }).click()
 

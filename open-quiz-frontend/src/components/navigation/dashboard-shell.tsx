@@ -23,6 +23,7 @@ type DashboardShellProps<Section extends string> = {
     onSelect: (section: Section) => void
     onSignOut: () => void
     headerAction?: ReactNode
+    showActiveEntryIcon?: boolean
     children: ReactNode
 }
 
@@ -38,6 +39,7 @@ export function DashboardShell<Section extends string>({
     onSelect,
     onSignOut,
     headerAction,
+    showActiveEntryIcon = true,
     children,
 }: DashboardShellProps<Section>) {
     return (
@@ -95,9 +97,11 @@ export function DashboardShell<Section extends string>({
                 >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-                            <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                                <activeEntry.icon className="size-6" />
-                            </div>
+                            {showActiveEntryIcon && (
+                                <div className="rounded-xl bg-primary/10 p-3 text-primary">
+                                    <activeEntry.icon className="size-6" />
+                                </div>
+                            )}
                             <div className="min-w-0">
                                 <h2
                                     id={`${activeEntry.id}-title`}
