@@ -891,6 +891,17 @@ export function ResultsPanel({
                                                         :{" "}
                                                     </span>
                                                     <span className="inline-flex items-center justify-end gap-1">
+                                                        {participant.pending_manual_grading_count >
+                                                            0 && (
+                                                            <ResultIndicator
+                                                                label={t(
+                                                                    "answers-pending-grading",
+                                                                    {
+                                                                        count: participant.pending_manual_grading_count,
+                                                                    }
+                                                                )}
+                                                            />
+                                                        )}
                                                         {Math.abs(
                                                             participant.maximum_score -
                                                                 selectedResult.median_maximum_score
@@ -927,17 +938,6 @@ export function ResultsPanel({
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    {participant.pending_manual_grading_count >
-                                                        0 && (
-                                                        <ResultIndicator
-                                                            label={t(
-                                                                "answers-pending-grading",
-                                                                {
-                                                                    count: participant.pending_manual_grading_count,
-                                                                }
-                                                            )}
-                                                        />
-                                                    )}
                                                     <Button
                                                         type="button"
                                                         size="sm"
