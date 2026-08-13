@@ -44,17 +44,26 @@ def download_class_import_example(
     professor: ProfessorUser,
     session: DbSession,
 ) -> Response:
-    grade_level = session.scalar(
-        select(GradeLevel.name)
-        .where(GradeLevel.owner_id == professor.id)
-        .order_by(GradeLevel.name, GradeLevel.id)
-        .limit(1)
+    available_grade_levels = list(
+        session.scalars(
+            select(GradeLevel.name)
+            .where(GradeLevel.owner_id == professor.id)
+            .order_by(GradeLevel.name, GradeLevel.id)
+        )
+    )
+    grade_level_comment = (
+        f"Niveaux de classe disponibles : {', '.join(available_grade_levels)}."
+        if available_grade_levels
+        else "Aucun niveau de classe n’est encore défini."
     )
     example = {
         "classes": [
             {
                 "name": "TG1",
-                "grade_level": grade_level or "Tle",
+                "_comment_grade_level": grade_level_comment,
+                "grade_level": available_grade_levels[0]
+                if available_grade_levels
+                else "Tle",
                 "students": [
                     {"identifier": "martin.l", "display_name": "Lucas Martin"},
                     {"identifier": "dupont.e", "display_name": "Emma Dupont"},

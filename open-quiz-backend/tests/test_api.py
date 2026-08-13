@@ -1828,6 +1828,18 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "5e",
             "Tle",
         ]
+        class_example = client.get(
+            "/api/classes/example",
+            headers=teacher_headers,
+        )
+        assert class_example.status_code == 200
+        example_class = class_example.json()["classes"][0]
+        assert "Niveaux de classe disponibles" in example_class["_comment_grade_level"]
+        assert all(
+            level["name"] in example_class["_comment_grade_level"]
+            for level in grade_levels
+        )
+        assert example_class["grade_level"] == "1ere"
         duplicate_grade_level = client.post(
             "/api/grade-levels",
             headers=teacher_headers,
