@@ -10,14 +10,7 @@ import { Button } from "@/components/ui/button"
 import { PageLoader } from "@/components/ui/page-loader"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import { isRtlLanguage } from "@/lib/utils"
-import {
-    ArrowLeft,
-    CheckCircle2,
-    Dumbbell,
-    Info,
-    Scale,
-    XCircle,
-} from "lucide-react"
+import { ArrowLeft, CheckCircle2, Info, Scale, XCircle } from "lucide-react"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router"
@@ -149,16 +142,13 @@ export function TrainingPage() {
                 </Button>
             </NavbarAction>
             <div className="mx-auto my-auto w-full max-w-7xl rounded-2xl border bg-secondary p-5 shadow-lg sm:p-8 lg:p-12">
-                <div className="mb-6 flex items-center justify-center gap-3 text-center">
-                    <Dumbbell className="size-8 shrink-0 text-primary" />
-                    <div>
-                        <p className="text-sm font-semibold text-primary">
-                            {t("training-mode")}
-                        </p>
-                        <h1 className="text-3xl font-extrabold">
-                            {session.quiz_title}
-                        </h1>
-                    </div>
+                <div className="mb-6 text-center">
+                    <p className="text-sm font-semibold text-primary">
+                        {t("training-mode")}
+                    </p>
+                    <h1 className="text-3xl font-extrabold">
+                        {session.quiz_title}
+                    </h1>
                 </div>
                 {feedback && answeredQuestion ? (
                     <TrainingCorrection

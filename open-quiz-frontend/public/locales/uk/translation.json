@@ -742,5 +742,6 @@
     "print-exams": "Друкувати роботи",
     "student-name-placeholder": "Ім’я: ____________________",
     "import": "Імпортувати",
-    "save": "Зберегти"
+    "save": "Зберегти",
+    "choose-json-file": "Вибрати файл JSON"
 }

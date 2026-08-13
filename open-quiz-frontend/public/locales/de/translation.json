@@ -712,5 +712,6 @@
     "print-exams": "Prüfungen drucken",
     "student-name-placeholder": "Name der Schülerin/des Schülers: ____________________",
     "import": "Importieren",
-    "save": "Speichern"
+    "save": "Speichern",
+    "choose-json-file": "JSON-Datei auswählen"
 }

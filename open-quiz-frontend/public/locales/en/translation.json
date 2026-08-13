@@ -712,5 +712,6 @@
     "print-exams": "Print exam papers",
     "student-name-placeholder": "Name: ____________________",
     "import": "Import",
-    "save": "Save"
+    "save": "Save",
+    "choose-json-file": "Choose a JSON file"
 }

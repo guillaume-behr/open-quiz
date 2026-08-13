@@ -712,5 +712,6 @@
     "print-exams": "打印试卷",
     "student-name-placeholder": "姓名：____________________",
     "import": "导入",
-    "save": "保存"
+    "save": "保存",
+    "choose-json-file": "选择 JSON 文件"
 }

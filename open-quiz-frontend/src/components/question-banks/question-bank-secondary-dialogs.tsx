@@ -7,7 +7,6 @@ import {
     FieldGroup,
     FieldLabel,
 } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import { LoaderCircle, Upload } from "lucide-react"
 import type { FormEvent, RefObject } from "react"
 import { useTranslation } from "react-i18next"
@@ -49,16 +48,31 @@ export function ImportQuestionBankDialog({
                         <FieldLabel htmlFor="import-json-file">
                             {t("json-file")}
                         </FieldLabel>
-                        <Input
+                        <input
                             ref={inputRef}
                             id="import-json-file"
                             type="file"
+                            className="sr-only"
                             accept="application/json,.json"
                             onChange={(event) =>
                                 onFileChange(event.target.files?.[0] ?? null)
                             }
                             required
                         />
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isBusy}
+                            onClick={() => inputRef.current?.click()}
+                        >
+                            <Upload />
+                            {t("choose-json-file")}
+                        </Button>
+                        {file && (
+                            <p className="text-sm break-all text-muted-foreground">
+                                {file.name}
+                            </p>
+                        )}
                     </Field>
                     {error && <FieldError>{error}</FieldError>}
                     <div className="flex justify-end gap-2 border-t pt-4">

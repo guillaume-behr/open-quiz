@@ -111,7 +111,10 @@ export function StudentQuestionForm({
                 />
             )}
             {error && <FieldError>{error}</FieldError>}
-            <div className="flex min-w-0 items-center gap-3 border-t pt-5">
+            <div
+                className="flex min-w-0 items-center justify-end gap-3 border-t pt-5"
+                dir="ltr"
+            >
                 {session.allow_previous_questions && (
                     <nav
                         className="min-w-0 flex-1 overflow-x-auto"
@@ -159,6 +162,7 @@ export function StudentQuestionForm({
                     className="shrink-0 sm:min-w-64"
                     size="lg"
                     type="submit"
+                    dir="auto"
                     disabled={
                         isBusy ||
                         (question.answer_mode === "written"

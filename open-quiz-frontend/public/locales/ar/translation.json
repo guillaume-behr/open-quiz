@@ -772,5 +772,6 @@
     "print-exams": "طباعة الاختبارات",
     "student-name-placeholder": "الاسم: ____________________",
     "import": "استيراد",
-    "save": "حفظ"
+    "save": "حفظ",
+    "choose-json-file": "اختيار ملف JSON"
 }

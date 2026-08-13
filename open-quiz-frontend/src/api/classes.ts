@@ -1,4 +1,4 @@
-import { request, requestPage } from "./client"
+import { request, requestBlob, requestPage } from "./client"
 import type { Page, StudentClass } from "./types"
 
 export function getStudentClasses(
@@ -43,6 +43,10 @@ export function importStudentClasses(
         method: "POST",
         body: JSON.stringify(payload),
     })
+}
+
+export function downloadClassImportExample(): Promise<Blob> {
+    return requestBlob("/api/classes/example")
 }
 
 export function deleteStudentClass(classId: number): Promise<void> {

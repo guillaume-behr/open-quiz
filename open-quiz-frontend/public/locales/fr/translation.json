@@ -716,5 +716,6 @@
     "print-exams": "Imprimer les sujets",
     "student-name-placeholder": "Nom : ____________________",
     "import": "Importer",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "choose-json-file": "Choisir un fichier JSON"
 }

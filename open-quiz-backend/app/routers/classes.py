@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Annotated
 
@@ -36,6 +37,40 @@ from app.student_memberships import (
 )
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
+
+
+@router.get("/example")
+def download_class_import_example(
+    professor: ProfessorUser,
+    session: DbSession,
+) -> Response:
+    grade_level = session.scalar(
+        select(GradeLevel.name)
+        .where(GradeLevel.owner_id == professor.id)
+        .order_by(GradeLevel.name, GradeLevel.id)
+        .limit(1)
+    )
+    example = {
+        "classes": [
+            {
+                "name": "TG1",
+                "grade_level": grade_level or "Tle",
+                "students": [
+                    {"identifier": "martin.l", "display_name": "Lucas Martin"},
+                    {"identifier": "dupont.e", "display_name": "Emma Dupont"},
+                ],
+            }
+        ]
+    }
+    return Response(
+        content=json.dumps(example, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="open-quiz-classes-example.json"'
+            )
+        },
+    )
 
 
 @router.post("/import", response_model=ClassBatchImportResponse, status_code=201)

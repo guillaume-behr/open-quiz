@@ -4,6 +4,7 @@ import {
     type AnswerMode,
     type Question,
 } from "@/api/types"
+import { Collapsible as CollapsiblePrimitive } from "@base-ui/react/collapsible"
 import { Button } from "@/components/ui/button"
 import { CollapsibleFilters } from "@/components/ui/collapsible-filters"
 import { Input } from "@/components/ui/input"
@@ -344,27 +345,19 @@ function QuestionCard({
     onDelete: () => void
 }) {
     const { t } = useTranslation()
-    const [expanded, setExpanded] = useState(false)
     const detailsId = `question-details-${question.id}`
     return (
-        <li className="rounded-xl border bg-background p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-start gap-2 rounded text-left font-semibold break-words outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                    aria-expanded={expanded}
-                    aria-controls={detailsId}
-                    onClick={() => setExpanded((value) => !value)}
-                >
-                    <ChevronDown
-                        className={`mt-0.5 size-4 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
-                    />
+        <CollapsiblePrimitive.Root
+            render={<li />}
+            className="overflow-hidden rounded-xl border bg-background"
+        >
+            <div className="flex flex-col sm:flex-row sm:items-stretch">
+                <CollapsiblePrimitive.Trigger className="group flex min-w-0 flex-1 cursor-pointer items-start gap-2 p-4 text-left font-semibold break-words transition-colors select-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset">
+                    <ChevronDown className="mt-0.5 size-4 shrink-0 transition-transform duration-200 ease-out group-data-panel-open:rotate-180 motion-reduce:transition-none" />
                     <span>
                         {index + 1}. {question.prompt}
                     </span>
-                </button>
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-muted px-2 py-1 text-xs whitespace-nowrap">
+                    <span className="ms-auto rounded-full bg-muted px-2 py-1 text-xs font-normal whitespace-nowrap">
                         {t(`difficulty-${question.difficulty}`)}
                     </span>
                     <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold whitespace-nowrap text-primary">
@@ -376,6 +369,8 @@ function QuestionCard({
                             ),
                         })}
                     </span>
+                </CollapsiblePrimitive.Trigger>
+                <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pb-4 sm:py-3 sm:ps-0">
                     <Button
                         type="button"
                         size="sm"
@@ -397,8 +392,11 @@ function QuestionCard({
                     </Button>
                 </div>
             </div>
-            {expanded && (
-                <div id={detailsId}>
+            <CollapsiblePrimitive.Panel
+                id={detailsId}
+                className="h-[var(--collapsible-panel-height)] overflow-hidden opacity-100 transition-[height,opacity] duration-200 ease-out data-ending-style:h-0 data-ending-style:opacity-0 data-starting-style:h-0 data-starting-style:opacity-0 motion-reduce:transition-none [&[hidden]:not([hidden='until-found'])]:hidden"
+            >
+                <div className="border-t px-4 pb-4">
                     {question.has_image && (
                         <>
                             <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
@@ -477,8 +475,8 @@ function QuestionCard({
                     </ul>
                     <QuestionMetadata question={question} />
                 </div>
-            )}
-        </li>
+            </CollapsiblePrimitive.Panel>
+        </CollapsiblePrimitive.Root>
     )
 }
 

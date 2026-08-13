@@ -2,6 +2,7 @@ import {
     assignStudentAccount,
     createStudentClass,
     deleteStudentClass,
+    downloadClassImportExample,
     getStudentClasses,
     unassignStudentAccount,
     updateStudentClass,
@@ -31,6 +32,7 @@ import { Pagination } from "@/components/ui/pagination"
 import { Toast } from "@/components/ui/toast"
 import {
     Check,
+    FileJson,
     LoaderCircle,
     Pencil,
     Printer,
@@ -40,7 +42,7 @@ import {
     UsersRound,
     Upload,
 } from "lucide-react"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 export function ClassesPanel({
@@ -96,26 +98,8 @@ export function ClassesPanel({
     } | null>(null)
     const [importError, setImportError] = useState<string | null>(null)
     const [importToast, setImportToast] = useState<string | null>(null)
-
-    const importExample = JSON.stringify(
-        {
-            classes: [
-                {
-                    name: "TG1",
-                    grade_level: gradeLevels[0]?.name ?? "Tle",
-                    students: [
-                        {
-                            identifier: "martin.l",
-                            display_name: "Lucas Martin",
-                        },
-                        { identifier: "dupont.e", display_name: "Emma Dupont" },
-                    ],
-                },
-            ],
-        },
-        null,
-        2
-    )
+    const [importFileName, setImportFileName] = useState("")
+    const importInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         if (!importToast) return
@@ -188,6 +172,19 @@ export function ClassesPanel({
             setImportError(t("classes-import-conflict"))
         } finally {
             setIsBusy(false)
+        }
+    }
+
+    async function downloadImportExample() {
+        try {
+            const url = URL.createObjectURL(await downloadClassImportExample())
+            const link = document.createElement("a")
+            link.href = url
+            link.download = "open-quiz-classes-example.json"
+            link.click()
+            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+        } catch {
+            setError(t("json-download-error"))
         }
     }
 
@@ -557,18 +554,31 @@ export function ClassesPanel({
                 <div className="min-w-0">
                     <div className="mb-4 flex items-center justify-between gap-3">
                         <h3 className="font-semibold">{t("classes")}</h3>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                                setImportOpen(true)
-                                setImportError(null)
-                                setImportPayload(null)
-                            }}
-                        >
-                            <Upload />
-                            {t("classes-import")}
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setImportOpen(true)
+                                    setImportError(null)
+                                    setImportPayload(null)
+                                    setImportFileName("")
+                                    if (importInputRef.current)
+                                        importInputRef.current.value = ""
+                                }}
+                            >
+                                <Upload />
+                                {t("classes-import")}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void downloadImportExample()}
+                            >
+                                <FileJson />
+                                {t("download-json-example")}
+                            </Button>
+                        </div>
                     </div>
                     {isLoading ? (
                         <div
@@ -700,24 +710,35 @@ export function ClassesPanel({
                     <FieldLabel htmlFor="classes-import-file">
                         {t("classes-import-file")}
                     </FieldLabel>
-                    <Input
+                    <input
+                        ref={importInputRef}
                         id="classes-import-file"
                         type="file"
+                        className="sr-only"
                         accept="application/json,.json"
                         onChange={(event) => {
                             const file = event.target.files?.[0]
-                            if (file) void readImportFile(file)
+                            if (file) {
+                                setImportFileName(file.name)
+                                void readImportFile(file)
+                            }
                         }}
                     />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isBusy}
+                        onClick={() => importInputRef.current?.click()}
+                    >
+                        <Upload />
+                        {t("choose-json-file")}
+                    </Button>
+                    {importFileName && (
+                        <p className="text-sm break-all text-muted-foreground">
+                            {importFileName}
+                        </p>
+                    )}
                 </Field>
-                <div className="mt-4">
-                    <p className="text-sm font-medium">
-                        {t("classes-import-example")}
-                    </p>
-                    <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-muted p-3 text-xs">
-                        <code>{importExample}</code>
-                    </pre>
-                </div>
                 {importPayload && (
                     <div className="mt-4 rounded-lg border p-3 text-sm">
                         <p className="font-semibold">
