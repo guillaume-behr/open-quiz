@@ -55,7 +55,6 @@ export function connectLiveUpdates<T>({
         const currentSocket = new WebSocket(apiWebSocketUrl(path))
         socket = currentSocket
         currentSocket.addEventListener("open", () => {
-            attempts = 0
             currentSocket.send(JSON.stringify({ token }))
         })
         currentSocket.addEventListener("message", (event) => {
@@ -66,12 +65,16 @@ export function connectLiveUpdates<T>({
             } catch {
                 return
             }
-            if (message.type === "ping") return
+            if (message.type === "ping") {
+                attempts = 0
+                return
+            }
             if (message.type === "deleted") {
                 onDeleted?.()
                 return
             }
             if ("data" in message) {
+                attempts = 0
                 refreshAttempted = false
                 onData(message.data)
             }

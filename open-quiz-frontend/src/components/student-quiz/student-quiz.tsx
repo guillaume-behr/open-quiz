@@ -49,6 +49,7 @@ export function StudentQuiz({
     const isLeavingQuiz = useRef(false)
     const sessionRequestVersion = useRef(0)
     const liveSessionRef = useRef<StudentQuizSession | null>(session)
+    const liveRevisionRef = useRef(0)
     const { isFullscreen, enterFullscreen } = useQuizMonitoring(
         session,
         participantToken,
@@ -111,7 +112,6 @@ export function StudentQuiz({
         if (
             !liveJoinCode ||
             !participantToken ||
-            isBusy ||
             ["finished", "cancelled"].includes(
                 liveSessionRef.current?.status ?? ""
             )
@@ -122,6 +122,7 @@ export function StudentQuiz({
             path: `/api/quizzes/live/student/sessions/${encodeURIComponent(liveJoinCode)}`,
             getToken: async () => participantToken,
             onData: (updated) => {
+                liveRevisionRef.current += 1
                 setError(null)
                 const current = liveSessionRef.current
                 if (
@@ -142,7 +143,7 @@ export function StudentQuiz({
             },
             onUnavailable: () => setError(t("student-session-error")),
         })
-    }, [isBusy, liveJoinCode, participantToken, t])
+    }, [liveJoinCode, participantToken, t])
 
     async function handleJoin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -217,13 +218,14 @@ export function StudentQuiz({
 
         setIsBusy(true)
         sessionRequestVersion.current += 1
+        const liveRevision = liveRevisionRef.current
         try {
             const updated = await navigateStudentQuiz(
                 session.join_code,
                 participantToken,
                 questionNumber
             )
-            applySession(updated)
+            if (liveRevisionRef.current === liveRevision) applySession(updated)
         } catch {
             setError(t("student-navigation-error"))
         } finally {
@@ -238,6 +240,7 @@ export function StudentQuiz({
         setError(null)
         setIsBusy(true)
         sessionRequestVersion.current += 1
+        const liveRevision = liveRevisionRef.current
         try {
             const updated = await submitStudentQuizAnswer(
                 session.join_code,
@@ -255,7 +258,7 @@ export function StudentQuiz({
             )
             setSelectedChoiceIds([])
             setWrittenAnswer("")
-            setSession(updated)
+            if (liveRevisionRef.current === liveRevision) applySession(updated)
         } catch {
             setError(t("student-answer-error"))
         } finally {

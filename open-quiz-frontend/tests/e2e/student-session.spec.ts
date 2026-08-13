@@ -193,6 +193,18 @@ test("student uses the numbered progress bar to revisit a question", async ({
             },
         ],
     }
+    let authenticatedSocketCount = 0
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
+        (socket) => {
+            socket.onMessage((message) => {
+                expect(JSON.parse(String(message))).toEqual({
+                    token: "participant-token",
+                })
+                authenticatedSocketCount += 1
+            })
+        }
+    )
     await page.route("**/api/quizzes/join", async (route) => {
         await route.fulfill({
             json: {
@@ -246,6 +258,7 @@ test("student uses the numbered progress bar to revisit a question", async ({
     )
 
     await joinExamViaDashboard(page, "ABCD")
+    await expect.poll(() => authenticatedSocketCount).toBe(1)
 
     await page.getByRole("button", { name: "Question 1 on 3" }).click()
     await expect(
@@ -254,6 +267,7 @@ test("student uses the numbered progress bar to revisit a question", async ({
     await expect(
         page.getByRole("button", { name: "Question 1 on 3" })
     ).toHaveAttribute("aria-current", "step")
+    expect(authenticatedSocketCount).toBe(1)
 })
 
 test("student stays on a usable join screen when session storage is unavailable", async ({
