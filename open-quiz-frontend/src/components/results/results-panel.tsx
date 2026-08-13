@@ -857,9 +857,43 @@ export function ResultsPanel({
                                                         <UserRound className="size-4" />
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <p className="truncate font-semibold">
-                                                            {participant.student_display_name ??
-                                                                participant.student_identifier}
+                                                        <p className="flex items-center gap-1 font-semibold">
+                                                            <span className="truncate">
+                                                                {participant.student_display_name ??
+                                                                    participant.student_identifier}
+                                                            </span>
+                                                            {participant.pending_manual_grading_count >
+                                                                0 && (
+                                                                <ResultIndicator
+                                                                    label={t(
+                                                                        "answers-pending-grading",
+                                                                        {
+                                                                            count: participant.pending_manual_grading_count,
+                                                                        }
+                                                                    )}
+                                                                />
+                                                            )}
+                                                            {Math.abs(
+                                                                participant.maximum_score -
+                                                                    selectedResult.median_maximum_score
+                                                            ) >= 3 && (
+                                                                <ResultIndicator
+                                                                    label={t(
+                                                                        "result-maximum-median-gap",
+                                                                        {
+                                                                            maximum:
+                                                                                formatScore(
+                                                                                    participant.maximum_score,
+                                                                                    i18n.language
+                                                                                ),
+                                                                            median: formatScore(
+                                                                                selectedResult.median_maximum_score,
+                                                                                i18n.language
+                                                                            ),
+                                                                        }
+                                                                    )}
+                                                                />
+                                                            )}
                                                         </p>
                                                         {participant.student_display_name &&
                                                             participant.student_display_name !==
@@ -891,38 +925,6 @@ export function ResultsPanel({
                                                         :{" "}
                                                     </span>
                                                     <span className="inline-flex items-center justify-end gap-1">
-                                                        {participant.pending_manual_grading_count >
-                                                            0 && (
-                                                            <ResultIndicator
-                                                                label={t(
-                                                                    "answers-pending-grading",
-                                                                    {
-                                                                        count: participant.pending_manual_grading_count,
-                                                                    }
-                                                                )}
-                                                            />
-                                                        )}
-                                                        {Math.abs(
-                                                            participant.maximum_score -
-                                                                selectedResult.median_maximum_score
-                                                        ) >= 3 && (
-                                                            <ResultIndicator
-                                                                label={t(
-                                                                    "result-maximum-median-gap",
-                                                                    {
-                                                                        maximum:
-                                                                            formatScore(
-                                                                                participant.maximum_score,
-                                                                                i18n.language
-                                                                            ),
-                                                                        median: formatScore(
-                                                                            selectedResult.median_maximum_score,
-                                                                            i18n.language
-                                                                        ),
-                                                                    }
-                                                                )}
-                                                            />
-                                                        )}
                                                         <span>
                                                             {formatScore(
                                                                 participant.score,
