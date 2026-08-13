@@ -651,8 +651,13 @@ async function mockTeacherApi(page: Page) {
         ) {
             if (request.method() === "PUT") {
                 trainingBankIds = (
-                    request.postDataJSON() as { question_bank_ids: number[] }
-                ).question_bank_ids
+                    request.postDataJSON() as {
+                        question_banks: {
+                            question_bank_id: number
+                            question_count: number
+                        }[]
+                    }
+                ).question_banks.map((item) => item.question_bank_id)
             }
             return route.fulfill({
                 json: trainingBankIds.includes(bank.id) ? [bank] : [],
@@ -1246,6 +1251,13 @@ test("teacher assigns existing question banks to a training class", async ({
 
     await expect(page.getByLabel("Class")).toHaveValue("11")
     await page.getByText("Matter and energy", { exact: true }).click()
+    const configurationDialog = page.getByRole("dialog", {
+        name: "Configure question bank",
+    })
+    await expect(
+        configurationDialog.getByLabel("Number of questions")
+    ).toHaveValue("10")
+    await configurationDialog.getByRole("button", { name: "Save" }).click()
     await expect(
         page.getByText("Advanced matter", { exact: true })
     ).toHaveCount(0)
@@ -1259,7 +1271,9 @@ test("teacher assigns existing question banks to a training class", async ({
                 "/api/quizzes/training/classes/11/question-banks" &&
             request.method() === "PUT"
     )
-    expect(saveRequest?.postDataJSON()).toEqual({ question_bank_ids: [21] })
+    expect(saveRequest?.postDataJSON()).toEqual({
+        question_banks: [{ question_bank_id: 21, question_count: 10 }],
+    })
     await expect(
         page.getByRole("button", { name: "New training quiz" })
     ).toHaveCount(0)
