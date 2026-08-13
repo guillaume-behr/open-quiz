@@ -265,9 +265,7 @@ export type QuizSession = {
     participant_count: number
     participants: QuizParticipant[]
     median_maximum_score: number
-    current_question_number: number | null
     total_questions: number
-    current_submission_count: number
     created_at: string
     started_at: string | null
     ends_at: string | null

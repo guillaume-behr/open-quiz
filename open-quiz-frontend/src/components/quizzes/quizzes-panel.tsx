@@ -1,5 +1,5 @@
 import { getAllStudentClasses } from "@/api/classes"
-import { ApiError } from "@/api/client"
+import { ApiError, getLiveAccessToken } from "@/api/client"
 import {
     getAllQuestionBanks,
     getChoiceImage,
@@ -12,8 +12,6 @@ import {
     deleteQuiz,
     deleteQuizSession,
     getAllQuizzes,
-    getActiveQuizSessions,
-    getQuizSession,
     getQuizzes,
     launchQuiz,
     pauseQuizSession,
@@ -40,6 +38,7 @@ import {
 } from "@/components/quizzes/quiz-secondary-dialogs"
 import { QuizzesList } from "@/components/quizzes/quizzes-list"
 import { isActiveSessionStatus } from "@/lib/session-status"
+import { connectLiveUpdates } from "@/lib/live-updates"
 import { Button } from "@/components/ui/button"
 import { Toast } from "@/components/ui/toast"
 import { Dialog } from "@/components/ui/dialog"
@@ -106,6 +105,7 @@ export function QuizzesPanel({
     const [isLoading, setIsLoading] = useState(true)
     const [supportLoadFailed, setSupportLoadFailed] = useState(false)
     const [quizListLoadFailed, setQuizListLoadFailed] = useState(false)
+    const [liveSessionsLoadFailed, setLiveSessionsLoadFailed] = useState(false)
     const [title, setTitle] = useState("")
     const [quizGradeLevel, setQuizGradeLevel] = useState("")
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
@@ -148,7 +148,6 @@ export function QuizzesPanel({
     const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
     const [deleteError, setDeleteError] = useState<string | null>(null)
-    const sessionRequestVersion = useRef(0)
     const previewRequestVersion = useRef(0)
     const activeSessionId = activeSession?.id
     const activeSessionStatus = activeSession?.status
@@ -156,15 +155,10 @@ export function QuizzesPanel({
 
     useEffect(() => {
         let isActive = true
-        Promise.all([
-            getAllQuestionBanks(),
-            getActiveQuizSessions(),
-            getAllStudentClasses(),
-        ])
-            .then(([loadedBanks, loadedSessions, loadedClasses]) => {
+        Promise.all([getAllQuestionBanks(), getAllStudentClasses()])
+            .then(([loadedBanks, loadedClasses]) => {
                 if (!isActive) return
                 setBanks(loadedBanks)
-                setSessions(loadedSessions.filter(isActiveSession))
                 setClasses(loadedClasses)
                 setSupportLoadFailed(false)
             })
@@ -200,6 +194,20 @@ export function QuizzesPanel({
         }
     }, [gradeLevelFilter, page, quizFilter, reloadKey])
 
+    useEffect(
+        () =>
+            connectLiveUpdates<QuizSession[]>({
+                path: "/api/quizzes/live/teacher/sessions",
+                getToken: getLiveAccessToken,
+                onData: (updatedSessions) => {
+                    setSessions(updatedSessions.filter(isActiveSession))
+                    setLiveSessionsLoadFailed(false)
+                },
+                onUnavailable: () => setLiveSessionsLoadFailed(true),
+            }),
+        []
+    )
+
     useEffect(() => {
         if (
             !activeSessionId ||
@@ -207,48 +215,29 @@ export function QuizzesPanel({
             !isActiveSessionStatus(activeSessionStatus)
         )
             return
-        let isActive = true
-        let refreshInFlight = false
-        const refresh = () => {
-            if (document.hidden || refreshInFlight) return
-            refreshInFlight = true
-            const requestVersion = sessionRequestVersion.current
-            void getQuizSession(activeSessionId)
-                .then((session) => {
-                    if (
-                        !isActive ||
-                        requestVersion !== sessionRequestVersion.current
-                    )
-                        return
-                    setActiveSessionError(null)
-                    setActiveSession(session)
-                    setSessions((current) =>
-                        isActiveSession(session)
-                            ? current.map((item) =>
-                                  item.id === session.id ? session : item
-                              )
-                            : current.filter((item) => item.id !== session.id)
-                    )
-                })
-                .catch(() => {
-                    if (
-                        isActive &&
-                        requestVersion === sessionRequestVersion.current
-                    ) {
-                        setActiveSessionError(t("quiz-session-refresh-error"))
-                    }
-                })
-                .finally(() => {
-                    refreshInFlight = false
-                })
-        }
-        const interval = window.setInterval(refresh, 1500)
-        document.addEventListener("visibilitychange", refresh)
-        return () => {
-            isActive = false
-            window.clearInterval(interval)
-            document.removeEventListener("visibilitychange", refresh)
-        }
+        return connectLiveUpdates<QuizSession>({
+            path: `/api/quizzes/live/teacher/sessions/${activeSessionId}`,
+            getToken: getLiveAccessToken,
+            onData: (session) => {
+                setActiveSessionError(null)
+                setActiveSession(session)
+                setSessions((current) =>
+                    isActiveSession(session)
+                        ? current.map((item) =>
+                              item.id === session.id ? session : item
+                          )
+                        : current.filter((item) => item.id !== session.id)
+                )
+            },
+            onDeleted: () => {
+                setSessions((current) =>
+                    current.filter((item) => item.id !== activeSessionId)
+                )
+                setActiveSession(null)
+            },
+            onUnavailable: () =>
+                setActiveSessionError(t("quiz-session-refresh-error")),
+        })
     }, [activeSessionId, activeSessionStatus, isSessionMutating, t])
 
     const availableByDifficulty = availableQuestionCounts(
@@ -261,7 +250,9 @@ export function QuizzesPanel({
     )
     const quizGradeLevels = gradeLevels
     const loadError =
-        supportLoadFailed || quizListLoadFailed ? t("quizzes-load-error") : null
+        supportLoadFailed || quizListLoadFailed || liveSessionsLoadFailed
+            ? t("quizzes-load-error")
+            : null
 
     function handleSelectedBankIdsChange(ids: number[]): void {
         setSelectedBankIds(ids)
@@ -646,11 +637,16 @@ export function QuizzesPanel({
                 quizToLaunch.id,
                 Number(selectedClassId)
             )
-            setSessions((current) => [session, ...current])
+            setSessions((current) =>
+                current.some((item) => item.id === session.id)
+                    ? current.map((item) =>
+                          item.id === session.id ? session : item
+                      )
+                    : [session, ...current]
+            )
             setQuizToLaunch(null)
             setSelectedClassId("")
             setActiveSessionError(null)
-            sessionRequestVersion.current += 1
             setActiveSession(session)
         } catch {
             setLaunchError(t("quiz-launch-error"))
@@ -663,7 +659,6 @@ export function QuizzesPanel({
         if (!activeSession) return
         setActiveSessionError(null)
         setIsStarting(true)
-        sessionRequestVersion.current += 1
         try {
             const started = await startQuizSession(activeSession.id)
             setActiveSession(started)
@@ -694,7 +689,6 @@ export function QuizzesPanel({
         if (!activeSession) return
         setActiveSessionError(null)
         setSessionAction(action)
-        sessionRequestVersion.current += 1
         try {
             if (action === "cancel") {
                 await cancelQuizSession(activeSession.id)
@@ -727,7 +721,6 @@ export function QuizzesPanel({
         if (!activeSession) return
         setActiveSessionError(null)
         setSessionAction("delete")
-        sessionRequestVersion.current += 1
         try {
             await deleteQuizSession(activeSession.id)
             setSessions((current) =>
@@ -882,7 +875,6 @@ export function QuizzesPanel({
                 isStarting={isStarting}
                 action={sessionAction}
                 onClose={() => {
-                    sessionRequestVersion.current += 1
                     setActiveSession(null)
                     setActiveSessionError(null)
                 }}

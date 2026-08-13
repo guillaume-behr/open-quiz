@@ -6,6 +6,7 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+from starlette.requests import HTTPConnection
 
 from app.models import TwoFactorCredential, User
 from app.security import access_token_version, decode_access_token
@@ -23,7 +24,7 @@ BearerCredentials = Annotated[HTTPAuthorizationCredentials | None, Depends(beare
 
 
 def authenticated_user_from_token(
-    request: Request,
+    request: HTTPConnection,
     token: str,
     session: Session,
 ) -> User | None:

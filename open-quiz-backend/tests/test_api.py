@@ -20,6 +20,7 @@ from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import event, select
+from starlette.websockets import WebSocketDisconnect
 
 from app.config import Settings, secure_private_file
 from app.database import legacy_difficulty_counts
@@ -78,6 +79,30 @@ VALID_PNG = b64decode(
     "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
 )
 TEST_CLIENT_BACKEND_OPTIONS = {"use_uvloop": True} if find_spec("uvloop") else {}
+STUDENT_EXAM_FORBIDDEN_ANSWER_FIELDS = {
+    "correct_choice_ids",
+    "correction_mode",
+    "expected_answer",
+    "expected_answers",
+    "is_correct",
+    "max_score",
+    "points",
+    "score",
+}
+
+
+def nested_keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return set(value) | {
+            key for child in value.values() for key in nested_keys(child)
+        }
+    if isinstance(value, list):
+        return {key for child in value for key in nested_keys(child)}
+    return set()
+
+
+def assert_student_exam_payload_hides_answers(payload: Any) -> None:
+    assert nested_keys(payload).isdisjoint(STUDENT_EXAM_FORBIDDEN_ANSWER_FIELDS)
 
 
 def settings_for(database: Path, **overrides: Any) -> Settings:
@@ -2489,6 +2514,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert joined.json()["source_language"] == "en"
         assert joined.json()["student_name"] == "Martin Giraud"
         assert "participants" not in joined.json()
+        assert_student_exam_payload_hides_answers(joined.json())
         with sqlite3.connect(tmp_path / "test.db") as connection:
             successful_join_limits = connection.execute(
                 "SELECT COUNT(*) FROM login_rate_limits "
@@ -2701,21 +2727,16 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 choice["position"] for choice in state_payload["question"]["choices"]
             ] == list(range(len(state_payload["question"]["choices"])))
 
-            def collect_keys(value):
-                if isinstance(value, dict):
-                    return set(value) | {
-                        key for child in value.values() for key in collect_keys(child)
-                    }
-                if isinstance(value, list):
-                    return {key for child in value for key in collect_keys(child)}
-                return set()
-
-            assert collect_keys(state_payload).isdisjoint(
-                {"is_correct", "points", "correction_mode"}
-            )
+            assert_student_exam_payload_hides_answers(state_payload)
             safe_question = state_payload["question"]
             expected = expected_by_prompt[safe_question["prompt"]]
             if safe_question["answer_mode"] == "written":
+                assert safe_question["choices"] == []
+                expected_answer = expected["choices"][0]["label"]
+                assert expected_answer not in json.dumps(
+                    state_payload,
+                    ensure_ascii=False,
+                )
                 answer_payload = {
                     "written_answer": "Réponse rédactionnelle très longue. " * 200
                 }
@@ -2750,6 +2771,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 json=answer_payload,
             )
             assert submitted.status_code == 200
+            assert_student_exam_payload_hides_answers(submitted.json())
             if question_number < 3:
                 assert submitted.json()["question_number"] == question_number + 1
                 assert submitted.json()["question"] is not None
@@ -2777,9 +2799,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     previous.json()["selected_choice_ids"] is not None
                     or previous.json()["written_answer"] is not None
                 )
-                assert collect_keys(previous.json()).isdisjoint(
-                    {"is_correct", "points", "correction_mode", "score"}
-                )
+                assert_student_exam_payload_hides_answers(previous.json())
                 returned_to_current = client.post(
                     f"{student_state_url}/navigate",
                     headers=student_headers,
@@ -4350,6 +4370,113 @@ def launch_and_join(
     return launched.json(), participant_headers
 
 
+def test_live_quiz_websockets_push_session_transitions(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "live-quiz.db")) as client:
+        environment = exam_environment(client)
+        launched, participant_headers = launch_and_join(client, environment)
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+        participant_token = participant_headers["X-Quiz-Token"]
+
+        with client.websocket_connect(
+            f"/api/quizzes/live/teacher/sessions/{launched['id']}",
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as teacher_socket:
+            teacher_socket.send_json({"token": teacher_token})
+            teacher_state = teacher_socket.receive_json()
+            assert teacher_state["type"] == "session"
+            assert teacher_state["data"]["status"] == "waiting"
+            assert teacher_state["data"]["participant_count"] == 1
+
+            with client.websocket_connect(
+                f"/api/quizzes/live/student/sessions/{launched['join_code']}",
+                headers={"Origin": FRONTEND_ORIGIN},
+            ) as student_socket:
+                student_socket.send_json({"token": participant_token})
+                student_state = student_socket.receive_json()
+                assert student_state["type"] == "session"
+                assert student_state["data"]["status"] == "waiting"
+
+                started = client.post(
+                    f"/api/quizzes/sessions/{launched['id']}/start",
+                    headers=environment["teacher_headers"],
+                )
+                assert started.status_code == 200
+
+                assert teacher_socket.receive_json()["data"]["status"] == "in_progress"
+                pushed_student_state = student_socket.receive_json()["data"]
+                assert pushed_student_state["status"] == "in_progress"
+                assert pushed_student_state["question"] is not None
+                assert_student_exam_payload_hides_answers(pushed_student_state)
+
+
+def test_live_teacher_session_list_pushes_launch_and_removal(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "live-session-list.db")) as client:
+        environment = exam_environment(client)
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+
+        with client.websocket_connect(
+            "/api/quizzes/live/teacher/sessions",
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as socket:
+            socket.send_json({"token": teacher_token})
+            initial = socket.receive_json()
+            assert initial == {"type": "active_sessions", "data": []}
+
+            launched = client.post(
+                f"/api/quizzes/{environment['quiz']['id']}/launch",
+                headers=environment["teacher_headers"],
+                json={"class_id": environment["student_class"]["id"]},
+            )
+            assert launched.status_code == status.HTTP_201_CREATED
+            launched_session = launched.json()
+            pushed = socket.receive_json()
+            assert pushed["type"] == "active_sessions"
+            assert [item["id"] for item in pushed["data"]] == [
+                launched_session["id"]
+            ]
+
+            cancelled = client.post(
+                f"/api/quizzes/sessions/{launched_session['id']}/cancel",
+                headers=environment["teacher_headers"],
+            )
+            assert cancelled.status_code == status.HTTP_204_NO_CONTENT
+            assert socket.receive_json() == {
+                "type": "active_sessions",
+                "data": [],
+            }
+
+
+def test_live_quiz_websocket_rejects_untrusted_origin_and_token(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "live-quiz-auth.db")) as client:
+        environment = exam_environment(client)
+        launched, _ = launch_and_join(client, environment)
+        path = f"/api/quizzes/live/teacher/sessions/{launched['id']}"
+
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect(
+                path,
+                headers={"Origin": "https://untrusted.example"},
+            ),
+        ):
+            pass
+
+        with client.websocket_connect(
+            path,
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as socket:
+            socket.send_json({"token": "invalid-token"})
+            with pytest.raises(WebSocketDisconnect) as rejected:
+                socket.receive_json()
+            assert rejected.value.code == status.WS_1008_POLICY_VIOLATION
+
+
 def test_join_and_start_race_never_strands_a_participant(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "join-start-race.db")) as client:
         environment = exam_environment(client)
@@ -4516,6 +4643,22 @@ def test_completed_student_waits_for_classmates_without_a_blank_state(
         assert completed.json()["status"] == "in_progress"
         assert completed.json()["question"] is None
         assert completed.json()["has_answered"] is True
+        violation_after_completion = client.post(
+            f"/api/quizzes/student/sessions/{launched['join_code']}/violation",
+            headers=first_participant_headers,
+            json={"event_type": "fullscreen_exit"},
+        )
+        assert violation_after_completion.status_code == 204
+        teacher_state = client.get(
+            f"/api/quizzes/sessions/{launched['id']}",
+            headers=environment["teacher_headers"],
+        ).json()
+        completed_participant = next(
+            item
+            for item in teacher_state["participants"]
+            if item["student_identifier"] == environment["account"]["identifier"]
+        )
+        assert completed_participant["violation_count"] == 0
 
 
 def test_single_choice_maximum_uses_the_best_selectable_option(tmp_path: Path) -> None:

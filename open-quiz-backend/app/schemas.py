@@ -665,9 +665,7 @@ class QuizSessionResponse(BaseModel):
     participant_count: int
     participants: list[QuizParticipantResponse]
     median_maximum_score: float = 0
-    current_question_number: int | None
     total_questions: int
-    current_submission_count: int
     created_at: datetime
     started_at: datetime | None
     ends_at: datetime | None

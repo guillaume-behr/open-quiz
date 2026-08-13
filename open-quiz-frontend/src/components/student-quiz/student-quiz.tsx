@@ -11,6 +11,7 @@ import type { StudentQuizSession } from "@/api/types"
 import { JoinQuizForm } from "@/components/forms/join-quiz-form"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import { isActiveSessionStatus } from "@/lib/session-status"
+import { connectLiveUpdates } from "@/lib/live-updates"
 import { Button } from "@/components/ui/button"
 import { LogOut } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
@@ -47,6 +48,7 @@ export function StudentQuiz({
     const [error, setError] = useState<string | null>(null)
     const isLeavingQuiz = useRef(false)
     const sessionRequestVersion = useRef(0)
+    const liveSessionRef = useRef<StudentQuizSession | null>(session)
     const { isFullscreen, enterFullscreen } = useQuizMonitoring(
         session,
         participantToken,
@@ -62,12 +64,17 @@ export function StudentQuiz({
             : isRtlLanguage(session.source_language)
               ? "rtl"
               : "ltr"
+    const liveJoinCode = session?.join_code
 
     const applySession = useCallback((updated: StudentQuizSession) => {
         setSession(updated)
         setSelectedChoiceIds(updated.selected_choice_ids ?? [])
         setWrittenAnswer(updated.written_answer ?? "")
     }, [])
+
+    useEffect(() => {
+        liveSessionRef.current = session
+    }, [session])
 
     useEffect(() => {
         if (!restoredSession) return
@@ -102,59 +109,40 @@ export function StudentQuiz({
 
     useEffect(() => {
         if (
-            !session ||
+            !liveJoinCode ||
             !participantToken ||
             isBusy ||
-            ["finished", "cancelled"].includes(session.status)
+            ["finished", "cancelled"].includes(
+                liveSessionRef.current?.status ?? ""
+            )
         )
             return
 
-        let active = true
-        let refreshInFlight = false
-        const refresh = () => {
-            if (refreshInFlight) return
-            refreshInFlight = true
-            const requestVersion = sessionRequestVersion.current
-            void getStudentQuizSession(session.join_code, participantToken)
-                .then((updated) => {
-                    if (
-                        !active ||
-                        requestVersion !== sessionRequestVersion.current
-                    )
-                        return
-                    if (
-                        updated.question &&
-                        updated.question.id !== session.question?.id &&
-                        session.status !== "paused"
-                    ) {
-                        setSelectedChoiceIds(updated.selected_choice_ids ?? [])
-                        setWrittenAnswer(updated.written_answer ?? "")
-                    }
-                    setSession((current) => {
-                        const currentQuestion = current?.question
-                        return currentQuestion &&
-                            currentQuestion.id === updated.question?.id
-                            ? { ...updated, question: currentQuestion }
-                            : updated
-                    })
-                })
-                .catch(() => {
-                    if (
-                        active &&
-                        requestVersion === sessionRequestVersion.current
-                    )
-                        setError(t("student-session-error"))
-                })
-                .finally(() => {
-                    refreshInFlight = false
-                })
-        }
-        const interval = window.setInterval(refresh, 1500)
-        return () => {
-            active = false
-            window.clearInterval(interval)
-        }
-    }, [isBusy, participantToken, session, t])
+        return connectLiveUpdates<StudentQuizSession>({
+            path: `/api/quizzes/live/student/sessions/${encodeURIComponent(liveJoinCode)}`,
+            getToken: async () => participantToken,
+            onData: (updated) => {
+                setError(null)
+                const current = liveSessionRef.current
+                if (
+                    updated.question &&
+                    updated.question.id !== current?.question?.id &&
+                    current?.status !== "paused"
+                ) {
+                    setSelectedChoiceIds(updated.selected_choice_ids ?? [])
+                    setWrittenAnswer(updated.written_answer ?? "")
+                }
+                const next =
+                    current?.question &&
+                    current.question.id === updated.question?.id
+                        ? { ...updated, question: current.question }
+                        : updated
+                liveSessionRef.current = next
+                setSession(next)
+            },
+            onUnavailable: () => setError(t("student-session-error")),
+        })
+    }, [isBusy, liveJoinCode, participantToken, t])
 
     async function handleJoin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()

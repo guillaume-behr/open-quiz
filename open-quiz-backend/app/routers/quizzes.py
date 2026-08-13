@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+from asyncio import Queue, wait_for
 from collections import defaultdict
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -20,17 +21,27 @@ from fastapi import (
     Query,
     Request,
     Response,
+    WebSocket,
+    WebSocketDisconnect,
     status,
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
+from starlette.requests import HTTPConnection
 
 from app.audit import audit_event
 from app.class_names import format_class_name
-from app.dependencies import DbSession, ProfessorUser
+from app.dependencies import DbSession, ProfessorUser, authenticated_user_from_token
 from app.grading import compute_final_scores
+from app.live_quiz import (
+    active_quiz_sessions_topic,
+    makeup_sessions_topic,
+    quiz_session_topic,
+    student_session_topic,
+    websocket_origin_allowed,
+)
 from app.models import (
     ClassTrainingQuestionBank,
     MakeupSession,
@@ -52,6 +63,7 @@ from app.models import (
     StudentAccount,
     StudentClass,
     TrainingQuizProfile,
+    User,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.question_bank_summaries import load_question_bank_summaries
@@ -98,6 +110,93 @@ JOIN_CODE_ALPHABET = ascii_uppercase + digits
 VIOLATION_DEDUPLICATION_SECONDS = 2
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 MAX_TRAINING_QUESTIONS = 200
+LIVE_HEARTBEAT_SECONDS = 25
+
+
+def publish_quiz_update(
+    request: HTTPConnection,
+    quiz_session: QuizSession,
+    session: DbSession,
+    *,
+    active_sessions_changed: bool = True,
+    makeup_sessions_changed: bool = True,
+) -> None:
+    hub = request.app.state.live_quiz_hub
+    publish_quiz_topics(request, quiz_session.id, quiz_session.join_code)
+    if active_sessions_changed:
+        owner_id = session.scalar(
+            select(Quiz.owner_id).where(Quiz.id == quiz_session.quiz_id)
+        )
+        if owner_id is not None:
+            hub.publish(active_quiz_sessions_topic(owner_id))
+    if makeup_sessions_changed and quiz_session.makeup_session_id is not None:
+        makeup_owner_id = session.scalar(
+            select(MakeupSession.owner_id).where(
+                MakeupSession.id == quiz_session.makeup_session_id
+            )
+        )
+        if makeup_owner_id is not None:
+            hub.publish(makeup_sessions_topic(makeup_owner_id))
+
+
+def publish_quiz_topics(
+    request: HTTPConnection, session_id: int, join_code: str
+) -> None:
+    hub = request.app.state.live_quiz_hub
+    hub.publish(quiz_session_topic(session_id))
+    hub.publish(student_session_topic(join_code))
+
+
+def publish_makeup_update(request: HTTPConnection, owner_id: int) -> None:
+    request.app.state.live_quiz_hub.publish(makeup_sessions_topic(owner_id))
+
+
+def publish_active_quiz_sessions_update(
+    request: HTTPConnection, owner_id: int
+) -> None:
+    request.app.state.live_quiz_hub.publish(active_quiz_sessions_topic(owner_id))
+
+
+async def accept_live_socket(websocket: WebSocket) -> str | None:
+    if not websocket_origin_allowed(websocket):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+    await websocket.accept()
+    try:
+        credentials = await wait_for(websocket.receive_json(), timeout=5)
+    except TimeoutError, WebSocketDisconnect, ValueError:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+    token = credentials.get("token") if isinstance(credentials, dict) else None
+    if not isinstance(token, str) or not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+    return token
+
+
+def authenticated_live_professor_id(websocket: WebSocket, token: str) -> int | None:
+    with websocket.app.state.session_factory() as session:
+        professor = authenticated_user_from_token(websocket, token, session)
+        if professor is None or professor.is_admin:
+            return None
+        return professor.id
+
+
+async def wait_for_live_update(queue: Queue[None], ends_at: datetime | None) -> bool:
+    timeout = LIVE_HEARTBEAT_SECONDS
+    expires_during_wait = False
+    if ends_at is not None:
+        if ends_at.tzinfo is None:
+            ends_at = ends_at.replace(tzinfo=UTC)
+        remaining = max(0, (ends_at - datetime.now(UTC)).total_seconds())
+        if remaining <= timeout:
+            timeout = remaining
+            expires_during_wait = True
+    try:
+        await wait_for(queue.get(), timeout=timeout)
+        return True
+    except TimeoutError:
+        return expires_during_wait
 
 
 def safe_spreadsheet_cell(value: str) -> str:
@@ -110,7 +209,7 @@ def safe_spreadsheet_cell(value: str) -> str:
 
 
 def enforce_public_rate_limit(
-    request: Request,
+    request: HTTPConnection,
     session: DbSession,
     limiter_name: str,
     subject: str,
@@ -751,9 +850,7 @@ def session_response(
             )
             for participant in participants
         ],
-        current_question_number=None,
         total_questions=session_question_count(quiz_session, session),
-        current_submission_count=0,
         created_at=quiz_session.created_at,
         started_at=quiz_session.started_at,
         ends_at=quiz_ends_at(quiz_session, quiz),
@@ -911,12 +1008,10 @@ def finished_session_responses(
                     )
                     for participant in session_participants
                 ],
-                current_question_number=None,
                 total_questions=(
                     len(common_by_session[quiz_session.id])
                     or personalized_counts.get(quiz_session.id, 0)
                 ),
-                current_submission_count=0,
                 created_at=quiz_session.created_at,
                 started_at=quiz_session.started_at,
                 ends_at=quiz_ends_at(quiz_session, quiz),
@@ -1118,7 +1213,7 @@ def public_session_subject(
 def authenticated_participant(
     join_code: str,
     token: str | None,
-    request: Request,
+    request: HTTPConnection,
     session: DbSession,
 ) -> tuple[QuizSession, Quiz, QuizParticipant]:
     if not token:
@@ -1183,7 +1278,11 @@ def student_question_response(
             status_code=status.HTTP_409_CONFLICT,
             detail="La question actuelle n’est pas disponible",
         )
-    choices = choices_by_question.get(question.id, [])
+    choices = (
+        []
+        if question.answer_mode == "written"
+        else choices_by_question.get(question.id, [])
+    )
     choices.sort(
         key=lambda choice: sha256(
             (f"{quiz_session.id}:{participant.id}:{question.id}:{choice.id}").encode()
@@ -1461,9 +1560,8 @@ def create_quiz(
     return quiz_response(quiz, session)
 
 
-@router.get("/sessions/active", response_model=list[QuizSessionResponse])
-def list_active_sessions(
-    professor: ProfessorUser,
+def active_session_responses(
+    professor: User,
     session: DbSession,
 ) -> list[QuizSessionResponse]:
     expire_owned_quiz_sessions(professor, session)
@@ -1495,6 +1593,14 @@ def list_active_sessions(
     return [
         session_response(quiz_session, quiz, session) for quiz_session, quiz in rows
     ]
+
+
+@router.get("/sessions/active", response_model=list[QuizSessionResponse])
+def list_active_sessions(
+    professor: ProfessorUser,
+    session: DbSession,
+) -> list[QuizSessionResponse]:
+    return active_session_responses(professor, session)
 
 
 @router.get("/sessions/results", response_model=list[QuizSessionResponse])
@@ -1779,12 +1885,6 @@ def list_participant_answers(
     ]
 
 
-@router.get(
-    "/student/history",
-    response_model=list[StudentQuizHistoryItem],
-    include_in_schema=False,
-    deprecated=True,
-)
 @router.get(
     "/student/results",
     response_model=list[StudentQuizHistoryItem],
@@ -2078,6 +2178,229 @@ def grade_written_answer(
     return answer_review(answer, question, position, choices, max_score)
 
 
+@router.websocket("/live/teacher/sessions")
+async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
+    token = await accept_live_socket(websocket)
+    if token is None:
+        return
+    session_factory = websocket.app.state.session_factory
+    professor_id = authenticated_live_professor_id(websocket, token)
+    if professor_id is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    topic = active_quiz_sessions_topic(professor_id)
+    hub = websocket.app.state.live_quiz_hub
+    try:
+        async with hub.subscribe(topic) as updates:
+            refresh_state = True
+            next_ends_at: datetime | None = None
+            while True:
+                if refresh_state:
+                    with session_factory() as session:
+                        professor = session.get(User, professor_id)
+                        if professor is None or not professor.is_active:
+                            await websocket.close(
+                                code=status.WS_1008_POLICY_VIOLATION
+                            )
+                            return
+                        sessions = active_session_responses(professor, session)
+                    await websocket.send_json(
+                        {
+                            "type": "active_sessions",
+                            "data": [
+                                item.model_dump(mode="json") for item in sessions
+                            ],
+                        }
+                    )
+                    next_ends_at = min(
+                        (
+                            item.ends_at
+                            for item in sessions
+                            if item.status == "in_progress"
+                            and item.ends_at is not None
+                        ),
+                        default=None,
+                    )
+                refresh_state = await wait_for_live_update(updates, next_ends_at)
+                if not refresh_state:
+                    if (
+                        authenticated_live_professor_id(websocket, token)
+                        != professor_id
+                    ):
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                    await websocket.send_json({"type": "ping"})
+    except WebSocketDisconnect, RuntimeError:
+        return
+
+
+@router.websocket("/live/teacher/sessions/{session_id}")
+async def live_teacher_quiz_session(
+    websocket: WebSocket,
+    session_id: int,
+) -> None:
+    token = await accept_live_socket(websocket)
+    if token is None:
+        return
+    session_factory = websocket.app.state.session_factory
+    professor_id = authenticated_live_professor_id(websocket, token)
+    if professor_id is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    topic = quiz_session_topic(session_id)
+    hub = websocket.app.state.live_quiz_hub
+    try:
+        async with hub.subscribe(topic) as updates:
+            refresh_state = True
+            ends_at: datetime | None = None
+            while True:
+                if refresh_state:
+                    with session_factory() as session:
+                        row = session.execute(
+                            select(QuizSession, Quiz)
+                            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+                            .where(
+                                QuizSession.id == session_id,
+                                Quiz.owner_id == professor_id,
+                            )
+                        ).first()
+                        if row is None:
+                            await websocket.send_json({"type": "deleted"})
+                            await websocket.close()
+                            return
+                        quiz_session, quiz = row
+                        previous_status = quiz_session.status
+                        expire_quiz_session(quiz_session, quiz, session)
+                        if quiz_session.status != previous_status:
+                            publish_quiz_update(websocket, quiz_session, session)
+                        state = session_response(quiz_session, quiz, session)
+                    await websocket.send_json(
+                        {"type": "session", "data": state.model_dump(mode="json")}
+                    )
+                    ends_at = state.ends_at if state.status == "in_progress" else None
+                    if state.status in {"finished", "cancelled"}:
+                        await websocket.close()
+                        return
+                refresh_state = await wait_for_live_update(updates, ends_at)
+                if not refresh_state:
+                    if (
+                        authenticated_live_professor_id(websocket, token)
+                        != professor_id
+                    ):
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                    await websocket.send_json({"type": "ping"})
+    except WebSocketDisconnect, RuntimeError:
+        return
+
+
+@router.websocket("/live/student/sessions/{join_code}")
+async def live_student_quiz_session(
+    websocket: WebSocket,
+    join_code: str,
+) -> None:
+    token = await accept_live_socket(websocket)
+    if token is None:
+        return
+    normalized_code = join_code.strip().upper()
+    session_factory = websocket.app.state.session_factory
+    with session_factory() as session:
+        try:
+            authenticated_participant(normalized_code, token, websocket, session)
+        except HTTPException:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+    topic = student_session_topic(normalized_code)
+    hub = websocket.app.state.live_quiz_hub
+    try:
+        async with hub.subscribe(topic) as updates:
+            refresh_state = True
+            ends_at: datetime | None = None
+            while True:
+                if refresh_state:
+                    with session_factory() as session:
+                        try:
+                            quiz_session, quiz, participant = authenticated_participant(
+                                normalized_code, token, websocket, session
+                            )
+                        except HTTPException:
+                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                            return
+                        previous_status = quiz_session.status
+                        expire_quiz_session(quiz_session, quiz, session)
+                        if quiz_session.status != previous_status:
+                            publish_quiz_update(websocket, quiz_session, session)
+                        state = student_state_response(
+                            quiz_session, quiz, participant, session
+                        )
+                    await websocket.send_json(
+                        {"type": "session", "data": state.model_dump(mode="json")}
+                    )
+                    ends_at = state.ends_at if state.status == "in_progress" else None
+                    if state.status in {"finished", "cancelled"}:
+                        await websocket.close()
+                        return
+                refresh_state = await wait_for_live_update(updates, ends_at)
+                if not refresh_state:
+                    with session_factory() as session:
+                        try:
+                            authenticated_participant(
+                                normalized_code, token, websocket, session
+                            )
+                        except HTTPException:
+                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                            return
+                    await websocket.send_json({"type": "ping"})
+    except WebSocketDisconnect, RuntimeError:
+        return
+
+
+@router.websocket("/live/teacher/makeup-sessions")
+async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
+    token = await accept_live_socket(websocket)
+    if token is None:
+        return
+    session_factory = websocket.app.state.session_factory
+    professor_id = authenticated_live_professor_id(websocket, token)
+    if professor_id is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    topic = makeup_sessions_topic(professor_id)
+    hub = websocket.app.state.live_quiz_hub
+    try:
+        async with hub.subscribe(topic) as updates:
+            refresh_state = True
+            while True:
+                if refresh_state:
+                    with session_factory() as session:
+                        professor = session.get(User, professor_id)
+                        if professor is None or not professor.is_active:
+                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                            return
+                        sessions = list_makeup_sessions(professor, session)
+                    await websocket.send_json(
+                        {
+                            "type": "makeup_sessions",
+                            "data": [item.model_dump(mode="json") for item in sessions],
+                        }
+                    )
+                refresh_state = await wait_for_live_update(updates, None)
+                if not refresh_state:
+                    if (
+                        authenticated_live_professor_id(websocket, token)
+                        != professor_id
+                    ):
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                    await websocket.send_json({"type": "ping"})
+    except WebSocketDisconnect, RuntimeError:
+        return
+
+
 @router.get(
     "/sessions/{session_id}",
     response_model=QuizSessionResponse,
@@ -2124,6 +2447,7 @@ def delete_quiz_session(
 )
 def start_quiz_session(
     session_id: int,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
@@ -2163,6 +2487,7 @@ def start_quiz_session(
             participant.current_position = 0
         session.commit()
         session.refresh(quiz_session)
+        publish_quiz_update(request, quiz_session, session)
     return session_response(quiz_session, quiz, session)
 
 
@@ -2250,6 +2575,7 @@ def delete_quiz(
 )
 def pause_quiz_session(
     session_id: int,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
@@ -2264,6 +2590,7 @@ def pause_quiz_session(
     quiz_session.paused_at = datetime.now(UTC)
     session.commit()
     session.refresh(quiz_session)
+    publish_quiz_update(request, quiz_session, session)
     return session_response(quiz_session, quiz, session)
 
 
@@ -2273,6 +2600,7 @@ def pause_quiz_session(
 )
 def resume_quiz_session(
     session_id: int,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
@@ -2292,6 +2620,7 @@ def resume_quiz_session(
     quiz_session.status = "in_progress"
     session.commit()
     session.refresh(quiz_session)
+    publish_quiz_update(request, quiz_session, session)
     return session_response(quiz_session, quiz, session)
 
 
@@ -2301,6 +2630,7 @@ def resume_quiz_session(
 )
 def cancel_quiz_session(
     session_id: int,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
@@ -2326,8 +2656,11 @@ def cancel_quiz_session(
                 "enregistrées. Terminez la session pour conserver les résultats"
             ),
         )
+    join_code = quiz_session.join_code
     delete_quiz_session_records([quiz_session.id], session)
     session.commit()
+    publish_quiz_topics(request, session_id, join_code)
+    publish_active_quiz_sessions_update(request, professor.id)
     audit_event(
         "quiz.session_cancelled_and_deleted",
         professor_id=professor.id,
@@ -2764,6 +3097,7 @@ def makeup_quiz_options(
 )
 def create_makeup_session(
     payload: MakeupSessionCreate,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> MakeupSessionResponse:
@@ -2804,6 +3138,7 @@ def create_makeup_session(
         MakeupSessionQuiz(session_id=makeup.id, quiz_id=quiz_id) for quiz_id in quiz_ids
     )
     session.commit()
+    publish_makeup_update(request, professor.id)
     return makeup_session_response(makeup, session)
 
 
@@ -2814,6 +3149,7 @@ def create_makeup_session(
 def control_makeup_session(
     session_id: int,
     action: str,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> MakeupSessionResponse | Response:
@@ -2832,6 +3168,13 @@ def control_makeup_session(
         raise HTTPException(
             status_code=409, detail="Action impossible pour cette session"
         )
+    child_topics = list(
+        session.execute(
+            select(QuizSession.id, QuizSession.join_code).where(
+                QuizSession.makeup_session_id == makeup.id
+            )
+        )
+    )
     if action == "cancel":
         has_answers = (
             session.scalar(
@@ -2852,6 +3195,10 @@ def control_makeup_session(
             )
         delete_makeup_session_records(makeup.id, session)
         session.commit()
+        for child_id, join_code in child_topics:
+            publish_quiz_topics(request, child_id, join_code)
+        publish_makeup_update(request, professor.id)
+        publish_active_quiz_sessions_update(request, professor.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     transition = session.execute(
         update(MakeupSession)
@@ -2918,6 +3265,9 @@ def control_makeup_session(
             ):
                 participant.current_position = None
     session.commit()
+    for child in children:
+        publish_quiz_update(request, child, session)
+    publish_makeup_update(request, professor.id)
     return makeup_session_response(makeup, session)
 
 
@@ -3144,6 +3494,8 @@ def select_makeup_quiz(
     )
     session.add(participant)
     session.commit()
+    publish_quiz_update(request, child, session)
+    publish_makeup_update(request, makeup.owner_id)
     state = student_state_response(child, quiz, participant, session)
     return StudentQuizJoinResponse(**state.model_dump(), participant_token=token)
 
@@ -3225,6 +3577,7 @@ def update_quiz(
 def launch_quiz(
     quiz_id: int,
     payload: QuizLaunch,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
@@ -3290,6 +3643,7 @@ def launch_quiz(
     session.add_all(assignments)
     session.commit()
     session.refresh(quiz_session)
+    publish_active_quiz_sessions_update(request, professor.id)
     return session_response(quiz_session, quiz, session)
 
 
@@ -3387,6 +3741,7 @@ def join_quiz(
             reject_quiz_join(request, session, join_subject)
         session.commit()
         session.refresh(existing)
+        publish_quiz_update(request, quiz_session, session)
         state = student_state_response(quiz_session, quiz, existing, session)
         return StudentQuizJoinResponse(
             **state.model_dump(), participant_token=participant_token
@@ -3419,6 +3774,7 @@ def join_quiz(
     except IntegrityError:
         session.rollback()
         reject_quiz_join(request, session, join_subject)
+    publish_quiz_update(request, quiz_session, session)
     state = student_state_response(quiz_session, quiz, participant, session)
     return StudentQuizJoinResponse(
         **state.model_dump(),
@@ -3436,7 +3792,7 @@ def leave_student_quiz(
     session: DbSession,
     quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> Response:
-    _, _, participant = authenticated_participant(
+    quiz_session, _, participant = authenticated_participant(
         join_code, quiz_token, request, session
     )
     enforce_public_rate_limit(
@@ -3448,6 +3804,7 @@ def leave_student_quiz(
     participant.left_at = datetime.now(UTC)
     participant.access_token_hash = None
     session.commit()
+    publish_quiz_update(request, quiz_session, session)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3625,6 +3982,13 @@ def submit_student_answer(
             if quiz.mode == "exam":
                 compute_final_scores(quiz_session, session)
     session.commit()
+    publish_quiz_update(
+        request,
+        quiz_session,
+        session,
+        active_sessions_changed=quiz_session.status == "finished",
+        makeup_sessions_changed=False,
+    )
     state = student_state_response(quiz_session, quiz, participant, session)
     if feedback is not None:
         state.training_feedback = feedback
@@ -3688,6 +4052,13 @@ def navigate_student_quiz(
         )
     participant.current_position = target_position
     session.commit()
+    publish_quiz_update(
+        request,
+        quiz_session,
+        session,
+        active_sessions_changed=False,
+        makeup_sessions_changed=False,
+    )
     return student_state_response(quiz_session, quiz, participant, session)
 
 
@@ -3712,7 +4083,7 @@ def report_student_violation(
         f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status != "in_progress":
+    if quiz_session.status != "in_progress" or participant.current_position is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     now = datetime.now(UTC)
     last_violation_at = participant.last_violation_at
@@ -3728,6 +4099,13 @@ def report_student_violation(
     participant.last_violation_type = payload.event_type
     participant.last_violation_at = now
     session.commit()
+    publish_quiz_update(
+        request,
+        quiz_session,
+        session,
+        active_sessions_changed=False,
+        makeup_sessions_changed=False,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3811,9 +4189,12 @@ def get_student_choice_image(
     )
     question_id = current_question_id(quiz_session, participant, session)
     choice = session.scalar(
-        select(QuestionChoice).where(
+        select(QuestionChoice)
+        .join(Question, Question.id == QuestionChoice.question_id)
+        .where(
             QuestionChoice.id == choice_id,
             QuestionChoice.question_id == question_id,
+            Question.answer_mode != "written",
         )
     )
     if choice is None or choice.image_data is None or choice.image_content_type is None:

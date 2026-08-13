@@ -1,4 +1,10 @@
-import { expect, test, type Page, type Request } from "@playwright/test"
+import {
+    expect,
+    test,
+    type Page,
+    type Request,
+    type WebSocketRoute,
+} from "@playwright/test"
 
 const teacher = {
     id: 7,
@@ -59,9 +65,7 @@ async function mockTeacherApi(page: Page) {
                     joined_at: "2026-01-06T10:00:00Z",
                 },
             ],
-            current_question_number: 10,
             total_questions: 10,
-            current_submission_count: 1,
             created_at: "2026-01-06T10:00:00Z",
             started_at: "2026-01-06T10:01:00Z",
             ends_at: "2026-01-06T10:31:00Z",
@@ -548,9 +552,7 @@ async function mockTeacherApi(page: Page) {
                         joined_at: "2026-01-06T10:00:00Z",
                     },
                 ],
-                current_question_number: null,
                 total_questions: 10,
-                current_submission_count: 0,
                 created_at: "2026-01-06T10:00:00Z",
                 started_at: null,
                 ends_at: null,
@@ -1339,30 +1341,45 @@ test("finished quiz sessions disappear from the active quiz list", async ({
         status: "waiting",
         participant_count: 0,
         participants: [],
-        current_question_number: null,
         total_questions: 10,
-        current_submission_count: 0,
         created_at: "2026-01-06T10:00:00Z",
         started_at: null,
         ends_at: null,
     }
-    await page.route("**/api/quizzes/sessions/active", async (route) => {
-        await route.fulfill({ json: [waitingSession] })
+    let resolveSocket: (socket: WebSocketRoute) => void = () => undefined
+    const socketReady = new Promise<WebSocketRoute>((resolve) => {
+        resolveSocket = resolve
     })
-    await page.route("**/api/quizzes/sessions/79", async (route) => {
-        await route.fulfill({
-            json: { ...waitingSession, status: "finished" },
-        })
-    })
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/teacher\/sessions$/,
+        (socket) => {
+            socket.onMessage((message) => {
+                const credentials = JSON.parse(String(message)) as {
+                    token?: string
+                }
+                expect(credentials.token).toBeTruthy()
+                resolveSocket(socket)
+            })
+        }
+    )
 
     await page.goto("/teacher/dashboard")
     await page
         .getByRole("button", { name: "Exam quizzes", exact: true })
         .click()
+    const socket = await socketReady
+    await socket.send(
+        JSON.stringify({ type: "active_sessions", data: [waitingSession] })
+    )
     await expect(
         page.getByRole("heading", { name: "Active quizzes" })
     ).toBeVisible()
-    await page.getByRole("button", { name: /Running checkpoint/ }).click()
+    await socket.send(
+        JSON.stringify({
+            type: "active_sessions",
+            data: [],
+        })
+    )
 
     await expect(
         page.getByRole("heading", { name: "Active quizzes" })
@@ -1409,6 +1426,28 @@ test("teacher assigns existing question banks to a training class", async ({
 
 test("teacher launches and controls a live quiz session", async ({ page }) => {
     const requests = await mockTeacherApi(page)
+    let resolveWaitingSocket: (socket: WebSocketRoute) => void = () => undefined
+    let resolveStartedSocket: (socket: WebSocketRoute) => void = () => undefined
+    const waitingSocketReady = new Promise<WebSocketRoute>((resolve) => {
+        resolveWaitingSocket = resolve
+    })
+    const startedSocketReady = new Promise<WebSocketRoute>((resolve) => {
+        resolveStartedSocket = resolve
+    })
+    let authenticatedSocketCount = 0
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/teacher\/sessions\/80$/,
+        (socket) => {
+            socket.onMessage(() => {
+                authenticatedSocketCount += 1
+                if (authenticatedSocketCount === 1) {
+                    resolveWaitingSocket(socket)
+                } else {
+                    resolveStartedSocket(socket)
+                }
+            })
+        }
+    )
     await page.goto("/teacher/dashboard")
     await page
         .getByRole("button", { name: "Exam quizzes", exact: true })
@@ -1426,8 +1465,48 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
     })
     await expect(sessionDialog.getByText("LIVE80")).toBeVisible()
     await expect(sessionDialog.getByText("Alex Example")).toBeVisible()
+    await waitingSocketReady
     await sessionDialog.getByRole("button", { name: "Start quiz" }).click()
     await expect(sessionDialog.getByText("Quiz started")).toBeVisible()
+    const startedSocket = await startedSocketReady
+    await startedSocket.send(
+        JSON.stringify({
+            type: "session",
+            data: {
+                id: 80,
+                quiz_id: 31,
+                quiz_title: "Science checkpoint",
+                class_id: 11,
+                class_name: "Class 8B",
+                join_code: "LIVE80",
+                status: "in_progress",
+                participant_count: 1,
+                participants: [
+                    {
+                        id: 81,
+                        student_identifier: "alex-8b",
+                        student_display_name: "Alex Example",
+                        answered_count: 10,
+                        score: 999,
+                        maximum_score: 10,
+                        pending_manual_grading_count: 0,
+                        violation_count: 0,
+                        last_violation_type: null,
+                        last_violation_at: null,
+                        joined_at: "2026-01-06T10:00:00Z",
+                    },
+                ],
+                total_questions: 10,
+                created_at: "2026-01-06T10:00:00Z",
+                started_at: "2026-01-06T10:01:00Z",
+                ends_at: "2026-01-06T10:31:00Z",
+                grades_published_at: null,
+            },
+        })
+    )
+    await expect(sessionDialog.getByText("Quiz completed")).toBeVisible()
+    await expect(sessionDialog.getByText(/Score:/)).toHaveCount(0)
+    await expect(sessionDialog.getByText("999", { exact: true })).toHaveCount(0)
     await sessionDialog.getByRole("button", { name: "Pause quiz" }).click()
     await expect(
         sessionDialog.getByText("Quiz paused", { exact: true })
@@ -1594,6 +1673,57 @@ test("teacher creates and controls a retake session", async ({ page }) => {
     ).toEqual(["start", "pause", "resume", "finish"])
 })
 
+test("teacher receives a retake created while the local list is empty", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    let resolveSocket: (socket: WebSocketRoute) => void = () => undefined
+    const socketReady = new Promise<WebSocketRoute>((resolve) => {
+        resolveSocket = resolve
+    })
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/teacher\/makeup-sessions$/,
+        (socket) => {
+            socket.onMessage((message) => {
+                const credentials = JSON.parse(String(message)) as {
+                    token?: string
+                }
+                expect(credentials.token).toBeTruthy()
+                resolveSocket(socket)
+            })
+        }
+    )
+
+    await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Retake", exact: true }).click()
+    const socket = await socketReady
+    await socket.send(
+        JSON.stringify({
+            type: "makeup_sessions",
+            data: [
+                {
+                    id: 52,
+                    class_id: 11,
+                    class_name: "Class 8B",
+                    join_code: "REMOTE52",
+                    status: "waiting",
+                    quizzes: [
+                        {
+                            id: 31,
+                            title: "Science checkpoint",
+                            duration_seconds: 1800,
+                        },
+                    ],
+                    participant_count: 0,
+                    created_at: "2026-01-06T10:00:00Z",
+                },
+            ],
+        })
+    )
+
+    await expect(page.getByText("Class 8B · REMOTE52")).toBeVisible()
+})
+
 test("teacher reviews, grades, exports, and deletes quiz results", async ({
     page,
 }) => {
@@ -1672,13 +1802,27 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     expect(participantScoreBox).not.toBeNull()
     expect(participantScoreBox!.x).toBeCloseTo(scoreHeadingBox!.x, 0)
     expect(participantScoreBox!.width).toBeCloseTo(scoreHeadingBox!.width, 0)
+    const aboveMedianIndicator = resultDialog.getByRole("button", {
+        name: "Available points above the median",
+    })
+    await expect(aboveMedianIndicator).toBeVisible()
+    await aboveMedianIndicator.hover()
     await expect(
-        resultDialog.getByText("Available points above the median")
+        page.getByRole("tooltip").getByText("Available points above the median")
     ).toBeVisible()
     await expect(
         resultDialog.getByText("alex-8b", { exact: true })
     ).toHaveCount(1)
-    await expect(resultDialog.getByText("1 to grade")).toBeVisible()
+    const pendingGradingIndicator = resultDialog.getByRole("button", {
+        name: "1 to grade",
+    })
+    await expect(pendingGradingIndicator).toBeVisible()
+    const participantRow = resultDialog.locator('[data-participant-id="91"]')
+    await expect(participantRow).toHaveClass(/bg-amber-500\/10/)
+    await pendingGradingIndicator.hover()
+    await expect(
+        page.getByRole("tooltip").getByText("1 to grade")
+    ).toBeVisible()
     await resultDialog.getByRole("button", { name: "View answers" }).click()
 
     const answersDialog = page.getByRole("dialog", { name: "Student answers" })
@@ -1699,6 +1843,11 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
             ?.postDataJSON()
     ).toEqual({ score: 3.5 })
     await answersDialog.getByRole("button", { name: "Close" }).click()
+    await expect(participantRow).not.toHaveClass(/bg-amber-500\/10/)
+    await expect(
+        resultDialog.getByRole("button", { name: "1 to grade" })
+    ).toHaveCount(0)
+    await expect(aboveMedianIndicator).toBeVisible()
     await resultDialog.getByRole("button", { name: "Publish grades" }).click()
     await expect(
         resultDialog.getByRole("button", { name: "Grades published" })

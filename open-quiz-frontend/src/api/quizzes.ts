@@ -124,10 +124,6 @@ export function launchQuiz(
     })
 }
 
-export function getMakeupSessions(): Promise<MakeupSession[]> {
-    return request<MakeupSession[]>("/api/quizzes/makeup/sessions")
-}
-
 export function getMakeupQuizOptions(classId: number): Promise<Quiz[]> {
     return request<Quiz[]>(
         `/api/quizzes/makeup/quiz-options?class_id=${classId}`
@@ -183,14 +179,6 @@ export function selectMakeupQuiz(
         },
         false
     )
-}
-
-export function getQuizSession(sessionId: number): Promise<QuizSession> {
-    return request<QuizSession>(`/api/quizzes/sessions/${sessionId}`)
-}
-
-export function getActiveQuizSessions(): Promise<QuizSession[]> {
-    return request<QuizSession[]>("/api/quizzes/sessions/active")
 }
 
 export function getQuizResults(

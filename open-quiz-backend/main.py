@@ -13,6 +13,7 @@ from sqlalchemy import delete, select, update
 from app.audit import audit_event
 from app.config import Settings, get_settings
 from app.database import build_session_factory
+from app.live_quiz import LiveQuizHub
 from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
@@ -283,6 +284,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.session_factory = session_factory
+    app.state.live_quiz_hub = LiveQuizHub()
     app.state.login_rate_limiter = LoginRateLimiter(
         settings.login_attempts,
         settings.login_window_seconds,

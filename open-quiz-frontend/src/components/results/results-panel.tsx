@@ -24,7 +24,8 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
-import { formatClassName } from "@/lib/utils"
+import { cn, formatClassName } from "@/lib/utils"
+import { Tooltip } from "@base-ui/react/tooltip"
 import {
     CalendarDays,
     CalendarRange,
@@ -46,6 +47,29 @@ import { useTranslation } from "react-i18next"
 type ResultsViewMode = "cards" | "schedule"
 
 const RESULTS_VIEW_STORAGE_KEY = "open-quiz-teacher-results-view"
+
+function ResultIndicator({ label }: { label: string }) {
+    return (
+        <Tooltip.Root>
+            <Tooltip.Trigger
+                aria-label={label}
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-amber-700 transition-colors hover:bg-amber-500/15 focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:outline-none dark:text-amber-300"
+            >
+                <TriangleAlert className="size-4" aria-hidden="true" />
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+                <Tooltip.Positioner sideOffset={8} className="z-60">
+                    <Tooltip.Popup
+                        role="tooltip"
+                        className="max-w-64 rounded-lg border bg-popover px-3 py-2 text-xs font-medium text-popover-foreground shadow-md transition-[transform,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none"
+                    >
+                        {label}
+                    </Tooltip.Popup>
+                </Tooltip.Positioner>
+            </Tooltip.Portal>
+        </Tooltip.Root>
+    )
+}
 
 function storedResultsView(): ResultsViewMode {
     try {
@@ -775,101 +799,115 @@ export function ResultsPanel({
                                 </span>
                                 <span>{t("answers")}</span>
                             </div>
-                            <div className="divide-y">
-                                {selectedResult.participants.map(
-                                    (participant) => (
-                                        <div
-                                            key={participant.id}
-                                            className={`grid gap-3 px-4 py-4 md:grid-cols-[minmax(180px,1fr)_140px_180px_140px] md:items-center md:gap-4 ${participant.maximum_score > selectedResult.median_maximum_score ? "bg-amber-500/10" : ""}`}
-                                        >
-                                            <div className="flex min-w-0 items-center gap-3">
-                                                <div className="rounded-full bg-primary/10 p-2 text-primary">
-                                                    <UserRound className="size-4" />
+                            <Tooltip.Provider delay={250}>
+                                <div className="divide-y">
+                                    {selectedResult.participants.map(
+                                        (participant) => (
+                                            <div
+                                                key={participant.id}
+                                                data-participant-id={
+                                                    participant.id
+                                                }
+                                                className={cn(
+                                                    "grid gap-3 px-4 py-4 md:grid-cols-[minmax(180px,1fr)_140px_180px_140px] md:items-center md:gap-4",
+                                                    participant.pending_manual_grading_count >
+                                                        0 && "bg-amber-500/10"
+                                                )}
+                                            >
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <div className="rounded-full bg-primary/10 p-2 text-primary">
+                                                        <UserRound className="size-4" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="truncate font-semibold">
+                                                            {participant.student_display_name ??
+                                                                participant.student_identifier}
+                                                        </p>
+                                                        {participant.student_display_name &&
+                                                            participant.student_display_name !==
+                                                                participant.student_identifier && (
+                                                                <p className="truncate text-xs text-muted-foreground">
+                                                                    {
+                                                                        participant.student_identifier
+                                                                    }
+                                                                </p>
+                                                            )}
+                                                    </div>
                                                 </div>
-                                                <div className="min-w-0">
-                                                    <p className="truncate font-semibold">
-                                                        {participant.student_display_name ??
-                                                            participant.student_identifier}
-                                                    </p>
-                                                    {participant.student_display_name &&
-                                                        participant.student_display_name !==
-                                                            participant.student_identifier && (
-                                                            <p className="truncate text-xs text-muted-foreground">
-                                                                {
-                                                                    participant.student_identifier
-                                                                }
-                                                            </p>
-                                                        )}
-                                                </div>
-                                            </div>
-                                            <p className="text-sm">
-                                                <span className="md:hidden">
-                                                    {t("result-progress")}{" "}
-                                                    :{" "}
-                                                </span>
-                                                {participant.answered_count} /{" "}
-                                                {selectedResult.total_questions}
-                                            </p>
-                                            <p className="text-right font-bold text-primary tabular-nums md:whitespace-nowrap">
-                                                <span className="font-normal text-foreground md:hidden">
-                                                    {t("result-score-total")}{" "}
-                                                    :{" "}
-                                                </span>
-                                                {formatScore(
-                                                    participant.score,
-                                                    i18n.language
-                                                )}{" "}
-                                                /{" "}
-                                                {formatScore(
-                                                    participant.maximum_score,
-                                                    i18n.language
-                                                )}{" "}
-                                                {t("points-short")}
-                                                {participant.maximum_score >
-                                                    selectedResult.median_maximum_score && (
-                                                    <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                                                        <TriangleAlert className="size-4 shrink-0" />
-                                                        {t(
-                                                            "result-maximum-above-median"
-                                                        )}
+                                                <p className="text-sm">
+                                                    <span className="md:hidden">
+                                                        {t("result-progress")}{" "}
+                                                        :{" "}
                                                     </span>
-                                                )}
-                                            </p>
-                                            <div>
-                                                {participant.pending_manual_grading_count >
-                                                    0 && (
-                                                    <p className="mb-1 text-xs font-medium text-amber-700">
-                                                        {t(
-                                                            "answers-pending-grading",
-                                                            {
-                                                                count: participant.pending_manual_grading_count,
-                                                            }
-                                                        )}
-                                                    </p>
-                                                )}
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() =>
-                                                        void openParticipantAnswers(
-                                                            participant
-                                                        )
+                                                    {participant.answered_count}{" "}
+                                                    /{" "}
+                                                    {
+                                                        selectedResult.total_questions
                                                     }
-                                                >
-                                                    <FileText />
-                                                    {t("view-answers")}
-                                                </Button>
+                                                </p>
+                                                <p className="text-right font-bold text-primary tabular-nums md:whitespace-nowrap">
+                                                    <span className="font-normal text-foreground md:hidden">
+                                                        {t(
+                                                            "result-score-total"
+                                                        )}{" "}
+                                                        :{" "}
+                                                    </span>
+                                                    {formatScore(
+                                                        participant.score,
+                                                        i18n.language
+                                                    )}{" "}
+                                                    /{" "}
+                                                    {formatScore(
+                                                        participant.maximum_score,
+                                                        i18n.language
+                                                    )}{" "}
+                                                    {t("points-short")}
+                                                    {participant.maximum_score >
+                                                        selectedResult.median_maximum_score && (
+                                                        <ResultIndicator
+                                                            label={t(
+                                                                "result-maximum-above-median"
+                                                            )}
+                                                        />
+                                                    )}
+                                                </p>
+                                                <div className="flex items-center gap-2">
+                                                    {participant.pending_manual_grading_count >
+                                                        0 && (
+                                                        <ResultIndicator
+                                                            label={t(
+                                                                "answers-pending-grading",
+                                                                {
+                                                                    count: participant.pending_manual_grading_count,
+                                                                }
+                                                            )}
+                                                        />
+                                                    )}
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() =>
+                                                            void openParticipantAnswers(
+                                                                participant
+                                                            )
+                                                        }
+                                                    >
+                                                        <FileText />
+                                                        {t("view-answers")}
+                                                    </Button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )
-                                )}
-                                {selectedResult.participants.length === 0 && (
-                                    <p className="p-6 text-center text-sm text-muted-foreground">
-                                        {t("result-no-participants")}
-                                    </p>
-                                )}
-                            </div>
+                                        )
+                                    )}
+                                    {selectedResult.participants.length ===
+                                        0 && (
+                                        <p className="p-6 text-center text-sm text-muted-foreground">
+                                            {t("result-no-participants")}
+                                        </p>
+                                    )}
+                                </div>
+                            </Tooltip.Provider>
                         </div>
                     </div>
                 )}

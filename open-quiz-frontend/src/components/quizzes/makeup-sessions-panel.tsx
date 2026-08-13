@@ -1,13 +1,12 @@
 import { getAllStudentClasses } from "@/api/classes"
-import { ApiError } from "@/api/client"
+import { ApiError, getLiveAccessToken } from "@/api/client"
 import {
     controlMakeupSession,
     createMakeupSession,
     getMakeupQuizOptions,
-    getMakeupSessions,
 } from "@/api/quizzes"
 import type { MakeupSession, Quiz, StudentClass } from "@/api/types"
-import { isActiveSessionStatus } from "@/lib/session-status"
+import { connectLiveUpdates } from "@/lib/live-updates"
 import { formatClassName } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Toast } from "@/components/ui/toast"
@@ -28,11 +27,8 @@ export function MakeupSessionsPanel() {
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        Promise.all([getAllStudentClasses(), getMakeupSessions()])
-            .then(([loadedClasses, loadedSessions]) => {
-                setClasses(loadedClasses)
-                setSessions(loadedSessions)
-            })
+        getAllStudentClasses()
+            .then(setClasses)
             .catch(() => setError(t("makeup-load-error")))
     }, [t])
 
@@ -61,34 +57,14 @@ export function MakeupSessionsPanel() {
           )
         : quizOptions
 
-    const hasActiveSession = sessions.some((item) =>
-        isActiveSessionStatus(item.status)
-    )
-
     useEffect(() => {
-        if (!hasActiveSession) return
-        let isActive = true
-        let refreshInFlight = false
-        const refresh = () => {
-            if (document.hidden || refreshInFlight) return
-            refreshInFlight = true
-            void getMakeupSessions()
-                .then((loaded) => {
-                    if (isActive) setSessions(loaded)
-                })
-                .catch(() => undefined)
-                .finally(() => {
-                    refreshInFlight = false
-                })
-        }
-        const interval = window.setInterval(refresh, 2000)
-        document.addEventListener("visibilitychange", refresh)
-        return () => {
-            isActive = false
-            window.clearInterval(interval)
-            document.removeEventListener("visibilitychange", refresh)
-        }
-    }, [hasActiveSession])
+        return connectLiveUpdates<MakeupSession[]>({
+            path: "/api/quizzes/live/teacher/makeup-sessions",
+            getToken: getLiveAccessToken,
+            onData: setSessions,
+            onUnavailable: () => setError(t("makeup-load-error")),
+        })
+    }, [t])
 
     async function create(event: FormEvent) {
         event.preventDefault()
@@ -97,7 +73,13 @@ export function MakeupSessionsPanel() {
         setError(null)
         try {
             const created = await createMakeupSession(Number(classId), quizIds)
-            setSessions((current) => [created, ...current])
+            setSessions((current) =>
+                current.some((session) => session.id === created.id)
+                    ? current.map((session) =>
+                          session.id === created.id ? created : session
+                      )
+                    : [created, ...current]
+            )
             setQuizIds([])
         } catch {
             setError(t("makeup-create-error"))

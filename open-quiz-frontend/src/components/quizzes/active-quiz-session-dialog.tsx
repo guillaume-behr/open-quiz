@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
 import {
     AlertTriangle,
+    CircleCheck,
     LoaderCircle,
     Pause,
     Play,
@@ -180,6 +181,17 @@ function SessionSummary({ session }: { session: QuizSession }) {
 
 function Participants({ session }: { session: QuizSession }) {
     const { t } = useTranslation()
+    const participants = [...session.participants].sort(
+        (left, right) =>
+            Number(
+                right.answered_count >= session.total_questions &&
+                    session.total_questions > 0
+            ) -
+            Number(
+                left.answered_count >= session.total_questions &&
+                    session.total_questions > 0
+            )
+    )
     return (
         <>
             <div className="mt-5 flex items-center justify-between gap-3">
@@ -202,52 +214,67 @@ function Participants({ session }: { session: QuizSession }) {
                 </p>
             ) : (
                 <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {session.participants.map((participant) => (
-                        <li
-                            key={participant.id}
-                            className="rounded-lg border bg-background px-3 py-2 font-medium"
-                        >
-                            <span className="block">
-                                {participant.student_display_name ??
-                                    participant.student_identifier}
-                            </span>
-                            {participant.student_display_name && (
-                                <span className="block text-xs font-normal text-muted-foreground">
-                                    {participant.student_identifier}
-                                </span>
-                            )}
-                            {session.status === "finished" && (
-                                <span className="block text-sm font-semibold text-primary">
-                                    {t("teacher-student-result", {
-                                        score: participant.score,
-                                        count: participant.answered_count,
-                                        total: session.total_questions,
-                                    })}
-                                </span>
-                            )}
-                            {["in_progress", "paused"].includes(
-                                session.status
-                            ) && (
-                                <span className="block text-sm font-semibold text-primary">
-                                    {t("teacher-student-progress", {
-                                        count: participant.answered_count,
-                                        total: session.total_questions,
-                                    })}
-                                </span>
-                            )}
-                            {participant.violation_count > 0 && (
-                                <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
-                                    <AlertTriangle className="size-3" />
-                                    {t("student-monitoring-alert", {
-                                        count: participant.violation_count,
-                                        event: t(
-                                            `violation-${participant.last_violation_type}`
-                                        ),
-                                    })}
-                                </span>
-                            )}
-                        </li>
-                    ))}
+                    {participants.map((participant) => {
+                        const hasFinished =
+                            session.total_questions > 0 &&
+                            participant.answered_count >=
+                                session.total_questions
+                        return (
+                            <li
+                                key={participant.id}
+                                className={
+                                    hasFinished &&
+                                    ["in_progress", "paused"].includes(
+                                        session.status
+                                    )
+                                        ? "rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 font-medium"
+                                        : "rounded-lg border bg-background px-3 py-2 font-medium"
+                                }
+                            >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span>
+                                        {participant.student_display_name ??
+                                            participant.student_identifier}
+                                    </span>
+                                    {hasFinished &&
+                                        ["in_progress", "paused"].includes(
+                                            session.status
+                                        ) && (
+                                            <span className="flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
+                                                <CircleCheck className="size-3.5" />
+                                                {t("quiz-finished")}
+                                            </span>
+                                        )}
+                                </div>
+                                {participant.student_display_name && (
+                                    <span className="block text-xs font-normal text-muted-foreground">
+                                        {participant.student_identifier}
+                                    </span>
+                                )}
+                                {["in_progress", "paused", "finished"].includes(
+                                    session.status
+                                ) && (
+                                    <span className="block text-sm font-semibold text-primary">
+                                        {t("teacher-student-progress", {
+                                            count: participant.answered_count,
+                                            total: session.total_questions,
+                                        })}
+                                    </span>
+                                )}
+                                {participant.violation_count > 0 && (
+                                    <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
+                                        <AlertTriangle className="size-3" />
+                                        {t("student-monitoring-alert", {
+                                            count: participant.violation_count,
+                                            event: t(
+                                                `violation-${participant.last_violation_type}`
+                                            ),
+                                        })}
+                                    </span>
+                                )}
+                            </li>
+                        )
+                    })}
                 </ul>
             )}
         </>

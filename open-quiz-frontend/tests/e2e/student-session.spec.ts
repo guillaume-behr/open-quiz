@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page, type WebSocketRoute } from "@playwright/test"
 
 const baseSession = {
     quiz_title: "Science review",
@@ -42,7 +42,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 // Joining an exam happens on the student dashboard; the exam page then
-// restores the saved session by polling its current state.
+// restores the saved session once before subscribing to live updates.
 async function joinExamViaDashboard(page: Page, code: string): Promise<void> {
     await page.goto("/student/dashboard")
     await page.getByLabel("Quiz code").fill(code)
@@ -500,6 +500,10 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
 
     await joinExamViaDashboard(page, "ABCD")
     await expect(page.getByText("Révision scientifique")).toBeVisible()
+    await expect(
+        page.getByRole("button", { name: "Translate the quiz" })
+    ).toBeHidden()
+    await page.getByRole("button", { name: "Automatic translation" }).click()
     await page.getByRole("button", { name: "Translate the quiz" }).click()
     await expect(page.getByText("Science review")).toBeVisible()
     await expect(page.getByText("Which planet is red?")).toBeVisible()
@@ -514,7 +518,7 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
         .toEqual([{ event_type: "pointer_exit" }])
 })
 
-test("a delayed poll cannot restore a question after submission", async ({
+test("student session state is updated through its live socket", async ({
     page,
 }) => {
     await page.addInitScript(() => {
@@ -552,18 +556,10 @@ test("a delayed poll cannot restore a question after submission", async ({
             },
         ],
     }
-    // In development React strict mode mounts the component twice, so up to
-    // two state requests (one per mount) restore the active question; the
-    // following background poll is held so it lands after the answer is
-    // submitted.
-    let pollCall = 0
-    let markPollStarted: () => void = () => undefined
-    const pollStarted = new Promise<void>((resolve) => {
-        markPollStarted = resolve
-    })
-    let releasePoll: () => void = () => undefined
-    const pollRelease = new Promise<void>((resolve) => {
-        releasePoll = resolve
+    let stateRequestCount = 0
+    let resolveSocket: (socket: WebSocketRoute) => void = () => undefined
+    const socketReady = new Promise<WebSocketRoute>((resolve) => {
+        resolveSocket = resolve
     })
 
     await page.route("**/api/quizzes/join", async (route) => {
@@ -580,20 +576,7 @@ test("a delayed poll cannot restore a question after submission", async ({
     await page.route(
         /\/api\/quizzes\/student\/sessions\/ABCD$/,
         async (route) => {
-            pollCall += 1
-            if (pollCall < 3) {
-                await route.fulfill({
-                    json: {
-                        ...baseSession,
-                        status: "in_progress",
-                        question_number: 1,
-                        question,
-                    },
-                })
-                return
-            }
-            markPollStarted()
-            await pollRelease
+            stateRequestCount += 1
             await route.fulfill({
                 json: {
                     ...baseSession,
@@ -604,15 +587,14 @@ test("a delayed poll cannot restore a question after submission", async ({
             })
         }
     )
-    await page.route(
-        "**/api/quizzes/student/sessions/ABCD/answer",
-        async (route) => {
-            await route.fulfill({
-                json: {
-                    ...baseSession,
-                    status: "finished",
-                    answered_count: 1,
-                },
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
+        (socket) => {
+            socket.onMessage((message) => {
+                expect(JSON.parse(String(message))).toEqual({
+                    token: "participant-token",
+                })
+                resolveSocket(socket)
             })
         }
     )
@@ -623,14 +605,17 @@ test("a delayed poll cannot restore a question after submission", async ({
             name: "Which state should remain visible?",
         })
     ).toBeVisible()
-    await pollStarted
-    await page.getByLabel("The completed state").check()
-    await page.getByRole("button", { name: "Submit my answer" }).click()
-    await expect(
-        page.getByText("The quiz is over. Thank you for your participation!")
-    ).toBeVisible()
-
-    releasePoll()
+    const socket = await socketReady
+    await socket.send(
+        JSON.stringify({
+            type: "session",
+            data: {
+                ...baseSession,
+                status: "finished",
+                answered_count: 1,
+            },
+        })
+    )
     await expect(
         page.getByText("The quiz is over. Thank you for your participation!")
     ).toBeVisible()
@@ -639,6 +624,7 @@ test("a delayed poll cannot restore a question after submission", async ({
             name: "Which state should remain visible?",
         })
     ).toHaveCount(0)
+    expect(stateRequestCount).toBeLessThanOrEqual(2)
 })
 
 test("student can submit a written answer", async ({ page }) => {

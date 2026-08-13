@@ -115,6 +115,24 @@ export function clearSessionTokens() {
     storeRefreshProof(null)
 }
 
+export async function getLiveAccessToken(
+    forceRefresh = false
+): Promise<string | null> {
+    if ((forceRefresh || !accessToken) && !(await refreshAccessToken()))
+        return null
+    return accessToken
+}
+
+export function apiWebSocketUrl(path: string): string {
+    const base = new URL(
+        API_URL || window.location.origin,
+        window.location.origin
+    )
+    const url = new URL(path, base)
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+    return url.toString()
+}
+
 export function refreshProofHeaders(): HeadersInit {
     return refreshProof ? { "X-Refresh-Proof": refreshProof } : {}
 }

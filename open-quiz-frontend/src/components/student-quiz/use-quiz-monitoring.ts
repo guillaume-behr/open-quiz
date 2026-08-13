@@ -19,7 +19,9 @@ export function useQuizMonitoring(
     const wasMonitoredFullscreen = useRef(false)
     const lastViolationAt = useRef(0)
     const monitoredJoinCode =
-        session?.status === "in_progress" ? session.join_code : undefined
+        session?.status === "in_progress" && session.question
+            ? session.join_code
+            : undefined
 
     useEffect(() => {
         const fullscreenChanged = () => {
