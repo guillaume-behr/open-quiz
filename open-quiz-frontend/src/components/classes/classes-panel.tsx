@@ -439,14 +439,13 @@ export function ClassesPanel({
                 @page { size: A4 portrait; margin: 0; }
                 * { box-sizing: border-box; }
                 body { margin: 0; color: #111; font-family: Arial, sans-serif; }
-                main { display: grid; width: 210mm; min-height: 297mm; padding: 7mm; grid-template-columns: repeat(2, 1fr); }
-                article { min-height: 39mm; padding: 5mm 6mm; border-right: 1px dashed #777; border-bottom: 1px dashed #777; break-inside: avoid; }
-                article:nth-child(2n) { border-right: 0; }
-                .class { margin: 0 0 2mm; color: #555; font-size: 9pt; }
-                .name { margin: 0 0 3mm; font-size: 13pt; font-weight: 700; }
-                dl { display: grid; grid-template-columns: auto 1fr; gap: 1.5mm 3mm; margin: 0; font-size: 10pt; }
+                main { display: grid; width: 210mm; min-height: 297mm; padding: 6mm; grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: start; gap: 2mm; }
+                article { min-width: 0; min-height: 31mm; padding: 3mm; border: 1px dashed #777; break-inside: avoid; }
+                .class { margin: 0 0 1.5mm; color: #555; font-size: 8pt; }
+                .name { margin: 0 0 2mm; font-size: 11pt; font-weight: 700; overflow-wrap: anywhere; }
+                dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1mm 2mm; margin: 0; font-size: 8.5pt; }
                 dt { color: #555; }
-                dd { margin: 0; font-family: monospace; font-size: 11pt; font-weight: 700; overflow-wrap: anywhere; }
+                dd { margin: 0; font-family: monospace; font-size: 9pt; font-weight: 700; overflow-wrap: anywhere; }
                 .empty { grid-column: 1 / -1; padding: 10mm; text-align: center; }
             `
             document.head.append(style)
