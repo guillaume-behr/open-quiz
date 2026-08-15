@@ -72,6 +72,19 @@ export function ClassFormDialog({
             <form onSubmit={onSubmit}>
                 <FieldGroup>
                     <div className="grid items-start gap-4 md:grid-cols-2">
+                        <GradeLevelField
+                            id="class-grade"
+                            value={gradeLevel}
+                            levels={gradeLevels}
+                            newValue={newGradeLevel}
+                            isAdding={isAddingGradeLevel}
+                            disabled={isBusy}
+                            onChange={onGradeLevelChange}
+                            onNewValueChange={onNewGradeLevelChange}
+                            onAddingChange={onAddingGradeLevelChange}
+                            onDelete={onDeleteGradeLevel}
+                            onAdd={onAddGradeLevel}
+                        />
                         <Field>
                             <FieldLabel htmlFor="class-name">
                                 {t("class-name")}
@@ -100,19 +113,6 @@ export function ClassFormDialog({
                                 ))}
                             </datalist>
                         </Field>
-                        <GradeLevelField
-                            id="class-grade"
-                            value={gradeLevel}
-                            levels={gradeLevels}
-                            newValue={newGradeLevel}
-                            isAdding={isAddingGradeLevel}
-                            disabled={isBusy}
-                            onChange={onGradeLevelChange}
-                            onNewValueChange={onNewGradeLevelChange}
-                            onAddingChange={onAddingGradeLevelChange}
-                            onDelete={onDeleteGradeLevel}
-                            onAdd={onAddGradeLevel}
-                        />
                     </div>
                     {editingClass && studentManagement}
                     {error && <FieldError>{error}</FieldError>}
