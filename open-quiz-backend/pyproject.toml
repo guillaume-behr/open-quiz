@@ -18,7 +18,7 @@ dependencies = [
     "pyjwt>=2.13.0",
     "pyotp>=2.10.0",
     "python-dotenv>=1.2.2",
-    "sqlalchemy>=2.0.51",
+    "sqlalchemy>=2.0.52",
 ]
 
 [dependency-groups]
