@@ -757,7 +757,7 @@ test("student can submit a written answer", async ({ page }) => {
         page.getByText("The quiz is over. Thank you for your participation!")
     ).toBeVisible()
     await expect(
-        page.locator("main").getByRole("button", { name: "Join another quiz" })
+        page.locator("main").getByRole("button", { name: "Back to home" })
     ).toBeVisible()
     await expect(
         page

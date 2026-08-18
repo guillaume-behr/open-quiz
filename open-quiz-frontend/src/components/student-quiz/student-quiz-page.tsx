@@ -235,7 +235,7 @@ function QuizStatus({
                     size="lg"
                     onClick={onReturnHome}
                 >
-                    {t("join-another-quiz")}
+                    {t("back-home")}
                 </Button>
             </div>
         )
