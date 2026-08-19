@@ -39,11 +39,13 @@
         file_server
     }
 
-    handle /theme-init.js /favicon.svg {
+    @theme_favicon path /theme-init.js /favicon.svg
+    handle @theme_favicon {
         file_server
     }
 
-    handle /locales/* /pyodide/* {
+    @locales_pyodide path /locales/* /pyodide/*
+    handle @locales_pyodide {
         file_server
     }
 
