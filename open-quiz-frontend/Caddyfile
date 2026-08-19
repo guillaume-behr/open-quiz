@@ -35,6 +35,18 @@
     @fresh_content path / /index.html /locales/*
     header @fresh_content Cache-Control "no-cache"
 
+    handle /assets/* {
+        file_server
+    }
+
+    handle /theme-init.js /favicon.svg {
+        file_server
+    }
+
+    handle /locales/* /pyodide/* {
+        file_server
+    }
+
     handle {
         try_files {path} /index.html
         file_server

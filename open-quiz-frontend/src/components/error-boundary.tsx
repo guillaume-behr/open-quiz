@@ -8,6 +8,26 @@ type ErrorBoundaryState = {
     hasError: boolean
 }
 
+const MODULE_RELOAD_STORAGE_KEY = "open-quiz-module-reload-at"
+const MODULE_RELOAD_COOLDOWN_MS = 60_000
+const MODULE_LOAD_ERROR_PATTERN =
+    /dynamically imported module|MIME type|Failed to fetch dynamically/i
+
+function isModuleLoadError(error: unknown): boolean {
+    return (
+        error instanceof Error && MODULE_LOAD_ERROR_PATTERN.test(error.message)
+    )
+}
+
+function reloadForStaleBuild(): void {
+    const lastReload = Number(
+        window.sessionStorage.getItem(MODULE_RELOAD_STORAGE_KEY) ?? 0
+    )
+    if (Date.now() - lastReload < MODULE_RELOAD_COOLDOWN_MS) return
+    window.sessionStorage.setItem(MODULE_RELOAD_STORAGE_KEY, String(Date.now()))
+    window.location.reload()
+}
+
 class ErrorBoundary extends Component<
     { children: ReactNode },
     ErrorBoundaryState
@@ -20,6 +40,12 @@ class ErrorBoundary extends Component<
 
     componentDidCatch(error: Error, info: ErrorInfo) {
         console.error("Uncaught application error", error, info.componentStack)
+        if (isModuleLoadError(error)) {
+            // Stale tab across a deploy: the server no longer serves the
+            // hashed assets this page requested. A fresh load picks up the
+            // current build.
+            reloadForStaleBuild()
+        }
     }
 
     render() {
