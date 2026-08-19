@@ -83,6 +83,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const [isQuestionBankCreationOpen, setIsQuestionBankCreationOpen] =
         useState(false)
     const [isQuizCreationOpen, setIsQuizCreationOpen] = useState(false)
+    const [isMakeupCreationOpen, setIsMakeupCreationOpen] = useState(false)
     const [isClassCreationOpen, setIsClassCreationOpen] = useState(false)
     const [isStudentCreationOpen, setIsStudentCreationOpen] = useState(false)
     const [isResultsExportOpen, setIsResultsExportOpen] = useState(false)
@@ -299,6 +300,15 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                             {t("create-exam-quiz")}
                         </Button>
                     )}
+                    {activeSection === "makeup" && (
+                        <Button
+                            type="button"
+                            onClick={() => setIsMakeupCreationOpen(true)}
+                        >
+                            <Plus />
+                            {t("makeup-create")}
+                        </Button>
+                    )}
                     {activeSection === "results" && (
                         <Button
                             type="button"
@@ -343,7 +353,12 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                     onDeleteGradeLevel={handleDeleteGradeLevel}
                 />
             )}
-            {activeSection === "makeup" && <MakeupSessionsPanel />}
+            {activeSection === "makeup" && (
+                <MakeupSessionsPanel
+                    isCreateDialogOpen={isMakeupCreationOpen}
+                    onCreateDialogOpenChange={setIsMakeupCreationOpen}
+                />
+            )}
             {activeSection === "training-quizzes" && (
                 <ClassTrainingBanksPanel />
             )}

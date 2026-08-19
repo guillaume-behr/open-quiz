@@ -8,13 +8,24 @@ import {
 import type { MakeupSession, Quiz, StudentClass } from "@/api/types"
 import { connectLiveUpdates } from "@/lib/live-updates"
 import { formatClassName } from "@/lib/utils"
+import { DialogFormActions } from "@/components/forms/dialog-form-actions"
 import { Button } from "@/components/ui/button"
+import { Dialog } from "@/components/ui/dialog"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { useEffect, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 
-export function MakeupSessionsPanel() {
+type MakeupSessionsPanelProps = {
+    isCreateDialogOpen: boolean
+    onCreateDialogOpenChange: (open: boolean) => void
+}
+
+export function MakeupSessionsPanel({
+    isCreateDialogOpen,
+    onCreateDialogOpenChange,
+}: MakeupSessionsPanelProps) {
     const { t } = useTranslation()
     const [classes, setClasses] = useState<StudentClass[]>([])
     const [quizOptions, setQuizOptions] = useState<Quiz[]>([])
@@ -65,6 +76,19 @@ export function MakeupSessionsPanel() {
         })
     }, [t])
 
+    function resetCreateForm() {
+        setClassId("")
+        setQuizIds([])
+        setQuizSearch("")
+        setQuizOptions([])
+        setError(null)
+    }
+
+    function closeCreateDialog() {
+        onCreateDialogOpenChange(false)
+        resetCreateForm()
+    }
+
     async function create(event: FormEvent) {
         event.preventDefault()
         if (!classId || !quizIds.length) return
@@ -79,7 +103,7 @@ export function MakeupSessionsPanel() {
                       )
                     : [created, ...current]
             )
-            setQuizIds([])
+            closeCreateDialog()
         } catch {
             setError(t("makeup-create-error"))
         } finally {
@@ -125,107 +149,119 @@ export function MakeupSessionsPanel() {
                     {error}
                 </p>
             )}
-            <form
-                onSubmit={create}
-                className="w-full max-w-md rounded-2xl border bg-card p-5"
+            <Dialog
+                open={isCreateDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open && !busy) closeCreateDialog()
+                }}
+                title={t("makeup-create")}
+                description={t("makeup-professor-help")}
+                size="md"
             >
-                <h2 className="text-xl font-bold">{t("makeup-create")}</h2>
-                <div className="mt-4 grid gap-4">
-                    <label className="grid max-w-md gap-1 text-sm font-medium">
-                        {t("class-name")}
-                        <select
-                            className={NATIVE_SELECT_CLASS_NAME}
-                            value={classId}
-                            onChange={(event) => {
-                                setClassId(event.target.value)
-                                setQuizIds([])
-                                setQuizSearch("")
-                                setQuizOptions([])
-                            }}
-                            required
-                        >
-                            <option value="">{t("select-class")}</option>
-                            {classes.map((item) => (
-                                <option key={item.id} value={item.id}>
-                                    {formatClassName(
-                                        item.grade_level,
-                                        item.name
-                                    )}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                    {classId && (
-                        <fieldset className="grid gap-2">
-                            <legend className="mb-2 text-sm font-medium">
-                                {t("makeup-authorized-quizzes")}
-                            </legend>
-                            <label className="grid max-w-md gap-1 text-sm">
-                                {t("search")}
-                                <Input
-                                    value={quizSearch}
-                                    placeholder={t("search-quiz")}
-                                    onChange={(event) =>
-                                        setQuizSearch(event.target.value)
-                                    }
-                                />
-                            </label>
-                            {quizOptions.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                    {t("makeup-no-eligible-quizzes")}
-                                </p>
-                            ) : (
-                                filteredQuizOptions.map((quiz) => (
-                                    <label
-                                        key={quiz.id}
-                                        className="flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50"
-                                    >
-                                        <span className="flex items-center gap-3">
-                                            <input
-                                                type="checkbox"
-                                                className="accent-primary"
-                                                checked={quizIds.includes(
-                                                    quiz.id
-                                                )}
-                                                onChange={(event) =>
-                                                    setQuizIds((current) =>
-                                                        event.target.checked
-                                                            ? [
-                                                                  ...current,
-                                                                  quiz.id,
-                                                              ]
-                                                            : current.filter(
-                                                                  (id) =>
-                                                                      id !==
-                                                                      quiz.id
-                                                              )
-                                                    )
-                                                }
-                                            />
-                                            <span className="font-medium">
-                                                {quiz.title}
+                <form onSubmit={create}>
+                    <FieldGroup>
+                        <Field>
+                            <FieldLabel htmlFor="makeup-class">
+                                {t("class-name")}
+                            </FieldLabel>
+                            <select
+                                id="makeup-class"
+                                className={NATIVE_SELECT_CLASS_NAME}
+                                value={classId}
+                                onChange={(event) => {
+                                    setClassId(event.target.value)
+                                    setQuizIds([])
+                                    setQuizSearch("")
+                                    setQuizOptions([])
+                                }}
+                                required
+                            >
+                                <option value="">{t("select-class")}</option>
+                                {classes.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                        {formatClassName(
+                                            item.grade_level,
+                                            item.name
+                                        )}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        {classId && (
+                            <fieldset className="grid gap-2">
+                                <legend className="mb-2 text-sm font-medium">
+                                    {t("makeup-authorized-quizzes")}
+                                </legend>
+                                <Field>
+                                    <FieldLabel htmlFor="makeup-quiz-search">
+                                        {t("search")}
+                                    </FieldLabel>
+                                    <Input
+                                        id="makeup-quiz-search"
+                                        value={quizSearch}
+                                        placeholder={t("search-quiz")}
+                                        onChange={(event) =>
+                                            setQuizSearch(event.target.value)
+                                        }
+                                    />
+                                </Field>
+                                {quizOptions.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {t("makeup-no-eligible-quizzes")}
+                                    </p>
+                                ) : (
+                                    filteredQuizOptions.map((quiz) => (
+                                        <label
+                                            key={quiz.id}
+                                            className="flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50"
+                                        >
+                                            <span className="flex items-center gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    className="accent-primary"
+                                                    checked={quizIds.includes(
+                                                        quiz.id
+                                                    )}
+                                                    onChange={(event) =>
+                                                        setQuizIds((current) =>
+                                                            event.target.checked
+                                                                ? [
+                                                                      ...current,
+                                                                      quiz.id,
+                                                                  ]
+                                                                : current.filter(
+                                                                      (id) =>
+                                                                          id !==
+                                                                          quiz.id
+                                                                  )
+                                                        )
+                                                    }
+                                                />
+                                                <span className="font-medium">
+                                                    {quiz.title}
+                                                </span>
                                             </span>
-                                        </span>
-                                        <span className="text-muted-foreground">
-                                            {Math.round(
-                                                quiz.duration_seconds / 60
-                                            )}{" "}
-                                            min
-                                        </span>
-                                    </label>
-                                ))
-                            )}
-                        </fieldset>
-                    )}
-                    <Button
-                        type="submit"
-                        className="w-full max-w-md"
-                        disabled={busy || !classId || !quizIds.length}
-                    >
-                        {t("makeup-launch")}
-                    </Button>
-                </div>
-            </form>
+                                            <span className="text-muted-foreground">
+                                                {Math.round(
+                                                    quiz.duration_seconds / 60
+                                                )}{" "}
+                                                min
+                                            </span>
+                                        </label>
+                                    ))
+                                )}
+                            </fieldset>
+                        )}
+                        <DialogFormActions
+                            isBusy={busy}
+                            isEditing={false}
+                            submitLabel={t("makeup-launch")}
+                            submitDisabled={!classId || !quizIds.length}
+                            onClose={closeCreateDialog}
+                        />
+                    </FieldGroup>
+                </form>
+            </Dialog>
             <div
                 key={sessions.map((session) => session.id).join(",")}
                 className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
