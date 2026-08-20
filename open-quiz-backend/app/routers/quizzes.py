@@ -34,7 +34,7 @@ from starlette.requests import HTTPConnection
 from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser, authenticated_user_from_token
-from app.grading import compute_final_scores
+from app.grading import compute_final_scores, selected_choice_score
 from app.live_quiz import (
     active_quiz_sessions_topic,
     makeup_sessions_topic,
@@ -1318,11 +1318,19 @@ def student_question_response(
         ).digest()
     )
     code = session.get(QuestionCode, question.id)
+    public_answer_mode = question.answer_mode
+    if not question.answer_mode_disclosed and question.answer_mode in {
+        "single",
+        "multiple",
+    }:
+        # Hidden choice modes must have the same API and control shape. The
+        # server still validates and grades against the real stored mode.
+        public_answer_mode = "multiple"
     return StudentQuizQuestionResponse(
         id=question.id,
         prompt=question.prompt,
         difficulty=question.difficulty,
-        answer_mode=question.answer_mode,
+        answer_mode=public_answer_mode,
         answer_mode_disclosed=question.answer_mode_disclosed,
         response_language=question.response_language,
         allow_code_execution=question.allow_code_execution,
@@ -1487,10 +1495,10 @@ def training_result(
             if isinstance(answer_data, dict)
             else []
         )
-        score += sum(
-            choice.points
-            for choice in choices
-            if choice.id in selected_ids and choice.points >= 0
+        score += selected_choice_score(
+            choices,
+            selected_ids,
+            allow_negative_points=False,
         )
     return round(score, 2), round(maximum, 2), pending
 
@@ -2919,11 +2927,35 @@ def update_class_training_question_banks(
     ]
 
 
+def active_exam_bank_ids_for_class(class_id: int, session: DbSession) -> set[int]:
+    return set(
+        session.scalars(
+            select(QuizQuestionBank.question_bank_id)
+            .join(
+                QuizSession,
+                QuizSession.quiz_id == QuizQuestionBank.quiz_id,
+            )
+            .where(
+                QuizSession.class_id == class_id,
+                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
+            )
+        )
+    )
+
+
 @router.get("/training", response_model=list[QuestionBankResponse])
 def list_student_training_question_banks(
     session: DbSession,
     student: StudentAccount = Depends(current_student),
 ) -> list[QuestionBankResponse]:
+    memberships = list(
+        session.scalars(select(Student).where(Student.account_id == student.id))
+    )
+    blocked_bank_ids = {
+        bank_id
+        for membership in memberships
+        for bank_id in active_exam_bank_ids_for_class(membership.class_id, session)
+    }
     bank_ids = list(
         session.scalars(
             select(ClassTrainingQuestionBank.question_bank_id)
@@ -2936,6 +2968,7 @@ def list_student_training_question_banks(
             .where(
                 Student.account_id == student.id,
                 QuestionBank.grade_level == StudentClass.grade_level,
+                ~ClassTrainingQuestionBank.question_bank_id.in_(blocked_bank_ids),
             )
         )
     )
@@ -3009,6 +3042,8 @@ def start_training_quiz(
             detail="L’élève doit être affecté à une classe",
         )
     class_student, student_class = membership
+    if question_bank_id in active_exam_bank_ids_for_class(student_class.id, session):
+        raise HTTPException(status_code=404, detail="Entraînement introuvable")
     assigned = session.execute(
         select(QuestionBank, ClassTrainingQuestionBank.question_count)
         .join(
@@ -3735,6 +3770,29 @@ def launch_quiz(
             status_code=status.HTTP_409_CONFLICT,
             detail="La classe doit contenir au moins un élève",
         )
+    exam_bank_ids = set(
+        session.scalars(
+            select(QuizQuestionBank.question_bank_id).where(
+                QuizQuestionBank.quiz_id == quiz.id
+            )
+        )
+    )
+    active_training_ids = list(
+        session.scalars(
+            select(QuizSession.id)
+            .join(
+                QuizParticipant,
+                QuizParticipant.session_id == QuizSession.id,
+            )
+            .join(Student, Student.id == QuizParticipant.student_id)
+            .where(
+                Student.class_id == student_class.id,
+                QuizSession.training_question_bank_id.in_(exam_bank_ids),
+                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
+            )
+        )
+    )
+    delete_quiz_session_records(active_training_ids, session)
     quiz_session = QuizSession(
         quiz_id=quiz.id,
         quiz_title=quiz.title,
@@ -4042,7 +4100,9 @@ def submit_student_answer(
             )
         selected_ids = list(dict.fromkeys(payload.selected_choice_ids or []))
         if payload.written_answer is not None or (
-            question.answer_mode == "single" and len(selected_ids) != 1
+            question.answer_mode == "single"
+            and question.answer_mode_disclosed
+            and len(selected_ids) != 1
         ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

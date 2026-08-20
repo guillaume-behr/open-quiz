@@ -429,6 +429,81 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
     await expect(page.getByText("Response recorded")).toBeVisible()
 })
 
+test("hidden choice mode uses a generic multi-select control", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+    })
+    const question = {
+        id: 42,
+        prompt: "Select the answer",
+        difficulty: "easy",
+        answer_mode: "multiple",
+        answer_mode_disclosed: false,
+        response_language: null,
+        has_image: false,
+        code_language: null,
+        code_content: null,
+        choices: [
+            {
+                id: 103,
+                label: "First option",
+                position: 0,
+                has_image: false,
+                code_language: null,
+                code_content: null,
+            },
+            {
+                id: 104,
+                label: "Second option",
+                position: 1,
+                has_image: false,
+                code_language: null,
+                code_content: null,
+            },
+        ],
+    }
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            json: {
+                ...baseSession,
+                status: "in_progress",
+                question_number: 1,
+                question,
+                participant_token: "participant-token",
+            },
+        })
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            json: {
+                ...baseSession,
+                status: "in_progress",
+                question_number: 1,
+                question,
+            },
+        })
+    })
+
+    await joinExamViaDashboard(page, "ABCD")
+
+    await expect(page.getByText("Answer type hidden")).toBeVisible()
+    await expect(page.getByText("Multiple choice")).toHaveCount(0)
+    await expect(page.getByText("Single choice")).toHaveCount(0)
+    await expect(page.getByLabel("First option")).toHaveAttribute(
+        "type",
+        "checkbox"
+    )
+    await expect(page.getByLabel("Second option")).toHaveAttribute(
+        "type",
+        "checkbox"
+    )
+})
+
 test("student translates a quiz and monitoring reports leaving the viewport", async ({
     page,
 }) => {
@@ -531,8 +606,8 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
         .poll(() => violations)
         .toEqual([{ event_type: "pointer_exit" }])
 
-    // Normal editor operations are allowed. Only an unusually large paste is
-    // reported, and different signals do not suppress one another.
+    // Clipboard and context-menu signals are reported, and different signals
+    // do not suppress one another.
     await page.locator("body").dispatchEvent("copy")
     await page.locator("body").evaluate((element) => {
         const clipboard = new DataTransfer()
@@ -544,23 +619,14 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
             })
         )
     })
-    await page.waitForTimeout(100)
-    expect(violations).toEqual([{ event_type: "pointer_exit" }])
-    await page.locator("body").evaluate((element) => {
-        const clipboard = new DataTransfer()
-        clipboard.setData("text/plain", "x".repeat(500))
-        element.dispatchEvent(
-            new ClipboardEvent("paste", {
-                bubbles: true,
-                clipboardData: clipboard,
-            })
-        )
-    })
+    await page.locator("body").dispatchEvent("contextmenu")
     await expect
         .poll(() => violations)
         .toEqual([
             { event_type: "pointer_exit" },
+            { event_type: "copy_attempt" },
             { event_type: "paste_attempt" },
+            { event_type: "context_menu" },
         ])
 })
 

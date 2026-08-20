@@ -12,6 +12,27 @@ from app.models import (
 )
 
 
+def selected_choice_score(
+    choices: list[QuestionChoice],
+    selected_ids: set[int],
+    *,
+    allow_negative_points: bool,
+) -> float:
+    selected = [choice for choice in choices if choice.id in selected_ids]
+    if not allow_negative_points and any(not choice.is_correct for choice in selected):
+        # Otherwise selecting every option earns every positive point while
+        # wrong zero-point options are silently ignored.
+        return 0.0
+    return round(
+        sum(
+            choice.points
+            for choice in selected
+            if allow_negative_points or choice.points >= 0
+        ),
+        2,
+    )
+
+
 def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
     answers = list(
         session.scalars(
@@ -50,11 +71,9 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
                 if isinstance(submitted, dict)
                 else []
             )
-            score = sum(
-                choice.points
-                for choice in choices
-                if choice.id in selected_ids
-                and (quiz_session.allow_negative_points or choice.points >= 0)
+            answer.score = selected_choice_score(
+                choices,
+                selected_ids,
+                allow_negative_points=bool(quiz_session.allow_negative_points),
             )
-            answer.score = round(score, 2)
             answer.is_graded = True

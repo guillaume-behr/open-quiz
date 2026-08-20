@@ -25,6 +25,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.config import Settings, secure_private_file
 from app.database import postgres_url
+from app.grading import selected_choice_score
 from app.live_quiz import LiveQuizHub
 from app.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
 from app.models import (
@@ -334,6 +335,25 @@ def test_question_batch_import_has_a_fixed_question_limit() -> None:
                 "version": 1,
                 "question_bank": {"grade_level": "2de", "chapter": "Limits"},
                 "questions": [question] * 501,
+            }
+        )
+
+
+def test_written_answer_mode_cannot_claim_to_be_hidden() -> None:
+    with pytest.raises(ValidationError):
+        QuestionBatchImport.model_validate(
+            {
+                "version": 1,
+                "question_bank": {"grade_level": "2de", "chapter": "Hidden"},
+                "questions": [
+                    {
+                        "prompt": "Explain",
+                        "difficulty": "easy",
+                        "answer_mode": "written",
+                        "answer_mode_disclosed": False,
+                        "choices": [{"label": "Expected", "is_correct": True}],
+                    }
+                ],
             }
         )
 
@@ -1680,6 +1700,11 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             },
         )
         assert replacement_question.status_code == 201
+        pre_exam_training = client.post(
+            f"/api/quizzes/training/{bank['id']}/start",
+            headers=student_headers,
+        )
+        assert pre_exam_training.status_code == 201
         exam = client.post(
             "/api/quizzes",
             headers=teacher_headers,
@@ -1698,6 +1723,22 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             json={"class_id": student_class["id"]},
         )
         assert launched_exam.status_code == 201
+        assert (
+            client.get(
+                "/api/quizzes/student/sessions/"
+                f"{pre_exam_training.json()['join_code']}",
+                headers={"X-Quiz-Token": pre_exam_training.json()["participant_token"]},
+            ).status_code
+            == 401
+        )
+        assert client.get("/api/quizzes/training", headers=student_headers).json() == []
+        assert (
+            client.post(
+                f"/api/quizzes/training/{bank['id']}/start",
+                headers=student_headers,
+            ).status_code
+            == 404
+        )
         joined_exam = client.post(
             "/api/quizzes/join",
             headers=student_headers,
@@ -4855,6 +4896,101 @@ def test_single_choice_maximum_uses_the_best_selectable_option(tmp_path: Path) -
         participant = result.json()["participants"][0]
         assert participant["score"] == 2
         assert participant["maximum_score"] == 2
+
+
+def test_selecting_wrong_choices_cancels_non_negative_partial_credit() -> None:
+    choices = [
+        QuestionChoice(id=1, is_correct=True, points=1.5),
+        QuestionChoice(id=2, is_correct=True, points=0.5),
+        QuestionChoice(id=3, is_correct=False, points=-1),
+    ]
+
+    assert (
+        selected_choice_score(
+            choices,
+            {1},
+            allow_negative_points=False,
+        )
+        == 1.5
+    )
+    assert (
+        selected_choice_score(
+            choices,
+            {1, 2, 3},
+            allow_negative_points=False,
+        )
+        == 0
+    )
+    assert (
+        selected_choice_score(
+            choices,
+            {1, 2, 3},
+            allow_negative_points=True,
+        )
+        == 1
+    )
+
+
+def test_hidden_single_choice_mode_is_not_disclosed_or_probeable(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "hidden-answer-mode")) as client:
+        environment = exam_environment(client)
+        question = environment["question"]
+        hidden = client.post(
+            f"/api/question-banks/questions/{question['id']}/update",
+            headers=environment["teacher_headers"],
+            data={
+                "payload": json.dumps(
+                    {
+                        "prompt": question["prompt"],
+                        "difficulty": question["difficulty"],
+                        "answer_mode": "single",
+                        "answer_mode_disclosed": False,
+                        "choices": [
+                            {
+                                "id": choice["id"],
+                                "label": choice["label"],
+                                "is_correct": choice["is_correct"],
+                                "points": choice["points"],
+                            }
+                            for choice in question["choices"]
+                        ],
+                    }
+                )
+            },
+        )
+        assert hidden.status_code == 200
+        environment["question"] = hidden.json()
+        launched, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+
+        student_state_url = f"/api/quizzes/student/sessions/{launched['join_code']}"
+        state = client.get(student_state_url, headers=participant_headers)
+        assert state.status_code == 200
+        assert state.json()["question"]["answer_mode_disclosed"] is False
+        assert state.json()["question"]["answer_mode"] == "multiple"
+
+        all_choice_ids = [
+            choice["id"] for choice in state.json()["question"]["choices"]
+        ]
+        submitted = client.post(
+            f"{student_state_url}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": all_choice_ids},
+        )
+        assert submitted.status_code == 200
+        participant = client.get(
+            f"/api/quizzes/sessions/{launched['id']}",
+            headers=environment["teacher_headers"],
+        ).json()["participants"][0]
+        assert participant["score"] == 0
 
 
 def test_answer_points_are_summed_and_negative_points_follow_quiz_setting(

@@ -452,6 +452,10 @@ class QuestionCreate(BaseModel):
             raise ValueError(
                 "Une question rédactionnelle nécessite une réponse attendue"
             )
+        if self.answer_mode == "written" and not self.answer_mode_disclosed:
+            raise ValueError(
+                "Le type d’une réponse rédactionnelle ne peut pas être masqué"
+            )
         if self.answer_mode != "written" and self.response_language is not None:
             raise ValueError(
                 "Un langage de réponse est réservé aux questions rédactionnelles"

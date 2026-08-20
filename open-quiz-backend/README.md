@@ -189,7 +189,10 @@ mécanisme partagé et tester le comportement en charge.
 - un examen peut partager le même tirage entre tous les élèves ou attribuer un
   tirage individuel à chacun ;
 - chaque proposition porte son propre nombre de points et le quiz décide si les
-  valeurs négatives sont appliquées ;
+  valeurs négatives sont appliquées ; sans points négatifs, sélectionner aussi
+  une proposition incorrecte annule les points de la question ;
+- une banque d’entraînement utilisée par un examen actif devient indisponible
+  pour la classe jusqu’à la fin ou l’annulation de cet examen ;
 - les questions rédactionnelles restent en attente d’une correction manuelle ;
 - les questions, leur ordre et le barème sont figés dans la session pour
   préserver les résultats historiques.

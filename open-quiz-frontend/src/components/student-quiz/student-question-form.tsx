@@ -274,9 +274,11 @@ function ChoiceAnswers({
                 className="mt-1 mb-3 text-sm text-muted-foreground"
             >
                 {t(
-                    question.answer_mode === "single"
-                        ? "single-choice"
-                        : "multiple-choice"
+                    !question.answer_mode_disclosed
+                        ? "answer-mode-not-disclosed"
+                        : question.answer_mode === "single"
+                          ? "single-choice"
+                          : "multiple-choice"
                 )}
             </p>
             <div className="grid items-stretch gap-3 sm:grid-cols-2">
@@ -294,6 +296,7 @@ function ChoiceAnswers({
                             <input
                                 className="mt-0.5 size-5 shrink-0 accent-primary"
                                 type={
+                                    question.answer_mode_disclosed &&
                                     question.answer_mode === "single"
                                         ? "radio"
                                         : "checkbox"

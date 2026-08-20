@@ -6,6 +6,15 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Sécurité et corrections
 
+- les questions à choix multiples sans points négatifs n’accordent plus de
+  points lorsqu’une proposition incorrecte est également sélectionnée ;
+- un type de réponse masqué utilise désormais la même représentation générique
+  côté API et interface pour les choix simples et multiples ;
+- les banques utilisées par un examen actif sont temporairement retirées des
+  entraînements de la classe, et les entraînements correspondants sont révoqués
+  au lancement ;
+- la surveillance signale aussi les copies, collages et ouvertures du menu
+  contextuel, quelle que soit la longueur du contenu ;
 - adoption exclusive de PostgreSQL 17 dans Docker Compose ; cette transition
   repart d’une base vide et ne fournit pas de reprise historique ;
 - la limitation des signalements anonymes n'utilise plus jamais l'adresse IP :
