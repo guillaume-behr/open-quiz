@@ -1685,6 +1685,7 @@ test("teacher creates and controls a retake session", async ({ page }) => {
     const requests = await mockTeacherApi(page)
     await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Retake", exact: true }).click()
+    await expect(page.getByText("Class 8B · OLD123")).toHaveCount(0)
 
     await page.getByRole("button", { name: "New retake session" }).click()
 
@@ -1724,7 +1725,7 @@ test("teacher creates and controls a retake session", async ({ page }) => {
     await sessionCard.getByRole("button", { name: "Resume quiz" }).click()
     await expect(sessionCard.getByText("In progress")).toBeVisible()
     await sessionCard.getByRole("button", { name: "Finish quiz" }).click()
-    await expect(sessionCard.getByText("Finished")).toBeVisible()
+    await expect(sessionCard).toHaveCount(0)
 
     expect(
         requests

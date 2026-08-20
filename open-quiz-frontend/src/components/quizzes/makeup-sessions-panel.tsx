@@ -66,6 +66,10 @@ export function MakeupSessionsPanel({
               quiz.title.toLowerCase().includes(trimmedSearch)
           )
         : quizOptions
+    const activeSessions = sessions.filter(
+        (session) =>
+            session.status !== "finished" && session.status !== "cancelled"
+    )
 
     useEffect(() => {
         return connectLiveUpdates<MakeupSession[]>({
@@ -263,10 +267,10 @@ export function MakeupSessionsPanel({
                 </form>
             </Dialog>
             <div
-                key={sessions.map((session) => session.id).join(",")}
+                key={activeSessions.map((session) => session.id).join(",")}
                 className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
             >
-                {sessions.map((item) => (
+                {activeSessions.map((item) => (
                     <article
                         key={item.id}
                         className="rounded-2xl border bg-card p-5"
