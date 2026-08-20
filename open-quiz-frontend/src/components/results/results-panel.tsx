@@ -917,7 +917,10 @@ export function ResultsPanel({
                                                         selectedResult.total_questions
                                                     }
                                                 </p>
-                                                <div className="flex items-center justify-between gap-2 text-right font-bold text-primary tabular-nums md:justify-end md:whitespace-nowrap">
+                                                <div
+                                                    data-participant-score
+                                                    className="flex items-center justify-between gap-2 text-right font-bold text-primary tabular-nums md:justify-end md:whitespace-nowrap"
+                                                >
                                                     <span className="font-normal text-foreground md:hidden">
                                                         {t(
                                                             "result-score-total"

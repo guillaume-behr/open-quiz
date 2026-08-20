@@ -6,6 +6,12 @@ import { defineConfig } from "vite"
 // https://vite.dev/config/
 export default defineConfig({
     plugins: [react(), tailwindcss()],
+    // Pyodide is imported only from a Web Worker, so Vite's initial source
+    // scan does not discover it. Pre-bundle it at startup to avoid a runtime
+    // dependency-optimization reload that interrupts the first execution.
+    optimizeDeps: {
+        include: ["pyodide"],
+    },
     server: {
         proxy: {
             "/api": {

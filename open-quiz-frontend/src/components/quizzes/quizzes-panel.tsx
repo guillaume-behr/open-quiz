@@ -151,8 +151,6 @@ export function QuizzesPanel({
     const [deleteError, setDeleteError] = useState<string | null>(null)
     const previewRequestVersion = useRef(0)
     const activeSessionId = activeSession?.id
-    const activeSessionStatus = activeSession?.status
-    const isSessionMutating = isStarting || sessionAction !== null
 
     useEffect(() => {
         let isActive = true
@@ -201,7 +199,17 @@ export function QuizzesPanel({
                 path: "/api/quizzes/live/teacher/sessions",
                 getToken: getLiveAccessToken,
                 onData: (updatedSessions) => {
-                    setSessions(updatedSessions.filter(isActiveSession))
+                    const activeSessions =
+                        updatedSessions.filter(isActiveSession)
+                    setSessions(activeSessions)
+                    setActiveSession((current) => {
+                        if (!current) return null
+                        return (
+                            activeSessions.find(
+                                (session) => session.id === current.id
+                            ) ?? current
+                        )
+                    })
                     setLiveSessionsLoadFailed(false)
                 },
                 onUnavailable: () => setLiveSessionsLoadFailed(true),
@@ -210,12 +218,10 @@ export function QuizzesPanel({
     )
 
     useEffect(() => {
-        if (
-            !activeSessionId ||
-            isSessionMutating ||
-            !isActiveSessionStatus(activeSessionStatus)
-        )
-            return
+        if (!activeSessionId) return
+        // Keep one subscription for the lifetime of the dialog. Reconnecting
+        // around every Start/Pause/Resume request creates a gap exactly while
+        // the backend publishes the corresponding state change.
         return connectLiveUpdates<QuizSession>({
             path: `/api/quizzes/live/teacher/sessions/${activeSessionId}`,
             getToken: getLiveAccessToken,
@@ -239,7 +245,7 @@ export function QuizzesPanel({
             onUnavailable: () =>
                 setActiveSessionError(t("quiz-session-refresh-error")),
         })
-    }, [activeSessionId, activeSessionStatus, isSessionMutating, t])
+    }, [activeSessionId, t])
 
     const availableByDifficulty = availableQuestionCounts(
         banks,

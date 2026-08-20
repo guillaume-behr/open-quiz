@@ -286,7 +286,7 @@ function ChoiceAnswers({
                         <label
                             key={choice.id}
                             className={cn(
-                                "flex min-h-24 cursor-pointer select-none items-start gap-3 rounded-xl border bg-background p-4 shadow-xs transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50 hover:bg-primary/5",
+                                "flex min-h-24 cursor-pointer items-start gap-3 rounded-xl border bg-background p-4 shadow-xs transition-colors select-none focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 hover:border-primary/50 hover:bg-primary/5",
                                 checked &&
                                     "border-primary bg-primary/10 ring-1 ring-primary/30"
                             )}

@@ -1387,6 +1387,100 @@ test("finished quiz sessions disappear from the active quiz list", async ({
     await expect(page.getByText("Recent sessions")).toHaveCount(0)
 })
 
+test("teacher dialog tracks progress from the active sessions stream", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    const runningSession = {
+        id: 79,
+        quiz_id: 31,
+        quiz_title: "Running checkpoint",
+        class_id: 11,
+        class_name: "Class 8B",
+        join_code: "RUN079",
+        status: "in_progress",
+        participant_count: 1,
+        participants: [
+            {
+                id: 81,
+                student_identifier: "alex-8b",
+                student_display_name: "Alex Example",
+                answered_count: 0,
+                score: 0,
+                maximum_score: 10,
+                pending_manual_grading_count: 0,
+                violation_count: 0,
+                last_violation_type: null,
+                last_violation_at: null,
+                joined_at: "2026-01-06T10:00:00Z",
+            },
+        ],
+        total_questions: 10,
+        created_at: "2026-01-06T10:00:00Z",
+        started_at: "2026-01-06T10:01:00Z",
+        ends_at: "2026-01-06T10:31:00Z",
+        grades_published_at: null,
+    }
+    let resolveSessionsSocket: (socket: WebSocketRoute) => void =
+        () => undefined
+    const sessionsSocketReady = new Promise<WebSocketRoute>((resolve) => {
+        resolveSessionsSocket = resolve
+    })
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/teacher\/sessions$/,
+        (socket) => {
+            socket.onMessage(() => resolveSessionsSocket(socket))
+        }
+    )
+    // Keep the detail stream connected but silent to reproduce a missed
+    // per-session notification or reconnect gap.
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/teacher\/sessions\/79$/,
+        () => undefined
+    )
+
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Exam quizzes", exact: true })
+        .click()
+    const sessionsSocket = await sessionsSocketReady
+    await sessionsSocket.send(
+        JSON.stringify({ type: "active_sessions", data: [runningSession] })
+    )
+    await page
+        .getByRole("button", {
+            name: "Running checkpoint · Class 8B · 1",
+        })
+        .click()
+
+    const sessionDialog = page.getByRole("dialog", {
+        name: "Running checkpoint",
+    })
+    await expect(
+        sessionDialog.getByText("Progress: 0 of 10 questions")
+    ).toBeVisible()
+    await sessionsSocket.send(
+        JSON.stringify({
+            type: "active_sessions",
+            data: [
+                {
+                    ...runningSession,
+                    participants: [
+                        {
+                            ...runningSession.participants[0],
+                            answered_count: 4,
+                        },
+                    ],
+                },
+            ],
+        })
+    )
+
+    await expect(
+        sessionDialog.getByText("Progress: 4 of 10 questions")
+    ).toBeVisible()
+})
+
 test("teacher assigns existing question banks to a training class", async ({
     page,
 }) => {
@@ -1428,25 +1522,13 @@ test("teacher assigns existing question banks to a training class", async ({
 test("teacher launches and controls a live quiz session", async ({ page }) => {
     const requests = await mockTeacherApi(page)
     let resolveWaitingSocket: (socket: WebSocketRoute) => void = () => undefined
-    let resolveStartedSocket: (socket: WebSocketRoute) => void = () => undefined
     const waitingSocketReady = new Promise<WebSocketRoute>((resolve) => {
         resolveWaitingSocket = resolve
     })
-    const startedSocketReady = new Promise<WebSocketRoute>((resolve) => {
-        resolveStartedSocket = resolve
-    })
-    let authenticatedSocketCount = 0
     await page.routeWebSocket(
         /\/api\/quizzes\/live\/teacher\/sessions\/80$/,
         (socket) => {
-            socket.onMessage(() => {
-                authenticatedSocketCount += 1
-                if (authenticatedSocketCount === 1) {
-                    resolveWaitingSocket(socket)
-                } else {
-                    resolveStartedSocket(socket)
-                }
-            })
+            socket.onMessage(() => resolveWaitingSocket(socket))
         }
     )
     await page.goto("/teacher/dashboard")
@@ -1466,11 +1548,10 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
     })
     await expect(sessionDialog.getByText("LIVE80")).toBeVisible()
     await expect(sessionDialog.getByText("Alex Example")).toBeVisible()
-    await waitingSocketReady
+    const sessionSocket = await waitingSocketReady
     await sessionDialog.getByRole("button", { name: "Start quiz" }).click()
     await expect(sessionDialog.getByText("Quiz started")).toBeVisible()
-    const startedSocket = await startedSocketReady
-    await startedSocket.send(
+    await sessionSocket.send(
         JSON.stringify({
             type: "session",
             data: {
@@ -1861,11 +1942,12 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     const scoreHeading = resultDialog.getByText("Points / possible total", {
         exact: true,
     })
-    const participantScore = resultDialog
-        .locator("p")
-        .filter({ hasText: /2\s*\/\s*10\s*pts?/ })
+    const participantRow = resultDialog.locator('[data-participant-id="91"]')
+    const participantScore = participantRow.locator(
+        "[data-participant-score]"
+    )
     await expect(scoreHeading).toBeVisible()
-    await expect(participantScore).toBeVisible()
+    await expect(participantScore).toContainText(/2\s*\/\s*10\s*pts?/)
     await expect
         .poll(() =>
             resultDialog.evaluate((element) =>
@@ -1881,8 +1963,10 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     expect(participantScoreBox).not.toBeNull()
     expect(participantScoreBox!.x).toBeCloseTo(scoreHeadingBox!.x, 0)
     expect(participantScoreBox!.width).toBeCloseTo(scoreHeadingBox!.width, 0)
+    const medianGapMessage =
+        "This student's available points (10) differ from the group median (5) by at least 3 points. A different question selection may explain the difference."
     const medianGapIndicator = resultDialog.getByRole("button", {
-        name: "Available points differ from the median by at least 3 points",
+        name: medianGapMessage,
     })
     await expect(medianGapIndicator).toBeVisible()
     const medianGapIndicatorBox = await medianGapIndicator.boundingBox()
@@ -1897,11 +1981,7 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     ).toBeLessThan(participantScoreValueBox!.x)
     await medianGapIndicator.hover()
     await expect(
-        page
-            .getByRole("tooltip")
-            .getByText(
-                "Available points differ from the median by at least 3 points"
-            )
+        page.getByRole("tooltip").getByText(medianGapMessage)
     ).toBeVisible()
     await expect(
         resultDialog.getByText("alex-8b", { exact: true })
@@ -1910,7 +1990,6 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
         name: "1 to grade",
     })
     await expect(pendingGradingIndicator).toBeVisible()
-    const participantRow = resultDialog.locator('[data-participant-id="91"]')
     await expect(participantRow).toHaveClass(/bg-amber-500\/10/)
     const participantGradingStatus = participantRow.locator(
         '[data-grading-status="pending"]'
