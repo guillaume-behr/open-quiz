@@ -1,9 +1,9 @@
 import asyncio
 import json
 import os
-import sqlite3
 from base64 import b64decode, b64encode
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from hmac import new as hmac_new
@@ -14,16 +14,17 @@ from time import sleep, time
 from typing import Any
 
 import jwt
+import psycopg
 import pyotp
 import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import event, select
+from sqlalchemy import create_engine, event, inspect, select
 from starlette.websockets import WebSocketDisconnect
 
 from app.config import Settings, secure_private_file
-from app.database import legacy_difficulty_counts
+from app.database import postgres_url
 from app.live_quiz import LiveQuizHub
 from app.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
 from app.models import (
@@ -80,6 +81,11 @@ VALID_PNG = b64decode(
     "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
 )
 TEST_CLIENT_BACKEND_OPTIONS = {"use_uvloop": True} if find_spec("uvloop") else {}
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+psycopg://open_quiz_test:open-quiz-test-password@127.0.0.1:5432/open_quiz_test",
+)
+PREPARED_TEST_SCHEMAS: set[str] = set()
 STUDENT_EXAM_FORBIDDEN_ANSWER_FIELDS = {
     "correct_choice_ids",
     "correction_mode",
@@ -90,6 +96,20 @@ STUDENT_EXAM_FORBIDDEN_ANSWER_FIELDS = {
     "points",
     "score",
 }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_schemas():
+    yield
+    if not PREPARED_TEST_SCHEMAS:
+        return
+    engine = create_engine(postgres_url(TEST_DATABASE_URL))
+    try:
+        for schema in PREPARED_TEST_SCHEMAS:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+    finally:
+        engine.dispose()
 
 
 def nested_keys(value: Any) -> set[str]:
@@ -106,9 +126,31 @@ def assert_student_exam_payload_hides_answers(payload: Any) -> None:
     assert nested_keys(payload).isdisjoint(STUDENT_EXAM_FORBIDDEN_ANSWER_FIELDS)
 
 
+def database_url_for(database: Path) -> str:
+    schema = f"test_{sha256(str(database).encode()).hexdigest()[:24]}"
+    base_url = postgres_url(TEST_DATABASE_URL)
+    if schema not in PREPARED_TEST_SCHEMAS:
+        engine = create_engine(base_url)
+        with engine.begin() as connection:
+            connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+            connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        engine.dispose()
+        PREPARED_TEST_SCHEMAS.add(schema)
+    return base_url.update_query_dict(
+        {"options": f"-csearch_path={schema}"}
+    ).render_as_string(hide_password=False)
+
+
+@contextmanager
+def database_connection(database: Path):
+    url = postgres_url(database_url_for(database)).set(drivername="postgresql")
+    with psycopg.connect(url.render_as_string(hide_password=False)) as connection:
+        yield connection
+
+
 def settings_for(database: Path, **overrides: Any) -> Settings:
     values: dict[str, Any] = {
-        "database_url": f"sqlite:///{database.as_posix()}",
+        "database_url": database_url_for(database),
         "jwt_secret": JWT_SECRET,
         "totp_encryption_key": TOTP_ENCRYPTION_KEY,
         "student_credential_encryption_key": STUDENT_CREDENTIAL_ENCRYPTION_KEY,
@@ -139,32 +181,28 @@ def refresh_headers(client: TestClient, secret: str = JWT_SECRET) -> dict[str, s
 
 
 def test_health_checks_database_readiness(tmp_path: Path) -> None:
-    database = tmp_path / "health.db"
+    database = tmp_path / "health"
     with make_client(settings_for(database)) as client:
         response = client.get("/api/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert response.headers["cache-control"] == "no-store"
-    if os.name == "posix":
-        assert database.stat().st_mode & 0o077 == 0
 
 
 def test_rate_limit_expiration_has_a_supporting_index(tmp_path: Path) -> None:
-    database = tmp_path / "rate-limit-index.db"
-    with sqlite3.connect(database) as connection:
-        connection.execute(
-            "CREATE TABLE login_rate_limits ("
-            "limiter_key VARCHAR(96) PRIMARY KEY, "
-            "window_started_at INTEGER NOT NULL, attempts INTEGER NOT NULL)"
-        )
-    with make_client(settings_for(database)):
+    database = tmp_path / "rate-limit-index"
+    settings = settings_for(database)
+    with make_client(settings):
         pass
 
-    with sqlite3.connect(database) as connection:
+    engine = create_engine(postgres_url(settings.database_url))
+    try:
         indexes = {
-            row[1] for row in connection.execute("PRAGMA index_list(login_rate_limits)")
+            index["name"] for index in inspect(engine).get_indexes("login_rate_limits")
         }
+    finally:
+        engine.dispose()
     assert "ix_login_rate_limits_window_started_at" in indexes
 
 
@@ -196,7 +234,7 @@ def test_private_file_permissions_are_restricted(tmp_path: Path) -> None:
 
 def test_startup_enforces_security_data_retention(tmp_path: Path) -> None:
     settings = settings_for(
-        tmp_path / "retention.db",
+        tmp_path / "retention",
         quiz_result_retention_days=1,
         problem_report_retention_days=1,
     )
@@ -270,16 +308,16 @@ def test_startup_enforces_security_data_retention(tmp_path: Path) -> None:
     with make_client(settings):
         pass
 
-    with sqlite3.connect(tmp_path / "retention.db") as database:
-        for table in (
-            "quiz_sessions",
-            "quiz_participants",
-            "problem_reports",
-            "refresh_sessions",
-            "refresh_session_families",
-            "authentication_challenges",
+    with app.state.session_factory() as session:
+        for model in (
+            QuizSession,
+            QuizParticipant,
+            ProblemReport,
+            RefreshSession,
+            RefreshSessionFamily,
+            AuthenticationChallenge,
         ):
-            assert database.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+            assert session.query(model).count() == 0
 
 
 def test_question_batch_import_has_a_fixed_question_limit() -> None:
@@ -1369,11 +1407,11 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             ).status_code
             == 200
         )
-        with sqlite3.connect(database_path) as database:
+        with database_connection(database_path) as database:
             assert (
                 database.execute(
                     "SELECT COUNT(*) FROM class_training_question_banks "
-                    "WHERE question_bank_id = ?",
+                    "WHERE question_bank_id = %s",
                     (mutable_bank["id"],),
                 ).fetchone()[0]
                 == 0
@@ -1475,10 +1513,10 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             ).status_code
             == 204
         )
-        with sqlite3.connect(database_path) as database:
+        with database_connection(database_path) as database:
             assert (
                 database.execute(
-                    "SELECT COUNT(*) FROM quiz_sessions WHERE join_code = ?",
+                    "SELECT COUNT(*) FROM quiz_sessions WHERE join_code = %s",
                     (other_training.json()["join_code"],),
                 ).fetchone()[0]
                 == 0
@@ -1508,10 +1546,10 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             ).status_code
             == 200
         )
-        with sqlite3.connect(database_path) as database:
+        with database_connection(database_path) as database:
             assert (
                 database.execute(
-                    "SELECT COUNT(*) FROM quiz_sessions WHERE join_code = ?",
+                    "SELECT COUNT(*) FROM quiz_sessions WHERE join_code = %s",
                     (transferred_training.json()["join_code"],),
                 ).fetchone()[0]
                 == 0
@@ -1569,7 +1607,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         ).json()[0]
         assert class_after_training["completed_quiz_count"] == 0
         assert class_after_training["latest_quiz_title"] is None
-        with sqlite3.connect(database_path) as database:
+        with database_connection(database_path) as database:
             assert (
                 database.execute("SELECT COUNT(*) FROM quiz_answers").fetchone()[0] == 1
             )
@@ -1666,19 +1704,23 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             json={"join_code": launched_exam.json()["join_code"]},
         )
         assert joined_exam.status_code == 201
-        with sqlite3.connect(database_path) as database:
+        engine = create_engine(postgres_url(settings_for(database_path).database_url))
+        try:
             assert "points" not in {
-                row[1] for row in database.execute("PRAGMA table_info(questions)")
+                column["name"] for column in inspect(engine).get_columns("questions")
             }
             assert "points" not in {
-                row[1]
-                for row in database.execute("PRAGMA table_info(quiz_session_questions)")
+                column["name"]
+                for column in inspect(engine).get_columns("quiz_session_questions")
             }
+        finally:
+            engine.dispose()
+        with database_connection(database_path) as database:
             common_question_ids = {
                 row[0]
                 for row in database.execute(
                     "SELECT question_id FROM quiz_session_questions "
-                    "WHERE session_id = ?",
+                    "WHERE session_id = %s",
                     (launched_exam.json()["id"],),
                 )
             }
@@ -1686,7 +1728,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
                 row[0]
                 for row in database.execute(
                     "SELECT question_id FROM quiz_session_student_questions "
-                    "WHERE session_id = ? AND student_identifier = ? ORDER BY position",
+                    "WHERE session_id = %s AND student_identifier = %s ORDER BY position",
                     (launched_exam.json()["id"], account["identifier"]),
                 )
             ]
@@ -1705,73 +1747,6 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         )
         assert student_exam_state.status_code == 200
         assert student_exam_state.json()["question"]["id"] == student_question_ids[0]
-
-
-def test_legacy_quiz_percentages_keep_the_previous_draw_distribution() -> None:
-    assert legacy_difficulty_counts(
-        3,
-        {"easy": 50, "medium": 50, "hard": 0},
-        {"easy": 2, "medium": 1, "hard": 0},
-    ) == {"easy": 2, "medium": 1, "hard": 0}
-
-    assert legacy_difficulty_counts(
-        4,
-        {"easy": 75, "medium": 25, "hard": 0},
-        {"easy": 1, "medium": 2, "hard": 1},
-    ) == {"easy": 1, "medium": 2, "hard": 1}
-
-
-def test_legacy_quiz_migration_persists_available_difficulty_counts(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "legacy-quiz-percentages.db"
-    with make_client(settings_for(database_path)):
-        pass
-    with sqlite3.connect(database_path) as database:
-        owner_id = database.execute("SELECT id FROM users LIMIT 1").fetchone()[0]
-        database.execute(
-            "INSERT INTO question_banks "
-            "(id, owner_id, grade_level, chapter, created_at) "
-            "VALUES (1, ?, '3e', 'Legacy', CURRENT_TIMESTAMP)",
-            (owner_id,),
-        )
-        database.executemany(
-            "INSERT INTO questions "
-            "(id, question_bank_id, prompt, difficulty, answer_mode, "
-            "answer_mode_disclosed, correction_mode, created_at) "
-            "VALUES (?, 1, ?, ?, 'single', 1, 'automatic', CURRENT_TIMESTAMP)",
-            [
-                (1, "Easy one", "easy"),
-                (2, "Easy two", "easy"),
-                (3, "Medium one", "medium"),
-            ],
-        )
-        database.execute("DROP TABLE quizzes")
-        database.execute(
-            "CREATE TABLE quizzes ("
-            "id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL, title TEXT NOT NULL, "
-            "question_count INTEGER NOT NULL, easy_percentage INTEGER NOT NULL, "
-            "medium_percentage INTEGER NOT NULL, hard_percentage INTEGER NOT NULL, "
-            "created_at DATETIME NOT NULL)"
-        )
-        database.execute(
-            "INSERT INTO quizzes VALUES "
-            "(1, ?, 'Legacy quiz', 3, 50, 50, 0, CURRENT_TIMESTAMP)",
-            (owner_id,),
-        )
-        database.execute(
-            "INSERT INTO quiz_question_banks (quiz_id, question_bank_id) VALUES (1, 1)"
-        )
-        database.commit()
-
-    create_app(settings_for(database_path))
-
-    with sqlite3.connect(database_path) as database:
-        migrated = database.execute(
-            "SELECT question_count, easy_question_count, "
-            "medium_question_count, hard_question_count FROM quizzes WHERE id = 1"
-        ).fetchone()
-    assert migrated == (3, 2, 1, 0)
 
 
 def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
@@ -2416,14 +2391,14 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert quiz_session["class_name"] == "Cinquième 5e B"
         assert quiz_session["status"] == "waiting"
         assert len(quiz_session["join_code"]) == 6
-        with sqlite3.connect(tmp_path / "test.db") as connection:
+        with database_connection(tmp_path / "test.db") as connection:
             student_count = connection.execute(
-                "SELECT COUNT(*) FROM students WHERE class_id = ?",
+                "SELECT COUNT(*) FROM students WHERE class_id = %s",
                 (student_class["id"],),
             ).fetchone()[0]
             assert (
                 connection.execute(
-                    "SELECT COUNT(*) FROM quiz_session_questions WHERE session_id = ?",
+                    "SELECT COUNT(*) FROM quiz_session_questions WHERE session_id = %s",
                     (quiz_session["id"],),
                 ).fetchone()[0]
                 == 0
@@ -2431,7 +2406,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             assert (
                 connection.execute(
                     "SELECT COUNT(*) FROM quiz_session_student_questions "
-                    "WHERE session_id = ?",
+                    "WHERE session_id = %s",
                     (quiz_session["id"],),
                 ).fetchone()[0]
                 == student_count * quiz["question_count"]
@@ -2442,7 +2417,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 "FROM quiz_session_student_questions AS assigned "
                 "JOIN question_choices AS choices "
                 "ON choices.question_id = assigned.question_id "
-                "WHERE assigned.session_id = ? GROUP BY assigned.student_id",
+                "WHERE assigned.session_id = %s GROUP BY assigned.student_id",
                 (quiz_session["id"],),
             ).fetchall()
             assert assigned_points
@@ -2457,7 +2432,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     "FROM quiz_session_student_questions AS assigned "
                     "JOIN question_choices AS choices "
                     "ON choices.question_id = assigned.question_id "
-                    "WHERE assigned.session_id = ? "
+                    "WHERE assigned.session_id = %s "
                     "GROUP BY assigned.student_id, assigned.question_id)",
                     (quiz_session["id"],),
                 )
@@ -2516,7 +2491,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert joined.json()["student_name"] == "Martin Giraud"
         assert "participants" not in joined.json()
         assert_student_exam_payload_hides_answers(joined.json())
-        with sqlite3.connect(tmp_path / "test.db") as connection:
+        with database_connection(tmp_path / "test.db") as connection:
             successful_join_limits = connection.execute(
                 "SELECT COUNT(*) FROM login_rate_limits "
                 "WHERE limiter_key LIKE 'quiz-join:%'"
@@ -3196,9 +3171,9 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             ).status_code
             == 200
         )
-        with sqlite3.connect(tmp_path / "test.db") as connection:
+        with database_connection(tmp_path / "test.db") as connection:
             connection.execute(
-                "UPDATE quiz_sessions SET started_at = ? WHERE id = ?",
+                "UPDATE quiz_sessions SET started_at = %s WHERE id = %s",
                 ("2000-01-01 00:00:00", expiring_session["id"]),
             )
             connection.commit()
@@ -3427,126 +3402,6 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert recovery_login.json()["status"] == "setup_required"
 
 
-def test_existing_question_choices_gain_neutral_legacy_points(tmp_path: Path) -> None:
-    database_path = tmp_path / "legacy-question-choices.db"
-    with sqlite3.connect(database_path) as database:
-        database.execute(
-            """
-            CREATE TABLE question_choices (
-                id INTEGER PRIMARY KEY,
-                question_id INTEGER NOT NULL,
-                label TEXT NOT NULL,
-                is_correct BOOLEAN NOT NULL DEFAULT 0,
-                position INTEGER NOT NULL
-            )
-            """
-        )
-        database.executemany(
-            """
-            INSERT INTO question_choices (
-                id,
-                question_id,
-                label,
-                is_correct,
-                position
-            )
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            [
-                (1, 1, "Correct answer", True, 0),
-                (2, 1, "Incorrect answer", False, 1),
-            ],
-        )
-
-    create_app(settings_for(database_path))
-
-    with sqlite3.connect(database_path) as database:
-        columns = {
-            row[1] for row in database.execute("PRAGMA table_info(question_choices)")
-        }
-        points = list(
-            database.execute("SELECT points FROM question_choices ORDER BY position")
-        )
-    assert {
-        "points",
-        "image_data",
-        "image_content_type",
-        "code_language",
-        "code_content",
-    }.issubset(columns)
-    assert points == [(0.0,), (0.0,)]
-
-
-def test_legacy_students_without_accounts_are_deleted(tmp_path: Path) -> None:
-    database_path = tmp_path / "legacy-students.db"
-    create_app(settings_for(database_path))
-    with sqlite3.connect(database_path) as database:
-        database.execute(
-            "INSERT INTO students "
-            "(id, class_id, account_id, identifier, display_name, created_at) "
-            "VALUES (1, 999, NULL, 'legacy.student', 'Legacy Student', "
-            "CURRENT_TIMESTAMP)"
-        )
-        database.commit()
-
-    create_app(settings_for(database_path))
-
-    with sqlite3.connect(database_path) as database:
-        assert database.execute("SELECT COUNT(*) FROM students").fetchone()[0] == 0
-
-
-def test_existing_quiz_sessions_gain_class_and_student_links(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "legacy-quiz-sessions.db"
-    with sqlite3.connect(database_path) as database:
-        database.execute(
-            """
-            CREATE TABLE quiz_sessions (
-                id INTEGER PRIMARY KEY,
-                quiz_id INTEGER NOT NULL,
-                class_name TEXT NOT NULL,
-                join_code TEXT NOT NULL,
-                status TEXT NOT NULL,
-                created_at DATETIME NOT NULL,
-                started_at DATETIME
-            )
-            """
-        )
-        database.execute(
-            """
-            CREATE TABLE quiz_participants (
-                id INTEGER PRIMARY KEY,
-                session_id INTEGER NOT NULL,
-                student_identifier TEXT NOT NULL,
-                joined_at DATETIME NOT NULL
-            )
-            """
-        )
-
-    create_app(settings_for(database_path))
-
-    with sqlite3.connect(database_path) as database:
-        session_columns = {
-            row[1] for row in database.execute("PRAGMA table_info(quiz_sessions)")
-        }
-        participant_columns = {
-            row[1] for row in database.execute("PRAGMA table_info(quiz_participants)")
-        }
-    assert "class_id" in session_columns
-    assert {
-        "paused_at",
-        "paused_duration_seconds",
-        "quiz_title",
-        "source_language",
-        "duration_seconds",
-        "allow_previous_questions",
-    }.issubset(session_columns)
-    assert {"student_id", "student_display_name", "left_at"}.issubset(
-        participant_columns
-    )
-
-
 def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
     database_path = tmp_path / "test.db"
     with make_client(settings_for(database_path)) as client:
@@ -3554,7 +3409,7 @@ def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
         first_refresh = client.cookies.get(REFRESH_COOKIE)
         assert first_refresh
 
-        with sqlite3.connect(database_path) as database:
+        with database_connection(database_path) as database:
             created_at, first_expires_at = database.execute(
                 "SELECT created_at, expires_at FROM refresh_sessions"
             ).fetchone()
@@ -3572,7 +3427,7 @@ def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
             second_refresh,
             JWT_SECRET,
         )
-        with sqlite3.connect(database_path) as database:
+        with database_connection(database_path) as database:
             second_expires_at = database.execute(
                 "SELECT expires_at FROM refresh_sessions ORDER BY id DESC LIMIT 1"
             ).fetchone()[0]
@@ -4434,14 +4289,14 @@ def test_quiz_can_assign_the_same_draw_to_every_student(tmp_path: Path) -> None:
         )
         assert launched.status_code == 201
 
-        with sqlite3.connect(database_path) as connection:
+        with database_connection(database_path) as connection:
             common_count = connection.execute(
-                "SELECT COUNT(*) FROM quiz_session_questions WHERE session_id = ?",
+                "SELECT COUNT(*) FROM quiz_session_questions WHERE session_id = %s",
                 (launched.json()["id"],),
             ).fetchone()[0]
             personalized_count = connection.execute(
                 "SELECT COUNT(*) FROM quiz_session_student_questions "
-                "WHERE session_id = ?",
+                "WHERE session_id = %s",
                 (launched.json()["id"],),
             ).fetchone()[0]
         assert common_count == quiz["question_count"]
@@ -5274,9 +5129,9 @@ def test_concurrent_answer_submissions_keep_a_single_answer(
             ]
 
         assert statuses == [200, 200, 200, 200]
-        with sqlite3.connect(database_path) as connection:
+        with database_connection(database_path) as connection:
             answer_count = connection.execute(
-                "SELECT COUNT(*) FROM quiz_answers WHERE session_id = ?",
+                "SELECT COUNT(*) FROM quiz_answers WHERE session_id = %s",
                 (quiz_session["id"],),
             ).fetchone()[0]
         assert answer_count == 1
@@ -5341,9 +5196,9 @@ def test_makeup_session_requires_quizzes_taken_by_the_class(
             )
         assert statuses == [201, 409]
 
-        with sqlite3.connect(tmp_path / "makeup-eligibility.db") as connection:
+        with database_connection(tmp_path / "makeup-eligibility.db") as connection:
             child_count = connection.execute(
-                "SELECT COUNT(*) FROM quiz_sessions WHERE makeup_session_id = ?",
+                "SELECT COUNT(*) FROM quiz_sessions WHERE makeup_session_id = %s",
                 (allowed.json()["id"],),
             ).fetchone()[0]
         assert child_count == 1

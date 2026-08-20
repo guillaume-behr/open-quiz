@@ -2,7 +2,7 @@
 
 Backend FastAPI d’Open Quiz. Il centralise l’authentification, les autorisations,
 les tirages de questions, la notation, les sessions temps réel et la persistance
-SQLite.
+PostgreSQL.
 
 Consultez aussi le [README principal](../README.md), le
 [guide de déploiement](../docs/deployment.md) et le
@@ -12,7 +12,7 @@ Consultez aussi le [README principal](../README.md), le
 
 - Python 3.14 et uv ;
 - FastAPI et Uvicorn ;
-- SQLAlchemy avec SQLite en mode WAL ;
+- SQLAlchemy avec PostgreSQL et Psycopg ;
 - Argon2, JWT, TOTP et Fernet pour les mécanismes d’authentification ;
 - pytest, Ruff et pip-audit pour la qualité et la sécurité.
 
@@ -21,7 +21,8 @@ Consultez aussi le [README principal](../README.md), le
 ### Prérequis
 
 - Python 3.14 ou supérieur ;
-- [uv](https://docs.astral.sh/uv/).
+- [uv](https://docs.astral.sh/uv/) ;
+- PostgreSQL 17, par exemple le service `open-quiz-database` de Docker Compose.
 
 Créez la configuration locale :
 
@@ -30,16 +31,23 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-Remplacez les **quatre** valeurs commençant par `replace-with-` :
+Remplacez les **cinq** valeurs commençant par `replace-with-` :
 
 - `JWT_SECRET` ;
 - `TOTP_ENCRYPTION_KEY` ;
 - `STUDENT_CREDENTIAL_ENCRYPTION_KEY` ;
-- `ADMIN_PASSWORD`.
+- `ADMIN_PASSWORD` ;
+- `POSTGRES_PASSWORD`.
 
 Les trois secrets cryptographiques doivent contenir au moins 32 caractères,
-être suffisamment variés et rester distincts. Le mot de passe administrateur
-doit contenir entre 16 et 256 caractères.
+être suffisamment variés et rester distincts. Les mots de passe administrateur
+et PostgreSQL doivent contenir au moins 16 caractères.
+
+Depuis la racine du dépôt, démarrez ensuite PostgreSQL :
+
+```shell
+docker compose up --detach --wait open-quiz-database
+```
 
 Installez les dépendances et démarrez l’API :
 
@@ -59,14 +67,15 @@ Ces trois routes sont désactivées en production.
 
 ## Configuration
 
-Les valeurs sont chargées depuis `.env`. Ce fichier et la base SQLite locale
-sont protégés en mode `0600` sur les systèmes POSIX.
+Les valeurs sont chargées depuis `.env`. Ce fichier est protégé en mode `0600`
+sur les systèmes POSIX.
 
 ### Variables principales
 
 | Variable                            | Requise | Défaut                       | Contraintes principales                  |
 | ----------------------------------- | ------- | ---------------------------- | ---------------------------------------- |
-| `DATABASE_URL`                      | non     | `sqlite:///./open-quiz.db`   | URL SQLAlchemy                           |
+| `DATABASE_URL`                      | oui     | —                            | URL PostgreSQL SQLAlchemy                |
+| `POSTGRES_PASSWORD`                 | oui     | —                            | mot de passe PostgreSQL                  |
 | `JWT_SECRET`                        | oui     | —                            | au moins 32 caractères                   |
 | `TOTP_ENCRYPTION_KEY`               | oui     | —                            | distincte de `JWT_SECRET`, 32 caractères |
 | `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | oui     | —                            | distincte des deux autres, 32 caractères |
@@ -232,22 +241,19 @@ avant stockage. Les métadonnées et les trames d’animation ne sont pas
 conservées. Une image destinée à un élève n’est accessible qu’avec le jeton de
 sa participation et pendant une session valide.
 
-## Stockage, migrations et conservation
+## Stockage et conservation
 
-En local, la base par défaut se trouve dans
-`open-quiz-backend/open-quiz.db`. Dans le conteneur, elle se trouve dans
-`/data/open-quiz.db`, sur le volume persistant `open-quiz-data`.
-
-SQLite utilise le mode WAL, les clés étrangères, une attente sur verrou et un
-contrôle de disponibilité. Les migrations sont appliquées automatiquement au
-démarrage. Sauvegardez toujours la base avant une mise à jour, en particulier
-depuis la série `0.1.x`, puis consultez [CHANGELOG.md](../CHANGELOG.md).
+Docker Compose exécute PostgreSQL dans `open-quiz-database` et conserve ses
+données dans le volume `open-quiz-postgres-data`. Le backend accepte uniquement
+une URL PostgreSQL et crée le schéma courant dans une base vide au démarrage.
+Il n’existe pas de reprise depuis les anciennes bases : le passage à cette
+version nécessite un nouveau volume PostgreSQL.
 
 La purge des résultats et signalements expirés s’exécute au démarrage puis
 toutes les heures. Un enseignant peut aussi supprimer immédiatement un résultat
 et toutes ses participations, réponses et alertes associées.
 
-Pour une procédure de sauvegarde cohérente avec SQLite WAL, consultez le
+Pour une procédure de sauvegarde et restauration PostgreSQL, consultez le
 [guide d’exploitation](../docs/deployment.md#sauvegarder-les-données).
 
 ## Sécurité et exploitation

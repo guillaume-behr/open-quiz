@@ -898,7 +898,7 @@ def update_question(
         )
     )
     # Move existing rows out of the final position range before applying a
-    # reorder. SQLite checks the unique (question_id, position) constraint for
+    # reorder. The unique (question_id, position) constraint is checked for
     # every row update, so swapping positions directly can fail transiently.
     temporary_position = (
         max((choice.position for choice in existing_choices), default=-1) + 1

@@ -52,6 +52,7 @@ Remplacez toutes les valeurs commençant par `replace-with-` dans
 | `TOTP_ENCRYPTION_KEY`               | valeur aléatoire distincte d’au moins 32 caractères                       |
 | `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | troisième valeur aléatoire distincte d’au moins 32 caractères             |
 | `ADMIN_PASSWORD`                    | mot de passe robuste de 16 à 256 caractères, différent des autres secrets |
+| `POSTGRES_PASSWORD`                 | mot de passe aléatoire robuste du rôle PostgreSQL                         |
 
 Générez ces valeurs avec un gestionnaire de mots de passe ou un générateur
 cryptographiquement sûr. Ne les placez ni dans Git, ni dans une issue, ni dans
@@ -79,11 +80,12 @@ docker compose up --detach --build --remove-orphans --wait
 docker compose ps
 ```
 
-Le déploiement crée deux services :
+Le déploiement crée trois services :
 
 - `open-quiz-frontend`, qui sert l’application et transmet `/api` au backend ;
-- `open-quiz-backend`, qui exécute l’API et stocke SQLite dans le volume
-  persistant `open-quiz-data`.
+- `open-quiz-backend`, qui exécute l’API ;
+- `open-quiz-database`, qui exécute PostgreSQL et stocke ses données dans le
+  volume persistant `open-quiz-postgres-data`.
 
 Le backend n’est pas publié sur l’hôte. Le frontend écoute uniquement sur
 `127.0.0.1:7800` afin qu’un reverse proxy soit le seul point d’entrée public.
@@ -137,8 +139,8 @@ Commandes utiles :
 
 ```shell
 docker compose ps
-docker compose logs --tail 200 open-quiz-backend open-quiz-frontend
-docker compose logs --follow open-quiz-backend open-quiz-frontend
+docker compose logs --tail 200 open-quiz-database open-quiz-backend open-quiz-frontend
+docker compose logs --follow open-quiz-database open-quiz-backend open-quiz-frontend
 ```
 
 Surveillez au minimum :
@@ -158,7 +160,7 @@ votre instance.
 
 Une sauvegarde exploitable comprend :
 
-1. une copie cohérente de la base SQLite ;
+1. une sauvegarde logique cohérente de la base PostgreSQL ;
 2. une copie protégée de `open-quiz-backend/.env` ;
 3. la version ou le commit Open Quiz correspondant.
 
@@ -166,32 +168,21 @@ Une sauvegarde exploitable comprend :
 stockées dans la base. Sans le fichier `.env` correspondant, une restauration
 de la base reste incomplète.
 
-### Base SQLite en fonctionnement
+### Sauvegarde PostgreSQL en fonctionnement
 
-SQLite fonctionne en mode WAL. Ne copiez pas uniquement
-`open-quiz.db` avec un outil de fichiers pendant que l’application écrit. Utilisez
-l’API de sauvegarde SQLite ou arrêtez le backend de manière contrôlée.
-
-Cette commande crée une image cohérente dans le répertoire temporaire du
-conteneur :
-
-```shell
-docker compose exec -T open-quiz-backend \
-    /app/.venv/bin/python -c 'import sqlite3; source = sqlite3.connect("/data/open-quiz.db"); target = sqlite3.connect("/tmp/open-quiz-backup.db"); source.backup(target); target.close(); source.close()'
-```
-
-Copiez-la immédiatement hors du conteneur :
+`pg_dump` produit une sauvegarde cohérente sans arrêter l’application. Créez
+directement une archive au format personnalisé hors du conteneur :
 
 ```shell
 mkdir -p backups
-docker compose cp \
-    open-quiz-backend:/tmp/open-quiz-backup.db \
-    backups/open-quiz.db
+docker compose exec -T open-quiz-database \
+    pg_dump --username=open_quiz --dbname=open_quiz --format=custom \
+    > backups/open-quiz.dump
 ```
 
 Déplacez ensuite la sauvegarde vers un stockage distinct, chiffré et protégé.
-Vérifiez-la avec `PRAGMA integrity_check` et testez régulièrement une
-restauration dans une instance isolée.
+Vérifiez-la avec `pg_restore --list backups/open-quiz.dump` et testez
+régulièrement une restauration dans une instance isolée.
 
 ### Tester une restauration
 
@@ -203,10 +194,10 @@ Sur une instance de test arrêtée et après avoir conservé sa base actuelle :
 
 ```shell
 docker compose down
-docker compose run --rm --no-deps \
-    --volume ./backups/open-quiz.db:/restore/open-quiz.db:ro \
-    open-quiz-backend \
-    /app/.venv/bin/python -c 'import sqlite3; source = sqlite3.connect("/restore/open-quiz.db"); target = sqlite3.connect("/data/open-quiz.db"); source.backup(target); target.close(); source.close()'
+docker compose up --detach --wait open-quiz-database
+docker compose exec -T open-quiz-database \
+    pg_restore --username=open_quiz --dbname=open_quiz \
+    --clean --if-exists --no-owner < backups/open-quiz.dump
 docker compose up --detach --wait
 docker compose ps
 ```
@@ -242,8 +233,8 @@ Sous PowerShell :
 ```
 
 Les scripts effectuent un `git pull --ff-only`, reconstruisent les conteneurs,
-attendent leur état sain puis affichent leur statut. Les migrations SQLite sont
-appliquées automatiquement au démarrage du backend.
+attendent leur état sain puis affichent leur statut. Cette version ne migre pas
+les anciennes bases : utilisez un volume PostgreSQL neuf pour la transition.
 
 Après la mise à jour, vérifiez `docker compose ps`, `/api/health`, la connexion
 des trois rôles et les journaux du backend.
@@ -335,7 +326,7 @@ remplacent pas un audit RGAA.
 | L’API refuse de démarrer             | recherchez une valeur `replace-with-`, vérifiez la longueur et l’unicité des secrets, `APP_ENV` et `FRONTEND_ORIGIN` |
 | Boucle de redirection HTTP/HTTPS     | vérifiez `FRONTEND_ORIGIN` et les en-têtes de protocole transmis par les proxies                                     |
 | Le navigateur bloque les appels API  | faites correspondre l’origine visible, `FRONTEND_ORIGIN`, `VITE_API_URL`, CORS et CSP                                |
-| Un conteneur reste `unhealthy`       | consultez `docker compose ps` puis les journaux des deux services                                                    |
+| Un conteneur reste `unhealthy`       | consultez `docker compose ps` puis les journaux des trois services                                                   |
 | Le frontend ne trouve pas le backend | vérifiez le réseau Compose et laissez `VITE_API_URL` vide pour le déploiement fourni                                 |
 | La traduction est indisponible       | utilisez un navigateur et une paire de langues compatibles avec l’API `Translator`                                   |
 | Un compte a perdu son TOTP           | utilisez **Récupérer l’accès** ou la commande de secours documentée plus haut                                        |

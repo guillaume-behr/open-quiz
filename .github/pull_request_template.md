@@ -21,16 +21,18 @@ Indiquez les commandes réellement exécutées et leurs résultats.
 ## Données et compatibilité
 
 - [ ] aucun secret, jeton ou donnée personnelle n’est inclus
-- [ ] les migrations SQLite et changements d’API sont documentés, ou sans objet
+- [ ] les évolutions du schéma PostgreSQL et changements d’API sont documentés,
+      ou sans objet
 - [ ] les nouvelles chaînes existent dans les huit catalogues, ou sans objet
 
-Décrivez les migrations ou changements incompatibles. Écrivez « sans objet »
-pour les cases qui ne concernent pas cette pull request.
+Décrivez les évolutions de schéma ou changements incompatibles. Écrivez
+« sans objet » pour les cases qui ne concernent pas cette pull request.
 
 ## Risques
 
-Décrivez les migrations, changements d’API, effets de sécurité, d’accessibilité
-ou de performance. Ajoutez une capture si le changement visuel le justifie.
+Décrivez les évolutions de schéma, changements d’API, effets de sécurité,
+d’accessibilité ou de performance. Ajoutez une capture si le changement visuel
+le justifie.
 
 ## Captures
 

@@ -5,8 +5,6 @@
 **/__pycache__/
 **/.pytest_cache/
 **/.ruff_cache/
-**/*.db
-**/*.db-*
 **/*.log
 **/node_modules/
 **/dist/

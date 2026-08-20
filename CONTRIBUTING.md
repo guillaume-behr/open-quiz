@@ -8,8 +8,8 @@ traductions et améliorations de documentation sont les bienvenues.
 1. consultez les
    [issues ouvertes](https://github.com/guillaume-behr/open-quiz/issues) et les
    [pull requests](https://github.com/guillaume-behr/open-quiz/pulls) ;
-2. ouvrez une issue avant une évolution importante, une migration ou un
-   changement de comportement public ;
+2. ouvrez une issue avant une évolution importante, une transition de données
+   ou un changement de comportement public ;
 3. suivez le [README](README.md) pour installer le projet ;
 4. ne publiez jamais de secret, de donnée d’élève ou de vulnérabilité : utilisez
    la procédure privée de [SECURITY.md](SECURITY.md).
@@ -50,8 +50,8 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
 - validez les entrées côté backend, même si le frontend les contrôle déjà ;
 - vérifiez les permissions avec les rôles administrateur, enseignant et élève ;
 - préservez l’atomicité des imports et opérations concurrentes ;
-- accompagnez toute évolution SQLite d’un chemin de migration automatique et
-  d’un test depuis le schéma antérieur ;
+- accompagnez toute évolution du schéma PostgreSQL d’une stratégie explicite
+  de déploiement et des tests correspondants ;
 - documentez les changements d’API, de configuration, de conservation ou de
   sécurité ;
 - ajoutez une entrée à [CHANGELOG.md](CHANGELOG.md) pour tout changement visible
@@ -147,7 +147,7 @@ Avant l’envoi :
   présent ;
 - décrivez le problème, la solution, les risques et les compromis ;
 - indiquez les commandes réellement exécutées et leur résultat ;
-- mentionnez les tests ajoutés, les migrations et les changements de
+- mentionnez les tests ajoutés, les évolutions de schéma et les changements de
   documentation ;
 - liez l’issue avec `Closes #…` lorsqu’elle doit être fermée à la fusion.
 

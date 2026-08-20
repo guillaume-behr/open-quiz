@@ -3,7 +3,7 @@ from hmac import new as hmac_new
 from time import time
 
 from sqlalchemy import case, delete, update
-from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.models import LoginRateLimit

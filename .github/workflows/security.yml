@@ -15,6 +15,20 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17.10-alpine3.24
+        env:
+          POSTGRES_DB: open_quiz_test
+          POSTGRES_USER: open_quiz_test
+          POSTGRES_PASSWORD: ci-test-postgres-password-2026
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U open_quiz_test -d open_quiz_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: open-quiz-backend
@@ -36,6 +50,8 @@ jobs:
           STUDENT_CREDENTIAL_ENCRYPTION_KEY: ci-test-student-credential-key-with-variety-2026
           ADMIN_USERNAME: ci-admin
           ADMIN_PASSWORD: ci-test-admin-password-2026
+          DATABASE_URL: postgresql+psycopg://open_quiz_test:ci-test-postgres-password-2026@127.0.0.1:5432/open_quiz_test
+          TEST_DATABASE_URL: postgresql+psycopg://open_quiz_test:ci-test-postgres-password-2026@127.0.0.1:5432/open_quiz_test
         run: uv run --frozen pytest -q
       - run: uv run --frozen pip-audit
 
@@ -95,6 +111,7 @@ jobs:
             -e 's|replace-with-a-different-random-value-of-at-least-32-characters|ci-network-totp-secret-2026-abcdefghijklmnopqrstuvwxyz|' \
             -e 's|replace-with-another-random-value-of-at-least-32-characters|ci-network-student-secret-2026-0123456789-abcdef|' \
             -e 's|replace-with-a-strong-password-of-at-least-16-characters|ci-network-admin-password-2026!|' \
+            -e 's|replace-with-a-strong-database-password|ci-network-postgres-password-2026!|' \
             open-quiz-backend/.env
           docker compose up --build --wait --detach
           docker compose exec -T open-quiz-backend \

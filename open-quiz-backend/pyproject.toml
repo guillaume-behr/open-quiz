@@ -14,6 +14,7 @@ dependencies = [
     "cryptography>=50.0.0",
     "fastapi[standard]>=0.139.2",
     "pillow>=12.1.0",
+    "psycopg[binary]>=3.2.10",
     "pwdlib>=0.3.0",
     "pyjwt>=2.13.0",
     "pyotp>=2.10.0",

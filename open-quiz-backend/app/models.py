@@ -213,11 +213,6 @@ class Quiz(Base):
     easy_points: Mapped[float] = mapped_column(Float, default=0.0)
     medium_points: Mapped[float] = mapped_column(Float, default=0.0)
     hard_points: Mapped[float] = mapped_column(Float, default=0.0)
-    # Kept only so databases created before explicit difficulty counts can still
-    # satisfy their legacy NOT NULL columns. These values are no longer exposed.
-    easy_percentage: Mapped[int] = mapped_column(Integer, default=0)
-    medium_percentage: Mapped[int] = mapped_column(Integer, default=0)
-    hard_percentage: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )

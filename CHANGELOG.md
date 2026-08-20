@@ -6,6 +6,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Sécurité et corrections
 
+- adoption exclusive de PostgreSQL 17 dans Docker Compose ; cette transition
+  repart d’une base vide et ne fournit pas de reprise historique ;
 - la limitation des signalements anonymes n'utilise plus jamais l'adresse IP :
   le budget est désormais global à l'instance (`PROBLEM_REPORT_ATTEMPTS`, 30
   par défaut en développement et 5 dans l’exemple de production) ;
@@ -75,7 +77,6 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 ### Modifications incompatibles
 
 - l’entrée en examen nécessite désormais un compte élève authentifié ;
-- les anciens élèves sans compte sont supprimés lors de la migration ;
 - les pourcentages de difficulté sont remplacés par des quantités ;
 - les points sont désormais définis sur les propositions des banques de questions ;
 - l’ancien écran public permettant de rejoindre un quiz est remplacé par la
@@ -97,4 +98,4 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - première préversion publiée ;
 - gestion des enseignants, classes, banques de questions et sessions ;
 - correction automatique et manuelle, traduction locale et export CSV ;
-- déploiement autonome avec Docker Compose, Caddy et SQLite.
+- déploiement autonome avec Docker Compose, Caddy et une base embarquée.

@@ -199,6 +199,9 @@ class Settings:
             )
         if self.environment not in {"development", "test", "production"}:
             raise ValueError("APP_ENV must be development, test, or production")
+        database = urlparse(self.database_url)
+        if database.scheme not in {"postgresql", "postgresql+psycopg"}:
+            raise ValueError("DATABASE_URL must use PostgreSQL")
         if self.environment == "production" and origin.scheme != "https":
             raise ValueError("Production FRONTEND_ORIGIN must use HTTPS")
         validate_optional_public_url(
@@ -224,9 +227,7 @@ def get_settings() -> Settings:
     secure_private_file(ENV_FILE)
     load_dotenv(ENV_FILE)
     return Settings(
-        database_url=os.getenv(
-            "DATABASE_URL", f"sqlite:///{(BASE_DIR / 'open-quiz.db').as_posix()}"
-        ),
+        database_url=required_environment("DATABASE_URL"),
         jwt_secret=required_environment("JWT_SECRET"),
         totp_encryption_key=required_environment("TOTP_ENCRYPTION_KEY"),
         student_credential_encryption_key=required_environment(

@@ -54,7 +54,7 @@ et les élèves passent leurs examens ou s’entraînent depuis leur tableau de 
 
 ### Hébergement maîtrisé
 
-- déploiement autonome avec Docker Compose, Caddy et SQLite ;
+- déploiement autonome avec Docker Compose, Caddy et PostgreSQL ;
 - mots de passe Argon2, TOTP pour les comptes privilégiés et cookies HttpOnly ;
 - limites de débit, journaux de sécurité et données persistantes sauvegardables.
 
@@ -89,16 +89,17 @@ cd open-quiz
 ### 2. Démarrer l’API
 
 ```shell
-cd open-quiz-backend
-cp .env.example .env
-chmod 600 .env
+cp open-quiz-backend/.env.example open-quiz-backend/.env
+chmod 600 open-quiz-backend/.env
 ```
 
-Ouvrez `.env` et remplacez les **quatre** valeurs commençant par
-`replace-with-` : trois secrets distincts d’au moins 32 caractères et un mot de
-passe administrateur d’au moins 16 caractères.
+Ouvrez `.env` et remplacez les **cinq** valeurs commençant par
+`replace-with-` : trois secrets distincts d’au moins 32 caractères, un mot de
+passe administrateur et un mot de passe PostgreSQL d’au moins 16 caractères.
 
 ```shell
+docker compose up --detach --wait open-quiz-database
+cd open-quiz-backend
 uv sync
 uv run fastapi dev main.py
 ```
@@ -163,7 +164,7 @@ chmod 600 open-quiz-backend/.env
 
 Dans `open-quiz-backend/.env` :
 
-1. remplacez les quatre valeurs `replace-with-` ;
+1. remplacez les cinq valeurs `replace-with-`, dont le mot de passe PostgreSQL ;
 2. définissez `FRONTEND_ORIGIN` avec l’origine HTTPS exacte, sans `/` final ;
 3. renseignez les informations légales, de confidentialité et d’accessibilité
    applicables à votre instance.
@@ -197,17 +198,14 @@ La réponse attendue est `{"status":"ok"}`.
 
 - utilisez `sh ./update.sh` sous Unix ou `./update.ps1` sous PowerShell pour
   appliquer une mise à jour en avance rapide et reconstruire les conteneurs ;
-- sauvegardez régulièrement le volume `open-quiz-data` avec un outil compatible
-  SQLite WAL, ou pendant un arrêt contrôlé ;
+- sauvegardez régulièrement PostgreSQL avec `pg_dump` et testez les restaurations ;
 - conservez `TOTP_ENCRYPTION_KEY` et `STUDENT_CREDENTIAL_ENCRYPTION_KEY` dans un
   gestionnaire de secrets ;
 - testez la restauration de vos sauvegardes ;
-- sauvegardez impérativement la base avant une migration de version.
+- sauvegardez impérativement la base avant une mise à jour de version.
 
-La migration depuis la série `0.1.x` comporte des changements incompatibles,
-notamment la suppression des anciens élèves sans compte. Consultez le
-[journal des versions](CHANGELOG.md) avant la première mise à jour vers
-`0.2.x`.
+Le passage à PostgreSQL réinitialise le stockage : aucune reprise de la base
+historique n’est fournie. Consultez le [journal des versions](CHANGELOG.md).
 
 ## Configuration
 
@@ -216,7 +214,8 @@ Git. Les principales variables sont :
 
 | Variable                            | Rôle                                               | Valeur locale              |
 | ----------------------------------- | -------------------------------------------------- | -------------------------- |
-| `DATABASE_URL`                      | Base SQLAlchemy                                    | `sqlite:///./open-quiz.db` |
+| `DATABASE_URL`                      | Base PostgreSQL via SQLAlchemy                     | `postgresql+psycopg://…`   |
+| `POSTGRES_PASSWORD`                 | Mot de passe du rôle PostgreSQL                    | obligatoire                |
 | `JWT_SECRET`                        | Signature des jetons, 32 caractères minimum        | obligatoire                |
 | `TOTP_ENCRYPTION_KEY`               | Chiffrement TOTP, distinct du secret JWT           | obligatoire                |
 | `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | Chiffrement des mots de passe élèves récupérables  | obligatoire                |
@@ -248,7 +247,7 @@ correspondante.
 
 | Partie            | Technologies principales                               |
 | ----------------- | ------------------------------------------------------ |
-| API               | Python 3.14, FastAPI, SQLAlchemy, SQLite               |
+| API               | Python 3.14, FastAPI, SQLAlchemy, PostgreSQL           |
 | Interface         | React 19, TypeScript, Vite, Tailwind CSS               |
 | Sécurité          | JWT, cookies HttpOnly, TOTP, Argon2, Fernet            |
 | Python navigateur | Pyodide dans un Web Worker                             |
@@ -268,7 +267,7 @@ Caddy (SPA, CSP, fichiers statiques, proxy /api)
 FastAPI (authentification, règles métier, limites de débit)
           │
           ▼
-SQLite en mode WAL (volume persistant)
+PostgreSQL (volume persistant)
 ```
 
 ### Structure du dépôt
@@ -328,7 +327,7 @@ Les mêmes contrôles principaux sont exécutés par
 | [Déploiement et exploitation](docs/deployment.md)      | production, sauvegardes, mises à jour et dépannage |
 | [Documentation backend](open-quiz-backend/README.md)   | API, sécurité, stockage et exploitation            |
 | [Documentation frontend](open-quiz-frontend/README.md) | interface, routes, traduction et tests navigateur  |
-| [Journal des versions](CHANGELOG.md)                   | nouveautés et migrations incompatibles             |
+| [Journal des versions](CHANGELOG.md)                   | nouveautés et transitions incompatibles            |
 | [Guide de contribution](CONTRIBUTING.md)               | conventions et vérifications attendues             |
 | [Politique de sécurité](SECURITY.md)                   | procédure privée de signalement                    |
 

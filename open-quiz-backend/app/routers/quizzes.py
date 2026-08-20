@@ -27,7 +27,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import case, delete, func, or_, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from starlette.requests import HTTPConnection
 
@@ -726,7 +726,7 @@ def participant_maximum_scores(
     # Load assignments and choice totals once for the whole session. Calling
     # session_question_points for every participant made result polling issue
     # two or three additional queries per student, which quickly overwhelmed
-    # SQLite for full classrooms.
+    # the database for full classrooms.
     personalized_by_student: dict[int, list[int]] = defaultdict(list)
     personalized_by_identifier: dict[str, list[int]] = defaultdict(list)
     personalized_rows = list(
@@ -1498,12 +1498,13 @@ def training_result(
 def generate_join_code(session: DbSession) -> str:
     for _ in range(20):
         code = "".join(randomizer.choice(JOIN_CODE_ALPHABET) for _ in range(6))
-        reserved = session.execute(
-            sqlite_insert(QuizJoinCode)
+        reserved_code = session.scalar(
+            insert(QuizJoinCode)
             .values(code=code)
             .on_conflict_do_nothing(index_elements=[QuizJoinCode.code])
+            .returning(QuizJoinCode.code)
         )
-        if reserved.rowcount == 1:
+        if reserved_code is not None:
             return code
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -3545,8 +3546,8 @@ def select_makeup_quiz(
         raise HTTPException(
             status_code=409, detail="Ce rattrapage n’accepte plus de choix"
         )
-    claimed = session.execute(
-        sqlite_insert(MakeupSessionSelection)
+    claimed_student_id = session.scalar(
+        insert(MakeupSessionSelection)
         .values(session_id=makeup.id, student_id=membership.id)
         .on_conflict_do_nothing(
             index_elements=[
@@ -3554,8 +3555,9 @@ def select_makeup_quiz(
                 MakeupSessionSelection.student_id,
             ]
         )
+        .returning(MakeupSessionSelection.student_id)
     )
-    if claimed.rowcount != 1:
+    if claimed_student_id is None:
         raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
     child = QuizSession(
         quiz_id=quiz.id,
@@ -4062,7 +4064,7 @@ def submit_student_answer(
 
     # Atomic upsert: concurrent submissions for the same question can never
     # create duplicate answers nor crash on the uniqueness constraint.
-    answer_statement = sqlite_insert(QuizAnswer).values(
+    answer_statement = insert(QuizAnswer).values(
         session_id=quiz_session.id,
         participant_id=participant.id,
         question_id=question_id,
