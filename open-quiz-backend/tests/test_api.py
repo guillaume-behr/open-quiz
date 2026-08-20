@@ -4489,6 +4489,103 @@ def test_live_quiz_websockets_push_session_transitions(tmp_path: Path) -> None:
                 assert_student_exam_payload_hides_answers(pushed_student_state)
 
 
+def test_live_teacher_websockets_push_student_progress(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "live-quiz-progress.db")) as client:
+        environment = exam_environment(client)
+        bank_id = environment["question"]["question_bank_id"]
+        second_question = client.post(
+            f"/api/question-banks/{bank_id}/questions",
+            headers=environment["teacher_headers"],
+            data={
+                "payload": json.dumps(
+                    {
+                        "prompt": "Two plus two?",
+                        "points": 2,
+                        "difficulty": "easy",
+                        "answer_mode": "single",
+                        "answer_mode_disclosed": True,
+                        "choices": [
+                            {"label": "Four", "is_correct": True, "points": 2},
+                            {"label": "Five", "is_correct": False, "points": 0},
+                        ],
+                    }
+                )
+            },
+        )
+        assert second_question.status_code == status.HTTP_201_CREATED
+        quiz = environment["quiz"]
+        updated_quiz = client.post(
+            f"/api/quizzes/{quiz['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "title": quiz["title"],
+                "source_language": quiz["source_language"],
+                "question_bank_ids": [bank_id],
+                "duration_seconds": quiz["duration_seconds"],
+                "allow_previous_questions": quiz["allow_previous_questions"],
+                "allow_negative_points": quiz["allow_negative_points"],
+                "same_questions_for_all": quiz["same_questions_for_all"],
+                "easy_question_count": 2,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        )
+        assert updated_quiz.status_code == status.HTTP_200_OK
+        launched, participant_headers = launch_and_join(client, environment)
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+
+        with (
+            client.websocket_connect(
+                "/api/quizzes/live/teacher/sessions",
+                headers={"Origin": FRONTEND_ORIGIN},
+            ) as sessions_socket,
+            client.websocket_connect(
+                f"/api/quizzes/live/teacher/sessions/{launched['id']}",
+                headers={"Origin": FRONTEND_ORIGIN},
+            ) as session_socket,
+        ):
+            sessions_socket.send_json({"token": teacher_token})
+            session_socket.send_json({"token": teacher_token})
+            sessions_socket.receive_json()
+            session_socket.receive_json()
+
+            started = client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            )
+            assert started.status_code == status.HTTP_200_OK
+            sessions_socket.receive_json()
+            session_socket.receive_json()
+
+            student_state_url = f"/api/quizzes/student/sessions/{launched['join_code']}"
+            student_state = client.get(
+                student_state_url,
+                headers=participant_headers,
+            ).json()
+            question = student_state["question"]
+            answer_payload = (
+                {"written_answer": "Student response"}
+                if question["answer_mode"] == "written"
+                else {"selected_choice_ids": [question["choices"][0]["id"]]}
+            )
+            submitted = client.post(
+                f"{student_state_url}/answer",
+                headers=participant_headers,
+                json=answer_payload,
+            )
+            assert submitted.status_code == status.HTTP_200_OK
+
+            session_update = session_socket.receive_json()
+            assert session_update["type"] == "session"
+            assert session_update["data"]["participants"][0]["answered_count"] == 1
+
+            sessions_update = sessions_socket.receive_json()
+            assert sessions_update["type"] == "active_sessions"
+            assert sessions_update["data"][0]["participants"][0]["answered_count"] == 1
+
+
 def test_live_teacher_session_pushes_student_join(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

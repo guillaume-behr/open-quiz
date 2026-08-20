@@ -4118,7 +4118,6 @@ def submit_student_answer(
         request,
         quiz_session,
         session,
-        active_sessions_changed=quiz_session.status == "finished",
         makeup_sessions_changed=False,
     )
     state = student_state_response(quiz_session, quiz, participant, session)
