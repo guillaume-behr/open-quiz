@@ -186,6 +186,9 @@ quiz.example.com {
 }
 ```
 
+Un [exemple de configuration Nginx](deployment/nginx.conf) est également
+fourni ; remplacez son domaine et ses chemins de certificats avant de l'activer.
+
 Vérifiez ensuite l’instance :
 
 ```shell

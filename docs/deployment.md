@@ -100,6 +100,12 @@ quiz.example.com {
 }
 ```
 
+Pour Nginx, adaptez puis installez
+l'[exemple de serveur virtuel](../deployment/nginx.conf). Il inclut la
+redirection HTTPS, les en-têtes transmis à l'application et la limite nécessaire
+aux imports de questions. Il transmet également la négociation de protocole
+nécessaire aux connexions WebSocket.
+
 Le nom de domaine doit correspondre exactement à `FRONTEND_ORIGIN`. En
 production, l’API redirige les requêtes qu’elle considère comme HTTP ; conservez
 donc les en-têtes de protocole transmis par les reverse proxies.
