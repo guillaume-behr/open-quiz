@@ -125,10 +125,10 @@ Pour Nginx, adaptez puis installez
 l'[exemple de serveur virtuel](../deployment/nginx.conf). Il inclut la
 redirection HTTPS, les en-têtes transmis à l'application et la limite nécessaire
 aux imports de questions. Il transmet également la négociation de protocole
-nécessaire aux connexions WebSocket. Conservez `proxy_http_version 1.1`, les
-en-têtes `Upgrade` et `Connection`, ainsi que le bloc `map` associé : les
-requêtes HTTP ordinaires utilisent alors `Connection: close`, tandis qu’une
-demande WebSocket utilise `Connection: upgrade`. L’en-tête `Origin`, validé par
+nécessaire aux connexions WebSocket. Conservez `proxy_http_version 1.1` et les
+en-têtes `Upgrade` et `Connection`. La valeur explicite de `Connection` évite de
+dépendre d’un bloc `map` au niveau `http`, qui n’est pas accepté dans tous les
+emplacements d’inclusion d’un virtual host. L’en-tête `Origin`, validé par
 l’application, et les en-têtes `Sec-WebSocket-*` sont transmis automatiquement
 par Nginx et ne doivent pas être réécrits.
 
