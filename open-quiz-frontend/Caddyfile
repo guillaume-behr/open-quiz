@@ -1,3 +1,11 @@
+{
+    servers {
+        # The public edge proxy sanitizes X-Forwarded-For before it reaches us.
+        trusted_proxies static private_ranges
+        trusted_proxies_strict
+    }
+}
+
 :8080 {
     root * /srv
     encode zstd gzip
@@ -21,7 +29,6 @@
             max_size 101MB
         }
         reverse_proxy open-quiz-backend:8000 {
-            header_up X-Forwarded-Proto https
             transport http {
                 dial_timeout 2s
                 response_header_timeout 150s

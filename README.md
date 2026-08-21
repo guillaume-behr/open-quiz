@@ -77,12 +77,12 @@ l’évaluation. Pour une instance accessible en ligne, passez directement au
 
 - Python 3.14 et [uv](https://docs.astral.sh/uv/) ;
 - Node.js 24, Corepack et pnpm 11 ;
-- Git.
+- Git et une clé SSH associée à votre compte GitHub.
 
 ### 1. Récupérer le projet
 
 ```shell
-git clone https://github.com/guillaume-behr/open-quiz.git
+git clone git@github.com:guillaume-behr/open-quiz.git
 cd open-quiz
 ```
 
@@ -151,31 +151,31 @@ jour, la rotation des secrets et le dépannage, consultez le
 ### Prérequis
 
 - Docker avec le plugin Compose ;
+- Git et un shell compatible POSIX (Linux, macOS ou WSL sous Windows) ;
 - un nom de domaine et un reverse proxy HTTPS pour une instance publique.
 
 ### Lancer les conteneurs
 
-Depuis la racine du dépôt :
+Depuis la racine du dépôt, lancez l’installation guidée :
 
 ```shell
-cp open-quiz-backend/.env.production.example open-quiz-backend/.env
-chmod 600 open-quiz-backend/.env
+sh ./install.sh
 ```
 
-Dans `open-quiz-backend/.env` :
+Le script demande uniquement le nom de domaine, sans `https://` ni `/` final.
+Il génère automatiquement tous les secrets et le mot de passe administrateur,
+crée `open-quiz-backend/.env` avec les variables de production, puis lance
+`update.sh` pour construire et démarrer les conteneurs. Enregistrez le mot de
+passe administrateur affiché une seule fois.
 
-1. remplacez les cinq valeurs `replace-with-`, dont le mot de passe PostgreSQL ;
-2. définissez `FRONTEND_ORIGIN` avec l’origine HTTPS exacte, sans `/` final ;
-3. renseignez les informations légales, de confidentialité et d’accessibilité
-   applicables à votre instance.
+Le script refuse d’écraser une configuration existante. Pour un déploiement
+déjà installé, utilisez directement `sh ./update.sh`. Renseignez ensuite dans
+`.env` les informations légales, de confidentialité et d’accessibilité propres
+à votre instance, puis relancez `sh ./update.sh`.
 
-Validez ensuite la configuration et démarrez les services :
-
-```shell
-docker compose config --quiet
-docker compose up --detach --build --remove-orphans --wait
-docker compose ps
-```
+L’installation configure Open Quiz, mais pas le DNS, le certificat TLS ou le
+reverse proxy de la machine. Ces éléments restent à mettre en place pour rendre
+le domaine accessible en HTTPS.
 
 Le frontend écoute uniquement sur `127.0.0.1:7800`. Publiez-le derrière un
 reverse proxy HTTPS, par exemple avec Caddy :
@@ -284,6 +284,7 @@ PostgreSQL (volume persistant)
 ├── CHANGELOG.md             historique des versions
 ├── CONTRIBUTING.md          guide de contribution
 ├── docker-compose.yml       déploiement autonome
+├── install.sh               installation Docker guidée sous Unix
 ├── SECURITY.md              signalement privé des vulnérabilités
 ├── update.ps1               mise à jour sous PowerShell
 └── update.sh                mise à jour sous Unix

@@ -25,25 +25,45 @@ personnes qui administrent une instance Open Quiz avec Docker Compose.
 ### Prérequis
 
 - Docker Engine avec un plugin Compose prenant en charge `docker compose up --wait` ;
-- Git pour récupérer les mises à jour ;
+- Git avec un accès SSH configuré pour GitHub, et un shell compatible POSIX
+  (Linux, macOS ou WSL sous Windows) ;
 - un nom de domaine et un reverse proxy HTTPS pour une instance publique ;
 - une stratégie de sauvegarde hors de la machine qui héberge l’application.
 
-Clonez le dépôt, puis créez la configuration de production :
+Clonez le dépôt, puis lancez l’installation guidée depuis sa racine :
 
 ```shell
-git clone https://github.com/guillaume-behr/open-quiz.git
+git clone git@github.com:guillaume-behr/open-quiz.git
 cd open-quiz
-cp open-quiz-backend/.env.production.example open-quiz-backend/.env
-chmod 600 open-quiz-backend/.env
+sh ./install.sh
 ```
 
-Sous Windows, protégez le fichier avec les permissions du système plutôt
-qu’avec `chmod`.
+Le script demande le nom de domaine public, par exemple `quiz.example.com`.
+Saisissez-le sans `https://`, chemin ni `/` final. Il effectue ensuite toutes
+les opérations nécessaires au premier démarrage :
+
+1. il génère localement des valeurs aléatoires distinctes pour PostgreSQL, JWT,
+   TOTP et le chiffrement des identifiants élèves ;
+2. il génère le mot de passe du compte administrateur ;
+3. il définit l’origine du frontend en HTTPS et reprend tous les autres réglages
+   de production depuis le fichier d’exemple ;
+4. il crée `open-quiz-backend/.env` avec des permissions réservées au
+   propriétaire ;
+5. il lance `update.sh`, qui récupère la dernière version, construit les images,
+   démarre les services et attend leur état sain.
+
+Enregistrez immédiatement le mot de passe administrateur affiché par le script :
+il ne sera pas réaffiché. L’installation refuse d’écraser un fichier `.env`
+existant afin de ne pas remplacer des secrets ou rendre des données chiffrées
+illisibles.
+
+Le script ne modifie ni le DNS, ni le pare-feu, ni la configuration TLS ou le
+reverse proxy de l’hôte. Configurez ces éléments séparément dans la section
+[Publier l’application en HTTPS](#publier-lapplication-en-https).
 
 ### Secrets obligatoires
 
-Remplacez toutes les valeurs commençant par `replace-with-` dans
+`install.sh` renseigne automatiquement toutes les valeurs obligatoires dans
 `open-quiz-backend/.env`.
 
 | Variable                            | Exigence                                                                  |
@@ -54,17 +74,19 @@ Remplacez toutes les valeurs commençant par `replace-with-` dans
 | `ADMIN_PASSWORD`                    | mot de passe robuste de 16 à 256 caractères, différent des autres secrets |
 | `POSTGRES_PASSWORD`                 | mot de passe aléatoire robuste du rôle PostgreSQL                         |
 
-Générez ces valeurs avec un gestionnaire de mots de passe ou un générateur
-cryptographiquement sûr. Ne les placez ni dans Git, ni dans une issue, ni dans
-les journaux d’exploitation.
+Conservez le fichier généré dans une sauvegarde chiffrée. Ne placez ses valeurs
+ni dans Git, ni dans une issue, ni dans les journaux d’exploitation.
 
-Définissez aussi :
+Après le premier démarrage, vous pouvez adapter :
 
 - `ADMIN_USERNAME`, l’identifiant du compte administrateur géré par
   l’application ;
-- `FRONTEND_ORIGIN`, l’origine HTTPS exacte visible dans le navigateur, par
-  exemple `https://quiz.example.com`, sans `/` final ;
-- `APP_ENV=production`.
+- `FRONTEND_ORIGIN`, si le nom de domaine change ; sa valeur doit être l’origine
+  HTTPS exacte visible dans le navigateur, sans `/` final.
+
+Conservez `APP_ENV=production` pour une instance publique. Après toute
+modification, relancez `sh ./update.sh` et mettez également à jour le reverse
+proxy lorsque le domaine change.
 
 Le compte administrateur est créé au premier démarrage. Ensuite,
 `ADMIN_USERNAME` et `ADMIN_PASSWORD` continuent de piloter ce même compte : une
@@ -72,11 +94,11 @@ modification du mot de passe révoque ses sessions actives.
 
 ## Démarrer les services
 
-Validez la configuration avant chaque déploiement :
+Le premier démarrage est effectué automatiquement par `install.sh` via
+`update.sh`. Pour contrôler le résultat :
 
 ```shell
 docker compose config --quiet
-docker compose up --detach --build --remove-orphans --wait
 docker compose ps
 ```
 
@@ -104,7 +126,21 @@ Pour Nginx, adaptez puis installez
 l'[exemple de serveur virtuel](../deployment/nginx.conf). Il inclut la
 redirection HTTPS, les en-têtes transmis à l'application et la limite nécessaire
 aux imports de questions. Il transmet également la négociation de protocole
-nécessaire aux connexions WebSocket.
+nécessaire aux connexions WebSocket. Conservez `proxy_http_version 1.1`, les
+en-têtes `Upgrade` et `Connection`, ainsi que le bloc `map` associé : les
+requêtes HTTP ordinaires utilisent alors `Connection: close`, tandis qu’une
+demande WebSocket utilise `Connection: upgrade`. L’en-tête `Origin`, validé par
+l’application, et les en-têtes `Sec-WebSocket-*` sont transmis automatiquement
+par Nginx et ne doivent pas être réécrits.
+
+Nginx remplace aussi `X-Forwarded-For` par l’adresse du client directement
+connecté, au lieu d’accepter une chaîne fournie par celui-ci. Le Caddy du
+conteneur n’accepte les chaînes transférées que depuis les plages privées du
+réseau Docker, complète les en-têtes `X-Forwarded-*` puis les transmet à
+FastAPI. Ne remplacez pas `$remote_addr` par `$proxy_add_x_forwarded_for` lorsque
+Nginx est le point d’entrée public direct. Si un CDN ou un autre load balancer
+précède Nginx, configurez explicitement ses plages de confiance au lieu de
+reprendre cette règle telle quelle.
 
 Le nom de domaine doit correspondre exactement à `FRONTEND_ORIGIN`. En
 production, l’API redirige les requêtes qu’elle considère comme HTTP ; conservez
@@ -238,9 +274,10 @@ Sous PowerShell :
 ./update.ps1
 ```
 
-Les scripts effectuent un `git pull --ff-only`, reconstruisent les conteneurs,
-attendent leur état sain puis affichent leur statut. Cette version ne migre pas
-les anciennes bases : utilisez un volume PostgreSQL neuf pour la transition.
+Les scripts effectuent un `git pull --ff-only`, valident la configuration
+Compose, reconstruisent les conteneurs, attendent leur état sain puis affichent
+leur statut. Cette version ne migre pas les anciennes bases : utilisez un volume
+PostgreSQL neuf pour la transition.
 
 Après la mise à jour, vérifiez `docker compose ps`, `/api/health`, la connexion
 des trois rôles et les journaux du backend.

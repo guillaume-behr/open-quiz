@@ -46,6 +46,11 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Ajouts
 
+- installation Docker guidée par `install.sh`, avec saisie du domaine,
+  génération locale des secrets, création sécurisée de `.env` et lancement du
+  script de mise à jour ;
+- exemple Nginx simplifié avec transmission conditionnelle de la mise à niveau
+  WebSocket et chaîne d’en-têtes `X-Forwarded-*` protégée contre l’usurpation ;
 - comptes élèves avec identifiant, mot de passe et tableau de bord dédié ;
 - routes séparées `/student/*` et `/teacher/*` ;
 - gestion indépendante des élèves et des classes ;
