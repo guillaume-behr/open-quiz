@@ -25,15 +25,14 @@ personnes qui administrent une instance Open Quiz avec Docker Compose.
 ### Prérequis
 
 - Docker Engine avec un plugin Compose prenant en charge `docker compose up --wait` ;
-- Git avec un accès SSH configuré pour GitHub, et un shell compatible POSIX
-  (Linux, macOS ou WSL sous Windows) ;
-- un nom de domaine et un reverse proxy HTTPS pour une instance publique ;
+- Git et un shell compatible POSIX (Linux, macOS ou WSL sous Windows) ;
+- un nom de domaine valide et un reverse proxy HTTPS ;
 - une stratégie de sauvegarde hors de la machine qui héberge l’application.
 
 Clonez le dépôt, puis lancez l’installation guidée depuis sa racine :
 
 ```shell
-git clone git@github.com:guillaume-behr/open-quiz.git
+git clone https://github.com/guillaume-behr/open-quiz.git
 cd open-quiz
 sh ./install.sh
 ```

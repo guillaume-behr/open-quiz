@@ -102,8 +102,9 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Documentation
 
-- réorganisation du README principal autour du démarrage rapide, du premier
-  parcours et du déploiement ;
+- Docker Compose devient la méthode d’installation présentée en premier dans
+  toute la documentation ; les lancements directs avec Python et Vite sont
+  explicitement réservés au développement ;
 - ajout d’un guide d’exploitation couvrant HTTPS, sauvegardes, restauration,
   mises à jour, secrets, conservation et dépannage ;
 - mise à jour des documentations backend et frontend à partir des commandes,

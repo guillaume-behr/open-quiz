@@ -19,11 +19,11 @@ et les élèves passent leurs examens ou s’entraînent depuis leur tableau de 
 ## Sommaire
 
 - [Pourquoi Open Quiz](#pourquoi-open-quiz)
-- [Démarrage rapide](#démarrage-rapide)
+- [Installation avec Docker](#installation-avec-docker)
 - [Premiers pas](#premiers-pas)
-- [Déploiement avec Docker](#déploiement-avec-docker)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
+- [Développement local](#développement-local)
 - [Développement et qualité](#développement-et-qualité)
 - [Documentation et contribution](#documentation-et-contribution)
 
@@ -67,83 +67,9 @@ Le déroulement général reste simple :
 5. l’enseignant corrige les réponses rédactionnelles puis publie ou exporte les
    résultats.
 
-## Démarrage rapide
+## Installation avec Docker
 
-Cette procédure lance l’application en local pour le développement ou
-l’évaluation. Pour une instance accessible en ligne, passez directement au
-[déploiement avec Docker](#déploiement-avec-docker).
-
-### Prérequis
-
-- Python 3.14 et [uv](https://docs.astral.sh/uv/) ;
-- Node.js 24, Corepack et pnpm 11 ;
-- Git et une clé SSH associée à votre compte GitHub.
-
-### 1. Récupérer le projet
-
-```shell
-git clone git@github.com:guillaume-behr/open-quiz.git
-cd open-quiz
-```
-
-### 2. Démarrer l’API
-
-```shell
-cp open-quiz-backend/.env.example open-quiz-backend/.env
-chmod 600 open-quiz-backend/.env
-```
-
-Ouvrez `.env` et remplacez les **cinq** valeurs commençant par
-`replace-with-` : trois secrets distincts d’au moins 32 caractères, un mot de
-passe administrateur et un mot de passe PostgreSQL d’au moins 16 caractères.
-
-```shell
-docker compose up --detach --wait open-quiz-database
-cd open-quiz-backend
-uv sync
-uv run fastapi dev main.py
-```
-
-L’API répond sur `http://localhost:8000` et sa documentation interactive est
-disponible sur `http://localhost:8000/docs`.
-
-> [!NOTE]
-> Sous Windows, ignorez la commande `chmod` et protégez le fichier `.env` avec
-> les permissions du système.
-
-### 3. Démarrer l’interface
-
-Dans un second terminal, depuis la racine du dépôt :
-
-```shell
-cd open-quiz-frontend
-corepack enable
-pnpm install --frozen-lockfile
-pnpm dev
-```
-
-Ouvrez `http://localhost:5173`. Le serveur de développement transmet
-automatiquement les requêtes `/api` au backend.
-
-## Premiers pas
-
-| Espace         | Adresse locale                          | Première action                                                                      |
-| -------------- | --------------------------------------- | ------------------------------------------------------------------------------------ |
-| Administration | `http://localhost:5173/admin/dashboard` | Se connecter avec les identifiants de `.env`, configurer TOTP et créer un enseignant |
-| Enseignant     | `http://localhost:5173/teacher/login`   | Configurer TOTP, puis créer les élèves, classes et banques                           |
-| Élève          | `http://localhost:5173/student/login`   | Se connecter avec le compte fourni par l’enseignant                                  |
-
-La racine de l’application redirige vers la connexion élève. Les tableaux de
-bord protégés renvoient vers leur écran de connexion lorsque la session est
-absente ou expirée.
-
-Les questions sont tirées au lancement d’une session, pas à la création du
-quiz. L’enseignant peut choisir un tirage commun à la classe ou un tirage
-individuel. Les questions, leur ordre et le barème sont ensuite figés pour
-préserver la correction historique, même si la banque évolue.
-
-## Déploiement avec Docker
-
+Docker Compose est la méthode recommandée pour installer et utiliser Open Quiz.
 Cette section couvre le premier démarrage. Pour les sauvegardes, les mises à
 jour, la rotation des secrets et le dépannage, consultez le
 [guide de déploiement et d’exploitation](docs/deployment.md).
@@ -152,7 +78,15 @@ jour, la rotation des secrets et le dépannage, consultez le
 
 - Docker avec le plugin Compose ;
 - Git et un shell compatible POSIX (Linux, macOS ou WSL sous Windows) ;
-- un nom de domaine et un reverse proxy HTTPS pour une instance publique.
+- un nom de domaine valide, ainsi qu’un reverse proxy HTTPS pour rendre
+  l’instance publique.
+
+### Récupérer le projet
+
+```shell
+git clone https://github.com/guillaume-behr/open-quiz.git
+cd open-quiz
+```
 
 ### Lancer les conteneurs
 
@@ -210,12 +144,32 @@ La réponse attendue est `{"status":"ok"}`.
 Le passage à PostgreSQL réinitialise le stockage : aucune reprise de la base
 historique n’est fournie. Consultez le [journal des versions](CHANGELOG.md).
 
+## Premiers pas
+
+Les chemins ci-dessous sont à ajouter au domaine configuré pendant
+l’installation. En développement local, utilisez `http://localhost:5173`.
+
+| Espace         | Chemin              | Première action                                                                      |
+| -------------- | ------------------- | ------------------------------------------------------------------------------------ |
+| Administration | `/admin/dashboard`  | Se connecter avec les identifiants de `.env`, configurer TOTP et créer un enseignant |
+| Enseignant     | `/teacher/login`    | Configurer TOTP, puis créer les élèves, classes et banques                           |
+| Élève          | `/student/login`    | Se connecter avec le compte fourni par l’enseignant                                  |
+
+La racine de l’application redirige vers la connexion élève. Les tableaux de
+bord protégés renvoient vers leur écran de connexion lorsque la session est
+absente ou expirée.
+
+Les questions sont tirées au lancement d’une session, pas à la création du
+quiz. L’enseignant peut choisir un tirage commun à la classe ou un tirage
+individuel. Les questions, leur ordre et le barème sont ensuite figés pour
+préserver la correction historique, même si la banque évolue.
+
 ## Configuration
 
 Les secrets du backend sont stockés dans `open-quiz-backend/.env`, ignoré par
 Git. Les principales variables sont :
 
-| Variable                            | Rôle                                               | Valeur locale              |
+| Variable                            | Rôle                                               | Exemple de développement   |
 | ----------------------------------- | -------------------------------------------------- | -------------------------- |
 | `DATABASE_URL`                      | Base PostgreSQL via SQLAlchemy                     | `postgresql+psycopg://…`   |
 | `POSTGRES_PASSWORD`                 | Mot de passe du rôle PostgreSQL                    | obligatoire                |
@@ -289,6 +243,60 @@ PostgreSQL (volume persistant)
 ├── update.ps1               mise à jour sous PowerShell
 └── update.sh                mise à jour sous Unix
 ```
+
+## Développement local
+
+Les commandes de cette section sont destinées au développement et à
+l’évaluation du projet. Pour installer une instance à utiliser, suivez en
+priorité la procédure [Docker](#installation-avec-docker).
+
+### Prérequis de développement
+
+- Python 3.14 et [uv](https://docs.astral.sh/uv/) ;
+- Node.js 24, Corepack et pnpm 11 ;
+- Docker avec le plugin Compose, pour PostgreSQL ;
+- Git.
+
+### Démarrer l’API
+
+Depuis la racine du dépôt :
+
+```shell
+cp open-quiz-backend/.env.example open-quiz-backend/.env
+chmod 600 open-quiz-backend/.env
+```
+
+Ouvrez `.env` et remplacez les **cinq** valeurs commençant par
+`replace-with-` : trois secrets distincts d’au moins 32 caractères, un mot de
+passe administrateur et un mot de passe PostgreSQL d’au moins 16 caractères.
+
+```shell
+docker compose up --detach --wait open-quiz-database
+cd open-quiz-backend
+uv sync
+uv run fastapi dev main.py
+```
+
+L’API répond sur `http://localhost:8000` et sa documentation interactive est
+disponible sur `http://localhost:8000/docs`.
+
+> [!NOTE]
+> Sous Windows, ignorez la commande `chmod` et protégez le fichier `.env` avec
+> les permissions du système.
+
+### Démarrer l’interface
+
+Dans un second terminal, depuis la racine du dépôt :
+
+```shell
+cd open-quiz-frontend
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Ouvrez `http://localhost:5173`. Le serveur de développement transmet
+automatiquement les requêtes `/api` au backend.
 
 ## Développement et qualité
 

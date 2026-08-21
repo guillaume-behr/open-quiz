@@ -10,7 +10,7 @@ traductions et améliorations de documentation sont les bienvenues.
    [pull requests](https://github.com/guillaume-behr/open-quiz/pulls) ;
 2. ouvrez une issue avant une évolution importante, une transition de données
    ou un changement de comportement public ;
-3. suivez le [README](README.md) pour installer le projet ;
+3. préparez l’[environnement de développement](README.md#développement-local) ;
 4. ne publiez jamais de secret, de donnée d’élève ou de vulnérabilité : utilisez
    la procédure privée de [SECURITY.md](SECURITY.md).
 

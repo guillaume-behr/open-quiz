@@ -8,6 +8,18 @@ Consultez aussi le [README principal](../README.md), le
 [guide de déploiement](../docs/deployment.md) et le
 [guide de contribution](../CONTRIBUTING.md).
 
+## Installation avec Docker
+
+Le backend fait partie de l’installation Docker Compose d’Open Quiz, qui
+configure également PostgreSQL et le frontend. Depuis la racine du dépôt,
+suivez la [procédure d’installation recommandée](../README.md#installation-avec-docker) :
+
+```shell
+sh ./install.sh
+```
+
+Le lancement direct avec Python décrit plus bas est réservé au développement.
+
 ## Technologies
 
 - Python 3.14 et uv ;
@@ -16,7 +28,10 @@ Consultez aussi le [README principal](../README.md), le
 - Argon2, JWT, TOTP et Fernet pour les mécanismes d’authentification ;
 - pytest, Ruff et pip-audit pour la qualité et la sécurité.
 
-## Démarrage local
+## Développement local
+
+Cette procédure lance uniquement l’API en mode développement. Elle ne remplace
+pas l’installation Docker Compose recommandée pour utiliser une instance.
 
 ### Prérequis
 
@@ -24,11 +39,11 @@ Consultez aussi le [README principal](../README.md), le
 - [uv](https://docs.astral.sh/uv/) ;
 - PostgreSQL 17, par exemple le service `open-quiz-database` de Docker Compose.
 
-Créez la configuration locale :
+Depuis la racine du dépôt, créez la configuration locale :
 
 ```shell
-cp .env.example .env
-chmod 600 .env
+cp open-quiz-backend/.env.example open-quiz-backend/.env
+chmod 600 open-quiz-backend/.env
 ```
 
 Remplacez les **cinq** valeurs commençant par `replace-with-` :
@@ -43,7 +58,7 @@ Les trois secrets cryptographiques doivent contenir au moins 32 caractères,
 être suffisamment variés et rester distincts. Les mots de passe administrateur
 et PostgreSQL doivent contenir au moins 16 caractères.
 
-Depuis la racine du dépôt, démarrez ensuite PostgreSQL :
+Démarrez ensuite PostgreSQL :
 
 ```shell
 docker compose up --detach --wait open-quiz-database
@@ -52,6 +67,7 @@ docker compose up --detach --wait open-quiz-database
 Installez les dépendances et démarrez l’API :
 
 ```shell
+cd open-quiz-backend
 uv sync
 uv run fastapi dev main.py
 ```
@@ -310,8 +326,9 @@ sauvegarde n’est pas ignorée par Git : déplacez-la immédiatement vers un es
 protégé ou supprimez-la dès qu’elle n’est plus utile. Redémarrez ensuite l’API
 pour charger les nouvelles valeurs.
 
-Ce script vise une installation locale. En production Compose, modifiez le
-fichier `.env` de l’hôte, protégez l’ancienne copie puis recréez le service.
+Ce script vise uniquement un environnement de développement local. Avec
+l’installation Docker Compose, modifiez le fichier `.env` de l’hôte, protégez
+l’ancienne copie puis recréez le service.
 
 ## Vérifications
 

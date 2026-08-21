@@ -8,6 +8,18 @@ Consultez aussi le [README principal](../README.md), le
 [guide de contribution](../CONTRIBUTING.md) et le
 [guide de déploiement](../docs/deployment.md).
 
+## Installation avec Docker
+
+Le frontend est construit et servi avec le reste d’Open Quiz par Docker
+Compose. Depuis la racine du dépôt, suivez la
+[procédure d’installation recommandée](../README.md#installation-avec-docker) :
+
+```shell
+sh ./install.sh
+```
+
+Le serveur Vite décrit plus bas est réservé au développement.
+
 ## Technologies
 
 - React 19 et React Router ;
@@ -16,7 +28,11 @@ Consultez aussi le [README principal](../README.md), le
 - Playwright pour les parcours navigateur ;
 - Pyodide pour l’exécution locale de Python.
 
-## Démarrage local
+## Développement local
+
+Cette procédure lance le serveur Vite pour modifier et tester l’interface. Elle
+ne remplace pas l’installation Docker Compose recommandée pour utiliser une
+instance.
 
 ### Prérequis
 
@@ -25,6 +41,8 @@ Consultez aussi le [README principal](../README.md), le
 - pnpm 11.15.1 ;
 - le backend lancé sur `http://localhost:8000` pour utiliser l’application
   manuellement.
+
+Depuis le dossier `open-quiz-frontend` :
 
 ```shell
 corepack enable
