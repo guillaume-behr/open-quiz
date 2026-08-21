@@ -11,7 +11,7 @@ import {
 import {
     createStudentAccount,
     getAllStudents,
-    getStudentCredentials,
+    getClassStudentCredentials,
 } from "@/api/students"
 import type { GradeLevel, StudentAccount, StudentClass } from "@/api/types"
 import { ClassFormDialog } from "@/components/classes/class-form-dialog"
@@ -406,7 +406,9 @@ export function ClassesPanel({
         setIsBusy(true)
         setError(null)
         try {
-            const credentials = await getStudentCredentials(studentClass.id)
+            const credentials = await getClassStudentCredentials(
+                studentClass.id
+            )
             const document = printWindow.document
             document.title = t("student-credentials-print-title", {
                 className: formatClassName(

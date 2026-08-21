@@ -79,6 +79,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Interface
 
+- l’onglet Élèves ne propose plus d’afficher tous les identifiants dans une
+  fenêtre ; l’export JSON et l’impression par classe restent disponibles ;
 - les questions d’une banque sont triées par difficulté par défaut, repliables
   avec animation et conservent la position de liste après édition ;
 - la progression d’un quiz affiche uniquement `Question X sur Z` ;

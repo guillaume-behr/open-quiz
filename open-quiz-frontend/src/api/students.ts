@@ -63,11 +63,12 @@ export function deleteStudentAccount(studentId: number): Promise<void> {
     return request<void>(`/api/students/${studentId}`, { method: "DELETE" })
 }
 
-export function getStudentCredentials(
-    classId?: number
+export function getClassStudentCredentials(
+    classId: number
 ): Promise<StudentCredential[]> {
-    const query = classId === undefined ? "" : `?class_id=${classId}`
-    return request<StudentCredential[]>(`/api/students/credentials${query}`)
+    return request<StudentCredential[]>(
+        `/api/students/credentials?class_id=${classId}`
+    )
 }
 
 export function exportStudentCredentials(): Promise<Blob> {
