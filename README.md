@@ -238,6 +238,7 @@ PostgreSQL (volume persistant)
 ├── CHANGELOG.md             historique des versions
 ├── CONTRIBUTING.md          guide de contribution
 ├── docker-compose.yml       déploiement autonome
+├── install-dev.sh           préparation de l’environnement de développement
 ├── install.sh               installation Docker guidée sous Unix
 ├── SECURITY.md              signalement privé des vulnérabilités
 ├── update.ps1               mise à jour sous PowerShell
@@ -259,19 +260,20 @@ priorité la procédure [Docker](#installation-avec-docker).
 
 ### Démarrer l’API
 
-Depuis la racine du dépôt :
+Depuis la racine du dépôt, générez les identifiants de développement et
+démarrez PostgreSQL :
 
 ```shell
-cp open-quiz-backend/.env.example open-quiz-backend/.env
-chmod 600 open-quiz-backend/.env
+sh ./install-dev.sh
 ```
 
-Ouvrez `.env` et remplacez les **cinq** valeurs commençant par
-`replace-with-` : trois secrets distincts d’au moins 32 caractères, un mot de
-passe administrateur et un mot de passe PostgreSQL d’au moins 16 caractères.
+Le script crée `open-quiz-backend/.env` avec des secrets distincts, affiche les
+identifiants administrateur une seule fois et lance uniquement le service
+Docker `open-quiz-database`. Il conserve un `.env` de développement existant et
+compatible, refuse les valeurs d’exemple et les configurations de production,
+puis vérifie que PostgreSQL accepte réellement les identifiants.
 
 ```shell
-docker compose up --detach --wait open-quiz-database
 cd open-quiz-backend
 uv sync
 uv run fastapi dev main.py
@@ -281,8 +283,7 @@ L’API répond sur `http://localhost:8000` et sa documentation interactive est
 disponible sur `http://localhost:8000/docs`.
 
 > [!NOTE]
-> Sous Windows, ignorez la commande `chmod` et protégez le fichier `.env` avec
-> les permissions du système.
+> Sous Windows, exécutez le script dans WSL.
 
 ### Démarrer l’interface
 

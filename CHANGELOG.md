@@ -49,6 +49,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - installation Docker guidée par `install.sh`, avec saisie du domaine,
   génération locale des secrets, création sécurisée de `.env` et lancement du
   script de mise à jour ;
+- préparation guidée du développement par `install-dev.sh`, avec génération
+  des identifiants locaux et démarrage de PostgreSQL dans Docker ;
 - exemple Nginx simplifié avec transmission de la mise à niveau WebSocket sans
   dépendance à un bloc `map`, et chaîne d’en-têtes `X-Forwarded-*` protégée
   contre l’usurpation ;
