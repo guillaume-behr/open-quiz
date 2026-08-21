@@ -47,6 +47,7 @@ def authenticated_user_from_token(
             access_token_version(
                 user.password_hash,
                 request.app.state.settings.jwt_secret,
+                user.access_token_generation,
             ),
         )
     ):

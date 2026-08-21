@@ -121,8 +121,11 @@ def update_user_status(
 ) -> User:
     """Enable or disable a professor and revoke access when disabled."""
     user = professor_account(user_id, session)
+    status_changed = user.is_active != payload.is_active
     user.is_active = payload.is_active
-    if not payload.is_active:
+    if status_changed:
+        user.access_token_generation += 1
+    if status_changed and not payload.is_active:
         revoke_user_sessions(user.id, session)
     session.commit()
     session.refresh(user)

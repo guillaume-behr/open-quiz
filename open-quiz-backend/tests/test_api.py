@@ -57,12 +57,14 @@ from app.schemas import (
     LoginRequest,
     QuestionBatchImport,
     QuestionChoiceCreate,
+    QuestionCreate,
     StudentAccountUpdate,
     StudentLoginRequest,
     StudentQuizAnswer,
 )
 from app.security import (
     DUMMY_PASSWORD_HASH,
+    access_token_version,
     decode_access_token,
     decode_student_access_token,
     decode_two_factor_token,
@@ -359,6 +361,19 @@ def test_written_answer_mode_cannot_claim_to_be_hidden() -> None:
         )
 
 
+def test_question_choices_reject_repeated_existing_ids() -> None:
+    with pytest.raises(ValidationError):
+        QuestionCreate(
+            prompt="Repeated choice",
+            difficulty="easy",
+            answer_mode="single",
+            choices=[
+                QuestionChoiceCreate(id=1, label="First", is_correct=True),
+                QuestionChoiceCreate(id=1, label="Repeated"),
+            ],
+        )
+
+
 def test_choice_text_is_optional_with_an_image_or_code() -> None:
     image_choice = QuestionChoiceCreate.model_validate(
         {
@@ -432,6 +447,13 @@ def test_signed_tokens_require_an_expiration_claim(decoder, payload) -> None:
 
     with pytest.raises(jwt.MissingRequiredClaimError):
         decoder(token, JWT_SECRET)
+
+
+def test_access_token_generation_permanently_invalidates_old_versions() -> None:
+    password_hash = "stored-password-hash"
+    assert access_token_version(password_hash, JWT_SECRET, 1) != (
+        access_token_version(password_hash, JWT_SECRET, 0)
+    )
 
 
 @pytest.mark.parametrize("password", ["shortpass", "abcdeabcde"])
@@ -3426,6 +3448,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             json={"is_active": True},
         )
         assert enabled.status_code == 200
+        assert client.get("/api/users/me", headers=teacher_headers).status_code == 401
         for _ in range(4):
             failed_login = client.post(
                 "/api/auth/login",

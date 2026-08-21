@@ -208,7 +208,11 @@ def issue_session(
             user.id,
             settings.jwt_secret,
             settings.access_token_minutes,
-            access_token_version(user.password_hash, settings.jwt_secret),
+            access_token_version(
+                user.password_hash,
+                settings.jwt_secret,
+                user.access_token_generation,
+            ),
             session_expires_at=session_expires_at,
         ),
         refresh_proof=refresh_request_proof(refresh_token, settings.jwt_secret),

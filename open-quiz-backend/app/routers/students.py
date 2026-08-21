@@ -292,12 +292,15 @@ def update_student_account(
     request: Request,
 ) -> StudentAccountResponse:
     account = owned_student_account(account_id, professor.id, session)
+    status_changed = account.is_active != payload.is_active
     credentials_changed = payload.password is not None or (
-        account.is_active and not payload.is_active
+        status_changed and not payload.is_active
     )
     account.identifier = payload.identifier
     account.display_name = payload.display_name
     account.is_active = payload.is_active
+    if status_changed:
+        account.access_token_generation += 1
     if payload.password is not None:
         account.password_hash = hash_password(payload.password)
         account.encrypted_password = encrypt_student_password(

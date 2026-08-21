@@ -44,7 +44,9 @@ def student_from_token(
         or not compare_digest(
             version,
             access_token_version(
-                account.password_hash, request.app.state.settings.jwt_secret
+                account.password_hash,
+                request.app.state.settings.jwt_secret,
+                account.access_token_generation,
             ),
         )
     ):
@@ -106,7 +108,9 @@ def login_student(
         account.id,
         request.app.state.settings.jwt_secret,
         access_token_version(
-            account.password_hash, request.app.state.settings.jwt_secret
+            account.password_hash,
+            request.app.state.settings.jwt_secret,
+            account.access_token_generation,
         ),
     )
     return StudentLoginResponse(

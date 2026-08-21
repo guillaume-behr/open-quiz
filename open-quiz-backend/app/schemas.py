@@ -447,6 +447,11 @@ class QuestionCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_correct_choices(self) -> QuestionCreate:
+        existing_choice_ids = [
+            choice.id for choice in self.choices if choice.id is not None
+        ]
+        if len(existing_choice_ids) != len(set(existing_choice_ids)):
+            raise ValueError("Une proposition ne peut être utilisée qu’une fois")
         correct_count = sum(choice.is_correct for choice in self.choices)
         if self.answer_mode in {"single", "written"} and correct_count > 1:
             raise ValueError(

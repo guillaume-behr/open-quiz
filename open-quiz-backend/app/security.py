@@ -24,10 +24,14 @@ def verify_password(password: str, encoded: str) -> bool:
     return password_hash.verify(password, encoded)
 
 
-def access_token_version(password_hash: str, secret: str) -> str:
+def access_token_version(
+    password_hash: str,
+    secret: str,
+    generation: int = 0,
+) -> str:
     return hmac_new(
         secret.encode(),
-        password_hash.encode(),
+        f"{generation}:{password_hash}".encode(),
         sha256,
     ).hexdigest()
 

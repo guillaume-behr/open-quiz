@@ -1,6 +1,6 @@
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -37,4 +37,15 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
         pool_pre_ping=True,
     )
     Base.metadata.create_all(engine)
+    # create_all() does not add columns to installations with an existing
+    # database. Keep this small, idempotent security migration here until the
+    # project adopts a general migration framework.
+    with engine.begin() as connection:
+        for table in ("users", "student_accounts"):
+            connection.execute(
+                text(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                    "access_token_generation INTEGER NOT NULL DEFAULT 0"
+                )
+            )
     return sessionmaker(bind=engine, expire_on_commit=False)
