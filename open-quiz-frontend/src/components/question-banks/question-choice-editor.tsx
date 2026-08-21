@@ -137,6 +137,10 @@ function ChoiceValueField({
     onUpdate: (update: Partial<EditableChoice>) => void
 }) {
     const { t } = useTranslation()
+    const hasImage =
+        Boolean(choice.image) ||
+        Boolean(choice.has_image && !choice.remove_image)
+    const hasCode = choice.hasCode && Boolean(choice.codeContent.trim())
 
     if (answerMode === "written" && responseLanguage) {
         return (
@@ -177,7 +181,7 @@ function ChoiceValueField({
             onChange={(event) => onUpdate({ label: event.target.value })}
             maxLength={500}
             placeholder={t("choice-placeholder", { number: index + 1 })}
-            required
+            required={!hasImage && !hasCode}
         />
     )
 }

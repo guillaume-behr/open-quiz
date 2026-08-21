@@ -375,6 +375,16 @@ def add_question(
         choice_images = [
             decode_image_payload(choice.image) for choice in payload.choices
         ]
+    if any(
+        not choice.label and choice_image_data is None and choice.code_content is None
+        for choice, (choice_image_data, _) in zip(
+            payload.choices, choice_images, strict=True
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Une proposition nécessite du texte, une image ou du code",
+        )
     question = Question(
         question_bank_id=question_bank_id,
         prompt=payload.prompt,
@@ -929,6 +939,19 @@ def update_question(
             new_image_data = existing_choice.image_data
             new_image_content_type = existing_choice.image_content_type
         replacement_choice_images.append((new_image_data, new_image_content_type))
+
+    if any(
+        not choice.label and choice_image_data is None and choice.code_content is None
+        for choice, (choice_image_data, _) in zip(
+            question_payload.choices,
+            replacement_choice_images,
+            strict=True,
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Une proposition nécessite du texte, une image ou du code",
+        )
 
     retained_question_image = (
         image_data

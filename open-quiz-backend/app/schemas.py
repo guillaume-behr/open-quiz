@@ -385,7 +385,7 @@ class QuestionImportImage(BaseModel):
 
 class QuestionChoiceCreate(BaseModel):
     id: int | None = None
-    label: str = Field(min_length=1, max_length=4000)
+    label: str = Field(max_length=4000)
     is_correct: bool = False
     points: float | None = Field(default=None, ge=-10000, le=10000)
     image: QuestionImportImage | None = None
@@ -397,8 +397,6 @@ class QuestionChoiceCreate(BaseModel):
     @classmethod
     def normalize_label(cls, value: str) -> str:
         normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
-        if not normalized:
-            raise ValueError("Une proposition ne peut pas être vide")
         return normalized
 
     @field_validator("code_content")
@@ -412,6 +410,14 @@ class QuestionChoiceCreate(BaseModel):
             raise ValueError(
                 "Le langage et le contenu du code doivent être renseignés ensemble"
             )
+        may_retain_existing_image = self.id is not None and not self.remove_image
+        if (
+            not self.label
+            and self.image is None
+            and self.code_content is None
+            and not may_retain_existing_image
+        ):
+            raise ValueError("Une proposition nécessite du texte, une image ou du code")
         return self
 
 
@@ -621,17 +627,6 @@ class MakeupQuizOption(BaseModel):
     duration_seconds: int
 
 
-class MakeupSessionResponse(BaseModel):
-    id: int
-    class_id: int | None
-    class_name: str
-    join_code: str
-    status: QuizSessionStatus
-    quizzes: list[MakeupQuizOption]
-    participant_count: int
-    created_at: datetime
-
-
 class MakeupSessionJoinResponse(BaseModel):
     join_code: str
     class_name: str
@@ -655,6 +650,23 @@ class QuizParticipantResponse(BaseModel):
     last_violation_type: str | None = None
     last_violation_at: datetime | None = None
     joined_at: datetime
+
+
+class MakeupParticipantResponse(QuizParticipantResponse):
+    quiz_title: str
+    total_questions: int
+
+
+class MakeupSessionResponse(BaseModel):
+    id: int
+    class_id: int | None
+    class_name: str
+    join_code: str
+    status: QuizSessionStatus
+    quizzes: list[MakeupQuizOption]
+    participant_count: int
+    participants: list[MakeupParticipantResponse]
+    created_at: datetime
 
 
 class QuizSessionResponse(BaseModel):

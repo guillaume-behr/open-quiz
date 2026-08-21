@@ -316,7 +316,7 @@ function ChoiceAnswers({
                                         id={choice.id}
                                         joinCode={joinCode}
                                         token={participantToken}
-                                        alt={choice.label}
+                                        alt={choice.label || t("choice-image")}
                                     />
                                 )}
                                 {choice.code_content && (

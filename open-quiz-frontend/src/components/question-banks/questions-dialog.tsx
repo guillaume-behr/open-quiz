@@ -458,7 +458,7 @@ function QuestionCard({
                                 {choice.has_image && (
                                     <ChoiceImage
                                         choiceId={choice.id}
-                                        alt={choice.label}
+                                        alt={choice.label || t("choice-image")}
                                     />
                                 )}
                                 {choice.code_content &&

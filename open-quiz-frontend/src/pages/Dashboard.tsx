@@ -36,6 +36,20 @@ type DashboardSection =
     | "question-banks"
     | "results"
 
+const defaultGradeLevelOrder = new Map([
+    ["2nd", 0],
+    ["1ere", 1],
+    ["Tle", 2],
+])
+
+function compareGradeLevels(first: GradeLevel, second: GradeLevel): number {
+    const firstOrder = defaultGradeLevelOrder.get(first.name) ?? 3
+    const secondOrder = defaultGradeLevelOrder.get(second.name) ?? 3
+    return (
+        firstOrder - secondOrder || first.name.localeCompare(second.name, "fr")
+    )
+}
+
 const ClassesPanel = lazy(() =>
     import("@/components/classes/classes-panel").then((module) => ({
         default: module.ClassesPanel,
@@ -83,7 +97,6 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const [isQuestionBankCreationOpen, setIsQuestionBankCreationOpen] =
         useState(false)
     const [isQuizCreationOpen, setIsQuizCreationOpen] = useState(false)
-    const [isMakeupCreationOpen, setIsMakeupCreationOpen] = useState(false)
     const [isClassCreationOpen, setIsClassCreationOpen] = useState(false)
     const [isStudentCreationOpen, setIsStudentCreationOpen] = useState(false)
     const [isResultsExportOpen, setIsResultsExportOpen] = useState(false)
@@ -216,9 +229,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
         setGradeLevels((current) =>
             current.some((item) => item.id === level.id)
                 ? current
-                : [...current, level].sort((a, b) =>
-                      a.name.localeCompare(b.name, "fr")
-                  )
+                : [...current, level].sort(compareGradeLevels)
         )
         return level
     }
@@ -300,15 +311,6 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                             {t("create-exam-quiz")}
                         </Button>
                     )}
-                    {activeSection === "makeup" && (
-                        <Button
-                            type="button"
-                            onClick={() => setIsMakeupCreationOpen(true)}
-                        >
-                            <Plus />
-                            {t("makeup-create")}
-                        </Button>
-                    )}
                     {activeSection === "results" && (
                         <Button
                             type="button"
@@ -353,12 +355,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                     onDeleteGradeLevel={handleDeleteGradeLevel}
                 />
             )}
-            {activeSection === "makeup" && (
-                <MakeupSessionsPanel
-                    isCreateDialogOpen={isMakeupCreationOpen}
-                    onCreateDialogOpenChange={setIsMakeupCreationOpen}
-                />
-            )}
+            {activeSection === "makeup" && <MakeupSessionsPanel />}
             {activeSection === "training-quizzes" && (
                 <ClassTrainingBanksPanel />
             )}

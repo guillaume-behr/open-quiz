@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
-from app.grade_levels import ensure_default_grade_levels
+from app.grade_levels import ensure_default_grade_levels, grade_level_order
 from app.models import GradeLevel, QuestionBank, StudentClass
 from app.schemas import GradeLevelCreate, GradeLevelResponse
 
@@ -27,7 +27,11 @@ def list_grade_levels(
         session.scalars(
             select(GradeLevel)
             .where(GradeLevel.owner_id == professor.id)
-            .order_by(GradeLevel.name, GradeLevel.id)
+            .order_by(
+                grade_level_order(GradeLevel.name),
+                GradeLevel.name,
+                GradeLevel.id,
+            )
         )
     )
 

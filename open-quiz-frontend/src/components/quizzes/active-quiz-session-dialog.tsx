@@ -1,4 +1,4 @@
-import type { QuizSession } from "@/api/types"
+import type { MakeupSession, QuizParticipant, QuizSession } from "@/api/types"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next"
 type SessionAction = "pause" | "resume" | "cancel" | "delete" | null
 
 type ActiveQuizSessionDialogProps = {
-    session: QuizSession | null
+    session: QuizSession | MakeupSession | null
     error: string | null
     isStarting: boolean
     action: SessionAction
@@ -28,6 +28,7 @@ type ActiveQuizSessionDialogProps = {
     onStart: () => void
     onPause: () => void
     onResume: () => void
+    onFinish?: () => void
     onConfirmCancel: () => void
     onConfirmDelete: () => void
 }
@@ -51,6 +52,7 @@ export function ActiveQuizSessionDialog({
     onStart,
     onPause,
     onResume,
+    onFinish,
     onConfirmCancel,
     onConfirmDelete,
 }: ActiveQuizSessionDialogProps) {
@@ -62,7 +64,11 @@ export function ActiveQuizSessionDialog({
             onOpenChange={(open) => {
                 if (!open) onClose()
             }}
-            title={session?.quiz_title ?? t("quiz-waiting-room")}
+            title={
+                session && "quiz_title" in session
+                    ? session.quiz_title
+                    : t("makeup-tab")
+            }
             description={
                 session
                     ? `${session.class_name} — ${t(
@@ -125,6 +131,16 @@ export function ActiveQuizSessionDialog({
                                 {t("resume-quiz")}
                             </Button>
                         )}
+                        {session.status === "in_progress" && onFinish && (
+                            <Button
+                                type="button"
+                                disabled={action !== null}
+                                onClick={onFinish}
+                            >
+                                <CircleCheck />
+                                {t("finish-quiz")}
+                            </Button>
+                        )}
                         {isActiveSessionStatus(session.status) && (
                             <Button
                                 type="button"
@@ -154,7 +170,7 @@ export function ActiveQuizSessionDialog({
     )
 }
 
-function SessionSummary({ session }: { session: QuizSession }) {
+function SessionSummary({ session }: { session: QuizSession | MakeupSession }) {
     const { t } = useTranslation()
     return (
         <div className="rounded-xl bg-primary/10 p-5 text-center">
@@ -164,7 +180,7 @@ function SessionSummary({ session }: { session: QuizSession }) {
             <p className="mt-1 font-mono text-4xl font-black tracking-[0.2em] text-primary slashed-zero">
                 {session.join_code}
             </p>
-            {session.status === "in_progress" && (
+            {session.status === "in_progress" && "ends_at" in session && (
                 <div className="mt-3">
                     <QuizTimer endsAt={session.ends_at} />
                 </div>
@@ -179,19 +195,27 @@ function SessionSummary({ session }: { session: QuizSession }) {
     )
 }
 
-function Participants({ session }: { session: QuizSession }) {
+type SupervisedParticipant = QuizParticipant & {
+    quiz_title?: string
+    total_questions?: number
+}
+
+function Participants({ session }: { session: QuizSession | MakeupSession }) {
     const { t } = useTranslation()
-    const participants = [...session.participants].sort(
-        (left, right) =>
-            Number(
-                right.answered_count >= session.total_questions &&
-                    session.total_questions > 0
-            ) -
-            Number(
-                left.answered_count >= session.total_questions &&
-                    session.total_questions > 0
-            )
-    )
+    const participants = (
+        [...(session.participants ?? [])] as SupervisedParticipant[]
+    ).sort((left, right) => {
+        const leftTotal =
+            left.total_questions ??
+            ("total_questions" in session ? session.total_questions : 0)
+        const rightTotal =
+            right.total_questions ??
+            ("total_questions" in session ? session.total_questions : 0)
+        return (
+            Number(right.answered_count >= rightTotal && rightTotal > 0) -
+            Number(left.answered_count >= leftTotal && leftTotal > 0)
+        )
+    })
     return (
         <>
             <div className="mt-5 flex items-center justify-between gap-3">
@@ -208,17 +232,21 @@ function Participants({ session }: { session: QuizSession }) {
                     </span>
                 )}
             </div>
-            {session.participants.length === 0 ? (
+            {participants.length === 0 ? (
                 <p className="mt-3 rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">
                     {t("no-student-joined")}
                 </p>
             ) : (
                 <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                     {participants.map((participant) => {
+                        const totalQuestions =
+                            participant.total_questions ??
+                            ("total_questions" in session
+                                ? session.total_questions
+                                : 0)
                         const hasFinished =
-                            session.total_questions > 0 &&
-                            participant.answered_count >=
-                                session.total_questions
+                            totalQuestions > 0 &&
+                            participant.answered_count >= totalQuestions
                         return (
                             <li
                                 key={participant.id}
@@ -251,13 +279,18 @@ function Participants({ session }: { session: QuizSession }) {
                                         {participant.student_identifier}
                                     </span>
                                 )}
+                                {participant.quiz_title && (
+                                    <span className="block text-xs font-normal text-muted-foreground">
+                                        {participant.quiz_title}
+                                    </span>
+                                )}
                                 {["in_progress", "paused", "finished"].includes(
                                     session.status
                                 ) && (
                                     <span className="block text-sm font-semibold text-primary">
                                         {t("teacher-student-progress", {
                                             count: participant.answered_count,
-                                            total: session.total_questions,
+                                            total: totalQuestions,
                                         })}
                                     </span>
                                 )}

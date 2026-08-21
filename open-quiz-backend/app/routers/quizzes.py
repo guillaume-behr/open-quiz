@@ -71,6 +71,7 @@ from app.question_responses import load_question_records, load_question_response
 from app.quiz_session_records import delete_quiz_session_records
 from app.routers.student_auth import current_student
 from app.schemas import (
+    MakeupParticipantResponse,
     MakeupQuizOption,
     MakeupQuizSelection,
     MakeupSessionCreate,
@@ -3123,11 +3124,28 @@ def makeup_session_response(
             .order_by(Quiz.title, Quiz.id)
         )
     )
-    participant_count = session.scalar(
-        select(func.count(QuizParticipant.id))
-        .join(QuizSession, QuizSession.id == QuizParticipant.session_id)
-        .where(QuizSession.makeup_session_id == makeup.id)
+    child_sessions = list(
+        session.scalars(
+            select(QuizSession)
+            .where(QuizSession.makeup_session_id == makeup.id)
+            .order_by(QuizSession.id)
+        )
     )
+    quizzes_by_id = {quiz.id: quiz for quiz in quizzes}
+    child_responses = [
+        session_response(child, quizzes_by_id[child.quiz_id], session)
+        for child in child_sessions
+        if child.quiz_id in quizzes_by_id
+    ]
+    participants = [
+        MakeupParticipantResponse(
+            **participant.model_dump(),
+            quiz_title=child.quiz_title,
+            total_questions=child.total_questions,
+        )
+        for child in child_responses
+        for participant in child.participants
+    ]
     return MakeupSessionResponse(
         id=makeup.id,
         class_id=makeup.class_id,
@@ -3148,7 +3166,8 @@ def makeup_session_response(
             )
             for quiz in quizzes
         ],
-        participant_count=participant_count or 0,
+        participant_count=len(participants),
+        participants=participants,
         created_at=makeup.created_at,
     )
 

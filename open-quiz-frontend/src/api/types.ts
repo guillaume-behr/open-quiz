@@ -286,6 +286,10 @@ export type MakeupSession = {
     status: "waiting" | "in_progress" | "paused" | "finished" | "cancelled"
     quizzes: MakeupQuizOption[]
     participant_count: number
+    participants: (QuizParticipant & {
+        quiz_title: string
+        total_questions: number
+    })[]
     created_at: string
 }
 

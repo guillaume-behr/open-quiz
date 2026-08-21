@@ -1,9 +1,18 @@
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 
 from app.models import GradeLevel
 
-DEFAULT_GRADE_LEVELS = ("1ere", "2nd", "Tle")
+DEFAULT_GRADE_LEVELS = ("2nd", "1ere", "Tle")
+
+
+def grade_level_order(column):
+    """Sort the default lycée levels chronologically, then custom levels."""
+    return case(
+        {name: position for position, name in enumerate(DEFAULT_GRADE_LEVELS)},
+        value=column,
+        else_=len(DEFAULT_GRADE_LEVELS),
+    )
 
 
 def grade_level_import_context(
@@ -13,7 +22,11 @@ def grade_level_import_context(
         session.scalars(
             select(GradeLevel.name)
             .where(GradeLevel.owner_id == owner_id)
-            .order_by(GradeLevel.name, GradeLevel.id)
+            .order_by(
+                grade_level_order(GradeLevel.name),
+                GradeLevel.name,
+                GradeLevel.id,
+            )
         )
     )
     comment = (

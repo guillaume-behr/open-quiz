@@ -8,24 +8,16 @@ import {
 import type { MakeupSession, Quiz, StudentClass } from "@/api/types"
 import { connectLiveUpdates } from "@/lib/live-updates"
 import { formatClassName } from "@/lib/utils"
-import { DialogFormActions } from "@/components/forms/dialog-form-actions"
+import { ActiveQuizSessionDialog } from "@/components/quizzes/active-quiz-session-dialog"
 import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
+import { LoaderCircle, Play } from "lucide-react"
 import { useEffect, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 
-type MakeupSessionsPanelProps = {
-    isCreateDialogOpen: boolean
-    onCreateDialogOpenChange: (open: boolean) => void
-}
-
-export function MakeupSessionsPanel({
-    isCreateDialogOpen,
-    onCreateDialogOpenChange,
-}: MakeupSessionsPanelProps) {
+export function MakeupSessionsPanel() {
     const { t } = useTranslation()
     const [classes, setClasses] = useState<StudentClass[]>([])
     const [quizOptions, setQuizOptions] = useState<Quiz[]>([])
@@ -35,6 +27,8 @@ export function MakeupSessionsPanel({
     const [quizIds, setQuizIds] = useState<number[]>([])
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [selectedSession, setSelectedSession] =
+        useState<MakeupSession | null>(null)
 
     useEffect(() => {
         getAllStudentClasses()
@@ -75,7 +69,14 @@ export function MakeupSessionsPanel({
         return connectLiveUpdates<MakeupSession[]>({
             path: "/api/quizzes/live/teacher/makeup-sessions",
             getToken: getLiveAccessToken,
-            onData: setSessions,
+            onData: (items) => {
+                setSessions(items)
+                setSelectedSession((current) =>
+                    current
+                        ? (items.find((item) => item.id === current.id) ?? null)
+                        : null
+                )
+            },
             onUnavailable: () => setError(t("makeup-load-error")),
         })
     }, [t])
@@ -86,11 +87,6 @@ export function MakeupSessionsPanel({
         setQuizSearch("")
         setQuizOptions([])
         setError(null)
-    }
-
-    function closeCreateDialog() {
-        onCreateDialogOpenChange(false)
-        resetCreateForm()
     }
 
     async function create(event: FormEvent) {
@@ -107,7 +103,8 @@ export function MakeupSessionsPanel({
                       )
                     : [created, ...current]
             )
-            closeCreateDialog()
+            setSelectedSession(created)
+            resetCreateForm()
         } catch {
             setError(t("makeup-create-error"))
         } finally {
@@ -130,6 +127,11 @@ export function MakeupSessionsPanel({
                           session.id === updated.id ? updated : session
                       )
             )
+            if (!updated || value === "finish" || value === "cancel") {
+                setSelectedSession(null)
+            } else {
+                setSelectedSession(updated)
+            }
         } catch (caught) {
             setError(
                 caught instanceof ApiError && caught.status === 409
@@ -153,15 +155,13 @@ export function MakeupSessionsPanel({
                     {error}
                 </p>
             )}
-            <Dialog
-                open={isCreateDialogOpen}
-                onOpenChange={(open) => {
-                    if (!open && !busy) closeCreateDialog()
-                }}
-                title={t("makeup-create")}
-                description={t("makeup-professor-help")}
-                size="md"
-            >
+            <section className="rounded-2xl border bg-card p-5 sm:p-6">
+                <div className="mb-5">
+                    <h3 className="text-lg font-bold">{t("makeup-create")}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {t("makeup-professor-help")}
+                    </p>
+                </div>
                 <form onSubmit={create}>
                     <FieldGroup>
                         <Field>
@@ -256,16 +256,23 @@ export function MakeupSessionsPanel({
                                 )}
                             </fieldset>
                         )}
-                        <DialogFormActions
-                            isBusy={busy}
-                            isEditing={false}
-                            submitLabel={t("makeup-launch")}
-                            submitDisabled={!classId || !quizIds.length}
-                            onClose={closeCreateDialog}
-                        />
+                        <div className="flex justify-end border-t pt-4">
+                            <Button
+                                type="submit"
+                                size="lg"
+                                disabled={busy || !classId || !quizIds.length}
+                            >
+                                {busy ? (
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                                ) : (
+                                    <Play />
+                                )}
+                                {t("makeup-launch")}
+                            </Button>
+                        </div>
                     </FieldGroup>
                 </form>
-            </Dialog>
+            </section>
             <div
                 key={activeSessions.map((session) => session.id).join(",")}
                 className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
@@ -295,60 +302,42 @@ export function MakeupSessionsPanel({
                             </span>
                         </div>
                         <div className="mt-4 flex flex-wrap gap-2">
-                            {item.status === "waiting" && (
-                                <>
-                                    <Button
-                                        disabled={busy}
-                                        onClick={() =>
-                                            void action(item, "start")
-                                        }
-                                    >
-                                        {t("start-quiz")}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        disabled={busy}
-                                        onClick={() =>
-                                            void action(item, "cancel")
-                                        }
-                                    >
-                                        {t("cancel")}
-                                    </Button>
-                                </>
-                            )}
-                            {item.status === "in_progress" && (
-                                <>
-                                    <Button
-                                        variant="outline"
-                                        disabled={busy}
-                                        onClick={() =>
-                                            void action(item, "pause")
-                                        }
-                                    >
-                                        {t("pause-quiz")}
-                                    </Button>
-                                    <Button
-                                        disabled={busy}
-                                        onClick={() =>
-                                            void action(item, "finish")
-                                        }
-                                    >
-                                        {t("finish-quiz")}
-                                    </Button>
-                                </>
-                            )}
-                            {item.status === "paused" && (
-                                <Button
-                                    disabled={busy}
-                                    onClick={() => void action(item, "resume")}
-                                >
-                                    {t("resume-quiz")}
-                                </Button>
-                            )}
+                            <Button
+                                disabled={busy}
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    setSelectedSession(item)
+                                }}
+                            >
+                                {t("open-waiting-room")}
+                            </Button>
                         </div>
                     </article>
                 ))}
             </div>
+            <ActiveQuizSessionDialog
+                session={selectedSession}
+                error={error}
+                isStarting={busy}
+                action={busy ? "pause" : null}
+                onClose={() => setSelectedSession(null)}
+                onStart={() =>
+                    selectedSession && void action(selectedSession, "start")
+                }
+                onPause={() =>
+                    selectedSession && void action(selectedSession, "pause")
+                }
+                onResume={() =>
+                    selectedSession && void action(selectedSession, "resume")
+                }
+                onFinish={() =>
+                    selectedSession && void action(selectedSession, "finish")
+                }
+                onConfirmCancel={() =>
+                    selectedSession && void action(selectedSession, "cancel")
+                }
+                onConfirmDelete={() => setSelectedSession(null)}
+            />
         </div>
     )
 }

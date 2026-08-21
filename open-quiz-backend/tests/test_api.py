@@ -56,6 +56,7 @@ from app.routers.quizzes import (
 from app.schemas import (
     LoginRequest,
     QuestionBatchImport,
+    QuestionChoiceCreate,
     StudentAccountUpdate,
     StudentLoginRequest,
     StudentQuizAnswer,
@@ -356,6 +357,30 @@ def test_written_answer_mode_cannot_claim_to_be_hidden() -> None:
                 ],
             }
         )
+
+
+def test_choice_text_is_optional_with_an_image_or_code() -> None:
+    image_choice = QuestionChoiceCreate.model_validate(
+        {
+            "label": "",
+            "image": {
+                "content_type": "image/png",
+                "data_base64": "AA==",
+            },
+        }
+    )
+    code_choice = QuestionChoiceCreate.model_validate(
+        {
+            "label": "",
+            "code_language": "python",
+            "code_content": "print('answer')",
+        }
+    )
+
+    assert image_choice.label == ""
+    assert code_choice.label == ""
+    with pytest.raises(ValidationError):
+        QuestionChoiceCreate.model_validate({"label": ""})
 
 
 @pytest.mark.parametrize(
@@ -1877,10 +1902,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["latest_quiz_at"] is None
         grade_levels = client.get("/api/grade-levels", headers=teacher_headers).json()
         assert [level["name"] for level in grade_levels] == [
-            "1ere",
             "2nd",
-            "5e",
+            "1ere",
             "Tle",
+            "5e",
         ]
         class_example = client.get(
             "/api/classes/example",
@@ -1893,7 +1918,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             level["name"] in example_class["_comment_grade_level"]
             for level in grade_levels
         )
-        assert example_class["grade_level"] == "1ere"
+        assert example_class["grade_level"] == "2nd"
         duplicate_grade_level = client.post(
             "/api/grade-levels",
             headers=teacher_headers,

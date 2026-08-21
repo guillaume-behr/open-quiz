@@ -617,7 +617,24 @@ async function mockTeacherApi(page: Page) {
                             duration_seconds: 1800,
                         },
                     ],
-                    participant_count: 0,
+                    participant_count: 1,
+                    participants: [
+                        {
+                            id: 901,
+                            student_identifier: "student-1",
+                            student_display_name: "Student One",
+                            answered_count: 0,
+                            score: 0,
+                            maximum_score: 0,
+                            pending_manual_grading_count: 0,
+                            violation_count: 0,
+                            last_violation_type: null,
+                            last_violation_at: null,
+                            joined_at: "2026-01-06T00:01:00Z",
+                            quiz_title: "Science checkpoint",
+                            total_questions: 10,
+                        },
+                    ],
                     created_at: "2026-01-06T00:00:00Z",
                 }
                 makeupSessions = [created, ...makeupSessions]
@@ -1768,13 +1785,12 @@ test("teacher creates and controls a retake session", async ({ page }) => {
     await page.getByRole("button", { name: "Retake", exact: true }).click()
     await expect(page.getByText("Class 8B · OLD123")).toHaveCount(0)
 
-    await page.getByRole("button", { name: "New retake session" }).click()
-
-    const dialog = page.getByRole("dialog", { name: "New retake session" })
-    await expect(dialog).toBeVisible()
-    await dialog.getByRole("combobox", { name: "Class" }).selectOption("11")
-    await dialog.getByText("Science checkpoint", { exact: true }).click()
-    await dialog.getByRole("button", { name: "Create session" }).click()
+    await expect(
+        page.getByRole("button", { name: "New retake session" })
+    ).toHaveCount(0)
+    await page.getByRole("combobox", { name: "Class" }).selectOption("11")
+    await page.getByText("Science checkpoint", { exact: true }).click()
+    await page.getByRole("button", { name: "Create session" }).click()
 
     await expect
         .poll(() =>
@@ -1786,7 +1802,9 @@ test("teacher creates and controls a retake session", async ({ page }) => {
             )
         )
         .toBe(true)
-    await expect(page.getByText("Class 8B · MAKE51")).toBeVisible()
+    const sessionDialog = page.getByRole("dialog", { name: "Retake" })
+    await expect(sessionDialog.getByText("MAKE51")).toBeVisible()
+    await expect(sessionDialog.getByText("Student One")).toBeVisible()
     expect(
         requests
             .find(
@@ -1798,15 +1816,16 @@ test("teacher creates and controls a retake session", async ({ page }) => {
             ?.postDataJSON()
     ).toEqual({ class_id: 11, quiz_ids: [31] })
 
-    const sessionCard = page.getByRole("article").filter({ hasText: "MAKE51" })
-    await sessionCard.getByRole("button", { name: "Start quiz" }).click()
-    await expect(sessionCard.getByText("In progress")).toBeVisible()
-    await sessionCard.getByRole("button", { name: "Pause quiz" }).click()
-    await expect(sessionCard.getByText("Paused")).toBeVisible()
-    await sessionCard.getByRole("button", { name: "Resume quiz" }).click()
-    await expect(sessionCard.getByText("In progress")).toBeVisible()
-    await sessionCard.getByRole("button", { name: "Finish quiz" }).click()
-    await expect(sessionCard).toHaveCount(0)
+    await sessionDialog.getByRole("button", { name: "Start quiz" }).click()
+    await expect(sessionDialog.getByText("Quiz started")).toBeVisible()
+    await sessionDialog.getByRole("button", { name: "Pause quiz" }).click()
+    await expect(
+        sessionDialog.getByText("Quiz paused", { exact: true })
+    ).toBeVisible()
+    await sessionDialog.getByRole("button", { name: "Resume quiz" }).click()
+    await expect(sessionDialog.getByText("Quiz started")).toBeVisible()
+    await sessionDialog.getByRole("button", { name: "Finish quiz" }).click()
+    await expect(sessionDialog).toHaveCount(0)
 
     expect(
         requests

@@ -7,7 +7,11 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
-from app.grade_levels import ensure_grade_level, grade_level_import_context
+from app.grade_levels import (
+    ensure_grade_level,
+    grade_level_import_context,
+    grade_level_order,
+)
 from app.models import (
     ClassTrainingQuestionBank,
     GradeLevel,
@@ -320,8 +324,9 @@ def list_classes(
             select(StudentClass)
             .where(*filters)
             .order_by(
-                StudentClass.name,
+                grade_level_order(StudentClass.grade_level),
                 StudentClass.grade_level,
+                StudentClass.name,
                 StudentClass.id,
             )
             .offset((page - 1) * page_size)
