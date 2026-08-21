@@ -28,6 +28,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   compte élève ;
 - les réponses envoyées simultanément ne peuvent plus créer de doublons ni
   provoquer d'erreur 500 (écriture atomique) ;
+- les exécutions Python demandées simultanément sont sérialisées afin que leurs
+  sorties et erreurs ne puissent plus se mélanger ;
 - les démarrages, réponses, corrections et suppressions concurrents sont
   sérialisés afin de préserver l’état des sessions et des résultats ;
 - la fin d'un rattrapage termine aussi les sessions en pause et la reprise
@@ -39,6 +41,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   bornée, contrôle d’origine et reconnexion progressive ;
 - test réseau conteneurisé couvrant l’API, le proxy et les WebSockets ;
 - Dependabot activé pour GitHub Actions, Docker, uv et npm.
+- mise à jour de `pip` dans l’outillage de développement vers une version
+  corrigée de `PYSEC-2026-3721`.
 
 ### Ajouts
 

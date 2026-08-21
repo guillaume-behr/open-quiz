@@ -24,6 +24,7 @@ type PythonRuntime = {
 const MAX_OUTPUT_CHARACTERS = 1_000_000
 let runtimePromise: Promise<PythonRuntime> | undefined
 let sandboxRestricted = false
+let executionQueue = Promise.resolve()
 const sendMessage = self.postMessage.bind(self)
 
 class OutputLimitError extends Error {}
@@ -65,8 +66,7 @@ function runtime(): Promise<PythonRuntime> {
     return runtimePromise
 }
 
-self.onmessage = async (event: MessageEvent<RunRequest>) => {
-    const { id, source } = event.data
+async function execute({ id, source }: RunRequest): Promise<void> {
     let outputLimitExceeded = false
     try {
         const python = await runtime()
@@ -106,4 +106,12 @@ self.onmessage = async (event: MessageEvent<RunRequest>) => {
         } satisfies RunResponse)
         if (fatal) self.close()
     }
+}
+
+self.onmessage = (event: MessageEvent<RunRequest>) => {
+    // Pyodide has one process-wide stdout/stderr configuration. Running two
+    // snippets at once lets the later request replace the earlier callbacks,
+    // mixing or losing output. Keep the public API concurrent while executing
+    // requests in arrival order inside the shared runtime.
+    executionQueue = executionQueue.then(() => execute(event.data))
 }

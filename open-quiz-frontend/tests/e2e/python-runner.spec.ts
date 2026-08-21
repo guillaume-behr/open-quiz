@@ -40,3 +40,21 @@ test("Python execution still blocks browser data and network capabilities", asyn
         "This browser capability is disabled for Python execution"
     )
 })
+
+test("concurrent Python requests keep their output isolated", async ({ page }) => {
+    await page.goto("/student/login")
+
+    const output = await page.evaluate(async () => {
+        const { runPython } = await import(
+            "/src/components/question-banks/python-runner.ts"
+        )
+        return Promise.all([
+            runPython(
+                "import asyncio\nprint('first-start')\nawait asyncio.sleep(0.05)\nprint('first-end')"
+            ),
+            runPython("print('second-only')"),
+        ])
+    })
+
+    expect(output).toEqual(["first-start\nfirst-end", "second-only"])
+})
