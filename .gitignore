@@ -1,11 +1,16 @@
 **/.env
+**/.env.*.bak
 **/.venv/
 **/.uv-cache*/
 **/.pnpm-store/
 **/__pycache__/
 **/.pytest_cache/
+**/.coverage
 **/.ruff_cache/
 **/*.log
+**/*.db
+**/*.db-shm
+**/*.db-wal
 **/node_modules/
 **/dist/
 **/coverage/
