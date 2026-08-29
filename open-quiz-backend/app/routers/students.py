@@ -2,6 +2,7 @@ import re
 import unicodedata
 from typing import Annotated
 
+from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import delete, func, select
@@ -77,14 +78,21 @@ def generated_student_identifier(
 def credential_response(
     account: StudentAccount, request: Request
 ) -> StudentCredentialResponse:
-    password = (
-        decrypt_student_password(
-            account.encrypted_password,
-            request.app.state.settings.student_credential_encryption_key,
-        )
-        if account.encrypted_password
-        else None
-    )
+    password = None
+    if account.encrypted_password:
+        try:
+            password = decrypt_student_password(
+                account.encrypted_password,
+                request.app.state.settings.student_credential_encryption_key,
+            )
+        except InvalidToken:
+            # A rotated STUDENT_CREDENTIAL_ENCRYPTION_KEY (or a restored
+            # backup) leaves stored passwords unreadable. Report that single
+            # account as unavailable instead of failing the whole listing.
+            audit_event(
+                "students.credential_undecryptable",
+                account_id=account.id,
+            )
     return StudentCredentialResponse(
         identifier=account.identifier,
         display_name=account.display_name,

@@ -68,6 +68,7 @@ from app.security import (
     decode_access_token,
     decode_student_access_token,
     decode_two_factor_token,
+    encrypt_student_password,
     refresh_request_proof,
 )
 from main import create_app
@@ -1328,6 +1329,68 @@ def test_professor_manages_student_accounts_and_class_assignments(
             ]
             is None
         )
+
+
+def test_unreadable_student_password_is_reported_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    """A rotated credential key must not fail the whole listing and export."""
+    with make_client(settings_for(tmp_path / "stale-credentials.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "stale.credentials.teacher",
+                    "display_name": "Stale Credentials Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client,
+            "stale.credentials.teacher",
+            "a-secure-teacher-password",
+        )
+        readable = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Lisa", "last_name": "Martin"},
+        ).json()
+        stale = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Noé", "last_name": "Bernard"},
+        ).json()
+
+        # Simulate a password stored under a previous encryption key.
+        with client.app.state.session_factory() as session:
+            account = session.get(StudentAccount, stale["id"])
+            assert account is not None
+            account.encrypted_password = encrypt_student_password(
+                "a-previous-password",
+                "a-rotated-student-credential-key-2026",
+            )
+            session.commit()
+
+        credentials = client.get("/api/students/credentials", headers=teacher_headers)
+        assert credentials.status_code == 200
+        passwords_by_identifier = {
+            item["identifier"]: item["password"] for item in credentials.json()
+        }
+        assert (
+            passwords_by_identifier[readable["identifier"]]
+            == readable["generated_password"]
+        )
+        assert passwords_by_identifier[stale["identifier"]] is None
+
+        exported = client.get(
+            "/api/students/credentials/export", headers=teacher_headers
+        )
+        assert exported.status_code == 200
+        assert exported.json() == {"students": credentials.json()}
 
 
 def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
