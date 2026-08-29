@@ -476,7 +476,9 @@ def download_import_example(
         "version": 1,
         "question_bank": {
             "_comment_grade_level": grade_level_comment,
-            "grade_level": "2de",
+            "grade_level": (
+                available_grade_levels[0] if available_grade_levels else "Tle"
+            ),
             "chapter": "Exemple complet",
         },
         "questions": [

@@ -13,6 +13,9 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   quitte sans avoir répondu reste ouverte pour permettre le retour ;
 - l’écran d’erreur de l’interface s’affiche même lorsque le navigateur refuse
   l’accès au stockage de session ;
+- l’exemple d’import de questions propose désormais un niveau de classe
+  existant du compte au lieu d’une valeur fictive, comme l’exemple d’import de
+  classes ;
 - `install-dev.sh` crée le rôle et la base `open_quiz_test` : la suite de tests
   backend s’y connecte, mais rien ne les créait, et un dépôt fraîchement cloné
   ne pouvait donc pas exécuter `pytest` ;
