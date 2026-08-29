@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import tomllib
 from base64 import b64decode, b64encode
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -23,6 +24,7 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine, event, inspect, select
 from starlette.websockets import WebSocketDisconnect
 
+import main
 from app.config import Settings, secure_private_file
 from app.database import postgres_url
 from app.grading import selected_choice_score
@@ -6555,3 +6557,41 @@ def test_leaving_without_answering_keeps_the_session_rejoinable(
             json={"join_code": join_code},
         )
         assert rejoined.status_code == 201
+
+
+def test_the_three_version_fields_agree() -> None:
+    """The published version is written in three files that must not drift.
+
+    The backend image installs its dependencies with --no-install-project, so
+    the API cannot read its version from package metadata and every file holds
+    a literal. A release that updates only some of them ships an API reporting
+    one version and an interface built as another.
+    """
+    repository = Path(__file__).resolve().parent.parent.parent
+    backend = tomllib.loads(
+        (repository / "open-quiz-backend" / "pyproject.toml").read_text()
+    )["project"]["version"]
+    frontend = json.loads(
+        (repository / "open-quiz-frontend" / "package.json").read_text()
+    )["version"]
+    served = main.app.version
+    assert backend == frontend == served, (
+        f"pyproject {backend}, package.json {frontend}, API {served}"
+    )
+
+
+def test_the_changelog_documents_the_released_version() -> None:
+    """The newest changelog entry must name the version being shipped."""
+    repository = Path(__file__).resolve().parent.parent.parent
+    version = tomllib.loads(
+        (repository / "open-quiz-backend" / "pyproject.toml").read_text()
+    )["project"]["version"]
+    headings = [
+        line
+        for line in (repository / "CHANGELOG.md").read_text().splitlines()
+        if line.startswith("## ")
+    ]
+    assert headings, "the changelog has no version heading"
+    assert headings[0].startswith(f"## {version} "), (
+        f"newest changelog heading is {headings[0]!r}, expected version {version}"
+    )

@@ -11,7 +11,7 @@ gère les enseignants, les enseignants préparent les contenus et les sessions,
 et les élèves passent leurs examens ou s’entraînent depuis leur tableau de bord.
 
 > [!IMPORTANT]
-> **Préversion 0.2.1.** Le projet est fonctionnel et testé, mais son schéma de
+> **Préversion 0.3.0.** Le projet est fonctionnel et testé, mais son schéma de
 > données et ses interfaces peuvent encore évoluer avant la version 1.0.
 > Sauvegardez vos données avant chaque mise à jour et consultez le
 > [journal des versions](CHANGELOG.md).

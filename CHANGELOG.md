@@ -2,7 +2,7 @@
 
 Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
-## 0.2.1 — En développement
+## 0.3.0 — 2026-08-29
 
 ### Sécurité et corrections
 
@@ -11,11 +11,11 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   vérification, et l’examen restait en cours jusqu’à l’expiration du minuteur
   alors que plus personne ne pouvait répondre ; une session que tout le monde
   quitte sans avoir répondu reste ouverte pour permettre le retour ;
-- l’écran d’erreur de l’interface s’affiche même lorsque le navigateur refuse
-  l’accès au stockage de session ;
 - l’exemple d’import de questions propose désormais un niveau de classe
   existant du compte au lieu d’une valeur fictive, comme l’exemple d’import de
   classes ;
+- l’écran d’erreur de l’interface s’affiche même lorsque le navigateur refuse
+  l’accès au stockage de session ;
 - `install-dev.sh` crée le rôle et la base `open_quiz_test` : la suite de tests
   backend s’y connecte, mais rien ne les créait, et un dépôt fraîchement cloné
   ne pouvait donc pas exécuter `pytest` ;
@@ -32,8 +32,6 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   au lancement ;
 - la surveillance signale aussi les copies, collages et ouvertures du menu
   contextuel, quelle que soit la longueur du contenu ;
-- adoption exclusive de PostgreSQL 17 dans Docker Compose ; cette transition
-  repart d’une base vide et ne fournit pas de reprise historique ;
 - la limitation des signalements anonymes n'utilise plus jamais l'adresse IP :
   le budget est désormais global à l'instance (`PROBLEM_REPORT_ATTEMPTS`, 30
   par défaut en développement et 5 dans l’exemple de production) ;
@@ -143,6 +141,14 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Modifications incompatibles
 
+> [!IMPORTANT]
+> Sauvegardez la base et `open-quiz-backend/.env` avant la mise à jour, puis
+> suivez la procédure du
+> [guide de déploiement](docs/deployment.md#mettre-à-jour-open-quiz).
+
+- adoption exclusive de PostgreSQL 17 dans Docker Compose : cette transition
+  repart d’un volume vide et ne fournit aucune reprise des bases antérieures,
+  les résultats et les comptes doivent être recréés ;
 - l’entrée en examen nécessite désormais un compte élève authentifié ;
 - les pourcentages de difficulté sont remplacés par des quantités ;
 - les points sont désormais définis sur les propositions des banques de questions ;
