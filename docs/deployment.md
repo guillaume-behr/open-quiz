@@ -48,8 +48,16 @@ les opérations nécessaires au premier démarrage :
    de production depuis le fichier d’exemple ;
 4. il crée `open-quiz-backend/.env` avec des permissions réservées au
    propriétaire ;
-5. il lance `update.sh`, qui récupère la dernière version, construit les images,
-   démarre les services et attend leur état sain.
+5. il lance `update.sh --no-pull`, qui construit les images, démarre les
+   services et attend leur état sain. Le clone est déjà à jour, donc aucune
+   révision n’est récupérée à cette étape.
+
+Pour une installation automatisée, le domaine peut être fourni en argument
+plutôt que saisi au clavier :
+
+```shell
+sh ./install.sh --domain quiz.example.com
+```
 
 Enregistrez immédiatement le mot de passe administrateur affiché par le script :
 il ne sera pas réaffiché. L’installation refuse d’écraser un fichier `.env`
@@ -273,10 +281,27 @@ Sous PowerShell :
 ./update.ps1
 ```
 
-Les scripts effectuent un `git pull --ff-only`, valident la configuration
-Compose, reconstruisent les conteneurs, attendent leur état sain puis affichent
-leur statut. Cette version ne migre pas les anciennes bases : utilisez un volume
-PostgreSQL neuf pour la transition.
+Les scripts vérifient d’abord que Docker est accessible, que
+`open-quiz-backend/.env` existe et que le dépôt ne contient aucune modification
+locale, puis effectuent un `git pull --ff-only`. Ils affichent la révision avant
+et après la mise à jour et rappellent de sauvegarder PostgreSQL lorsqu’elle
+change. Ils valident ensuite la configuration Compose, reconstruisent les
+conteneurs, attendent leur état sain et affichent leur statut ainsi que
+l’origine publique configurée.
+
+Pour reconstruire et redémarrer sans récupérer de révision, par exemple après
+avoir modifié `.env` :
+
+```shell
+sh ./update.sh --no-pull
+```
+
+```powershell
+./update.ps1 -NoPull
+```
+
+Cette version ne migre pas les anciennes bases : utilisez un volume PostgreSQL
+neuf pour la transition.
 
 Après la mise à jour, vérifiez `docker compose ps`, `/api/health`, la connexion
 des trois rôles et les journaux du backend.
