@@ -6,6 +6,9 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Sécurité et corrections
 
+- l’étiquette de classe construite par l’API et par l’interface ne diverge plus
+  lorsque le nom est vide ; les deux implémentations sont désormais vérifiées
+  sur le même jeu de cas ;
 - la sauvegarde écrite par `scripts/rotate_local_secrets.py` n’est plus créée
   avec les permissions par défaut : elle contient tous les secrets en cours et
   restait lisible par les autres comptes de la machine le temps de l’écriture ;

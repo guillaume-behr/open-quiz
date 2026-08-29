@@ -4,6 +4,8 @@ def format_class_name(grade_level: str | None, class_name: str) -> str:
     normalized_level = " ".join((grade_level or "").split())
     if not normalized_level:
         return normalized_name
+    if not normalized_name:
+        return normalized_level
     folded_name = normalized_name.casefold()
     folded_level = normalized_level.casefold()
     if folded_name == folded_level:

@@ -26,6 +26,7 @@ from sqlalchemy import create_engine, event, inspect, select
 from starlette.websockets import WebSocketDisconnect
 
 import main
+from app.class_names import format_class_name
 from app.config import Settings, secure_private_file, write_private_file
 from app.database import postgres_url
 from app.grading import selected_choice_score
@@ -6620,3 +6621,46 @@ def test_secret_files_are_never_readable_by_other_accounts(tmp_path: Path) -> No
     # An existing path is never silently overwritten.
     with pytest.raises(FileExistsError):
         write_private_file(secret_file, "other")
+
+
+@pytest.mark.parametrize(
+    ("grade_level", "class_name", "expected"),
+    [
+        # The level is prepended when the name does not already carry it.
+        ("Tle", "TG1", "Tle TG1"),
+        ("Tle", "Tle TG1", "Tle TG1"),
+        # A name equal to the level stays as written.
+        ("Tle", "Tle", "Tle"),
+        ("Tle", "tle", "tle"),
+        # Either side missing leaves the other untouched.
+        (None, "TG1", "TG1"),
+        ("", "TG1", "TG1"),
+        ("Tle", "", "Tle"),
+        # A level repeated around a separator is folded back into the prefix,
+        # for each separator teachers actually type.
+        ("Tle", "TG1 - Tle", "Tle TG1"),
+        ("Tle", "TG1 — Tle", "Tle TG1"),
+        ("Tle", "TG1 · Tle", "Tle TG1"),
+        ("Tle", "Tle - TG1", "Tle TG1"),
+        ("Tle", "Tle — TG1", "Tle TG1"),
+        ("Tle", "Tle · TG1", "Tle TG1"),
+        # Matching ignores case on both sides.
+        ("Tle", "tle - TG1", "Tle TG1"),
+        ("Tle", "TG1 - TLE", "Tle TG1"),
+        # Surrounding and repeated whitespace is collapsed.
+        ("Tle", "  TG1   B  ", "Tle TG1 B"),
+        ("  Tle  ", "TG1", "Tle TG1"),
+        # A level that merely starts the name is not a separator match.
+        ("1ere", "1ere-A", "1ere 1ere-A"),
+    ],
+)
+def test_class_labels_are_built_without_repeating_the_level(
+    grade_level: str | None, class_name: str, expected: str
+) -> None:
+    """This label is stored in session snapshots and printed in CSV exports.
+
+    The interface builds the same label with formatClassName in
+    open-quiz-frontend/src/lib/utils.ts; the two must agree, so keep this
+    table and that function in step.
+    """
+    assert format_class_name(grade_level, class_name) == expected
