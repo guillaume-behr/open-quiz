@@ -55,6 +55,7 @@ from app.schemas import (
     QuestionBankUpdate,
     QuestionBatchImport,
     QuestionBatchImportResponse,
+    QuestionChoiceCreate,
     QuestionCreate,
     QuestionImportImage,
     QuestionImportItem,
@@ -363,6 +364,18 @@ def discard_training_sessions_using_question(
     delete_quiz_session_records(training_session_ids, session)
 
 
+def choice_points(
+    choice: QuestionChoiceCreate,
+    choices: list[QuestionChoiceCreate],
+) -> float:
+    """Split a single point evenly across correct choices when none is given."""
+    if choice.points is not None:
+        return choice.points
+    if not choice.is_correct:
+        return 0
+    return 1 / sum(item.is_correct for item in choices)
+
+
 def add_question(
     question_bank_id: int,
     payload: QuestionCreate,
@@ -405,13 +418,7 @@ def add_question(
             question_id=question.id,
             label=choice.label,
             is_correct=choice.is_correct,
-            points=(
-                choice.points
-                if choice.points is not None
-                else 1 / sum(item.is_correct for item in payload.choices)
-                if choice.is_correct
-                else 0
-            ),
+            points=choice_points(choice, payload.choices),
             image_data=choice_image_data,
             image_content_type=choice_image_content_type,
             code_language=choice.code_language,
@@ -993,13 +1000,7 @@ def update_question(
         )
         choice.label = choice_payload.label
         choice.is_correct = choice_payload.is_correct
-        choice.points = (
-            choice_payload.points
-            if choice_payload.points is not None
-            else 1 / sum(item.is_correct for item in question_payload.choices)
-            if choice_payload.is_correct
-            else 0
-        )
+        choice.points = choice_points(choice_payload, question_payload.choices)
         choice.image_data = choice_image_data
         choice.image_content_type = choice_image_content_type
         choice.code_language = choice_payload.code_language

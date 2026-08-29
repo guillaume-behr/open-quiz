@@ -171,15 +171,15 @@ def list_student_accounts(
     return [
         student_account_response_from_membership(
             account,
-            (class_id, class_name, grade_level)
+            (membership_class_id, class_name, grade_level)
             if (
-                class_id is not None
+                membership_class_id is not None
                 and class_name is not None
                 and grade_level is not None
             )
             else None,
         )
-        for account, class_id, class_name, grade_level in rows
+        for account, membership_class_id, class_name, grade_level in rows
     ]
 
 

@@ -34,7 +34,12 @@ from starlette.requests import HTTPConnection
 from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser, authenticated_user_from_token
-from app.grading import compute_final_scores, selected_choice_score
+from app.grading import (
+    compute_final_scores,
+    decoded_answer_data,
+    selected_choice_ids,
+    selected_choice_score,
+)
 from app.live_quiz import (
     active_quiz_sessions_topic,
     makeup_sessions_topic,
@@ -1295,6 +1300,26 @@ def authenticated_participant(
     return row
 
 
+def accessible_question_positions(
+    question_ids: list[int],
+    answered_question_ids: set[int],
+    current_position: int | None,
+) -> set[int]:
+    """Positions a participant may reach: answered ones, the next, the current."""
+    positions = {
+        position
+        for position, question_id in enumerate(question_ids)
+        if question_id in answered_question_ids
+    }
+    if positions:
+        next_position = max(positions) + 1
+        if next_position < len(question_ids):
+            positions.add(next_position)
+    if current_position is not None:
+        positions.add(current_position)
+    return positions
+
+
 def student_question_response(
     question_id: int,
     quiz_session: QuizSession,
@@ -1389,27 +1414,15 @@ def student_state_response(
         if question_id is not None
         else None
     )
-    if existing_answer is not None:
-        try:
-            saved_answer = json.loads(existing_answer.answer_data)
-        except TypeError, ValueError:
-            saved_answer = {}
-        if not isinstance(saved_answer, dict):
-            saved_answer = {}
-    else:
-        saved_answer = {}
+    saved_answer = (
+        decoded_answer_data(existing_answer) if existing_answer is not None else {}
+    )
     answered_count = len(answered_question_ids)
-    accessible_positions = {
-        position
-        for position, assigned_question_id in enumerate(question_ids)
-        if assigned_question_id in answered_question_ids
-    }
-    if accessible_positions:
-        next_position = max(accessible_positions) + 1
-        if next_position < len(question_ids):
-            accessible_positions.add(next_position)
-    if participant.current_position is not None:
-        accessible_positions.add(participant.current_position)
+    accessible_positions = accessible_question_positions(
+        question_ids,
+        answered_question_ids,
+        participant.current_position,
+    )
     state = StudentQuizStateResponse(
         **student_session_response(
             quiz_session, quiz, participant, session
@@ -1487,15 +1500,7 @@ def training_result(
         answer = answers.get(question_id)
         if answer is None:
             continue
-        try:
-            answer_data = json.loads(answer.answer_data)
-        except TypeError, ValueError:
-            answer_data = {}
-        selected_ids = set(
-            answer_data.get("selected_choice_ids", [])
-            if isinstance(answer_data, dict)
-            else []
-        )
+        selected_ids = selected_choice_ids(answer)
         score += selected_choice_score(
             choices,
             selected_ids,
@@ -1814,12 +1819,7 @@ def answer_review(
     choices: list[QuestionChoice],
     max_score: float,
 ) -> QuizAnswerReview:
-    try:
-        submitted = json.loads(answer.answer_data)
-    except TypeError, ValueError:
-        submitted = {}
-    if not isinstance(submitted, dict):
-        submitted = {}
+    submitted = decoded_answer_data(answer)
     choices_by_id = {choice.id: choice for choice in choices}
     if question.answer_mode == "written":
         submitted_answers = [str(submitted.get("written_answer", ""))]
@@ -2022,12 +2022,6 @@ def list_student_quiz_history(
                     question_points.get(question.id, 0),
                 )
                 submitted_answers = review.submitted_answers
-                try:
-                    submitted_data = json.loads(answer.answer_data)
-                except TypeError, ValueError:
-                    submitted_data = {}
-                if not isinstance(submitted_data, dict):
-                    submitted_data = {}
                 if question.answer_mode == "written":
                     is_correct = (
                         answer.is_graded
@@ -2035,17 +2029,10 @@ def list_student_quiz_history(
                         and answer.score >= review.max_score
                     )
                 else:
-                    selected_ids = set(
-                        submitted_data.get("selected_choice_ids", [])
-                        if isinstance(
-                            submitted_data.get("selected_choice_ids", []), list
-                        )
-                        else []
-                    )
                     correct_ids = {
                         choice.id for choice in question_choices if choice.is_correct
                     }
-                    is_correct = selected_ids == correct_ids
+                    is_correct = selected_choice_ids(answer) == correct_ids
             else:
                 submitted_answers = []
                 is_correct = False
@@ -3434,9 +3421,7 @@ def control_makeup_session(
             if child.status not in {"in_progress", "paused"}:
                 continue
             child.status = "finished"
-            quiz = session.get(Quiz, child.quiz_id)
-            if quiz is not None:
-                compute_final_scores(child, session)
+            compute_final_scores(child, session)
             for participant in session.scalars(
                 select(QuizParticipant).where(QuizParticipant.session_id == child.id)
             ):
@@ -4241,17 +4226,11 @@ def navigate_student_quiz(
             )
         )
     )
-    accessible_positions = {
-        position
-        for position, question_id in enumerate(question_ids)
-        if question_id in answered_question_ids
-    }
-    if accessible_positions:
-        next_position = max(accessible_positions) + 1
-        if next_position < len(question_ids):
-            accessible_positions.add(next_position)
-    if participant.current_position is not None:
-        accessible_positions.add(participant.current_position)
+    accessible_positions = accessible_question_positions(
+        question_ids,
+        answered_question_ids,
+        participant.current_position,
+    )
     if (
         quiz_session.status != "in_progress"
         or not allow_previous_questions
