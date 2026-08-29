@@ -12,7 +12,7 @@ Consultez aussi le [README principal](../README.md), le
 
 Le backend fait partie de l’installation Docker Compose d’Open Quiz, qui
 configure également PostgreSQL et le frontend. Depuis la racine du dépôt,
-suivez la [procédure d’installation recommandée](../README.md#installation-avec-docker) :
+suivez la [procédure d’installation recommandée](../README.md#installation) :
 
 ```shell
 sh ./install.sh

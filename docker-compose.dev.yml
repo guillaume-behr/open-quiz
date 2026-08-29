@@ -1,0 +1,21 @@
+# Development-only overrides, applied by install-dev.sh on top of
+# docker-compose.yml. Production never loads this file.
+#
+# The API runs on the host during development (uv run fastapi dev), so it needs
+# to reach PostgreSQL at 127.0.0.1:5432. The shared "open-quiz" network is
+# internal, and Docker cannot publish a port from a container that is attached
+# to internal networks only: the mapping is silently dropped. Join a second,
+# routable bridge here so that the published port actually reaches the host.
+services:
+    open-quiz-database:
+        networks:
+            open-quiz:
+                ipv4_address: 172.28.0.4
+            open-quiz-database-edge: {}
+        ports:
+            - "127.0.0.1:5432:5432"
+
+networks:
+    open-quiz-database-edge:
+        name: open-quiz-database-edge
+        driver: bridge

@@ -6,6 +6,10 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Sécurité et corrections
 
+- `install-dev.sh` publie de nouveau PostgreSQL sur `127.0.0.1:5432` grâce à
+  `docker-compose.dev.yml` : le réseau Compose étant interne, la publication
+  déclarée était ignorée et l’API de développement échouait avec
+  « connection refused » ;
 - les questions à choix multiples sans points négatifs n’accordent plus de
   points lorsqu’une proposition incorrecte est également sélectionnée ;
 - un type de réponse masqué utilise désormais la même représentation générique
@@ -127,10 +131,16 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - les pourcentages de difficulté sont remplacés par des quantités ;
 - les points sont désormais définis sur les propositions des banques de questions ;
 - l’ancien écran public permettant de rejoindre un quiz est remplacé par la
-  connexion élève.
+  connexion élève ;
+- retrait de `update.ps1` : le déploiement exige déjà un shell POSIX, et la
+  mise à jour se fait avec `sh ./update.sh`, sous WSL pour Windows.
 
 ### Documentation
 
+- réorganisation de la documentation par public : le README présente le projet
+  et l’installation, le guide de contribution regroupe l’environnement de
+  développement et les vérifications, et le guide de déploiement reste la
+  référence d’exploitation ; les procédures ne sont plus décrites en double ;
 - Docker Compose devient la méthode d’installation présentée en premier dans
   toute la documentation ; les lancements directs avec Python et Vite sont
   explicitement réservés au développement ;
@@ -140,8 +150,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   routes et contraintes réellement présentes dans le dépôt ;
 - enrichissement des guides de contribution et de sécurité ainsi que des
   modèles d’issues et de pull request ;
-- les scripts `install.sh`, `install-dev.sh`, `update.sh` et `update.ps1`
-  partagent une présentation commune, affichent le logo Open Quiz et acceptent
+- les scripts `install.sh`, `install-dev.sh` et `update.sh` partagent une
+  présentation commune, affichent le logo Open Quiz et acceptent
   `--help` ; `install.sh` accepte `--domain` pour une installation non
   interactive et `update.sh` accepte `--no-pull` pour reconstruire sans
   récupérer de révision ;

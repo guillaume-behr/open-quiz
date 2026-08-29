@@ -7,6 +7,15 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 ENV_TEMPLATE="$SCRIPT_DIR/open-quiz-backend/.env.example"
 ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env"
+COMPOSE_BASE="$SCRIPT_DIR/docker-compose.yml"
+COMPOSE_DEV="$SCRIPT_DIR/docker-compose.dev.yml"
+
+# The development override publishes PostgreSQL on 127.0.0.1:5432 so that the
+# API can run on the host. Without it the container is reachable only from the
+# internal Docker network and the API fails with "connection refused".
+dev_compose() {
+    compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEV" "$@"
+}
 
 usage() {
     printf 'Usage: sh ./install-dev.sh [--help]\n\n'
@@ -29,6 +38,8 @@ esac
 open_quiz_banner 'Local development setup'
 
 require_commands docker grep od sed tr mktemp
+[ -f "$COMPOSE_BASE" ] || fail "missing Docker Compose file: $COMPOSE_BASE"
+[ -f "$COMPOSE_DEV" ] || fail "missing development override: $COMPOSE_DEV"
 setup_compose
 
 environment_created=false
@@ -76,9 +87,9 @@ fi
 
 cd "$SCRIPT_DIR"
 step 'Starting PostgreSQL'
-compose up --detach --wait open-quiz-database
+dev_compose up --detach --wait open-quiz-database
 
-if ! compose exec -T open-quiz-database sh -c \
+if ! dev_compose exec -T open-quiz-database sh -c \
     'PGPASSWORD="$POSTGRES_PASSWORD" psql --host=127.0.0.1 --username=open_quiz --dbname=open_quiz --command="SELECT 1"' \
     >/dev/null 2>&1; then
     fail "PostgreSQL rejected the credentials from open-quiz-backend/.env; restore the configuration matching the existing volume or recreate the development database"
