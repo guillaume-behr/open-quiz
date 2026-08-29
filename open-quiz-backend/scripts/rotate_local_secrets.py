@@ -4,7 +4,7 @@ from time import time
 
 from sqlalchemy import update
 
-from app.config import get_settings, secure_private_file
+from app.config import get_settings, secure_private_file, write_private_file
 from app.database import build_session_factory
 from app.models import RefreshSession
 
@@ -36,8 +36,7 @@ def rotate() -> None:
     # ENV_FILE has no suffix (".env" is a bare stem), so with_suffix() would
     # produce ".env.env.<timestamp>.bak". Name the sibling file explicitly.
     backup = ENV_FILE.with_name(f"{ENV_FILE.name}.{int(time())}.bak")
-    backup.write_text(ENV_FILE.read_text(encoding="utf-8"), encoding="utf-8")
-    secure_private_file(backup)
+    write_private_file(backup, ENV_FILE.read_text(encoding="utf-8"))
 
     ENV_FILE.write_text("\n".join(output) + "\n", encoding="utf-8")
     secure_private_file(ENV_FILE)

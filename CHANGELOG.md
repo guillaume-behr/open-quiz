@@ -6,6 +6,9 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Sécurité et corrections
 
+- la sauvegarde écrite par `scripts/rotate_local_secrets.py` n’est plus créée
+  avec les permissions par défaut : elle contient tous les secrets en cours et
+  restait lisible par les autres comptes de la machine le temps de l’écriture ;
 - une session d’examen se termine aussi lorsque le dernier élève encore
   présent la quitte : jusqu’ici seul l’envoi d’une réponse déclenchait la
   vérification, et l’examen restait en cours jusqu’à l’expiration du minuteur

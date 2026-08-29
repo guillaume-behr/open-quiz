@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import stat
 import tomllib
 from base64 import b64decode, b64encode
 from concurrent.futures import ThreadPoolExecutor
@@ -25,7 +26,7 @@ from sqlalchemy import create_engine, event, inspect, select
 from starlette.websockets import WebSocketDisconnect
 
 import main
-from app.config import Settings, secure_private_file
+from app.config import Settings, secure_private_file, write_private_file
 from app.database import postgres_url
 from app.grading import selected_choice_score
 from app.images import MAX_IMAGE_BYTES, InvalidImage, normalize_image
@@ -6595,3 +6596,27 @@ def test_the_changelog_documents_the_released_version() -> None:
     assert headings[0].startswith(f"## {version} "), (
         f"newest changelog heading is {headings[0]!r}, expected version {version}"
     )
+
+
+def test_secret_files_are_never_readable_by_other_accounts(tmp_path: Path) -> None:
+    """Rotation copies every current secret into a backup beside .env.
+
+    Restricting the file after creating it leaves it exposed for as long as
+    the write takes, with the process umask deciding who may read it. On a
+    shared host that is every local account, so the mode has to be set when
+    the file is created.
+    """
+    previous_umask = os.umask(0o022)
+    try:
+        secret_file = tmp_path / ".env.1234.bak"
+        write_private_file(secret_file, "JWT_SECRET=a-real-secret\n")
+    finally:
+        os.umask(previous_umask)
+
+    assert secret_file.read_text() == "JWT_SECRET=a-real-secret\n"
+    mode = stat.S_IMODE(secret_file.stat().st_mode)
+    assert not mode & 0o077, f"secret file is readable by others: {oct(mode)}"
+
+    # An existing path is never silently overwritten.
+    with pytest.raises(FileExistsError):
+        write_private_file(secret_file, "other")

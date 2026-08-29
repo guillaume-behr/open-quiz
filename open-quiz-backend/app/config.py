@@ -19,6 +19,19 @@ def secure_private_file(path: Path) -> None:
         raise RuntimeError(f"Unable to secure private file {path}") from error
 
 
+def write_private_file(path: Path, content: str) -> None:
+    """Write a secret file that is never readable by anyone else.
+
+    Creating the file first and restricting it afterwards leaves a window in
+    which the process umask decides who may read it, which for a default 022
+    means every local account.
+    """
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as private_file:
+        private_file.write(content)
+    secure_private_file(path)
+
+
 def reject_predictable_secret(
     name: str,
     value: str,
