@@ -23,6 +23,63 @@ function serializePythonExecution<T>(task: () => Promise<T>): Promise<T> {
     return execution
 }
 
+/**
+ * Read-only code surface sharing the CodeBlock look. CodeBlock itself carries
+ * buttons and a textarea, so it cannot be nested inside a clickable label.
+ */
+export function StaticCodeBlock({
+    code,
+    language,
+}: {
+    code: string
+    language: CodeLanguage
+}) {
+    return (
+        <div className="overflow-hidden rounded-xl border">
+            <Highlight theme={themes.vsDark} code={code} language={language}>
+                {({
+                    className,
+                    style,
+                    tokens,
+                    getLineProps,
+                    getTokenProps,
+                }) => (
+                    <pre
+                        className={`${className} overflow-x-auto p-4 font-mono text-sm leading-6`}
+                        style={style}
+                        dir="ltr"
+                    >
+                        <code>
+                            {tokens.map((line, lineIndex) => (
+                                <span
+                                    key={lineIndex}
+                                    {...getLineProps({ line })}
+                                    className="table-row"
+                                >
+                                    <span
+                                        className="table-cell w-10 pr-3 text-right text-white/40 select-none"
+                                        aria-hidden="true"
+                                    >
+                                        {lineIndex + 1}
+                                    </span>
+                                    <span className="table-cell">
+                                        {line.map((token, tokenIndex) => (
+                                            <span
+                                                key={tokenIndex}
+                                                {...getTokenProps({ token })}
+                                            />
+                                        ))}
+                                    </span>
+                                </span>
+                            ))}
+                        </code>
+                    </pre>
+                )}
+            </Highlight>
+        </div>
+    )
+}
+
 type CodeBlockProps = {
     code: string
     language: CodeLanguage

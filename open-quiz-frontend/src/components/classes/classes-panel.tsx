@@ -26,7 +26,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { formatClassName } from "@/lib/utils"
+import { formatClassName, saveBlob } from "@/lib/utils"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import {
@@ -161,12 +161,10 @@ export function ClassesPanel({
 
     async function downloadImportExample() {
         try {
-            const url = URL.createObjectURL(await downloadClassImportExample())
-            const link = document.createElement("a")
-            link.href = url
-            link.download = "open-quiz-classes-example.json"
-            link.click()
-            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+            saveBlob(
+                await downloadClassImportExample(),
+                "open-quiz-classes-example.json"
+            )
         } catch {
             setError(t("json-download-error"))
         }

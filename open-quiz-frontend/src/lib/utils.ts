@@ -9,6 +9,29 @@ export function isRtlLanguage(language: string | null | undefined): boolean {
     return Boolean(language && /^ar(?:\b|-)/i.test(language))
 }
 
+/** Page number holding `id`, so a saved item stays on screen after a reload. */
+export function pageContaining(
+    items: readonly { id: number }[],
+    id: number,
+    pageSize: number
+): number {
+    const index = items.findIndex((item) => item.id === id)
+    return index < 0 ? 1 : Math.floor(index / pageSize) + 1
+}
+
+/** Hand a generated file to the browser. The link must be in the document for
+ * the click to start a download in every supported browser. */
+export function saveBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 export function naturalCompare(first: string, second: string): number {
     return first.localeCompare(second, undefined, {
         numeric: true,

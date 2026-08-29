@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
-import { formatClassName } from "@/lib/utils"
+import { formatClassName, saveBlob } from "@/lib/utils"
 import {
     LoaderCircle,
     Download,
@@ -215,15 +215,10 @@ export function StudentsPanel({
         setIsBusy(true)
         setExportError(null)
         try {
-            const blob = await exportStudentCredentials()
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.href = url
-            link.download = "student-credentials.json"
-            document.body.append(link)
-            link.click()
-            link.remove()
-            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+            saveBlob(
+                await exportStudentCredentials(),
+                "student-credentials.json"
+            )
         } catch {
             setExportError(t("student-credentials-export-error"))
         } finally {

@@ -24,7 +24,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
-import { cn, formatClassName } from "@/lib/utils"
+import { cn, formatClassName, saveBlob } from "@/lib/utils"
 import { Tooltip } from "@base-ui/react/tooltip"
 import {
     CalendarDays,
@@ -210,15 +210,10 @@ export function ResultsPanel({
         setIsExporting(true)
         setExportError(false)
         try {
-            const blob = await downloadQuizResults(exportClassId, exportQuizId)
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.href = url
-            link.download = `resultats-classe-${exportClassId}${exportQuizId === null ? "-tous-les-quiz" : `-quiz-${exportQuizId}`}.csv`
-            document.body.appendChild(link)
-            link.click()
-            link.remove()
-            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+            saveBlob(
+                await downloadQuizResults(exportClassId, exportQuizId),
+                `resultats-classe-${exportClassId}${exportQuizId === null ? "-tous-les-quiz" : `-quiz-${exportQuizId}`}.csv`
+            )
             onExportDialogOpenChange(false)
         } catch {
             setExportError(true)
@@ -818,7 +813,7 @@ export function ResultsPanel({
                             <div className="hidden grid-cols-[minmax(180px,1fr)_140px_180px_140px] items-center gap-4 border-b bg-muted/60 px-4 py-3 text-xs font-semibold text-muted-foreground md:grid">
                                 <span>{t("student-name")}</span>
                                 <span>{t("result-progress")}</span>
-                                <span className="text-right">
+                                <span className="text-end">
                                     {t("result-score-total")}
                                 </span>
                                 <span>{t("answers")}</span>
@@ -919,7 +914,7 @@ export function ResultsPanel({
                                                 </p>
                                                 <div
                                                     data-participant-score
-                                                    className="flex items-center justify-between gap-2 text-right font-bold text-primary tabular-nums md:justify-end md:whitespace-nowrap"
+                                                    className="flex items-center justify-between gap-2 text-end font-bold text-primary tabular-nums md:justify-end md:whitespace-nowrap"
                                                 >
                                                     <span className="font-normal text-foreground md:hidden">
                                                         {t(
