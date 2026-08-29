@@ -11,6 +11,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   vérification, et l’examen restait en cours jusqu’à l’expiration du minuteur
   alors que plus personne ne pouvait répondre ; une session que tout le monde
   quitte sans avoir répondu reste ouverte pour permettre le retour ;
+- l’écran d’erreur de l’interface s’affiche même lorsque le navigateur refuse
+  l’accès au stockage de session ;
 - `install-dev.sh` crée le rôle et la base `open_quiz_test` : la suite de tests
   backend s’y connecte, mais rien ne les créait, et un dépôt fraîchement cloné
   ne pouvait donc pas exécuter `pytest` ;

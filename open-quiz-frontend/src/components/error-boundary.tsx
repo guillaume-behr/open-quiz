@@ -20,11 +20,27 @@ function isModuleLoadError(error: unknown): boolean {
 }
 
 function reloadForStaleBuild(): void {
-    const lastReload = Number(
-        window.sessionStorage.getItem(MODULE_RELOAD_STORAGE_KEY) ?? 0
-    )
+    // The cooldown is what stops a reload loop, so an unusable sessionStorage
+    // (private browsing, blocked site data) must cancel the reload rather than
+    // throw: this runs inside componentDidCatch, where an exception would tear
+    // down the tree and replace the error screen with a blank page.
+    let lastReload: number
+    try {
+        lastReload = Number(
+            window.sessionStorage.getItem(MODULE_RELOAD_STORAGE_KEY) ?? 0
+        )
+    } catch {
+        return
+    }
     if (Date.now() - lastReload < MODULE_RELOAD_COOLDOWN_MS) return
-    window.sessionStorage.setItem(MODULE_RELOAD_STORAGE_KEY, String(Date.now()))
+    try {
+        window.sessionStorage.setItem(
+            MODULE_RELOAD_STORAGE_KEY,
+            String(Date.now())
+        )
+    } catch {
+        return
+    }
     window.location.reload()
 }
 
