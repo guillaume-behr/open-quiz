@@ -64,6 +64,11 @@ Le service est démarré avec `docker-compose.dev.yml`, qui publie PostgreSQL su
 Compose de production est interne, et Docker n’y publie aucun port. Sans elle,
 l’API lancée sur la machine échoue avec « connection refused ».
 
+Le script crée enfin le rôle et la base `open_quiz_test`, que la suite de tests
+backend utilise. Elle y crée et supprime un schéma par module, sans jamais
+toucher aux données de développement. Définissez `TEST_DATABASE_URL` pour viser
+un autre serveur PostgreSQL.
+
 ### API
 
 ```shell

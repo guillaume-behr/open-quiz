@@ -6,6 +6,9 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Sécurité et corrections
 
+- `install-dev.sh` crée le rôle et la base `open_quiz_test` : la suite de tests
+  backend s’y connecte, mais rien ne les créait, et un dépôt fraîchement cloné
+  ne pouvait donc pas exécuter `pytest` ;
 - `install-dev.sh` publie de nouveau PostgreSQL sur `127.0.0.1:5432` grâce à
   `docker-compose.dev.yml` : le réseau Compose étant interne, la publication
   déclarée était ignorée et l’API de développement échouait avec

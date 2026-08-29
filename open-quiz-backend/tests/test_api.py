@@ -88,6 +88,8 @@ VALID_PNG = b64decode(
     "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
 )
 TEST_CLIENT_BACKEND_OPTIONS = {"use_uvloop": True} if find_spec("uvloop") else {}
+# install-dev.sh creates the role and database of this default; keep both in
+# step when changing it.
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql+psycopg://open_quiz_test:open-quiz-test-password@127.0.0.1:5432/open_quiz_test",

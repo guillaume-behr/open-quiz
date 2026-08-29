@@ -328,6 +328,10 @@ l’ancienne copie puis recréez le service.
 
 ## Vérifications
 
+Les tests ont besoin du rôle et de la base `open_quiz_test`, créés par
+`sh ./install-dev.sh` depuis la racine du dépôt. Définissez `TEST_DATABASE_URL`
+pour viser un autre serveur PostgreSQL.
+
 Installez les dépendances de développement puis reproduisez les contrôles CI :
 
 ```shell
