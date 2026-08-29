@@ -30,7 +30,7 @@ export function MainLayout() {
         <div className="flex min-h-dvh flex-col items-center">
             <a
                 href="#contenu"
-                className="fixed top-2 left-2 z-[100] -translate-y-20 rounded-md bg-background px-4 py-2 font-bold text-foreground shadow-lg transition-transform focus:translate-y-0 focus:ring-3 focus:ring-ring/50 focus:outline-none"
+                className="fixed start-2 top-2 z-[100] -translate-y-20 rounded-md bg-background px-4 py-2 font-bold text-foreground shadow-lg transition-transform focus:translate-y-0 focus:ring-3 focus:ring-ring/50 focus:outline-none"
             >
                 {t("skip-to-content")}
             </a>

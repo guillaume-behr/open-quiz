@@ -367,7 +367,7 @@ export function AdminDashboard() {
                                 )}
                                 {success && (
                                     <p
-                                        className="text-sm text-emerald-700 dark:text-emerald-300"
+                                        className="text-sm text-success"
                                         role="status"
                                     >
                                         {success}
@@ -433,7 +433,7 @@ export function AdminDashboard() {
                                             <span
                                                 className={
                                                     user.is_active
-                                                        ? "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                        ? "rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success"
                                                         : "rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
                                                 }
                                             >

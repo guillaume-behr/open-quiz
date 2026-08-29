@@ -112,7 +112,7 @@ export function ReportProblemPage() {
                     )}
                     {sent && (
                         <p
-                            className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
+                            className="flex items-center gap-2 text-sm font-medium text-success"
                             role="status"
                         >
                             <CircleCheck aria-hidden="true" />

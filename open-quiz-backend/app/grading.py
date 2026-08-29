@@ -33,6 +33,20 @@ def selected_choice_score(
     )
 
 
+def decoded_answer_data(answer: QuizAnswer) -> dict:
+    """Read a stored answer payload, tolerating any unreadable legacy row."""
+    try:
+        submitted = json.loads(answer.answer_data)
+    except TypeError, ValueError:
+        return {}
+    return submitted if isinstance(submitted, dict) else {}
+
+
+def selected_choice_ids(answer: QuizAnswer) -> set[int]:
+    selected = decoded_answer_data(answer).get("selected_choice_ids")
+    return set(selected) if isinstance(selected, list) else set()
+
+
 def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
     answers = list(
         session.scalars(
@@ -55,10 +69,6 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
     for answer in answers:
         question = questions.get(answer.question_id)
         choices = choices_by_question.get(answer.question_id, [])
-        try:
-            submitted = json.loads(answer.answer_data)
-        except TypeError, ValueError:
-            submitted = {}
         if question is None:
             answer.score = 0
             answer.is_graded = True
@@ -66,14 +76,9 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
             if not answer.is_graded:
                 answer.score = 0
         else:
-            selected_ids = set(
-                submitted.get("selected_choice_ids", [])
-                if isinstance(submitted, dict)
-                else []
-            )
             answer.score = selected_choice_score(
                 choices,
-                selected_ids,
+                selected_choice_ids(answer),
                 allow_negative_points=bool(quiz_session.allow_negative_points),
             )
             answer.is_graded = True

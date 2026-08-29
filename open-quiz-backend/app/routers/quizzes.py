@@ -34,7 +34,12 @@ from starlette.requests import HTTPConnection
 from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser, authenticated_user_from_token
-from app.grading import compute_final_scores, selected_choice_score
+from app.grading import (
+    compute_final_scores,
+    decoded_answer_data,
+    selected_choice_ids,
+    selected_choice_score,
+)
 from app.live_quiz import (
     active_quiz_sessions_topic,
     makeup_sessions_topic,
@@ -351,10 +356,40 @@ def difficulty_counts_for_banks(
     return requested
 
 
-def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
+class QuestionDrawPool:
+    """The candidate questions for one quiz, loaded once per launch.
+
+    Every student in a launch draws from the same pool, so reading it once
+    keeps a launch at a constant number of queries instead of a handful per
+    student per attempt.
+    """
+
+    def __init__(self, requested: dict[str, int], candidates: dict[str, list[int]]):
+        self.requested = requested
+        self.candidates = candidates
+
+    @property
+    def possible_combination_count(self) -> int:
+        total = 1
+        for difficulty, count in self.requested.items():
+            total *= comb(len(self.candidates.get(difficulty, ())), count)
+        return total
+
+    def draw(self) -> list[int]:
+        selected_ids: list[int] = []
+        for difficulty, count in self.requested.items():
+            if count > 0:
+                selected_ids.extend(
+                    randomizer.sample(self.candidates[difficulty], count)
+                )
+        randomizer.shuffle(selected_ids)
+        return selected_ids
+
+
+def question_draw_pool(quiz: Quiz, session: DbSession) -> QuestionDrawPool:
     bank_ids = quiz_bank_ids(quiz.id, session)
     requested = difficulty_counts_for_banks(quiz, bank_ids, session)
-    candidate_ids_by_difficulty = {
+    candidates = {
         difficulty: list(
             session.scalars(
                 select(Question.id).where(
@@ -366,40 +401,31 @@ def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
         for difficulty, count in requested.items()
         if count > 0
     }
-    selected_ids: list[int] = []
-    for difficulty, count in requested.items():
-        if count > 0:
-            selected_ids.extend(
-                randomizer.sample(candidate_ids_by_difficulty[difficulty], count)
-            )
-    randomizer.shuffle(selected_ids)
-    return selected_ids
+    return QuestionDrawPool(requested, candidates)
+
+
+def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
+    return question_draw_pool(quiz, session).draw()
 
 
 def draw_unique_question_ids(
-    quiz: Quiz,
-    session: DbSession,
+    pool: QuestionDrawPool,
     used_draws: set[tuple[int, ...]],
 ) -> list[int]:
-    if used_draws:
-        bank_ids = quiz_bank_ids(quiz.id, session)
-        requested = difficulty_counts_for_banks(quiz, bank_ids, session)
-        available = available_difficulty_counts(bank_ids, session)
-        possible_combination_count = 1
-        for difficulty, count in requested.items():
-            possible_combination_count *= comb(available.get(difficulty, 0), count)
-        if len(used_draws) >= possible_combination_count:
-            return draw_question_ids(quiz, session)
+    # Once every distinct combination is taken, retrying can only fail, so stop
+    # searching and let students share a draw.
+    if used_draws and len(used_draws) >= pool.possible_combination_count:
+        return pool.draw()
 
     for _ in range(200):
-        question_ids = draw_question_ids(quiz, session)
+        question_ids = pool.draw()
         signature = tuple(sorted(question_ids))
         if signature not in used_draws:
             used_draws.add(signature)
             return question_ids
     # If the banks contain only one possible combination, every student still
     # receives an independent draw even though the resulting sets must match.
-    return draw_question_ids(quiz, session)
+    return pool.draw()
 
 
 def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:
@@ -649,19 +675,37 @@ def session_question_points(
     participant: QuizParticipant | None = None,
 ) -> dict[int, float]:
     question_ids = session_question_ids(quiz_session, session, participant)
-    return question_maximum_scores(question_ids, session)
+    return question_maximum_scores(
+        question_ids,
+        session,
+        allow_negative_points=bool(quiz_session.allow_negative_points),
+    )
 
 
 def question_maximum_scores(
     question_ids: list[int],
     session: DbSession,
+    *,
+    allow_negative_points: bool = False,
 ) -> dict[int, float]:
+    """Best score a participant can actually reach on each question.
+
+    This has to follow the same rule as selected_choice_score. Without negative
+    points, picking any incorrect choice scores zero, so only correct choices
+    can contribute; with them, every positively scored choice is worth taking.
+    Counting distractors either way would report a ceiling nobody can reach.
+    """
     if not question_ids:
         return {}
     positive_points = case(
         (QuestionChoice.points > 0, QuestionChoice.points),
         else_=0,
     )
+    if not allow_negative_points:
+        positive_points = case(
+            (QuestionChoice.is_correct.is_(True), positive_points),
+            else_=0,
+        )
     maximums = {
         question_id: float(maximum or 0)
         for question_id, maximum in session.execute(
@@ -681,6 +725,24 @@ def question_maximum_scores(
         )
     }
     return {question_id: maximums.get(question_id, 0) for question_id in question_ids}
+
+
+def maximum_scores_per_session_mode(
+    question_ids: list[int],
+    quiz_sessions: list[QuizSession],
+    session: DbSession,
+) -> dict[bool, dict[int, float]]:
+    """Ceilings keyed by allow_negative_points, for a mixed batch of sessions.
+
+    Sessions in one listing can disagree on negative points, and the ceiling
+    differs between them, so build one table per mode actually present rather
+    than a single table that would be wrong for half the rows.
+    """
+    modes = {bool(quiz_session.allow_negative_points) for quiz_session in quiz_sessions}
+    return {
+        mode: question_maximum_scores(question_ids, session, allow_negative_points=mode)
+        for mode in modes
+    }
 
 
 def current_question_id(
@@ -758,6 +820,7 @@ def participant_maximum_scores(
     maximums = question_maximum_scores(
         list(assigned_question_ids),
         session,
+        allow_negative_points=bool(quiz_session.allow_negative_points),
     )
 
     result: dict[int, float] = {}
@@ -937,7 +1000,11 @@ def finished_session_responses(
             personalized_counts.get(session_id, 0), len(question_ids)
         )
 
-    maximums = question_maximum_scores(list(all_assigned_question_ids), session)
+    maximums_by_mode = maximum_scores_per_session_mode(
+        list(all_assigned_question_ids),
+        [quiz_session for quiz_session, _ in rows],
+        session,
+    )
     student_ids = {
         participant.student_id
         for participant in participants
@@ -964,6 +1031,7 @@ def finished_session_responses(
     responses: list[QuizSessionResponse] = []
     for quiz_session, quiz in rows:
         session_participants = participants_by_session[quiz_session.id]
+        maximums = maximums_by_mode[bool(quiz_session.allow_negative_points)]
         participant_maximums: dict[int, float] = {}
         for participant in session_participants:
             question_ids = assigned_question_ids(
@@ -1295,6 +1363,26 @@ def authenticated_participant(
     return row
 
 
+def accessible_question_positions(
+    question_ids: list[int],
+    answered_question_ids: set[int],
+    current_position: int | None,
+) -> set[int]:
+    """Positions a participant may reach: answered ones, the next, the current."""
+    positions = {
+        position
+        for position, question_id in enumerate(question_ids)
+        if question_id in answered_question_ids
+    }
+    if positions:
+        next_position = max(positions) + 1
+        if next_position < len(question_ids):
+            positions.add(next_position)
+    if current_position is not None:
+        positions.add(current_position)
+    return positions
+
+
 def student_question_response(
     question_id: int,
     quiz_session: QuizSession,
@@ -1389,27 +1477,15 @@ def student_state_response(
         if question_id is not None
         else None
     )
-    if existing_answer is not None:
-        try:
-            saved_answer = json.loads(existing_answer.answer_data)
-        except TypeError, ValueError:
-            saved_answer = {}
-        if not isinstance(saved_answer, dict):
-            saved_answer = {}
-    else:
-        saved_answer = {}
+    saved_answer = (
+        decoded_answer_data(existing_answer) if existing_answer is not None else {}
+    )
     answered_count = len(answered_question_ids)
-    accessible_positions = {
-        position
-        for position, assigned_question_id in enumerate(question_ids)
-        if assigned_question_id in answered_question_ids
-    }
-    if accessible_positions:
-        next_position = max(accessible_positions) + 1
-        if next_position < len(question_ids):
-            accessible_positions.add(next_position)
-    if participant.current_position is not None:
-        accessible_positions.add(participant.current_position)
+    accessible_positions = accessible_question_positions(
+        question_ids,
+        answered_question_ids,
+        participant.current_position,
+    )
     state = StudentQuizStateResponse(
         **student_session_response(
             quiz_session, quiz, participant, session
@@ -1473,7 +1549,9 @@ def training_result(
     score = 0.0
     maximum = 0.0
     pending = 0
-    maximums = question_maximum_scores(question_ids, session)
+    maximums = question_maximum_scores(
+        question_ids, session, allow_negative_points=False
+    )
     for question_id in question_ids:
         question = questions.get(question_id)
         if question is None:
@@ -1487,15 +1565,7 @@ def training_result(
         answer = answers.get(question_id)
         if answer is None:
             continue
-        try:
-            answer_data = json.loads(answer.answer_data)
-        except TypeError, ValueError:
-            answer_data = {}
-        selected_ids = set(
-            answer_data.get("selected_choice_ids", [])
-            if isinstance(answer_data, dict)
-            else []
-        )
+        selected_ids = selected_choice_ids(answer)
         score += selected_choice_score(
             choices,
             selected_ids,
@@ -1814,12 +1884,7 @@ def answer_review(
     choices: list[QuestionChoice],
     max_score: float,
 ) -> QuizAnswerReview:
-    try:
-        submitted = json.loads(answer.answer_data)
-    except TypeError, ValueError:
-        submitted = {}
-    if not isinstance(submitted, dict):
-        submitted = {}
+    submitted = decoded_answer_data(answer)
     choices_by_id = {choice.id: choice for choice in choices}
     if question.answer_mode == "written":
         submitted_answers = [str(submitted.get("written_answer", ""))]
@@ -1984,7 +2049,11 @@ def list_student_quiz_history(
             select(QuizAnswer).where(QuizAnswer.participant_id.in_(participant_ids))
         )
     }
-    question_points = question_maximum_scores(list(all_question_ids), session)
+    question_points_by_mode = maximum_scores_per_session_mode(
+        list(all_question_ids),
+        [quiz_session for quiz_session, _ in rows],
+        session,
+    )
     class_ids = {
         quiz_session.class_id
         for quiz_session, _ in rows
@@ -2000,6 +2069,9 @@ def list_student_quiz_history(
     history: list[StudentQuizHistoryItem] = []
     for quiz_session, participant in rows:
         question_ids = question_ids_by_participant[participant.id]
+        question_points = question_points_by_mode[
+            bool(quiz_session.allow_negative_points)
+        ]
         answers_by_question = {
             question_id: answers_by_participant_question.get(
                 (participant.id, question_id)
@@ -2022,12 +2094,6 @@ def list_student_quiz_history(
                     question_points.get(question.id, 0),
                 )
                 submitted_answers = review.submitted_answers
-                try:
-                    submitted_data = json.loads(answer.answer_data)
-                except TypeError, ValueError:
-                    submitted_data = {}
-                if not isinstance(submitted_data, dict):
-                    submitted_data = {}
                 if question.answer_mode == "written":
                     is_correct = (
                         answer.is_graded
@@ -2035,17 +2101,10 @@ def list_student_quiz_history(
                         and answer.score >= review.max_score
                     )
                 else:
-                    selected_ids = set(
-                        submitted_data.get("selected_choice_ids", [])
-                        if isinstance(
-                            submitted_data.get("selected_choice_ids", []), list
-                        )
-                        else []
-                    )
                     correct_ids = {
                         choice.id for choice in question_choices if choice.is_correct
                     }
-                    is_correct = selected_ids == correct_ids
+                    is_correct = selected_choice_ids(answer) == correct_ids
             else:
                 submitted_answers = []
                 is_correct = False
@@ -3434,9 +3493,7 @@ def control_makeup_session(
             if child.status not in {"in_progress", "paused"}:
                 continue
             child.status = "finished"
-            quiz = session.get(Quiz, child.quiz_id)
-            if quiz is not None:
-                compute_final_scores(child, session)
+            compute_final_scores(child, session)
             for participant in session.scalars(
                 select(QuizParticipant).where(QuizParticipant.session_id == child.id)
             ):
@@ -3651,7 +3708,9 @@ def select_makeup_quiz(
     used_draws = {
         tuple(sorted(question_ids)) for question_ids in questions_by_session.values()
     }
-    question_ids = draw_unique_question_ids(quiz, session, used_draws)
+    question_ids = draw_unique_question_ids(
+        question_draw_pool(quiz, session), used_draws
+    )
     session.add_all(
         QuizSessionStudentQuestion(
             session_id=child.id,
@@ -3827,6 +3886,7 @@ def launch_quiz(
     )
     session.add(quiz_session)
     session.flush()
+    pool = question_draw_pool(quiz, session)
     if quiz.same_questions_for_all:
         session.add_all(
             QuizSessionQuestion(
@@ -3834,13 +3894,13 @@ def launch_quiz(
                 question_id=question_id,
                 position=position,
             )
-            for position, question_id in enumerate(draw_question_ids(quiz, session))
+            for position, question_id in enumerate(pool.draw())
         )
     else:
         assignments: list[QuizSessionStudentQuestion] = []
         used_draws: set[tuple[int, ...]] = set()
         for student in students:
-            assigned_question_ids = draw_unique_question_ids(quiz, session, used_draws)
+            assigned_question_ids = draw_unique_question_ids(pool, used_draws)
             assignments.extend(
                 QuizSessionStudentQuestion(
                     session_id=quiz_session.id,
@@ -4174,10 +4234,14 @@ def submit_student_answer(
     else:
         participant.current_position = None
     session.flush()
+    # A participant who left keeps their position so that rejoining resumes
+    # where they stopped, but they must not hold the session open: the teacher
+    # no longer sees them among the participants either.
     unfinished_count = session.scalar(
         select(func.count(QuizParticipant.id)).where(
             QuizParticipant.session_id == quiz_session.id,
             QuizParticipant.current_position.is_not(None),
+            QuizParticipant.left_at.is_(None),
         )
     )
     if unfinished_count == 0:
@@ -4241,17 +4305,11 @@ def navigate_student_quiz(
             )
         )
     )
-    accessible_positions = {
-        position
-        for position, question_id in enumerate(question_ids)
-        if question_id in answered_question_ids
-    }
-    if accessible_positions:
-        next_position = max(accessible_positions) + 1
-        if next_position < len(question_ids):
-            accessible_positions.add(next_position)
-    if participant.current_position is not None:
-        accessible_positions.add(participant.current_position)
+    accessible_positions = accessible_question_positions(
+        question_ids,
+        answered_question_ids,
+        participant.current_position,
+    )
     if (
         quiz_session.status != "in_progress"
         or not allow_previous_questions

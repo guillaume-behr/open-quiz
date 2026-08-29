@@ -10,7 +10,7 @@ import {
     importQuestionBatch,
     updateQuestionBank,
 } from "@/api/question-banks"
-import { naturalCompare } from "@/lib/utils"
+import { naturalCompare, pageContaining, saveBlob } from "@/lib/utils"
 import { describeJsonImportFailure } from "@/lib/json-import"
 import { ApiError } from "@/api/client"
 import type { GradeLevel, Question, QuestionBank } from "@/api/types"
@@ -36,22 +36,6 @@ function compareQuestionBanks(
 }
 
 const PAGE_SIZE = 8
-
-function pageContaining(items: QuestionBank[], id: number): number {
-    const index = items.findIndex((item) => item.id === id)
-    return index < 0 ? 1 : Math.floor(index / PAGE_SIZE) + 1
-}
-
-function saveBlob(blob: Blob, filename: string): void {
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 0)
-}
 
 function exportFilename(bank: QuestionBank): string {
     const safeName = `${bank.grade_level}-${bank.chapter}`
@@ -193,7 +177,7 @@ export function QuestionBanksPanel({
             setTitleFilter("")
             setGradeLevelFilter("")
             const allBanks = await getAllQuestionBanks().catch(() => [])
-            setPage(pageContaining(allBanks, saved.id))
+            setPage(pageContaining(allBanks, saved.id, PAGE_SIZE))
             setReloadKey((current) => current + 1)
             onCreateDialogOpenChange(false)
         } catch (caughtError) {

@@ -3,22 +3,20 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$SCRIPT_DIR/scripts/common.sh"
+
 ENV_TEMPLATE="$SCRIPT_DIR/open-quiz-backend/.env.example"
 ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env"
 
-fail() {
-    printf 'Error: %s\n' "$1" >&2
-    exit 1
-}
-
 usage() {
-    printf 'Usage: sh ./install-dev.sh\n'
-    printf 'Create development credentials and start PostgreSQL with Docker Compose.\n'
+    printf 'Usage: sh ./install-dev.sh [--help]\n\n'
+    printf 'Create development credentials and start PostgreSQL with Docker Compose.\n\n'
+    printf '  --help, -h  Show this message.\n'
 }
 
 case "${1:-}" in
     "") ;;
-    --help|-h)
+    --help | -h)
         usage
         exit 0
         ;;
@@ -28,55 +26,22 @@ case "${1:-}" in
         ;;
 esac
 
-for command in docker grep od sed tr mktemp; do
-    command -v "$command" >/dev/null 2>&1 || fail "the '$command' command is required"
-done
+open_quiz_banner 'Local development setup'
 
-if docker info >/dev/null 2>&1; then
-    compose() {
-        docker compose "$@"
-    }
-elif command -v sudo >/dev/null 2>&1 && sudo docker info >/dev/null 2>&1; then
-    compose() {
-        sudo docker compose "$@"
-    }
-else
-    fail "Docker is not running or the current user cannot access it"
-fi
-
-compose version >/dev/null 2>&1 \
-    || fail "Docker Compose is not available (expected: docker compose)"
-
-validate_environment() {
-    grep -q '=replace-with-' "$ENV_FILE" \
-        && fail "$ENV_FILE still contains example credentials"
-
-    for variable in DATABASE_URL POSTGRES_PASSWORD JWT_SECRET \
-        TOTP_ENCRYPTION_KEY STUDENT_CREDENTIAL_ENCRYPTION_KEY \
-        ADMIN_USERNAME ADMIN_PASSWORD FRONTEND_ORIGIN APP_ENV; do
-        grep -Eq "^$variable=.+" "$ENV_FILE" \
-            || fail "$ENV_FILE does not define $variable"
-    done
-
-    grep -q '^APP_ENV=development$' "$ENV_FILE" \
-        || fail "$ENV_FILE must set APP_ENV=development"
-}
-
-random_hex() {
-    byte_count=$1
-    od -An -N "$byte_count" -tx1 /dev/urandom | tr -d ' \n'
-}
+require_commands docker grep od sed tr mktemp
+setup_compose
 
 environment_created=false
 
 if [ -e "$ENV_FILE" ]; then
     [ -f "$ENV_FILE" ] || fail "$ENV_FILE exists but is not a regular file"
-    validate_environment
+    validate_environment_file "$ENV_FILE" development
     chmod 600 "$ENV_FILE"
-    printf 'Keeping the existing development configuration in open-quiz-backend/.env.\n'
+    step 'Keeping the existing development configuration in open-quiz-backend/.env'
 else
     [ -f "$ENV_TEMPLATE" ] || fail "missing development environment template: $ENV_TEMPLATE"
 
+    step 'Generating development credentials'
     postgres_password=$(random_hex 32)
     jwt_secret=$(random_hex 48)
     totp_key=$(random_hex 48)
@@ -98,20 +63,19 @@ else
     mv "$temporary_file" "$ENV_FILE"
     trap - EXIT HUP INT TERM
     chmod 600 "$ENV_FILE"
-    validate_environment
+    validate_environment_file "$ENV_FILE" development
     environment_created=true
 
-    admin_username=$(sed -n 's/^ADMIN_USERNAME=//p' "$ENV_FILE")
-    printf 'Development configuration created in open-quiz-backend/.env.\n'
-    printf 'Administrator username: %s\n' "$admin_username"
-    printf 'Administrator password: %s\n' "$admin_password"
-    printf 'PostgreSQL username: open_quiz\n'
-    printf 'PostgreSQL password: %s\n' "$postgres_password"
-    printf 'PostgreSQL database: open_quiz\n'
-    printf 'Save these development credentials; they will not be displayed again.\n'
+    admin_username=$(sed -n 's/^ADMIN_USERNAME=//p' "$ENV_FILE" | head -n 1)
+    step 'Development configuration created in open-quiz-backend/.env'
+    highlight "Administrator username: $admin_username"
+    highlight "Administrator password: $admin_password"
+    highlight "PostgreSQL open_quiz / $postgres_password (database: open_quiz)"
+    note 'Save these development credentials; they will not be displayed again.'
 fi
 
 cd "$SCRIPT_DIR"
+step 'Starting PostgreSQL'
 compose up --detach --wait open-quiz-database
 
 if ! compose exec -T open-quiz-database sh -c \
@@ -120,11 +84,13 @@ if ! compose exec -T open-quiz-database sh -c \
     fail "PostgreSQL rejected the credentials from open-quiz-backend/.env; restore the configuration matching the existing volume or recreate the development database"
 fi
 
-printf '\nPostgreSQL is ready on 127.0.0.1:5432.\n'
+printf '\n'
+highlight 'PostgreSQL is ready on 127.0.0.1:5432.'
 if [ "$environment_created" = false ]; then
-    printf 'Administrator credentials are stored in open-quiz-backend/.env.\n'
+    note 'Administrator credentials are stored in open-quiz-backend/.env.'
 fi
-printf 'Start the API with:\n'
-printf '  cd open-quiz-backend && uv sync && uv run fastapi dev main.py\n'
-printf 'Start the frontend in another terminal with:\n'
-printf '  cd open-quiz-frontend && corepack enable && pnpm install --frozen-lockfile && pnpm dev\n'
+printf '\n'
+step 'Start the API'
+note 'cd open-quiz-backend && uv sync && uv run fastapi dev main.py'
+step 'Start the interface, in another terminal'
+note 'cd open-quiz-frontend && corepack enable && pnpm install --frozen-lockfile && pnpm dev'

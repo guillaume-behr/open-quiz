@@ -76,7 +76,7 @@ export function DashboardShell<Section extends string>({
                                     onClick={() => onSelect(entry.id)}
                                     aria-current={isActive ? "page" : undefined}
                                     className={cn(
-                                        "flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:w-full lg:min-w-0",
+                                        "flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-start text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:w-full lg:min-w-0",
                                         isActive
                                             ? "bg-primary text-primary-foreground shadow-sm"
                                             : "text-muted-foreground hover:bg-muted hover:text-foreground"

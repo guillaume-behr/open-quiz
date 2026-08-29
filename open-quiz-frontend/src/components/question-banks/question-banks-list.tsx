@@ -249,7 +249,7 @@ function BanksContent({
                             type="button"
                             size="icon-sm"
                             variant="ghost"
-                            className="absolute top-4 right-12 z-10"
+                            className="absolute end-12 top-4 z-10"
                             aria-label={t("edit-question-bank")}
                             title={t("edit-question-bank")}
                             onClick={() => onEdit(bank)}
@@ -260,14 +260,14 @@ function BanksContent({
                             type="button"
                             size="icon-sm"
                             variant="destructive"
-                            className="absolute top-4 right-4"
+                            className="absolute end-4 top-4"
                             aria-label={t("delete-question-bank")}
                             title={t("delete-question-bank")}
                             onClick={() => onDelete(bank)}
                         >
                             <Trash2 />
                         </Button>
-                        <div className="flex items-start gap-3 pr-20">
+                        <div className="flex items-start gap-3 pe-20">
                             <div className="rounded-lg bg-primary/10 p-2 text-primary">
                                 <BookOpenText className="size-5" />
                             </div>

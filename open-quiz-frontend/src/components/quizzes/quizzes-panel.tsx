@@ -45,6 +45,7 @@ import { FieldError } from "@/components/ui/field"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { LoaderCircle, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { pageContaining } from "@/lib/utils"
 
 type QuizzesPanelProps = {
     isCreateDialogOpen: boolean
@@ -59,11 +60,6 @@ const PRINT_IMAGE_LOAD_CONCURRENCY = 6
 
 function isActiveSession(session: QuizSession): boolean {
     return isActiveSessionStatus(session.status)
-}
-
-function pageContaining(items: Quiz[], id: number): number {
-    const index = items.findIndex((item) => item.id === id)
-    return index < 0 ? 1 : Math.floor(index / PAGE_SIZE) + 1
 }
 
 type Difficulty = (typeof difficultyKeys)[number]
@@ -626,7 +622,7 @@ export function QuizzesPanel({
                 setQuizFilter("")
                 setGradeLevelFilter("")
                 const allQuizzes = await getAllQuizzes().catch(() => [])
-                setPage(pageContaining(allQuizzes, quiz.id))
+                setPage(pageContaining(allQuizzes, quiz.id, PAGE_SIZE))
             }
             setReloadKey((current) => current + 1)
         } catch {

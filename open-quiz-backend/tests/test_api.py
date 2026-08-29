@@ -26,6 +26,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.config import Settings, secure_private_file
 from app.database import postgres_url
 from app.grading import selected_choice_score
+from app.images import MAX_IMAGE_BYTES, InvalidImage, normalize_image
 from app.live_quiz import LiveQuizHub
 from app.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
 from app.models import (
@@ -51,6 +52,7 @@ from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.routers.quizzes import (
     generate_join_code,
     participant_maximum_scores,
+    question_maximum_scores,
     safe_spreadsheet_cell,
 )
 from app.schemas import (
@@ -68,6 +70,7 @@ from app.security import (
     decode_access_token,
     decode_student_access_token,
     decode_two_factor_token,
+    encrypt_student_password,
     refresh_request_proof,
 )
 from main import create_app
@@ -1328,6 +1331,68 @@ def test_professor_manages_student_accounts_and_class_assignments(
             ]
             is None
         )
+
+
+def test_unreadable_student_password_is_reported_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    """A rotated credential key must not fail the whole listing and export."""
+    with make_client(settings_for(tmp_path / "stale-credentials.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "stale.credentials.teacher",
+                    "display_name": "Stale Credentials Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client,
+            "stale.credentials.teacher",
+            "a-secure-teacher-password",
+        )
+        readable = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Lisa", "last_name": "Martin"},
+        ).json()
+        stale = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Noé", "last_name": "Bernard"},
+        ).json()
+
+        # Simulate a password stored under a previous encryption key.
+        with client.app.state.session_factory() as session:
+            account = session.get(StudentAccount, stale["id"])
+            assert account is not None
+            account.encrypted_password = encrypt_student_password(
+                "a-previous-password",
+                "a-rotated-student-credential-key-2026",
+            )
+            session.commit()
+
+        credentials = client.get("/api/students/credentials", headers=teacher_headers)
+        assert credentials.status_code == 200
+        passwords_by_identifier = {
+            item["identifier"]: item["password"] for item in credentials.json()
+        }
+        assert (
+            passwords_by_identifier[readable["identifier"]]
+            == readable["generated_password"]
+        )
+        assert passwords_by_identifier[stale["identifier"]] is None
+
+        exported = client.get(
+            "/api/students/credentials/export", headers=teacher_headers
+        )
+        assert exported.status_code == 200
+        assert exported.json() == {"students": credentials.json()}
 
 
 def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
@@ -5498,3 +5563,795 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
         assert (
             client.get(child_url, headers=child_headers).json()["status"] == "finished"
         )
+
+
+@pytest.mark.parametrize(
+    ("data", "declared_type"),
+    [
+        (VALID_PNG, "image/svg+xml"),
+        (VALID_PNG, "text/html"),
+        (b"", "image/png"),
+        (b"not an image at all", "image/png"),
+        (b"\x89PNG\r\n\x1a\n" + b"\x00" * 32, "image/png"),
+    ],
+)
+def test_normalize_image_rejects_unsupported_or_invalid_data(
+    data: bytes, declared_type: str
+) -> None:
+    """Only decodable bytes in an allowed format may ever reach the database."""
+    with pytest.raises(InvalidImage):
+        normalize_image(data, declared_type)
+
+
+def test_normalize_image_rejects_oversized_payloads() -> None:
+    with pytest.raises(InvalidImage):
+        normalize_image(b"\x00" * (MAX_IMAGE_BYTES + 1), "image/png")
+
+
+def test_normalize_image_reencodes_a_valid_png() -> None:
+    normalized, content_type = normalize_image(VALID_PNG, "image/png")
+    assert content_type == "image/png"
+    assert normalized.startswith(b"\x89PNG")
+
+
+def test_class_import_creates_accounts_and_rejects_conflicts(tmp_path: Path) -> None:
+    """The bulk class importer is the only way to choose student identifiers."""
+    with make_client(settings_for(tmp_path / "class-import.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "import.teacher",
+                    "display_name": "Import Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client, "import.teacher", "a-secure-teacher-password"
+        )
+        levels = client.get("/api/grade-levels", headers=teacher_headers).json()
+        level = levels[0]["name"]
+
+        example = client.get("/api/classes/example", headers=teacher_headers)
+        assert example.status_code == 200
+        assert example.headers["content-disposition"].endswith(
+            'filename="open-quiz-classes-example.json"'
+        )
+
+        def import_payload(classes: list[dict[str, Any]]) -> dict[str, Any]:
+            return {"classes": classes}
+
+        duplicate_classes = client.post(
+            "/api/classes/import",
+            headers=teacher_headers,
+            json=import_payload(
+                [
+                    {"name": "TG1", "grade_level": level, "students": []},
+                    {"name": "tg1", "grade_level": level, "students": []},
+                ]
+            ),
+        )
+        assert duplicate_classes.status_code == 422
+
+        duplicate_identifiers = client.post(
+            "/api/classes/import",
+            headers=teacher_headers,
+            json=import_payload(
+                [
+                    {
+                        "name": "TG1",
+                        "grade_level": level,
+                        "students": [
+                            {"identifier": "a.martin", "display_name": "A Martin"},
+                            {"identifier": "a.martin", "display_name": "Autre Martin"},
+                        ],
+                    }
+                ]
+            ),
+        )
+        assert duplicate_identifiers.status_code == 422
+
+        unknown_level = client.post(
+            "/api/classes/import",
+            headers=teacher_headers,
+            json=import_payload(
+                [{"name": "TG1", "grade_level": "Niveau inconnu", "students": []}]
+            ),
+        )
+        assert unknown_level.status_code == 422
+        assert "Niveau inconnu" in unknown_level.json()["detail"]
+
+        imported = client.post(
+            "/api/classes/import",
+            headers=teacher_headers,
+            json=import_payload(
+                [
+                    {
+                        "name": "TG1",
+                        "grade_level": level,
+                        "students": [
+                            {"identifier": "a.martin", "display_name": "Alice Martin"},
+                            {"identifier": "b.dupont", "display_name": "Bruno Dupont"},
+                        ],
+                    }
+                ]
+            ),
+        )
+        assert imported.status_code == 201
+        assert imported.json() == {"class_count": 1, "student_count": 2}
+
+        credentials = client.get(
+            "/api/students/credentials", headers=teacher_headers
+        ).json()
+        by_identifier = {item["identifier"]: item for item in credentials}
+        assert set(by_identifier) == {"a.martin", "b.dupont"}
+        # The importer must generate a usable password for every account.
+        logged_in = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": "a.martin",
+                "password": by_identifier["a.martin"]["password"],
+            },
+        )
+        assert logged_in.status_code == 200
+
+        existing_class = client.post(
+            "/api/classes/import",
+            headers=teacher_headers,
+            json=import_payload(
+                [{"name": "TG1", "grade_level": level, "students": []}]
+            ),
+        )
+        assert existing_class.status_code == 409
+
+        # Identifiers are globally unique, so another teacher cannot claim one.
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "other.import.teacher",
+                    "display_name": "Other Import Teacher",
+                    "password": "another-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        other_headers, _ = complete_first_login(
+            client, "other.import.teacher", "another-secure-teacher-password"
+        )
+        other_level = client.get("/api/grade-levels", headers=other_headers).json()[0]
+        taken_identifier = client.post(
+            "/api/classes/import",
+            headers=other_headers,
+            json=import_payload(
+                [
+                    {
+                        "name": "TG2",
+                        "grade_level": other_level["name"],
+                        "students": [
+                            {"identifier": "a.martin", "display_name": "Homonyme"}
+                        ],
+                    }
+                ]
+            ),
+        )
+        assert taken_identifier.status_code == 409
+        # The rejected import must not have created a partial class.
+        assert client.get("/api/classes", headers=other_headers).json() == []
+
+
+def test_grade_level_deletion_is_blocked_while_in_use(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "grade-level-in-use.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "level.teacher",
+                    "display_name": "Level Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client, "level.teacher", "a-secure-teacher-password"
+        )
+        level = client.post(
+            "/api/grade-levels",
+            headers=teacher_headers,
+            json={"name": "Niveau supprimable"},
+        ).json()
+
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": level["name"], "chapter": "Chapitre"},
+        )
+        assert bank.status_code == 201
+        blocked_by_bank = client.delete(
+            f"/api/grade-levels/{level['id']}", headers=teacher_headers
+        )
+        assert blocked_by_bank.status_code == 409
+
+        assert (
+            client.delete(
+                f"/api/question-banks/{bank.json()['id']}", headers=teacher_headers
+            ).status_code
+            == 204
+        )
+        student_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "Classe", "grade_level": level["name"]},
+        )
+        assert student_class.status_code == 201
+        blocked_by_class = client.delete(
+            f"/api/grade-levels/{level['id']}", headers=teacher_headers
+        )
+        assert blocked_by_class.status_code == 409
+
+        # While the level still exists, another teacher must not reach it: a
+        # 404 here has to come from ownership scoping, not from a missing row.
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "other.level.teacher",
+                    "display_name": "Other Level Teacher",
+                    "password": "another-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        other_headers, _ = complete_first_login(
+            client, "other.level.teacher", "another-secure-teacher-password"
+        )
+        assert (
+            client.delete(
+                f"/api/grade-levels/{level['id']}", headers=other_headers
+            ).status_code
+            == 404
+        )
+
+        assert (
+            client.delete(
+                f"/api/classes/{student_class.json()['id']}", headers=teacher_headers
+            ).status_code
+            == 204
+        )
+        assert (
+            client.delete(
+                f"/api/grade-levels/{level['id']}", headers=teacher_headers
+            ).status_code
+            == 204
+        )
+
+
+def test_student_images_are_scoped_to_the_current_question(tmp_path: Path) -> None:
+    """Private images must never leak past the question a student is on."""
+    with make_client(settings_for(tmp_path / "student-images.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "image.teacher",
+                    "display_name": "Image Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client, "image.teacher", "a-secure-teacher-password"
+        )
+        student_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "5e A", "grade_level": "5e"},
+        ).json()
+        account = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Iris", "last_name": "Petit"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "5e", "chapter": "Images"},
+        ).json()
+        encoded_image = {
+            "content_type": "image/png",
+            "data_base64": b64encode(VALID_PNG).decode(),
+        }
+        for index in range(2):
+            created = client.post(
+                f"/api/question-banks/{bank['id']}/questions",
+                headers=teacher_headers,
+                data={
+                    "payload": json.dumps(
+                        {
+                            "prompt": f"Question imagée {index}",
+                            "difficulty": "easy",
+                            "answer_mode": "single",
+                            "answer_mode_disclosed": True,
+                            "choices": [
+                                {
+                                    "label": "Correct",
+                                    "is_correct": True,
+                                    "image": encoded_image,
+                                },
+                                {"label": "Faux", "is_correct": False},
+                            ],
+                        }
+                    )
+                },
+                files={"image": ("question.png", VALID_PNG, "image/png")},
+            )
+            assert created.status_code == 201
+
+        quiz = client.post(
+            "/api/quizzes",
+            headers=teacher_headers,
+            json={
+                "title": "Quiz avec images",
+                "question_bank_ids": [bank["id"]],
+                "same_questions_for_all": True,
+                "easy_question_count": 2,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        ).json()
+        launched = client.post(
+            f"/api/quizzes/{quiz['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        ).json()
+
+        student_token = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": account["identifier"],
+                "password": account["generated_password"],
+            },
+        ).json()["access_token"]
+        student_headers = {"Authorization": f"Bearer {student_token}"}
+        joined = client.post(
+            "/api/quizzes/join",
+            headers=student_headers,
+            json={"join_code": launched["join_code"]},
+        )
+        assert joined.status_code == 201
+        quiz_token = joined.json()["participant_token"]
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+
+        join_code = launched["join_code"]
+        state = client.get(
+            f"/api/quizzes/student/sessions/{join_code}",
+            headers={"X-Quiz-Token": quiz_token},
+        ).json()
+        current_question_id = state["question"]["id"]
+        current_choice_ids = {choice["id"] for choice in state["question"]["choices"]}
+
+        all_questions = client.get(
+            f"/api/question-banks/{bank['id']}/questions", headers=teacher_headers
+        ).json()
+        other_question = next(
+            question
+            for question in all_questions
+            if question["id"] != current_question_id
+        )
+        other_choice_id = next(
+            choice["id"]
+            for choice in other_question["choices"]
+            if choice["id"] not in current_choice_ids and choice["has_image"]
+        )
+
+        image_url = (
+            f"/api/quizzes/student/sessions/{join_code}"
+            f"/questions/{current_question_id}/image"
+        )
+        served = client.get(image_url, headers={"X-Quiz-Token": quiz_token})
+        assert served.status_code == 200
+        assert served.headers["content-type"] == "image/png"
+        assert served.content.startswith(b"\x89PNG")
+
+        choice_with_image = next(
+            choice["id"]
+            for choice in state["question"]["choices"]
+            if choice["has_image"]
+        )
+        served_choice = client.get(
+            f"/api/quizzes/student/sessions/{join_code}"
+            f"/choices/{choice_with_image}/image",
+            headers={"X-Quiz-Token": quiz_token},
+        )
+        assert served_choice.status_code == 200
+
+        # A question the student has not reached must stay private.
+        assert (
+            client.get(
+                f"/api/quizzes/student/sessions/{join_code}"
+                f"/questions/{other_question['id']}/image",
+                headers={"X-Quiz-Token": quiz_token},
+            ).status_code
+            == 404
+        )
+        assert (
+            client.get(
+                f"/api/quizzes/student/sessions/{join_code}"
+                f"/choices/{other_choice_id}/image",
+                headers={"X-Quiz-Token": quiz_token},
+            ).status_code
+            == 404
+        )
+        # The participant token is required, and a forged one is rejected.
+        assert client.get(image_url).status_code == 401
+        assert (
+            client.get(
+                image_url, headers={"X-Quiz-Token": "forged-participant-token"}
+            ).status_code
+            == 401
+        )
+
+
+def test_quiz_launch_uses_a_constant_query_count(tmp_path: Path) -> None:
+    """Every student draws from the same pool, so it is read once per launch."""
+    query_counts: dict[int, int] = {}
+    for student_count in (4, 16):
+        with make_client(
+            settings_for(tmp_path / f"launch-{student_count}.db")
+        ) as client:
+            admin_headers = login_admin(client)
+            assert (
+                client.post(
+                    "/api/admin/users",
+                    headers=admin_headers,
+                    json={
+                        "username": "launch.teacher",
+                        "display_name": "Launch Teacher",
+                        "password": "a-secure-teacher-password",
+                    },
+                ).status_code
+                == 201
+            )
+            teacher_headers, _ = complete_first_login(
+                client, "launch.teacher", "a-secure-teacher-password"
+            )
+            student_class = client.post(
+                "/api/classes",
+                headers=teacher_headers,
+                json={"name": "3e A", "grade_level": "3e"},
+            ).json()
+            for index in range(student_count):
+                account = client.post(
+                    "/api/students",
+                    headers=teacher_headers,
+                    json={"first_name": f"Eleve{index}", "last_name": "Test"},
+                ).json()
+                assert (
+                    client.post(
+                        f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+                        headers=teacher_headers,
+                    ).status_code
+                    == 200
+                )
+            bank = client.post(
+                "/api/question-banks",
+                headers=teacher_headers,
+                json={"grade_level": "3e", "chapter": "Tirage"},
+            ).json()
+            for index in range(20):
+                assert (
+                    client.post(
+                        f"/api/question-banks/{bank['id']}/questions",
+                        headers=teacher_headers,
+                        data={
+                            "payload": json.dumps(
+                                {
+                                    "prompt": f"Question {index}",
+                                    "difficulty": "easy",
+                                    "answer_mode": "single",
+                                    "answer_mode_disclosed": True,
+                                    "choices": [
+                                        {
+                                            "label": "Ok",
+                                            "is_correct": True,
+                                            "points": 2,
+                                        },
+                                        {"label": "No", "is_correct": False},
+                                    ],
+                                }
+                            )
+                        },
+                    ).status_code
+                    == 201
+                )
+            quiz = client.post(
+                "/api/quizzes",
+                headers=teacher_headers,
+                json={
+                    "title": "Tirage individuel",
+                    "question_bank_ids": [bank["id"]],
+                    "same_questions_for_all": False,
+                    "easy_question_count": 5,
+                    "medium_question_count": 0,
+                    "hard_question_count": 0,
+                },
+            ).json()
+
+            engine = client.app.state.session_factory.kw["bind"]
+            statements = 0
+
+            def count_statement(*_arguments: Any) -> None:
+                nonlocal statements
+                statements += 1
+
+            event.listen(engine, "before_cursor_execute", count_statement)
+            try:
+                launched = client.post(
+                    f"/api/quizzes/{quiz['id']}/launch",
+                    headers=teacher_headers,
+                    json={"class_id": student_class["id"]},
+                )
+            finally:
+                event.remove(engine, "before_cursor_execute", count_statement)
+            assert launched.status_code == 201
+            query_counts[student_count] = statements
+
+    assert query_counts[4] == query_counts[16], (
+        f"launch queries grow with class size: {query_counts}"
+    )
+
+
+def test_reported_maximum_score_is_actually_reachable(tmp_path: Path) -> None:
+    """The ceiling must follow the same rule the grader applies.
+
+    A distractor carrying positive points is only worth taking when the quiz
+    awards negative points; otherwise selecting it scores zero, so it must not
+    inflate the denominator.
+    """
+    with make_client(settings_for(tmp_path / "reachable-maximum.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "ceiling.teacher",
+                    "display_name": "Ceiling Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client, "ceiling.teacher", "a-secure-teacher-password"
+        )
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "2nd", "chapter": "Barème"},
+        ).json()
+        created = client.post(
+            f"/api/question-banks/{bank['id']}/questions",
+            headers=teacher_headers,
+            data={
+                "payload": json.dumps(
+                    {
+                        "prompt": "Quels nombres sont premiers ?",
+                        "difficulty": "medium",
+                        "answer_mode": "multiple",
+                        "answer_mode_disclosed": True,
+                        "choices": [
+                            {"label": "2", "is_correct": True, "points": 3},
+                            {"label": "3", "is_correct": True, "points": 3},
+                            {"label": "9", "is_correct": False, "points": 2},
+                        ],
+                    }
+                )
+            },
+        )
+        assert created.status_code == 201
+        question_id = created.json()["id"]
+
+        with client.app.state.session_factory() as session:
+            choices = list(
+                session.scalars(
+                    select(QuestionChoice).where(
+                        QuestionChoice.question_id == question_id
+                    )
+                )
+            )
+            every_choice = {choice.id for choice in choices}
+            correct_only = {choice.id for choice in choices if choice.is_correct}
+
+            for allow_negative_points in (False, True):
+                reported = question_maximum_scores(
+                    [question_id],
+                    session,
+                    allow_negative_points=allow_negative_points,
+                )[question_id]
+                reachable = max(
+                    selected_choice_score(
+                        choices,
+                        selection,
+                        allow_negative_points=allow_negative_points,
+                    )
+                    for selection in (correct_only, every_choice)
+                )
+                assert reported == reachable, (
+                    f"allow_negative_points={allow_negative_points}: "
+                    f"reported {reported}, reachable {reachable}"
+                )
+
+
+def test_departed_participant_does_not_hold_the_session_open(tmp_path: Path) -> None:
+    """A student who leaves must not keep a finished exam in progress.
+
+    Their position is kept so a rejoin resumes where they stopped, but the
+    teacher no longer sees them, so counting them would leave the session
+    running until the timer expires with nobody left to answer.
+    """
+    with make_client(settings_for(tmp_path / "departed-participant.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "leave.teacher",
+                    "display_name": "Leave Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client, "leave.teacher", "a-secure-teacher-password"
+        )
+        student_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "4e B", "grade_level": "4e"},
+        ).json()
+        accounts = []
+        for first_name in ("Alpha", "Beta"):
+            account = client.post(
+                "/api/students",
+                headers=teacher_headers,
+                json={"first_name": first_name, "last_name": "Partant"},
+            ).json()
+            assert (
+                client.post(
+                    f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+                    headers=teacher_headers,
+                ).status_code
+                == 200
+            )
+            accounts.append(account)
+
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "4e", "chapter": "Départ"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/question-banks/{bank['id']}/questions",
+                headers=teacher_headers,
+                data={
+                    "payload": json.dumps(
+                        {
+                            "prompt": "Seule question",
+                            "difficulty": "easy",
+                            "answer_mode": "single",
+                            "answer_mode_disclosed": True,
+                            "choices": [
+                                {"label": "Ok", "is_correct": True, "points": 1},
+                                {"label": "No", "is_correct": False},
+                            ],
+                        }
+                    )
+                },
+            ).status_code
+            == 201
+        )
+        quiz = client.post(
+            "/api/quizzes",
+            headers=teacher_headers,
+            json={
+                "title": "Quiz avec départ",
+                "question_bank_ids": [bank["id"]],
+                "same_questions_for_all": True,
+                "easy_question_count": 1,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        ).json()
+        launched = client.post(
+            f"/api/quizzes/{quiz['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        ).json()
+
+        quiz_tokens = []
+        for account in accounts:
+            student_token = client.post(
+                "/api/student-auth/login",
+                json={
+                    "identifier": account["identifier"],
+                    "password": account["generated_password"],
+                },
+            ).json()["access_token"]
+            joined = client.post(
+                "/api/quizzes/join",
+                headers={"Authorization": f"Bearer {student_token}"},
+                json={"join_code": launched["join_code"]},
+            )
+            assert joined.status_code == 201
+            quiz_tokens.append(joined.json()["participant_token"])
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+
+        join_code = launched["join_code"]
+        assert (
+            client.post(
+                f"/api/quizzes/student/sessions/{join_code}/leave",
+                headers={"X-Quiz-Token": quiz_tokens[0]},
+            ).status_code
+            == 204
+        )
+        # The teacher no longer counts the student who left.
+        in_progress = client.get(
+            f"/api/quizzes/sessions/{launched['id']}", headers=teacher_headers
+        ).json()
+        assert in_progress["participant_count"] == 1
+
+        state = client.get(
+            f"/api/quizzes/student/sessions/{join_code}",
+            headers={"X-Quiz-Token": quiz_tokens[1]},
+        ).json()
+        answered = client.post(
+            f"/api/quizzes/student/sessions/{join_code}/answer",
+            headers={"X-Quiz-Token": quiz_tokens[1]},
+            json={
+                "selected_choice_ids": [state["question"]["choices"][0]["id"]],
+            },
+        )
+        assert answered.status_code == 200
+
+        finished = client.get(
+            f"/api/quizzes/sessions/{launched['id']}", headers=teacher_headers
+        ).json()
+        assert finished["status"] == "finished"
+        # Results keep everyone who took part, including the student who left.
+        assert finished["participant_count"] == 2

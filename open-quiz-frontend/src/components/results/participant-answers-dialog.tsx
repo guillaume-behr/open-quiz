@@ -190,7 +190,7 @@ function AnswerText({
                 highlighted
                     ? "rounded-lg bg-primary/5 p-3"
                     : correctness === true
-                      ? "rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-200"
+                      ? "rounded-lg border border-success/40 bg-success/10 p-3 text-success"
                       : correctness === false
                         ? "rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive"
                         : "rounded-lg bg-muted/60 p-3"

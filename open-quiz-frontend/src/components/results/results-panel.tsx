@@ -24,7 +24,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
-import { cn, formatClassName } from "@/lib/utils"
+import { cn, formatClassName, saveBlob } from "@/lib/utils"
 import { Tooltip } from "@base-ui/react/tooltip"
 import {
     CalendarDays,
@@ -53,7 +53,7 @@ function ResultIndicator({ label }: { label: string }) {
         <Tooltip.Root>
             <Tooltip.Trigger
                 aria-label={label}
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-amber-700 transition-colors hover:bg-amber-500/15 focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:outline-none dark:text-amber-300"
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-warning transition-colors hover:bg-warning/10 focus-visible:ring-2 focus-visible:ring-warning/50 focus-visible:outline-none"
             >
                 <TriangleAlert className="size-4" aria-hidden="true" />
             </Tooltip.Trigger>
@@ -210,15 +210,10 @@ export function ResultsPanel({
         setIsExporting(true)
         setExportError(false)
         try {
-            const blob = await downloadQuizResults(exportClassId, exportQuizId)
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.href = url
-            link.download = `resultats-classe-${exportClassId}${exportQuizId === null ? "-tous-les-quiz" : `-quiz-${exportQuizId}`}.csv`
-            document.body.appendChild(link)
-            link.click()
-            link.remove()
-            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+            saveBlob(
+                await downloadQuizResults(exportClassId, exportQuizId),
+                `resultats-classe-${exportClassId}${exportQuizId === null ? "-tous-les-quiz" : `-quiz-${exportQuizId}`}.csv`
+            )
             onExportDialogOpenChange(false)
         } catch {
             setExportError(true)
@@ -535,8 +530,8 @@ export function ResultsPanel({
                                                     className={cn(
                                                         "shrink-0 rounded-xl p-2.5",
                                                         result.grades_published_at
-                                                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                                                            : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                                            ? "bg-success/10 text-success"
+                                                            : "bg-warning/10 text-warning"
                                                     )}
                                                 >
                                                     {result.grades_published_at ? (
@@ -818,7 +813,7 @@ export function ResultsPanel({
                             <div className="hidden grid-cols-[minmax(180px,1fr)_140px_180px_140px] items-center gap-4 border-b bg-muted/60 px-4 py-3 text-xs font-semibold text-muted-foreground md:grid">
                                 <span>{t("student-name")}</span>
                                 <span>{t("result-progress")}</span>
-                                <span className="text-right">
+                                <span className="text-end">
                                     {t("result-score-total")}
                                 </span>
                                 <span>{t("answers")}</span>
@@ -835,7 +830,7 @@ export function ResultsPanel({
                                                 className={cn(
                                                     "grid gap-3 px-4 py-4 md:grid-cols-[minmax(180px,1fr)_140px_180px_140px] md:items-center md:gap-4",
                                                     participant.pending_manual_grading_count >
-                                                        0 && "bg-amber-500/10"
+                                                        0 && "bg-warning/10"
                                                 )}
                                             >
                                                 <div className="flex min-w-0 items-center gap-3">
@@ -850,8 +845,8 @@ export function ResultsPanel({
                                                             "rounded-full p-2",
                                                             participant.pending_manual_grading_count >
                                                                 0
-                                                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                                                                : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                                                ? "bg-warning/10 text-warning"
+                                                                : "bg-success/10 text-success"
                                                         )}
                                                     >
                                                         <UserRound className="size-4" />
@@ -919,7 +914,7 @@ export function ResultsPanel({
                                                 </p>
                                                 <div
                                                     data-participant-score
-                                                    className="flex items-center justify-between gap-2 text-right font-bold text-primary tabular-nums md:justify-end md:whitespace-nowrap"
+                                                    className="flex items-center justify-between gap-2 text-end font-bold text-primary tabular-nums md:justify-end md:whitespace-nowrap"
                                                 >
                                                     <span className="font-normal text-foreground md:hidden">
                                                         {t(

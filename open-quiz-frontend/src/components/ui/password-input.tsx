@@ -18,13 +18,13 @@ export function PasswordInput({
             <Input
                 {...props}
                 type={visible ? "text" : "password"}
-                className={cn("pr-10", className)}
+                className={cn("pe-10", className)}
             />
             <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="absolute top-1/2 right-1 size-8 -translate-y-1/2 active:not-aria-[haspopup]:-translate-y-1/2"
+                className="absolute end-1 top-1/2 size-8 -translate-y-1/2 active:not-aria-[haspopup]:-translate-y-1/2"
                 aria-label={t(visible ? "hide-password" : "show-password")}
                 aria-pressed={visible}
                 onClick={() => setVisible((current) => !current)}

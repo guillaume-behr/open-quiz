@@ -42,7 +42,18 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - test réseau conteneurisé couvrant l’API, le proxy et les WebSockets ;
 - Dependabot activé pour GitHub Actions, Docker, uv et npm.
 - mise à jour de `pip` dans l’outillage de développement vers une version
-  corrigée de `PYSEC-2026-3721`.
+  corrigée de `PYSEC-2026-3721` ;
+- les fichiers de base SQLite résiduels et les sauvegardes `.env` créées par la
+  rotation des secrets sont désormais ignorés par Git, afin qu’un `git add`
+  accidentel ne puisse plus publier des données élèves ou d’anciens secrets ;
+- la sauvegarde écrite par `rotate_local_secrets.py` porte enfin le nom attendu
+  `.env.<horodatage>.bak` au lieu de `.env.env.<horodatage>.bak` ;
+- un mot de passe élève devenu indéchiffrable, après une rotation de
+  `STUDENT_CREDENTIAL_ENCRYPTION_KEY` ou la restauration d’une sauvegarde, est
+  signalé comme indisponible pour ce seul compte au lieu d’interrompre toute la
+  liste et l’export des identifiants ;
+- la suppression des banques d’entraînement lors d’un changement de niveau est
+  restreinte aux classes de l’enseignant concerné.
 
 ### Ajouts
 
@@ -79,6 +90,19 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Interface
 
+- les états de succès et d’avertissement disposent enfin de jetons de thème
+  (`--success`, `--warning`) déclinés en clair et en sombre, ce qui uniformise
+  des teintes qui divergeaient d’un écran à l’autre ; l’état « en pause » d’une
+  session, jusque-là sans variante sombre, redevient lisible ;
+- les pastilles d’état partagent une présentation commune, et le code d’une
+  proposition s’affiche pour l’élève avec la coloration syntaxique et la même
+  surface que partout ailleurs ;
+- correction de la mise en page en arabe : les actions des cartes et l’espace
+  qui leur est réservé suivent désormais le sens de lecture, si bien qu’un titre
+  long ne passe plus sous les boutons ; le bouton d’affichage du mot de passe
+  change également de côté ;
+- les mises à jour en direct ne peuvent plus ouvrir une connexion supplémentaire
+  après l’expiration d’une tentative de connexion WebSocket ;
 - l’onglet Élèves ne propose plus d’afficher tous les identifiants dans une
   fenêtre ; l’export JSON et l’impression par classe restent disponibles ;
 - les questions d’une banque sont triées par difficulté par défaut, repliables
@@ -115,7 +139,15 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - mise à jour des documentations backend et frontend à partir des commandes,
   routes et contraintes réellement présentes dans le dépôt ;
 - enrichissement des guides de contribution et de sécurité ainsi que des
-  modèles d’issues et de pull request.
+  modèles d’issues et de pull request ;
+- les scripts `install.sh`, `install-dev.sh`, `update.sh` et `update.ps1`
+  partagent une présentation commune, affichent le logo Open Quiz et acceptent
+  `--help` ; `install.sh` accepte `--domain` pour une installation non
+  interactive et `update.sh` accepte `--no-pull` pour reconstruire sans
+  récupérer de révision ;
+- la mise à jour s’interrompt avec un message explicite lorsque Docker est
+  inaccessible, que `.env` est absent ou que le dépôt contient des modifications
+  locales, et indique la révision avant et après l’opération.
 
 ## 0.1.0 — 2026-08-02
 

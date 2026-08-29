@@ -453,10 +453,6 @@ class QuestionCreate(BaseModel):
         if len(existing_choice_ids) != len(set(existing_choice_ids)):
             raise ValueError("Une proposition ne peut être utilisée qu’une fois")
         correct_count = sum(choice.is_correct for choice in self.choices)
-        if self.answer_mode in {"single", "written"} and correct_count > 1:
-            raise ValueError(
-                "Une question à choix unique ne peut avoir qu’une bonne réponse"
-            )
         if self.answer_mode != "written" and len(self.choices) < 2:
             raise ValueError("Une question nécessite au moins deux propositions")
         if self.answer_mode == "written" and len(self.choices) != 1:

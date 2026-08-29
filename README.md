@@ -102,6 +102,17 @@ crée `open-quiz-backend/.env` avec les variables de production, puis lance
 `update.sh` pour construire et démarrer les conteneurs. Enregistrez le mot de
 passe administrateur affiché une seule fois.
 
+Le domaine peut aussi être passé en argument, ce qui permet une installation
+non interactive :
+
+```shell
+sh ./install.sh --domain quiz.example.com
+```
+
+`sh ./install.sh --help` décrit les options disponibles. Le script vérifie le
+domaine et l’absence de configuration existante avant de contrôler Docker, et
+n’écrit aucun secret tant que ces vérifications n’ont pas abouti.
+
 Le script refuse d’écraser une configuration existante. Pour un déploiement
 déjà installé, utilisez directement `sh ./update.sh`. Renseignez ensuite dans
 `.env` les informations légales, de confidentialité et d’accessibilité propres
@@ -135,6 +146,11 @@ La réponse attendue est `{"status":"ok"}`.
 
 - utilisez `sh ./update.sh` sous Unix ou `./update.ps1` sous PowerShell pour
   appliquer une mise à jour en avance rapide et reconstruire les conteneurs ;
+- ajoutez `--no-pull` (ou `-NoPull` sous PowerShell) pour reconstruire et
+  redémarrer sans récupérer de nouvelle révision ;
+- les scripts refusent de continuer si le dépôt contient des modifications
+  locales, affichent la version avant et après la mise à jour, et rappellent de
+  sauvegarder la base lorsque la révision change ;
 - sauvegardez régulièrement PostgreSQL avec `pg_dump` et testez les restaurations ;
 - conservez `TOTP_ENCRYPTION_KEY` et `STUDENT_CREDENTIAL_ENCRYPTION_KEY` dans un
   gestionnaire de secrets ;
@@ -235,6 +251,7 @@ PostgreSQL (volume persistant)
 ├── docs/                    guides de déploiement et d’exploitation
 ├── open-quiz-backend/       API FastAPI, scripts et tests
 ├── open-quiz-frontend/      application React, traductions et tests E2E
+├── scripts/                 fonctions communes aux scripts shell
 ├── CHANGELOG.md             historique des versions
 ├── CONTRIBUTING.md          guide de contribution
 ├── docker-compose.yml       déploiement autonome

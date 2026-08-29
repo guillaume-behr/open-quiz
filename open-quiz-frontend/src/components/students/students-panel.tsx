@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
-import { formatClassName } from "@/lib/utils"
+import { formatClassName, saveBlob } from "@/lib/utils"
 import {
     LoaderCircle,
     Download,
@@ -215,15 +215,10 @@ export function StudentsPanel({
         setIsBusy(true)
         setExportError(null)
         try {
-            const blob = await exportStudentCredentials()
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.href = url
-            link.download = "student-credentials.json"
-            document.body.append(link)
-            link.click()
-            link.remove()
-            window.setTimeout(() => URL.revokeObjectURL(url), 0)
+            saveBlob(
+                await exportStudentCredentials(),
+                "student-credentials.json"
+            )
         } catch {
             setExportError(t("student-credentials-export-error"))
         } finally {
@@ -378,7 +373,7 @@ export function StudentsPanel({
                                         type="button"
                                         size="icon-sm"
                                         variant="ghost"
-                                        className="absolute top-4 right-12"
+                                        className="absolute end-12 top-4"
                                         aria-label={t("edit-student")}
                                         title={t("edit-student")}
                                         onClick={() => edit(student)}
@@ -389,7 +384,7 @@ export function StudentsPanel({
                                         type="button"
                                         size="icon-sm"
                                         variant="destructive"
-                                        className="absolute top-4 right-4"
+                                        className="absolute end-4 top-4"
                                         aria-label={t("delete-student")}
                                         title={t("delete-student")}
                                         onClick={() => {
@@ -402,7 +397,7 @@ export function StudentsPanel({
                                     <div className="rounded-lg bg-primary/10 p-1.5 text-primary">
                                         <UserRound className="size-4" />
                                     </div>
-                                    <div className="min-w-0 flex-1 pr-16">
+                                    <div className="min-w-0 flex-1 pe-20">
                                         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                             {student.identifier}
                                         </p>

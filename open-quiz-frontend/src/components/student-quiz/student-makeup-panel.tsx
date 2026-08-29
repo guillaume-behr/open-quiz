@@ -79,7 +79,7 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                                 type="button"
                                 disabled={busy}
                                 onClick={() => void select(quiz.id)}
-                                className="flex items-center justify-between gap-4 rounded-xl border bg-card p-4 text-left transition hover:border-primary hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                className="flex items-center justify-between gap-4 rounded-xl border bg-card p-4 text-start transition hover:border-primary hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <span className="font-semibold break-words">
                                     {quiz.title}

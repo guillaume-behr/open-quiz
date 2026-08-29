@@ -33,7 +33,9 @@ def rotate() -> None:
         if name not in updated:
             output.append(f"{name}={secure_defaults[name]}")
 
-    backup = ENV_FILE.with_suffix(f".env.{int(time())}.bak")
+    # ENV_FILE has no suffix (".env" is a bare stem), so with_suffix() would
+    # produce ".env.env.<timestamp>.bak". Name the sibling file explicitly.
+    backup = ENV_FILE.with_name(f"{ENV_FILE.name}.{int(time())}.bak")
     backup.write_text(ENV_FILE.read_text(encoding="utf-8"), encoding="utf-8")
     secure_private_file(backup)
 

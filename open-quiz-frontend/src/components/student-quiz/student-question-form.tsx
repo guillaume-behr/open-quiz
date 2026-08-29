@@ -1,6 +1,9 @@
 import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
 import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
-import { CodeBlock } from "@/components/question-banks/code-block"
+import {
+    CodeBlock,
+    StaticCodeBlock,
+} from "@/components/question-banks/code-block"
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
@@ -319,14 +322,15 @@ function ChoiceAnswers({
                                         alt={choice.label || t("choice-image")}
                                     />
                                 )}
-                                {choice.code_content && (
-                                    <pre
-                                        className="mt-2 overflow-x-auto rounded bg-slate-950 p-3 text-left text-sm text-slate-50"
-                                        dir="ltr"
-                                    >
-                                        <code>{choice.code_content}</code>
-                                    </pre>
-                                )}
+                                {choice.code_content &&
+                                    choice.code_language && (
+                                        <div className="mt-2">
+                                            <StaticCodeBlock
+                                                code={choice.code_content}
+                                                language={choice.code_language}
+                                            />
+                                        </div>
+                                    )}
                             </span>
                         </label>
                     )
