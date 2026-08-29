@@ -32,7 +32,10 @@ export function StudentQuizHistory({ token }: { token: string }) {
                 role="status"
                 aria-label={t("page-loading")}
             >
-                <LoaderCircle className="size-7 animate-spin text-primary motion-reduce:animate-none" />
+                <LoaderCircle
+                    className="size-7 animate-spin text-primary motion-reduce:animate-none"
+                    aria-hidden="true"
+                />
             </div>
         )
 

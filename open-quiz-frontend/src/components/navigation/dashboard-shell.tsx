@@ -123,7 +123,10 @@ export function DashboardShell<Section extends string>({
                                 role="status"
                                 aria-label={loadingLabel}
                             >
-                                <LoaderCircle className="size-8 animate-spin text-primary motion-reduce:animate-none" />
+                                <LoaderCircle
+                                    className="size-8 animate-spin text-primary motion-reduce:animate-none"
+                                    aria-hidden="true"
+                                />
                             </div>
                         }
                     >

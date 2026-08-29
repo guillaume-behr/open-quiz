@@ -107,6 +107,9 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Interface
 
+- les indicateurs de chargement masquent leur icône décorative aux lecteurs
+  d’écran, comme le reste des icônes de l’interface ;
+
 - les états de succès et d’avertissement disposent enfin de jetons de thème
   (`--success`, `--warning`) déclinés en clair et en sombre, ce qui uniformise
   des teintes qui divergeaient d’un écran à l’autre ; l’état « en pause » d’une

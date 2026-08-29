@@ -293,7 +293,10 @@ export function QuestionsManager({
                         role="status"
                         aria-label={t("page-loading")}
                     >
-                        <LoaderCircle className="size-6 animate-spin text-primary motion-reduce:animate-none" />
+                        <LoaderCircle
+                            className="size-6 animate-spin text-primary motion-reduce:animate-none"
+                            aria-hidden="true"
+                        />
                     </div>
                 ) : error ? (
                     <p role="alert" className="mt-3 text-sm text-destructive">
