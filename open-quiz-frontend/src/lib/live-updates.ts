@@ -79,10 +79,11 @@ export function connectLiveUpdates<T>({
         connectionTimer = window.setTimeout(() => {
             connectionTimer = null
             if (socket === currentSocket) {
-                // Some browsers throw when closing a socket that never left
-                // CONNECTING, so recover explicitly in that case.
+                // close() only accepts 1000 or 3000-4999, so pass no code at
+                // all: the close listener below schedules the reconnect once
+                // the abandoned handshake reports 1006.
                 try {
-                    currentSocket.close(1013, "Live connection timed out")
+                    currentSocket.close()
                 } catch {
                     socket = null
                     scheduleReconnect()
