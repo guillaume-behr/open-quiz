@@ -654,19 +654,37 @@ def session_question_points(
     participant: QuizParticipant | None = None,
 ) -> dict[int, float]:
     question_ids = session_question_ids(quiz_session, session, participant)
-    return question_maximum_scores(question_ids, session)
+    return question_maximum_scores(
+        question_ids,
+        session,
+        allow_negative_points=bool(quiz_session.allow_negative_points),
+    )
 
 
 def question_maximum_scores(
     question_ids: list[int],
     session: DbSession,
+    *,
+    allow_negative_points: bool = False,
 ) -> dict[int, float]:
+    """Best score a participant can actually reach on each question.
+
+    This has to follow the same rule as selected_choice_score. Without negative
+    points, picking any incorrect choice scores zero, so only correct choices
+    can contribute; with them, every positively scored choice is worth taking.
+    Counting distractors either way would report a ceiling nobody can reach.
+    """
     if not question_ids:
         return {}
     positive_points = case(
         (QuestionChoice.points > 0, QuestionChoice.points),
         else_=0,
     )
+    if not allow_negative_points:
+        positive_points = case(
+            (QuestionChoice.is_correct.is_(True), positive_points),
+            else_=0,
+        )
     maximums = {
         question_id: float(maximum or 0)
         for question_id, maximum in session.execute(
@@ -686,6 +704,24 @@ def question_maximum_scores(
         )
     }
     return {question_id: maximums.get(question_id, 0) for question_id in question_ids}
+
+
+def maximum_scores_per_session_mode(
+    question_ids: list[int],
+    quiz_sessions: list[QuizSession],
+    session: DbSession,
+) -> dict[bool, dict[int, float]]:
+    """Ceilings keyed by allow_negative_points, for a mixed batch of sessions.
+
+    Sessions in one listing can disagree on negative points, and the ceiling
+    differs between them, so build one table per mode actually present rather
+    than a single table that would be wrong for half the rows.
+    """
+    modes = {bool(quiz_session.allow_negative_points) for quiz_session in quiz_sessions}
+    return {
+        mode: question_maximum_scores(question_ids, session, allow_negative_points=mode)
+        for mode in modes
+    }
 
 
 def current_question_id(
@@ -763,6 +799,7 @@ def participant_maximum_scores(
     maximums = question_maximum_scores(
         list(assigned_question_ids),
         session,
+        allow_negative_points=bool(quiz_session.allow_negative_points),
     )
 
     result: dict[int, float] = {}
@@ -942,7 +979,11 @@ def finished_session_responses(
             personalized_counts.get(session_id, 0), len(question_ids)
         )
 
-    maximums = question_maximum_scores(list(all_assigned_question_ids), session)
+    maximums_by_mode = maximum_scores_per_session_mode(
+        list(all_assigned_question_ids),
+        [quiz_session for quiz_session, _ in rows],
+        session,
+    )
     student_ids = {
         participant.student_id
         for participant in participants
@@ -969,6 +1010,7 @@ def finished_session_responses(
     responses: list[QuizSessionResponse] = []
     for quiz_session, quiz in rows:
         session_participants = participants_by_session[quiz_session.id]
+        maximums = maximums_by_mode[bool(quiz_session.allow_negative_points)]
         participant_maximums: dict[int, float] = {}
         for participant in session_participants:
             question_ids = assigned_question_ids(
@@ -1486,7 +1528,9 @@ def training_result(
     score = 0.0
     maximum = 0.0
     pending = 0
-    maximums = question_maximum_scores(question_ids, session)
+    maximums = question_maximum_scores(
+        question_ids, session, allow_negative_points=False
+    )
     for question_id in question_ids:
         question = questions.get(question_id)
         if question is None:
@@ -1984,7 +2028,11 @@ def list_student_quiz_history(
             select(QuizAnswer).where(QuizAnswer.participant_id.in_(participant_ids))
         )
     }
-    question_points = question_maximum_scores(list(all_question_ids), session)
+    question_points_by_mode = maximum_scores_per_session_mode(
+        list(all_question_ids),
+        [quiz_session for quiz_session, _ in rows],
+        session,
+    )
     class_ids = {
         quiz_session.class_id
         for quiz_session, _ in rows
@@ -2000,6 +2048,9 @@ def list_student_quiz_history(
     history: list[StudentQuizHistoryItem] = []
     for quiz_session, participant in rows:
         question_ids = question_ids_by_participant[participant.id]
+        question_points = question_points_by_mode[
+            bool(quiz_session.allow_negative_points)
+        ]
         answers_by_question = {
             question_id: answers_by_participant_question.get(
                 (participant.id, question_id)

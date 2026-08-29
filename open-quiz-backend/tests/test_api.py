@@ -51,6 +51,7 @@ from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.routers.quizzes import (
     generate_join_code,
     participant_maximum_scores,
+    question_maximum_scores,
     safe_spreadsheet_cell,
 )
 from app.schemas import (
@@ -5561,3 +5562,85 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
         assert (
             client.get(child_url, headers=child_headers).json()["status"] == "finished"
         )
+
+
+def test_reported_maximum_score_is_actually_reachable(tmp_path: Path) -> None:
+    """The ceiling must follow the same rule the grader applies.
+
+    A distractor carrying positive points is only worth taking when the quiz
+    awards negative points; otherwise selecting it scores zero, so it must not
+    inflate the denominator.
+    """
+    with make_client(settings_for(tmp_path / "reachable-maximum.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "ceiling.teacher",
+                    "display_name": "Ceiling Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client, "ceiling.teacher", "a-secure-teacher-password"
+        )
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "2nd", "chapter": "Barème"},
+        ).json()
+        created = client.post(
+            f"/api/question-banks/{bank['id']}/questions",
+            headers=teacher_headers,
+            data={
+                "payload": json.dumps(
+                    {
+                        "prompt": "Quels nombres sont premiers ?",
+                        "difficulty": "medium",
+                        "answer_mode": "multiple",
+                        "answer_mode_disclosed": True,
+                        "choices": [
+                            {"label": "2", "is_correct": True, "points": 3},
+                            {"label": "3", "is_correct": True, "points": 3},
+                            {"label": "9", "is_correct": False, "points": 2},
+                        ],
+                    }
+                )
+            },
+        )
+        assert created.status_code == 201
+        question_id = created.json()["id"]
+
+        with client.app.state.session_factory() as session:
+            choices = list(
+                session.scalars(
+                    select(QuestionChoice).where(
+                        QuestionChoice.question_id == question_id
+                    )
+                )
+            )
+            every_choice = {choice.id for choice in choices}
+            correct_only = {choice.id for choice in choices if choice.is_correct}
+
+            for allow_negative_points in (False, True):
+                reported = question_maximum_scores(
+                    [question_id],
+                    session,
+                    allow_negative_points=allow_negative_points,
+                )[question_id]
+                reachable = max(
+                    selected_choice_score(
+                        choices,
+                        selection,
+                        allow_negative_points=allow_negative_points,
+                    )
+                    for selection in (correct_only, every_choice)
+                )
+                assert reported == reachable, (
+                    f"allow_negative_points={allow_negative_points}: "
+                    f"reported {reported}, reachable {reachable}"
+                )
