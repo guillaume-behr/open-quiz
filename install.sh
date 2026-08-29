@@ -3,35 +3,66 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$SCRIPT_DIR/scripts/common.sh"
+
 ENV_TEMPLATE="$SCRIPT_DIR/open-quiz-backend/.env.production.example"
 ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env"
 
-fail() {
-    printf 'Error: %s\n' "$1" >&2
-    exit 1
+usage() {
+    printf 'Usage: sh ./install.sh [--domain NAME] [--help]\n\n'
+    printf 'Set up a production deployment: generate every secret, write\n'
+    printf 'open-quiz-backend/.env and start the containers.\n\n'
+    printf '  --domain NAME  Public domain, without https:// or a trailing slash.\n'
+    printf '                 Prompted for when omitted.\n'
+    printf '  --help, -h     Show this message.\n'
 }
 
-for command in git docker grep od sed tr mktemp; do
-    command -v "$command" >/dev/null 2>&1 || fail "the '$command' command is required"
+domain=''
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --domain)
+            [ "$#" -ge 2 ] || fail '--domain requires a value'
+            domain=$2
+            shift
+            ;;
+        --domain=*) domain=${1#--domain=} ;;
+        --help | -h)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            fail "unknown argument: $1"
+            ;;
+    esac
+    shift
 done
 
-docker compose version >/dev/null 2>&1 || fail "Docker Compose is not available (expected: docker compose)"
-[ -f "$ENV_TEMPLATE" ] || fail "missing production environment template: $ENV_TEMPLATE"
-[ ! -e "$ENV_FILE" ] || fail "$ENV_FILE already exists; keep it and run sh ./update.sh instead"
+open_quiz_banner 'First-time production setup'
 
-printf 'Domain name for Open Quiz (for example quiz.example.com): '
-IFS= read -r domain
+require_commands git docker grep od sed tr mktemp
+
+# Check the cheap, most common failures first: a returning user should be told
+# to run update.sh rather than being sent to fix Docker.
+[ -f "$ENV_TEMPLATE" ] || fail "missing production environment template: $ENV_TEMPLATE"
+[ ! -e "$ENV_FILE" ] \
+    || fail "$ENV_FILE already exists; keep it and run 'sh ./update.sh' instead"
+
+if [ -z "$domain" ]; then
+    printf 'Domain name for Open Quiz (for example quiz.example.com): '
+    IFS= read -r domain
+fi
 domain=$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]')
 
-[ "${#domain}" -le 253 ] || fail "the domain name is too long"
+[ -n "$domain" ] || fail 'a domain name is required'
+[ "${#domain}" -le 253 ] || fail 'the domain name is too long'
 printf '%s\n' "$domain" | grep -Eq '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$' \
-    || fail "enter a domain name without https://, a path, or a trailing slash"
+    || fail 'enter a domain name without https://, a path, or a trailing slash'
 
-random_hex() {
-    byte_count=$1
-    od -An -N "$byte_count" -tx1 /dev/urandom | tr -d ' \n'
-}
+# Confirm Docker is usable before writing any secret to disk.
+setup_compose
 
+step 'Generating secrets'
 postgres_password=$(random_hex 32)
 jwt_secret=$(random_hex 48)
 totp_key=$(random_hex 48)
@@ -51,34 +82,27 @@ sed \
     -e "s|^FRONTEND_ORIGIN=.*$|FRONTEND_ORIGIN=https://$domain|" \
     "$ENV_TEMPLATE" > "$temporary_file"
 
-if grep -q '=replace-with-' "$temporary_file"; then
-    fail "the generated configuration still contains an example value"
-fi
+step 'Validating the generated configuration'
+validate_environment_file "$temporary_file" production
 
-for variable in DATABASE_URL POSTGRES_PASSWORD JWT_SECRET TOTP_ENCRYPTION_KEY \
-    STUDENT_CREDENTIAL_ENCRYPTION_KEY ADMIN_USERNAME ADMIN_PASSWORD \
-    FRONTEND_ORIGIN APP_ENV; do
-    grep -Eq "^$variable=.+" "$temporary_file" \
-        || fail "the production template does not define $variable"
-done
-
-grep -q '^APP_ENV=production$' "$temporary_file" \
-    || fail "the production template must set APP_ENV=production"
-
-admin_username=$(sed -n 's/^ADMIN_USERNAME=//p' "$temporary_file")
+admin_username=$(sed -n 's/^ADMIN_USERNAME=//p' "$temporary_file" | head -n 1)
 
 mv "$temporary_file" "$ENV_FILE"
 trap - EXIT HUP INT TERM
 chmod 600 "$ENV_FILE"
 
-printf '\nConfiguration created in open-quiz-backend/.env.\n'
-printf 'Administrator username: %s\n' "$admin_username"
-printf 'Administrator password: %s\n' "$admin_password"
-printf 'Save this password now. It will not be displayed again.\n\n'
-printf 'Launching the update and deployment script...\n'
+printf '\n'
+step 'Configuration written to open-quiz-backend/.env'
+highlight "Administrator username: $admin_username"
+highlight "Administrator password: $admin_password"
+note 'Save this password now. It is not stored anywhere else and will not be shown again.'
+printf '\n'
 
-cd "$SCRIPT_DIR"
-sh ./update.sh
+# --no-pull: a fresh clone is already current, and pulling here would fail on a
+# detached HEAD or move the deployment to an unexpected revision.
+sh "$SCRIPT_DIR/update.sh" --no-pull
 
-printf '\nOpen Quiz is running locally on http://127.0.0.1:7800.\n'
-printf 'Configure your HTTPS reverse proxy for https://%s.\n' "$domain"
+printf '\n'
+highlight "Next: point your HTTPS reverse proxy at 127.0.0.1:7800 for https://$domain."
+note 'Fill in the legal, privacy and accessibility values in .env, then re-run sh ./update.sh.'
+note 'Deployment and backup guide: docs/deployment.md'
