@@ -236,7 +236,7 @@ function TrainingCorrection({
         .map((choice) => choice.label)
     return (
         <section
-            className={`flex flex-col rounded-xl border p-6 ${feedback.requires_manual_review ? "border-border bg-muted/30" : feedback.is_correct ? "border-emerald-500/50 bg-emerald-500/10" : "border-destructive/50 bg-destructive/10"}`}
+            className={`flex flex-col rounded-xl border p-6 ${feedback.requires_manual_review ? "border-border bg-muted/30" : feedback.is_correct ? "border-success/40 bg-success/10" : "border-destructive/50 bg-destructive/10"}`}
             style={
                 questionFormHeight
                     ? { minHeight: `${questionFormHeight}px` }
@@ -247,7 +247,7 @@ function TrainingCorrection({
                 {feedback.requires_manual_review ? (
                     <Scale className="size-7 text-muted-foreground" />
                 ) : feedback.is_correct ? (
-                    <CheckCircle2 className="size-7 text-emerald-700 dark:text-emerald-300" />
+                    <CheckCircle2 className="size-7 text-success" />
                 ) : (
                     <XCircle className="size-7 text-destructive" />
                 )}

@@ -186,7 +186,7 @@ function SessionSummary({ session }: { session: QuizSession | MakeupSession }) {
                 </div>
             )}
             {session.status === "paused" && (
-                <p className="mt-3 flex items-center justify-center gap-2 font-semibold text-amber-600">
+                <p className="mt-3 flex items-center justify-center gap-2 font-semibold text-warning">
                     <Pause />
                     {t("quiz-paused")}
                 </p>
@@ -227,7 +227,7 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
                 </h4>
                 {session.status === "waiting" && (
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="size-2 animate-pulse rounded-full bg-emerald-500 motion-reduce:animate-none" />
+                        <span className="size-2 animate-pulse rounded-full bg-success motion-reduce:animate-none" />
                         {t("live-updates")}
                     </span>
                 )}
@@ -255,7 +255,7 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
                                     ["in_progress", "paused"].includes(
                                         session.status
                                     )
-                                        ? "rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 font-medium"
+                                        ? "rounded-lg border border-success/40 bg-success/10 px-3 py-2 font-medium"
                                         : "rounded-lg border bg-background px-3 py-2 font-medium"
                                 }
                             >
@@ -268,7 +268,7 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
                                         ["in_progress", "paused"].includes(
                                             session.status
                                         ) && (
-                                            <span className="flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
+                                            <span className="flex items-center gap-1 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
                                                 <CircleCheck className="size-3.5" />
                                                 {t("quiz-finished")}
                                             </span>

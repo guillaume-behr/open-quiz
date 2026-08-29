@@ -127,17 +127,17 @@ function TranslationNotice({
     const { t } = useTranslation()
 
     return (
-        <CollapsiblePrimitive.Root className="w-full max-w-xl self-center overflow-hidden rounded-xl border border-amber-500/50 bg-amber-500/10">
-            <CollapsiblePrimitive.Trigger className="group flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-bold transition-colors select-none hover:bg-amber-500/10 focus-visible:ring-3 focus-visible:ring-amber-500/40 focus-visible:outline-none focus-visible:ring-inset sm:px-4">
+        <CollapsiblePrimitive.Root className="w-full max-w-xl self-center overflow-hidden rounded-xl border border-warning/40 bg-warning/10">
+            <CollapsiblePrimitive.Trigger className="group flex w-full items-center gap-2 px-3 py-2 text-start text-sm font-bold transition-colors select-none hover:bg-warning/10 focus-visible:ring-3 focus-visible:ring-warning/50 focus-visible:outline-none focus-visible:ring-inset sm:px-4">
                 <TriangleAlert
-                    className="size-4 shrink-0 text-amber-700 dark:text-amber-300"
+                    className="size-4 shrink-0 text-warning"
                     aria-hidden="true"
                 />
                 <span>{t("automatic-translation-title")}</span>
-                <ChevronDown className="ms-auto size-4 shrink-0 text-amber-800 transition-transform duration-200 ease-out group-data-panel-open:rotate-180 motion-reduce:transition-none dark:text-amber-200" />
+                <ChevronDown className="ms-auto size-4 shrink-0 text-warning transition-transform duration-200 ease-out group-data-panel-open:rotate-180 motion-reduce:transition-none" />
             </CollapsiblePrimitive.Trigger>
             <CollapsiblePrimitive.Panel className="h-[var(--collapsible-panel-height)] overflow-hidden opacity-100 transition-[height,opacity] duration-200 ease-out data-ending-style:h-0 data-ending-style:opacity-0 data-starting-style:h-0 data-starting-style:opacity-0 motion-reduce:transition-none [&[hidden]:not([hidden='until-found'])]:hidden">
-                <div className="border-t border-amber-500/30 px-3 py-3 sm:px-4">
+                <div className="border-t border-warning/40 px-3 py-3 sm:px-4">
                     <p className="text-xs leading-5 sm:text-sm">
                         {t("automatic-translation-warning")}
                     </p>

@@ -53,7 +53,7 @@ function ResultIndicator({ label }: { label: string }) {
         <Tooltip.Root>
             <Tooltip.Trigger
                 aria-label={label}
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-amber-700 transition-colors hover:bg-amber-500/15 focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:outline-none dark:text-amber-300"
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-warning transition-colors hover:bg-warning/10 focus-visible:ring-2 focus-visible:ring-warning/50 focus-visible:outline-none"
             >
                 <TriangleAlert className="size-4" aria-hidden="true" />
             </Tooltip.Trigger>
@@ -535,8 +535,8 @@ export function ResultsPanel({
                                                     className={cn(
                                                         "shrink-0 rounded-xl p-2.5",
                                                         result.grades_published_at
-                                                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                                                            : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                                            ? "bg-success/10 text-success"
+                                                            : "bg-warning/10 text-warning"
                                                     )}
                                                 >
                                                     {result.grades_published_at ? (
@@ -835,7 +835,7 @@ export function ResultsPanel({
                                                 className={cn(
                                                     "grid gap-3 px-4 py-4 md:grid-cols-[minmax(180px,1fr)_140px_180px_140px] md:items-center md:gap-4",
                                                     participant.pending_manual_grading_count >
-                                                        0 && "bg-amber-500/10"
+                                                        0 && "bg-warning/10"
                                                 )}
                                             >
                                                 <div className="flex min-w-0 items-center gap-3">
@@ -850,8 +850,8 @@ export function ResultsPanel({
                                                             "rounded-full p-2",
                                                             participant.pending_manual_grading_count >
                                                                 0
-                                                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                                                                : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                                                ? "bg-warning/10 text-warning"
+                                                                : "bg-success/10 text-success"
                                                         )}
                                                     >
                                                         <UserRound className="size-4" />

@@ -148,8 +148,8 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                 </p>
                                             )}
                                         </div>
-                                        <div className="rounded-lg bg-emerald-500/10 p-3">
-                                            <p className="font-medium text-emerald-700 dark:text-emerald-300">
+                                        <div className="rounded-lg bg-success/10 p-3">
+                                            <p className="font-medium text-success">
                                                 {t("correct-answer")}
                                             </p>
                                             <p className="mt-1 whitespace-pre-wrap">

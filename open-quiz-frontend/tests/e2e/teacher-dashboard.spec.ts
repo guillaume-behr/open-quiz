@@ -1923,7 +1923,7 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     const resultTitle = resultCard.getByRole("heading", {
         name: "Science checkpoint",
     })
-    await expect(resultStatusIcon).toHaveClass(/text-amber-700/)
+    await expect(resultStatusIcon).toHaveClass(/text-warning/)
     const resultStatusIconBox = await resultStatusIcon.boundingBox()
     const resultTitleBox = await resultTitle.boundingBox()
     expect(resultStatusIconBox).not.toBeNull()
@@ -2009,11 +2009,11 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
         name: "1 to grade",
     })
     await expect(pendingGradingIndicator).toBeVisible()
-    await expect(participantRow).toHaveClass(/bg-amber-500\/10/)
+    await expect(participantRow).toHaveClass(/bg-warning\/10/)
     const participantGradingStatus = participantRow.locator(
         '[data-grading-status="pending"]'
     )
-    await expect(participantGradingStatus).toHaveClass(/text-amber-700/)
+    await expect(participantGradingStatus).toHaveClass(/text-warning/)
     await pendingGradingIndicator.hover()
     await expect(
         page.getByRole("tooltip").getByText("1 to grade")
@@ -2038,10 +2038,10 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
             ?.postDataJSON()
     ).toEqual({ score: 3.5 })
     await answersDialog.getByRole("button", { name: "Close" }).click()
-    await expect(participantRow).not.toHaveClass(/bg-amber-500\/10/)
+    await expect(participantRow).not.toHaveClass(/bg-warning\/10/)
     await expect(
         participantRow.locator('[data-grading-status="complete"]')
-    ).toHaveClass(/text-emerald-700/)
+    ).toHaveClass(/text-success/)
     await expect(
         resultDialog.getByRole("button", { name: "1 to grade" })
     ).toHaveCount(0)
@@ -2067,7 +2067,7 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await resultDialog.getByRole("button", { name: "Close" }).click()
     await expect(
         resultCard.getByRole("img", { name: "Grades published" })
-    ).toHaveClass(/text-emerald-700/)
+    ).toHaveClass(/text-success/)
 
     await page.getByRole("button", { name: "Export results" }).click()
     const exportDialog = page.getByRole("dialog", { name: "Export results" })
