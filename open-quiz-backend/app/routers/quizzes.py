@@ -323,14 +323,13 @@ def available_difficulty_counts(
     bank_ids: list[int],
     session: DbSession,
 ) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for difficulty, count in session.execute(
-        select(Question.difficulty, func.count(Question.id))
-        .where(Question.question_bank_id.in_(bank_ids))
-        .group_by(Question.difficulty)
-    ):
-        counts[difficulty] = count
-    return counts
+    return dict(
+        session.execute(
+            select(Question.difficulty, func.count(Question.id))
+            .where(Question.question_bank_id.in_(bank_ids))
+            .group_by(Question.difficulty)
+        ).all()
+    )
 
 
 def difficulty_counts_for_banks(
@@ -815,10 +814,10 @@ def participant_maximum_scores(
             .order_by(QuizSessionQuestion.position)
         )
     )
-    assigned_question_ids = set(common_question_ids)
-    assigned_question_ids.update(row.question_id for row in personalized_rows)
+    used_question_ids = set(common_question_ids)
+    used_question_ids.update(row.question_id for row in personalized_rows)
     maximums = question_maximum_scores(
-        list(assigned_question_ids),
+        list(used_question_ids),
         session,
         allow_negative_points=bool(quiz_session.allow_negative_points),
     )
@@ -1396,7 +1395,7 @@ def authenticated_participant(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Jeton de participation au quiz invalide",
         )
-    quiz_session, quiz, participant = row
+    participant = row[2]
     active_account = session.scalar(
         select(StudentAccount.is_active)
         .join(Student, Student.account_id == StudentAccount.id)
@@ -1939,18 +1938,19 @@ def answer_review(
             answer.score >= max_score if answer.is_graded and max_score > 0 else None
         )
     else:
-        selected_choice_ids = submitted.get("selected_choice_ids", [])
-        if not isinstance(selected_choice_ids, list):
-            selected_choice_ids = []
-        selected_choice_ids = [
-            choice_id for choice_id in selected_choice_ids if type(choice_id) is int
+        submitted_ids = submitted.get("selected_choice_ids", [])
+        if not isinstance(submitted_ids, list):
+            submitted_ids = []
+        # Only real integers can name a choice, and labels are looked up by id.
+        submitted_ids = [
+            choice_id for choice_id in submitted_ids if type(choice_id) is int
         ]
         submitted_answers = [
             choices_by_id[choice_id].label
-            for choice_id in selected_choice_ids
+            for choice_id in submitted_ids
             if choice_id in choices_by_id
         ]
-        is_correct = set(selected_choice_ids) == {
+        is_correct = set(submitted_ids) == {
             choice.id for choice in choices if choice.is_correct
         }
     expected_answers = [choice.label for choice in choices if choice.is_correct]
@@ -3947,7 +3947,7 @@ def launch_quiz(
         assignments: list[QuizSessionStudentQuestion] = []
         used_draws: set[tuple[int, ...]] = set()
         for student in students:
-            assigned_question_ids = draw_unique_question_ids(pool, used_draws)
+            student_question_ids = draw_unique_question_ids(pool, used_draws)
             assignments.extend(
                 QuizSessionStudentQuestion(
                     session_id=quiz_session.id,
@@ -3956,7 +3956,7 @@ def launch_quiz(
                     question_id=question_id,
                     position=position,
                 )
-                for position, question_id in enumerate(assigned_question_ids)
+                for position, question_id in enumerate(student_question_ids)
             )
         session.add_all(assignments)
     session.commit()

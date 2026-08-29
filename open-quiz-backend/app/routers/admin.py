@@ -15,6 +15,7 @@ from app.models import (
     User,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.routers.auth import password_rate_subject, two_factor_rate_subject
 from app.schemas import (
     UserCreate,
     UserCredentialReset,
@@ -159,8 +160,8 @@ def reset_user_credentials(
         )
     session.commit()
     limiter = request.app.state.login_rate_limiter
-    limiter.clear_subject(session, f"password:identity:{user.username}")
-    limiter.clear_subject(session, f"two-factor:user:{user.id}")
+    limiter.clear_subject(session, password_rate_subject(user.username))
+    limiter.clear_subject(session, two_factor_rate_subject(user.id))
     session.refresh(user)
     audit_event(
         "admin.user_credentials_reset",

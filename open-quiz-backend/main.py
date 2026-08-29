@@ -26,6 +26,7 @@ from app.models import (
     SecurityState,
     User,
 )
+from app.quiz_session_records import delete_quiz_session_records
 from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
 from app.routers import (
     admin,
@@ -206,7 +207,7 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
                 )
             )
         )
-        quizzes.delete_quiz_session_records(expired_quiz_session_ids, session)
+        delete_quiz_session_records(expired_quiz_session_ids, session)
 
         expired_refresh_session_ids = select(RefreshSession.id).where(
             RefreshSession.expires_at <= now

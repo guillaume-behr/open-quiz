@@ -25,13 +25,14 @@ def verify_password(password: str, encoded: str) -> bool:
 
 
 def access_token_version(
-    password_hash: str,
+    encoded_password: str,
     secret: str,
     generation: int = 0,
 ) -> str:
+    """Bind a token to the stored password, so a change invalidates it."""
     return hmac_new(
         secret.encode(),
-        f"{generation}:{password_hash}".encode(),
+        f"{generation}:{encoded_password}".encode(),
         sha256,
     ).hexdigest()
 
@@ -158,25 +159,25 @@ def provisioning_uri(secret: str, username: str) -> str:
     )
 
 
-def _totp_cipher(encryption_key: str) -> Fernet:
+def _cipher(encryption_key: str) -> Fernet:
     key = urlsafe_b64encode(sha256(encryption_key.encode()).digest())
     return Fernet(key)
 
 
 def encrypt_totp_secret(secret: str, encryption_key: str) -> str:
-    return _totp_cipher(encryption_key).encrypt(secret.encode()).decode()
+    return _cipher(encryption_key).encrypt(secret.encode()).decode()
 
 
 def decrypt_totp_secret(encrypted_secret: str, encryption_key: str) -> str:
-    return _totp_cipher(encryption_key).decrypt(encrypted_secret.encode()).decode()
+    return _cipher(encryption_key).decrypt(encrypted_secret.encode()).decode()
 
 
 def encrypt_student_password(password: str, encryption_key: str) -> str:
-    return _totp_cipher(encryption_key).encrypt(password.encode()).decode()
+    return _cipher(encryption_key).encrypt(password.encode()).decode()
 
 
 def decrypt_student_password(encrypted_password: str, encryption_key: str) -> str:
-    return _totp_cipher(encryption_key).decrypt(encrypted_password.encode()).decode()
+    return _cipher(encryption_key).decrypt(encrypted_password.encode()).decode()
 
 
 def verify_totp_code(

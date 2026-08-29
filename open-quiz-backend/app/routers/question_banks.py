@@ -250,8 +250,7 @@ def delete_question_bank(
             select(Question.id).where(Question.question_bank_id == question_bank_id)
         )
     )
-    for question_id in question_ids:
-        discard_training_sessions_using_question(question_id, session)
+    discard_training_sessions_using_questions(question_ids, session)
     session.execute(
         delete(ClassTrainingQuestionBank).where(
             ClassTrainingQuestionBank.question_bank_id == question_bank_id
@@ -339,15 +338,18 @@ def question_is_in_launched_quiz(question_id: int, session: DbSession) -> bool:
     )
 
 
-def discard_training_sessions_using_question(
-    question_id: int,
+def discard_training_sessions_using_questions(
+    question_ids: list[int],
     session: DbSession,
 ) -> None:
+    """Drop every training attempt that drew any of these questions."""
+    if not question_ids:
+        return
     common_session_ids = select(QuizSessionQuestion.session_id).where(
-        QuizSessionQuestion.question_id == question_id
+        QuizSessionQuestion.question_id.in_(question_ids)
     )
     personalized_session_ids = select(QuizSessionStudentQuestion.session_id).where(
-        QuizSessionStudentQuestion.question_id == question_id
+        QuizSessionStudentQuestion.question_id.in_(question_ids)
     )
     training_session_ids = list(
         session.scalars(
@@ -963,15 +965,10 @@ def update_question(
             detail="Une proposition nécessite du texte, une image ou du code",
         )
 
-    retained_question_image = (
-        image_data
-        if image_data
-        else None
-        if question_payload.remove_image
-        else question.image_data
-    )
+    # question.image_data already reflects the replacement or the removal
+    # applied above, so it is the image this question will actually keep.
     if (
-        len(retained_question_image or b"")
+        len(question.image_data or b"")
         + sum(
             len(choice_image_data or b"")
             for choice_image_data, _ in replacement_choice_images
@@ -1048,7 +1045,7 @@ def delete_question(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cette question est utilisée par un quiz déjà lancé",
         )
-    discard_training_sessions_using_question(question_id, session)
+    discard_training_sessions_using_questions([question_id], session)
     session.execute(
         delete(QuestionChoice).where(QuestionChoice.question_id == question_id)
     )
