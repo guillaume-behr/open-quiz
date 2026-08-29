@@ -144,12 +144,12 @@ La réponse attendue est `{"status":"ok"}`.
 
 ### Mises à jour et sauvegardes
 
-- utilisez `sh ./update.sh` sous Unix ou `./update.ps1` sous PowerShell pour
-  appliquer une mise à jour en avance rapide et reconstruire les conteneurs ;
-- ajoutez `--no-pull` (ou `-NoPull` sous PowerShell) pour reconstruire et
-  redémarrer sans récupérer de nouvelle révision ;
-- les scripts refusent de continuer si le dépôt contient des modifications
-  locales, affichent la version avant et après la mise à jour, et rappellent de
+- utilisez `sh ./update.sh` pour appliquer une mise à jour en avance rapide et
+  reconstruire les conteneurs ;
+- ajoutez `--no-pull` pour reconstruire et redémarrer sans récupérer de
+  nouvelle révision ;
+- le script refuse de continuer si le dépôt contient des modifications
+  locales, affiche la version avant et après la mise à jour, et rappelle de
   sauvegarder la base lorsque la révision change ;
 - sauvegardez régulièrement PostgreSQL avec `pg_dump` et testez les restaurations ;
 - conservez `TOTP_ENCRYPTION_KEY` et `STUDENT_CREDENTIAL_ENCRYPTION_KEY` dans un
@@ -258,7 +258,6 @@ PostgreSQL (volume persistant)
 ├── install-dev.sh           préparation de l’environnement de développement
 ├── install.sh               installation Docker guidée sous Unix
 ├── SECURITY.md              signalement privé des vulnérabilités
-├── update.ps1               mise à jour sous PowerShell
 └── update.sh                mise à jour sous Unix
 ```
 

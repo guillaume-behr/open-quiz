@@ -131,7 +131,9 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - les pourcentages de difficulté sont remplacés par des quantités ;
 - les points sont désormais définis sur les propositions des banques de questions ;
 - l’ancien écran public permettant de rejoindre un quiz est remplacé par la
-  connexion élève.
+  connexion élève ;
+- retrait de `update.ps1` : le déploiement exige déjà un shell POSIX, et la
+  mise à jour se fait avec `sh ./update.sh`, sous WSL pour Windows.
 
 ### Documentation
 
@@ -144,8 +146,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
   routes et contraintes réellement présentes dans le dépôt ;
 - enrichissement des guides de contribution et de sécurité ainsi que des
   modèles d’issues et de pull request ;
-- les scripts `install.sh`, `install-dev.sh`, `update.sh` et `update.ps1`
-  partagent une présentation commune, affichent le logo Open Quiz et acceptent
+- les scripts `install.sh`, `install-dev.sh` et `update.sh` partagent une
+  présentation commune, affichent le logo Open Quiz et acceptent
   `--help` ; `install.sh` accepte `--domain` pour une installation non
   interactive et `update.sh` accepte `--no-pull` pour reconstruire sans
   récupérer de révision ;

@@ -269,35 +269,22 @@ Avant une mise à jour :
 2. sauvegardez la base et le fichier `.env` ;
 3. vérifiez que le dépôt ne contient aucune modification locale à préserver.
 
-Sous Unix :
-
 ```shell
 sh ./update.sh
 ```
 
-Sous PowerShell :
-
-```powershell
-./update.ps1
-```
-
-Les scripts vérifient d’abord que Docker est accessible, que
+Le script vérifie d’abord que Docker est accessible, que
 `open-quiz-backend/.env` existe et que le dépôt ne contient aucune modification
-locale, puis effectuent un `git pull --ff-only`. Ils affichent la révision avant
-et après la mise à jour et rappellent de sauvegarder PostgreSQL lorsqu’elle
-change. Ils valident ensuite la configuration Compose, reconstruisent les
-conteneurs, attendent leur état sain et affichent leur statut ainsi que
-l’origine publique configurée.
+locale, puis effectue un `git pull --ff-only`. Il affiche la révision avant et
+après la mise à jour et rappelle de sauvegarder PostgreSQL lorsqu’elle change.
+Il valide ensuite la configuration Compose, reconstruit les conteneurs, attend
+leur état sain et affiche leur statut ainsi que l’origine publique configurée.
 
 Pour reconstruire et redémarrer sans récupérer de révision, par exemple après
 avoir modifié `.env` :
 
 ```shell
 sh ./update.sh --no-pull
-```
-
-```powershell
-./update.ps1 -NoPull
 ```
 
 Cette version ne migre pas les anciennes bases : utilisez un volume PostgreSQL
