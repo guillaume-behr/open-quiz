@@ -6357,3 +6357,201 @@ def test_departed_participant_does_not_hold_the_session_open(tmp_path: Path) -> 
         assert finished["status"] == "finished"
         # Results keep everyone who took part, including the student who left.
         assert finished["participant_count"] == 2
+
+
+def test_last_participant_leaving_finishes_the_session(tmp_path: Path) -> None:
+    """Leaving must finish a session whose remaining students are all done.
+
+    The answer endpoint already ends a session once nobody is left to answer,
+    but a student can just as easily finish first and have the last active
+    classmate leave afterwards. Without the same check there, the exam stays
+    in progress with nobody able to advance it until the timer expires.
+    """
+    with make_client(settings_for(tmp_path / "last-leaver.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "leaver.teacher",
+                    "display_name": "Leaver Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client, "leaver.teacher", "a-secure-teacher-password"
+        )
+        student_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "4e C", "grade_level": "4e"},
+        ).json()
+        accounts = []
+        for first_name in ("Gamma", "Delta"):
+            account = client.post(
+                "/api/students",
+                headers=teacher_headers,
+                json={"first_name": first_name, "last_name": "Sortant"},
+            ).json()
+            assert (
+                client.post(
+                    f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+                    headers=teacher_headers,
+                ).status_code
+                == 200
+            )
+            accounts.append(account)
+
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "4e", "chapter": "Sortie"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/question-banks/{bank['id']}/questions",
+                headers=teacher_headers,
+                data={
+                    "payload": json.dumps(
+                        {
+                            "prompt": "Seule question",
+                            "difficulty": "easy",
+                            "answer_mode": "single",
+                            "answer_mode_disclosed": True,
+                            "choices": [
+                                {"label": "Ok", "is_correct": True, "points": 1},
+                                {"label": "No", "is_correct": False},
+                            ],
+                        }
+                    )
+                },
+            ).status_code
+            == 201
+        )
+        quiz = client.post(
+            "/api/quizzes",
+            headers=teacher_headers,
+            json={
+                "title": "Quiz avec sortie finale",
+                "question_bank_ids": [bank["id"]],
+                "same_questions_for_all": True,
+                "easy_question_count": 1,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        ).json()
+        launched = client.post(
+            f"/api/quizzes/{quiz['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        ).json()
+
+        quiz_tokens = []
+        for account in accounts:
+            student_token = client.post(
+                "/api/student-auth/login",
+                json={
+                    "identifier": account["identifier"],
+                    "password": account["generated_password"],
+                },
+            ).json()["access_token"]
+            joined = client.post(
+                "/api/quizzes/join",
+                headers={"Authorization": f"Bearer {student_token}"},
+                json={"join_code": launched["join_code"]},
+            )
+            assert joined.status_code == 201
+            quiz_tokens.append(joined.json()["participant_token"])
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+
+        join_code = launched["join_code"]
+        # The first student answers everything and is done.
+        state = client.get(
+            f"/api/quizzes/student/sessions/{join_code}",
+            headers={"X-Quiz-Token": quiz_tokens[0]},
+        ).json()
+        assert (
+            client.post(
+                f"/api/quizzes/student/sessions/{join_code}/answer",
+                headers={"X-Quiz-Token": quiz_tokens[0]},
+                json={
+                    "selected_choice_ids": [state["question"]["choices"][0]["id"]],
+                },
+            ).status_code
+            == 200
+        )
+        # The session is still running for the classmate who has not answered.
+        assert (
+            client.get(
+                f"/api/quizzes/sessions/{launched['id']}", headers=teacher_headers
+            ).json()["status"]
+            == "in_progress"
+        )
+
+        # That classmate leaves instead of answering: nobody can advance the
+        # session any more, so it must finish now.
+        assert (
+            client.post(
+                f"/api/quizzes/student/sessions/{join_code}/leave",
+                headers={"X-Quiz-Token": quiz_tokens[1]},
+            ).status_code
+            == 204
+        )
+        finished = client.get(
+            f"/api/quizzes/sessions/{launched['id']}", headers=teacher_headers
+        ).json()
+        assert finished["status"] == "finished"
+        # The answered question is graded rather than left pending.
+        assert finished["participants"][0]["score"] == 1
+
+
+def test_leaving_without_answering_keeps_the_session_rejoinable(
+    tmp_path: Path,
+) -> None:
+    """An abandoned session must stay open so its students can come back.
+
+    Finishing when the last participant leaves is only right once someone has
+    answered. With no answer there is nothing to grade, and finishing would
+    lock out the student who left by mistake and wants to rejoin.
+    """
+    with make_client(settings_for(tmp_path / "abandoned.db")) as client:
+        environment = exam_environment(client)
+        launched, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        join_code = launched["join_code"]
+        assert (
+            client.post(
+                f"/api/quizzes/student/sessions/{join_code}/leave",
+                headers=participant_headers,
+            ).status_code
+            == 204
+        )
+        assert (
+            client.get(
+                f"/api/quizzes/sessions/{launched['id']}",
+                headers=environment["teacher_headers"],
+            ).json()["status"]
+            == "in_progress"
+        )
+        # The student can still come back and take the exam.
+        rejoined = client.post(
+            "/api/quizzes/join",
+            headers=environment["student_headers"],
+            json={"join_code": join_code},
+        )
+        assert rejoined.status_code == 201

@@ -1177,6 +1177,53 @@ def expire_quiz_session(
         session.commit()
 
 
+def finish_when_nobody_can_answer(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    session: DbSession,
+) -> None:
+    """End a running session once no present participant can still answer.
+
+    A participant who left keeps their position so that rejoining resumes
+    where they stopped, but they must not hold the session open: the teacher
+    no longer sees them among the participants either. Submitting the last
+    answer and being the last to leave both empty that set, so both paths
+    call this.
+
+    A session where nobody ever answered is left running: there is nothing to
+    grade, and finishing it would deny the rejoin its students still need.
+    """
+    if quiz_session.status != "in_progress":
+        return
+    answered = session.scalar(
+        select(QuizAnswer.id).where(QuizAnswer.session_id == quiz_session.id).limit(1)
+    )
+    if answered is None:
+        return
+    unfinished_count = session.scalar(
+        select(func.count(QuizParticipant.id)).where(
+            QuizParticipant.session_id == quiz_session.id,
+            QuizParticipant.current_position.is_not(None),
+            QuizParticipant.left_at.is_(None),
+        )
+    )
+    if unfinished_count:
+        return
+    transition = session.execute(
+        update(QuizSession)
+        .where(
+            QuizSession.id == quiz_session.id,
+            QuizSession.status == "in_progress",
+        )
+        .values(status="finished")
+        .execution_options(synchronize_session=False)
+    )
+    if transition.rowcount == 1:
+        quiz_session.status = "finished"
+        if quiz.mode == "exam":
+            compute_final_scores(quiz_session, session)
+
+
 def expire_owned_quiz_sessions(
     professor: ProfessorUser,
     session: DbSession,
@@ -4063,7 +4110,7 @@ def leave_student_quiz(
     session: DbSession,
     quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
 ) -> Response:
-    quiz_session, _, participant = authenticated_participant(
+    quiz_session, quiz, participant = authenticated_participant(
         join_code, quiz_token, request, session
     )
     enforce_public_rate_limit(
@@ -4074,6 +4121,8 @@ def leave_student_quiz(
     )
     participant.left_at = datetime.now(UTC)
     participant.access_token_hash = None
+    session.flush()
+    finish_when_nobody_can_answer(quiz_session, quiz, session)
     session.commit()
     publish_quiz_update(request, quiz_session, session)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -4234,30 +4283,7 @@ def submit_student_answer(
     else:
         participant.current_position = None
     session.flush()
-    # A participant who left keeps their position so that rejoining resumes
-    # where they stopped, but they must not hold the session open: the teacher
-    # no longer sees them among the participants either.
-    unfinished_count = session.scalar(
-        select(func.count(QuizParticipant.id)).where(
-            QuizParticipant.session_id == quiz_session.id,
-            QuizParticipant.current_position.is_not(None),
-            QuizParticipant.left_at.is_(None),
-        )
-    )
-    if unfinished_count == 0:
-        transition = session.execute(
-            update(QuizSession)
-            .where(
-                QuizSession.id == quiz_session.id,
-                QuizSession.status == "in_progress",
-            )
-            .values(status="finished")
-            .execution_options(synchronize_session=False)
-        )
-        if transition.rowcount == 1:
-            quiz_session.status = "finished"
-            if quiz.mode == "exam":
-                compute_final_scores(quiz_session, session)
+    finish_when_nobody_can_answer(quiz_session, quiz, session)
     session.commit()
     publish_quiz_update(
         request,
