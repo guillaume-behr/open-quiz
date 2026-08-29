@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 import stat
@@ -21,6 +22,7 @@ import pyotp
 import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
+from PIL import Image
 from pydantic import ValidationError
 from sqlalchemy import create_engine, event, inspect, select
 from starlette.websockets import WebSocketDisconnect
@@ -30,7 +32,12 @@ from app.class_names import format_class_name
 from app.config import Settings, secure_private_file, write_private_file
 from app.database import postgres_url
 from app.grading import selected_choice_score
-from app.images import MAX_IMAGE_BYTES, InvalidImage, normalize_image
+from app.images import (
+    MAX_IMAGE_BYTES,
+    MAX_IMAGE_DIMENSION,
+    InvalidImage,
+    normalize_image,
+)
 from app.live_quiz import LiveQuizHub
 from app.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
 from app.models import (
@@ -6664,3 +6671,317 @@ def test_class_labels_are_built_without_repeating_the_level(
     table and that function in step.
     """
     assert format_class_name(grade_level, class_name) == expected
+
+
+@pytest.mark.parametrize(
+    ("decoder", "payload"),
+    [
+        (decode_access_token, {"type": "student_access", "ver": "v"}),
+        (decode_access_token, {"type": "two_factor_setup", "ver": "v"}),
+        (decode_student_access_token, {"type": "access", "ver": "v"}),
+        (decode_student_access_token, {"type": "two_factor_setup", "ver": "v"}),
+        (decode_two_factor_token, {"type": "access", "jti": "identifier"}),
+        (decode_two_factor_token, {"type": "student_access", "jti": "identifier"}),
+    ],
+)
+def test_signed_tokens_are_refused_for_another_purpose(decoder, payload) -> None:
+    """Every token is signed with the same key, so only `type` separates them.
+
+    Without this check a two-factor challenge, which is issued before any code
+    is verified, would be accepted wherever an access token is expected.
+    """
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {"sub": "1", "iat": now, "exp": now + timedelta(minutes=5), **payload},
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+
+    with pytest.raises(jwt.InvalidTokenError):
+        decoder(token, JWT_SECRET)
+
+
+@pytest.mark.parametrize("version", ["", 1, None, []])
+def test_access_tokens_require_a_usable_version_claim(version) -> None:
+    """A blank or non-textual version cannot be compared against the stored one."""
+    now = datetime.now(UTC)
+    payload = {
+        "sub": "1",
+        "type": "access",
+        "ver": version,
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+    with pytest.raises(jwt.InvalidTokenError):
+        decode_access_token(token, JWT_SECRET)
+
+    student_token = jwt.encode(
+        {**payload, "type": "student_access"}, JWT_SECRET, algorithm="HS256"
+    )
+    with pytest.raises(jwt.InvalidTokenError):
+        decode_student_access_token(student_token, JWT_SECRET)
+
+
+@pytest.mark.parametrize("token_id", ["", 1, None])
+def test_two_factor_tokens_require_a_usable_identifier(token_id) -> None:
+    """The identifier is hashed into the single-use challenge record."""
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": "1",
+            "type": "two_factor_verification",
+            "jti": token_id,
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+
+    with pytest.raises(jwt.InvalidTokenError):
+        decode_two_factor_token(token, JWT_SECRET)
+
+
+def test_a_two_factor_challenge_is_not_accepted_as_an_access_token(
+    tmp_path: Path,
+) -> None:
+    """The challenge is handed out before the code is checked.
+
+    It authenticates nothing on its own, so presenting it as a bearer token
+    must not reach an authenticated route.
+    """
+    with make_client(settings_for(tmp_path / "challenge-token.db")) as client:
+        started = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        assert started.status_code == 200
+        challenge_token = started.json()["challenge_token"]
+
+        refused = client.get(
+            "/api/admin/users",
+            headers={"Authorization": f"Bearer {challenge_token}"},
+        )
+        assert refused.status_code == 401
+
+
+def test_a_student_token_does_not_open_the_teacher_api(tmp_path: Path) -> None:
+    """Both audiences send a bearer token signed with the same key."""
+    with make_client(settings_for(tmp_path / "audience-token.db")) as client:
+        environment = exam_environment(client)
+        student_headers = environment["student_headers"]
+
+        assert client.get("/api/users/me", headers=student_headers).status_code == 401
+        assert client.get("/api/classes", headers=student_headers).status_code == 401
+        assert (
+            client.get("/api/admin/users", headers=student_headers).status_code == 401
+        )
+
+        # And the teacher's own token is refused by the student API.
+        teacher_token = environment["teacher_headers"]["Authorization"]
+        assert (
+            client.get(
+                "/api/student-auth/me", headers={"Authorization": teacher_token}
+            ).status_code
+            == 401
+        )
+
+
+@pytest.mark.parametrize("content_length", ["not-a-number", "-1", "12.5", ""])
+def test_a_malformed_content_length_is_rejected(content_length: str) -> None:
+    """The body limit is decided from this header before anything is read.
+
+    A value the middleware cannot compare must be refused outright rather than
+    fall through to an unbounded read.
+    """
+    sent: list[dict[str, Any]] = []
+
+    async def receive() -> dict[str, Any]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    async def downstream(scope, receive, send) -> None:
+        raise AssertionError("the request must not reach the application")
+
+    middleware = RequestBodyLimitMiddleware(
+        downstream,
+        default_limit=1024,
+        session_factory=None,
+    )
+    asyncio.run(
+        middleware(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/auth/login",
+                "headers": [(b"content-length", content_length.encode())],
+            },
+            receive,
+            send,
+        )
+    )
+
+    response_start = next(
+        message for message in sent if message["type"] == "http.response.start"
+    )
+    assert response_start["status"] == 400
+
+
+def test_startup_refuses_to_choose_between_unmanaged_administrators(
+    tmp_path: Path,
+) -> None:
+    """Adopting the wrong account would hand the instance to the wrong person.
+
+    Before managed state existed an instance could hold several
+    administrators. Startup adopts a single one silently, but with more than
+    one and no configured match it must stop rather than guess.
+    """
+    database = tmp_path / "several-admins.db"
+    with make_client(settings_for(database)):
+        pass
+
+    with database_connection(database) as connection:
+        # Forget which account is managed and rename the existing one, so no
+        # administrator matches ADMIN_USERNAME any more.
+        connection.execute(
+            "DELETE FROM security_state WHERE key = 'managed_admin_user_id'"
+        )
+        connection.execute(
+            "UPDATE users SET username = 'legacy-admin' WHERE username = 'root-admin'"
+        )
+        connection.execute(
+            "INSERT INTO users (username, display_name, password_hash,"
+            " access_token_generation, is_admin, is_active, created_at)"
+            " VALUES ('second-admin', 'Second', 'x', 0, true, true, now())"
+        )
+        connection.commit()
+
+    with (
+        pytest.raises(RuntimeError, match="Multiple unmanaged administrators"),
+        make_client(settings_for(database)),
+    ):
+        pass
+
+
+def test_startup_disables_administrators_beside_the_configured_one(
+    tmp_path: Path,
+) -> None:
+    """Only the configured account keeps administrator access.
+
+    An extra administrator left over from an earlier installation is demoted
+    and deactivated, and its refresh sessions revoked, so it cannot be used to
+    regain access.
+    """
+    database = tmp_path / "extra-admin.db"
+    with make_client(settings_for(database)):
+        pass
+
+    with database_connection(database) as connection:
+        connection.execute(
+            "DELETE FROM security_state WHERE key = 'managed_admin_user_id'"
+        )
+        connection.execute(
+            "INSERT INTO users (username, display_name, password_hash,"
+            " access_token_generation, is_admin, is_active, created_at)"
+            " VALUES ('extra-admin', 'Extra', 'x', 0, true, true, now())"
+        )
+        connection.commit()
+        extra_id = connection.execute(
+            "SELECT id FROM users WHERE username = 'extra-admin'"
+        ).fetchone()[0]
+        connection.execute(
+            "INSERT INTO refresh_sessions (token_hash, user_id, expires_at,"
+            " revoked_at, created_at)"
+            " VALUES (%s, %s, %s, NULL, now())",
+            ("a" * 64, extra_id, int(time()) + 3600),
+        )
+        connection.commit()
+
+    with make_client(settings_for(database)):
+        pass
+
+    with database_connection(database) as connection:
+        is_admin, is_active = connection.execute(
+            "SELECT is_admin, is_active FROM users WHERE username = 'extra-admin'"
+        ).fetchone()
+        assert is_admin is False
+        assert is_active is False
+        revoked = connection.execute(
+            "SELECT revoked_at FROM refresh_sessions WHERE user_id = %s",
+            (extra_id,),
+        ).fetchone()[0]
+        assert revoked is not None
+        # The configured administrator keeps its access.
+        assert connection.execute(
+            "SELECT is_admin AND is_active FROM users WHERE username = 'root-admin'"
+        ).fetchone()[0]
+
+
+@pytest.mark.parametrize(
+    ("declared_type", "magic"),
+    [
+        ("image/jpeg", b"\xff\xd8\xff"),
+        ("image/webp", b"RIFF"),
+        ("image/gif", b"\x89PNG"),
+    ],
+)
+def test_normalize_image_reencodes_every_accepted_format(
+    declared_type: str, magic: bytes
+) -> None:
+    """Stored bytes are always the re-encoded image, never what was uploaded.
+
+    Re-encoding is what drops any payload smuggled beside the pixels, so each
+    accepted format has to go through it. A GIF is stored as PNG because that
+    is what the encoder writes for it.
+    """
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), (10, 20, 30)).save(buffer, format="PNG")
+    normalized, content_type = normalize_image(buffer.getvalue(), declared_type)
+
+    assert normalized.startswith(magic)
+    assert content_type == (
+        "image/png" if declared_type == "image/gif" else declared_type
+    )
+    assert normalized != buffer.getvalue()
+
+
+def test_normalize_image_rejects_images_that_are_too_large_on_screen() -> None:
+    """Pixel count is bounded separately from the encoded byte size.
+
+    A highly compressible image can be tiny on the wire and still exhaust
+    memory once decoded.
+    """
+    buffer = io.BytesIO()
+    Image.new("RGB", (MAX_IMAGE_DIMENSION + 1, 2), (0, 0, 0)).save(buffer, format="PNG")
+    assert len(buffer.getvalue()) < MAX_IMAGE_BYTES
+
+    with pytest.raises(InvalidImage):
+        normalize_image(buffer.getvalue(), "image/png")
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "message"),
+    [
+        ("jwt_secret", "JWT_SECRET"),
+        ("totp_encryption_key", "TOTP_ENCRYPTION_KEY"),
+        ("student_credential_encryption_key", "STUDENT_CREDENTIAL_ENCRYPTION_KEY"),
+        ("admin_password", "ADMIN_PASSWORD"),
+    ],
+)
+def test_startup_refuses_the_example_secrets(
+    tmp_path: Path, setting_name: str, message: str
+) -> None:
+    """The shipped .env examples must never boot an instance as written.
+
+    install.sh replaces them and the shell helper greps for the marker, but a
+    hand-edited file that keeps one placeholder has to fail here rather than
+    run a public instance on a published secret.
+    """
+    placeholder = "replace-with-a-value-that-is-long-enough-to-pass-length-checks"
+
+    with pytest.raises(ValueError, match=f"{message} is still set to its example"):
+        settings_for(tmp_path / "example-secret.db", **{setting_name: placeholder})
