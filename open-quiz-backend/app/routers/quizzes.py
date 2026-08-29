@@ -356,10 +356,40 @@ def difficulty_counts_for_banks(
     return requested
 
 
-def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
+class QuestionDrawPool:
+    """The candidate questions for one quiz, loaded once per launch.
+
+    Every student in a launch draws from the same pool, so reading it once
+    keeps a launch at a constant number of queries instead of a handful per
+    student per attempt.
+    """
+
+    def __init__(self, requested: dict[str, int], candidates: dict[str, list[int]]):
+        self.requested = requested
+        self.candidates = candidates
+
+    @property
+    def possible_combination_count(self) -> int:
+        total = 1
+        for difficulty, count in self.requested.items():
+            total *= comb(len(self.candidates.get(difficulty, ())), count)
+        return total
+
+    def draw(self) -> list[int]:
+        selected_ids: list[int] = []
+        for difficulty, count in self.requested.items():
+            if count > 0:
+                selected_ids.extend(
+                    randomizer.sample(self.candidates[difficulty], count)
+                )
+        randomizer.shuffle(selected_ids)
+        return selected_ids
+
+
+def question_draw_pool(quiz: Quiz, session: DbSession) -> QuestionDrawPool:
     bank_ids = quiz_bank_ids(quiz.id, session)
     requested = difficulty_counts_for_banks(quiz, bank_ids, session)
-    candidate_ids_by_difficulty = {
+    candidates = {
         difficulty: list(
             session.scalars(
                 select(Question.id).where(
@@ -371,40 +401,31 @@ def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
         for difficulty, count in requested.items()
         if count > 0
     }
-    selected_ids: list[int] = []
-    for difficulty, count in requested.items():
-        if count > 0:
-            selected_ids.extend(
-                randomizer.sample(candidate_ids_by_difficulty[difficulty], count)
-            )
-    randomizer.shuffle(selected_ids)
-    return selected_ids
+    return QuestionDrawPool(requested, candidates)
+
+
+def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
+    return question_draw_pool(quiz, session).draw()
 
 
 def draw_unique_question_ids(
-    quiz: Quiz,
-    session: DbSession,
+    pool: QuestionDrawPool,
     used_draws: set[tuple[int, ...]],
 ) -> list[int]:
-    if used_draws:
-        bank_ids = quiz_bank_ids(quiz.id, session)
-        requested = difficulty_counts_for_banks(quiz, bank_ids, session)
-        available = available_difficulty_counts(bank_ids, session)
-        possible_combination_count = 1
-        for difficulty, count in requested.items():
-            possible_combination_count *= comb(available.get(difficulty, 0), count)
-        if len(used_draws) >= possible_combination_count:
-            return draw_question_ids(quiz, session)
+    # Once every distinct combination is taken, retrying can only fail, so stop
+    # searching and let students share a draw.
+    if used_draws and len(used_draws) >= pool.possible_combination_count:
+        return pool.draw()
 
     for _ in range(200):
-        question_ids = draw_question_ids(quiz, session)
+        question_ids = pool.draw()
         signature = tuple(sorted(question_ids))
         if signature not in used_draws:
             used_draws.add(signature)
             return question_ids
     # If the banks contain only one possible combination, every student still
     # receives an independent draw even though the resulting sets must match.
-    return draw_question_ids(quiz, session)
+    return pool.draw()
 
 
 def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:
@@ -3687,7 +3708,9 @@ def select_makeup_quiz(
     used_draws = {
         tuple(sorted(question_ids)) for question_ids in questions_by_session.values()
     }
-    question_ids = draw_unique_question_ids(quiz, session, used_draws)
+    question_ids = draw_unique_question_ids(
+        question_draw_pool(quiz, session), used_draws
+    )
     session.add_all(
         QuizSessionStudentQuestion(
             session_id=child.id,
@@ -3863,6 +3886,7 @@ def launch_quiz(
     )
     session.add(quiz_session)
     session.flush()
+    pool = question_draw_pool(quiz, session)
     if quiz.same_questions_for_all:
         session.add_all(
             QuizSessionQuestion(
@@ -3870,13 +3894,13 @@ def launch_quiz(
                 question_id=question_id,
                 position=position,
             )
-            for position, question_id in enumerate(draw_question_ids(quiz, session))
+            for position, question_id in enumerate(pool.draw())
         )
     else:
         assignments: list[QuizSessionStudentQuestion] = []
         used_draws: set[tuple[int, ...]] = set()
         for student in students:
-            assigned_question_ids = draw_unique_question_ids(quiz, session, used_draws)
+            assigned_question_ids = draw_unique_question_ids(pool, used_draws)
             assignments.extend(
                 QuizSessionStudentQuestion(
                     session_id=quiz_session.id,

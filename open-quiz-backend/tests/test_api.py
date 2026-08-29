@@ -5644,3 +5644,112 @@ def test_reported_maximum_score_is_actually_reachable(tmp_path: Path) -> None:
                     f"allow_negative_points={allow_negative_points}: "
                     f"reported {reported}, reachable {reachable}"
                 )
+
+
+def test_quiz_launch_uses_a_constant_query_count(tmp_path: Path) -> None:
+    """Every student draws from the same pool, so it is read once per launch."""
+    query_counts: dict[int, int] = {}
+    for student_count in (4, 16):
+        with make_client(
+            settings_for(tmp_path / f"launch-{student_count}.db")
+        ) as client:
+            admin_headers = login_admin(client)
+            assert (
+                client.post(
+                    "/api/admin/users",
+                    headers=admin_headers,
+                    json={
+                        "username": "launch.teacher",
+                        "display_name": "Launch Teacher",
+                        "password": "a-secure-teacher-password",
+                    },
+                ).status_code
+                == 201
+            )
+            teacher_headers, _ = complete_first_login(
+                client, "launch.teacher", "a-secure-teacher-password"
+            )
+            student_class = client.post(
+                "/api/classes",
+                headers=teacher_headers,
+                json={"name": "3e A", "grade_level": "3e"},
+            ).json()
+            for index in range(student_count):
+                account = client.post(
+                    "/api/students",
+                    headers=teacher_headers,
+                    json={"first_name": f"Eleve{index}", "last_name": "Test"},
+                ).json()
+                assert (
+                    client.post(
+                        f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+                        headers=teacher_headers,
+                    ).status_code
+                    == 200
+                )
+            bank = client.post(
+                "/api/question-banks",
+                headers=teacher_headers,
+                json={"grade_level": "3e", "chapter": "Tirage"},
+            ).json()
+            for index in range(20):
+                assert (
+                    client.post(
+                        f"/api/question-banks/{bank['id']}/questions",
+                        headers=teacher_headers,
+                        data={
+                            "payload": json.dumps(
+                                {
+                                    "prompt": f"Question {index}",
+                                    "difficulty": "easy",
+                                    "answer_mode": "single",
+                                    "answer_mode_disclosed": True,
+                                    "choices": [
+                                        {
+                                            "label": "Ok",
+                                            "is_correct": True,
+                                            "points": 2,
+                                        },
+                                        {"label": "No", "is_correct": False},
+                                    ],
+                                }
+                            )
+                        },
+                    ).status_code
+                    == 201
+                )
+            quiz = client.post(
+                "/api/quizzes",
+                headers=teacher_headers,
+                json={
+                    "title": "Tirage individuel",
+                    "question_bank_ids": [bank["id"]],
+                    "same_questions_for_all": False,
+                    "easy_question_count": 5,
+                    "medium_question_count": 0,
+                    "hard_question_count": 0,
+                },
+            ).json()
+
+            engine = client.app.state.session_factory.kw["bind"]
+            statements = 0
+
+            def count_statement(*_arguments: Any) -> None:
+                nonlocal statements
+                statements += 1
+
+            event.listen(engine, "before_cursor_execute", count_statement)
+            try:
+                launched = client.post(
+                    f"/api/quizzes/{quiz['id']}/launch",
+                    headers=teacher_headers,
+                    json={"class_id": student_class["id"]},
+                )
+            finally:
+                event.remove(engine, "before_cursor_execute", count_statement)
+            assert launched.status_code == 201
+            query_counts[student_count] = statements
+
+    assert query_counts[4] == query_counts[16], (
+        f"launch queries grow with class size: {query_counts}"
+    )
