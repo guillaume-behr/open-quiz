@@ -3,6 +3,16 @@
 Merci de votre intérêt pour Open Quiz. Les corrections ciblées, tests,
 traductions et améliorations de documentation sont les bienvenues.
 
+## Sommaire
+
+- [Avant de commencer](#avant-de-commencer)
+- [Préparer l’environnement de développement](#préparer-lenvironnement-de-développement)
+- [Préparer une branche](#préparer-une-branche)
+- [Principes de contribution](#principes-de-contribution)
+- [Selon la nature du changement](#selon-la-nature-du-changement)
+- [Vérifications](#vérifications)
+- [Ouvrir une pull request](#ouvrir-une-pull-request)
+
 ## Avant de commencer
 
 1. consultez les
@@ -10,13 +20,74 @@ traductions et améliorations de documentation sont les bienvenues.
    [pull requests](https://github.com/guillaume-behr/open-quiz/pulls) ;
 2. ouvrez une issue avant une évolution importante, une transition de données
    ou un changement de comportement public ;
-3. préparez l’[environnement de développement](README.md#développement-local) ;
+3. préparez l’[environnement de développement](#préparer-lenvironnement-de-développement) ;
 4. ne publiez jamais de secret, de donnée d’élève ou de vulnérabilité : utilisez
    la procédure privée de [SECURITY.md](SECURITY.md).
 
 Une petite correction évidente peut être proposée directement. Pour une
 fonctionnalité, décrivez d’abord le besoin utilisateur et les contraintes afin
 d’éviter un travail incompatible avec la direction du projet.
+
+## Préparer l’environnement de développement
+
+Cette procédure sert au développement et à l’évaluation du projet. Pour
+installer une instance à utiliser, suivez la procédure Docker du
+[README](README.md#installation).
+
+### Prérequis
+
+- Python 3.14 et [uv](https://docs.astral.sh/uv/) ;
+- Node.js 24, Corepack et pnpm 11 ;
+- Docker avec le plugin Compose, pour PostgreSQL ;
+- Git.
+
+> [!NOTE]
+> Sous Windows, exécutez ces commandes dans WSL : les scripts demandent un shell
+> compatible POSIX.
+
+### Base de données et secrets
+
+Depuis la racine du dépôt :
+
+```shell
+sh ./install-dev.sh
+```
+
+Le script crée `open-quiz-backend/.env` avec des secrets distincts, affiche les
+identifiants administrateur une seule fois et lance uniquement le service Docker
+`open-quiz-database`. Il conserve un `.env` de développement existant et
+compatible, refuse les valeurs d’exemple et les configurations de production,
+puis vérifie que PostgreSQL accepte réellement les identifiants.
+
+Le service est démarré avec `docker-compose.dev.yml`, qui publie PostgreSQL sur
+`127.0.0.1:5432`. Cette surcharge est indispensable au développement : le réseau
+Compose de production est interne, et Docker n’y publie aucun port. Sans elle,
+l’API lancée sur la machine échoue avec « connection refused ».
+
+### API
+
+```shell
+cd open-quiz-backend
+uv sync
+uv run fastapi dev main.py
+```
+
+L’API répond sur `http://localhost:8000` et sa documentation interactive est
+disponible sur `http://localhost:8000/docs`.
+
+### Interface
+
+Dans un second terminal, depuis la racine du dépôt :
+
+```shell
+cd open-quiz-frontend
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Ouvrez `http://localhost:5173`. Le serveur de développement transmet
+automatiquement les requêtes `/api` au backend.
 
 ## Préparer une branche
 
@@ -87,8 +158,10 @@ Toute nouvelle chaîne visible doit exister dans les huit catalogues de
 
 ## Vérifications
 
-Exécutez les contrôles correspondant aux fichiers modifiés. La CI fait autorité
-pour les contrôles obligatoires. Chaque bloc ci-dessous part de la racine du
+Exécutez les contrôles correspondant aux fichiers modifiés. Les mêmes contrôles
+principaux sont exécutés par
+[GitHub Actions](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml),
+qui fait autorité pour les contrôles obligatoires. Chaque bloc ci-dessous part de la racine du
 dépôt ; revenez-y avant de passer à un autre composant.
 
 ### Backend

@@ -12,7 +12,7 @@ Consultez aussi le [README principal](../README.md), le
 
 Le frontend est construit et servi avec le reste d’Open Quiz par Docker
 Compose. Depuis la racine du dépôt, suivez la
-[procédure d’installation recommandée](../README.md#installation-avec-docker) :
+[procédure d’installation recommandée](../README.md#installation) :
 
 ```shell
 sh ./install.sh
