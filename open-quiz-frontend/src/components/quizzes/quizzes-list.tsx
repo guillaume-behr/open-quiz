@@ -252,7 +252,7 @@ function QuizCard({
                 type="button"
                 size="icon-sm"
                 variant="ghost"
-                className="absolute top-4 right-12 z-10"
+                className="absolute end-12 top-4 z-10"
                 aria-label={t("edit-quiz")}
                 title={t("edit-quiz")}
                 onClick={onEdit}
@@ -263,14 +263,14 @@ function QuizCard({
                 type="button"
                 size="icon-sm"
                 variant="destructive"
-                className="absolute top-4 right-4"
+                className="absolute end-4 top-4"
                 aria-label={t("delete-quiz")}
                 title={t("delete-quiz")}
                 onClick={onDelete}
             >
                 <Trash2 />
             </Button>
-            <div className="flex items-start gap-3 pr-10">
+            <div className="flex items-start gap-3 pe-20">
                 <div className="min-w-0">
                     <h3 className="font-semibold break-words">{quiz.title}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">

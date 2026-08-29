@@ -512,7 +512,7 @@ export function CookiesPage() {
             <section>
                 <h2>{t("cookies-required-title")}</h2>
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[42rem] border-collapse text-left">
+                    <table className="w-full min-w-[42rem] border-collapse text-start">
                         <caption className="sr-only">
                             {t("cookies-auth-caption")}
                         </caption>
@@ -564,7 +564,7 @@ export function CookiesPage() {
             <section>
                 <h2>{t("cookies-storage-title")}</h2>
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[48rem] border-collapse text-left">
+                    <table className="w-full min-w-[48rem] border-collapse text-start">
                         <caption className="sr-only">
                             {t("cookies-storage-caption")}
                         </caption>

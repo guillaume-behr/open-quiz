@@ -378,7 +378,7 @@ export function StudentsPanel({
                                         type="button"
                                         size="icon-sm"
                                         variant="ghost"
-                                        className="absolute top-4 right-12"
+                                        className="absolute end-12 top-4"
                                         aria-label={t("edit-student")}
                                         title={t("edit-student")}
                                         onClick={() => edit(student)}
@@ -389,7 +389,7 @@ export function StudentsPanel({
                                         type="button"
                                         size="icon-sm"
                                         variant="destructive"
-                                        className="absolute top-4 right-4"
+                                        className="absolute end-4 top-4"
                                         aria-label={t("delete-student")}
                                         title={t("delete-student")}
                                         onClick={() => {
@@ -402,7 +402,7 @@ export function StudentsPanel({
                                     <div className="rounded-lg bg-primary/10 p-1.5 text-primary">
                                         <UserRound className="size-4" />
                                     </div>
-                                    <div className="min-w-0 flex-1 pr-16">
+                                    <div className="min-w-0 flex-1 pe-20">
                                         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                             {student.identifier}
                                         </p>

@@ -65,7 +65,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
                     className="overflow-hidden rounded-xl border bg-background"
                 >
                     <Accordion.Header>
-                        <Accordion.Trigger className="group flex w-full items-center justify-between gap-3 rounded-xl p-4 text-left transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+                        <Accordion.Trigger className="group flex w-full items-center justify-between gap-3 rounded-xl p-4 text-start transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
                             <span>
                                 <span className="block font-semibold">
                                     {item.quiz_title}

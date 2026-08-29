@@ -26,7 +26,7 @@ export function CollapsibleFilters({
             )}
             defaultOpen={defaultOpen}
         >
-            <CollapsiblePrimitive.Trigger className="group flex w-full items-center gap-2 px-4 py-3 text-left font-semibold transition-colors select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset">
+            <CollapsiblePrimitive.Trigger className="group flex w-full items-center gap-2 px-4 py-3 text-start font-semibold transition-colors select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset">
                 <SlidersHorizontal className="size-4 text-primary" />
                 <span>{t("filters")}</span>
                 {activeCount > 0 && (

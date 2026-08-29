@@ -603,7 +603,7 @@ export function ClassesPanel({
                                         type="button"
                                         size="icon-sm"
                                         variant="ghost"
-                                        className="absolute top-4 right-12"
+                                        className="absolute end-12 top-4"
                                         onClick={() => {
                                             setEditing(studentClass)
                                             setManaged(studentClass)
@@ -621,7 +621,7 @@ export function ClassesPanel({
                                         type="button"
                                         size="icon-sm"
                                         variant="destructive"
-                                        className="absolute top-4 right-4"
+                                        className="absolute end-4 top-4"
                                         onClick={() =>
                                             setDeleting(studentClass)
                                         }
@@ -630,7 +630,7 @@ export function ClassesPanel({
                                     >
                                         <Trash2 />
                                     </Button>
-                                    <div className="flex items-start gap-3 pr-20">
+                                    <div className="flex items-start gap-3 pe-20">
                                         <div className="rounded-lg bg-primary/10 p-2 text-primary">
                                             <UsersRound className="size-5" />
                                         </div>
@@ -1018,15 +1018,15 @@ export function ClassesPanel({
                                             onClick={() =>
                                                 toggleAccount(account.id)
                                             }
-                                            className={`relative rounded-xl border p-4 text-left transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none ${isSelected ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "bg-background hover:border-primary/50 hover:bg-muted/40"}`}
+                                            className={`relative rounded-xl border p-4 text-start transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none ${isSelected ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "bg-background hover:border-primary/50 hover:bg-muted/40"}`}
                                         >
                                             <span
-                                                className={`absolute top-4 right-4 flex size-6 items-center justify-center rounded-md border ${isSelected ? "border-primary bg-primary text-primary-foreground" : "text-transparent"}`}
+                                                className={`absolute end-4 top-4 flex size-6 items-center justify-center rounded-md border ${isSelected ? "border-primary bg-primary text-primary-foreground" : "text-transparent"}`}
                                                 aria-hidden="true"
                                             >
                                                 <Check className="size-4" />
                                             </span>
-                                            <div className="pr-9">
+                                            <div className="pe-9">
                                                 <p className="font-semibold break-words">
                                                     {account.display_name}
                                                 </p>
