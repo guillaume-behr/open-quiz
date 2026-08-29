@@ -128,7 +128,7 @@ quiz.example.com {
 }
 ```
 
-Un [exemple de configuration Nginx](deployment/nginx.conf) est également fourni ;
+Un [exemple de configuration Nginx](docs/nginx.conf) est également fourni ;
 remplacez son domaine et ses chemins de certificats avant de l’activer. Le
 [guide de déploiement](docs/deployment.md#publier-lapplication-en-https) décrit
 les en-têtes à transmettre, notamment pour les connexions WebSocket.
@@ -249,8 +249,7 @@ PostgreSQL (volume persistant)
 ```text
 .
 ├── .github/                 CI, Dependabot et modèles de contribution
-├── deployment/              exemples de configuration reverse proxy
-├── docs/                    guides de déploiement et d’exploitation
+├── docs/                    guides d’exploitation et exemple Nginx
 ├── open-quiz-backend/       API FastAPI, scripts et tests
 ├── open-quiz-frontend/      application React, traductions et tests E2E
 ├── scripts/                 fonctions communes aux scripts shell

@@ -165,6 +165,8 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Documentation
 
+- l’exemple de configuration Nginx rejoint `docs/`, à côté du guide qui
+  l’explique ; le dossier `deployment/` disparaît ;
 - réorganisation de la documentation par public : le README présente le projet
   et l’installation, le guide de contribution regroupe l’environnement de
   développement et les vérifications, et le guide de déploiement reste la

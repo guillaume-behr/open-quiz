@@ -130,7 +130,7 @@ quiz.example.com {
 ```
 
 Pour Nginx, adaptez puis installez
-l'[exemple de serveur virtuel](../deployment/nginx.conf). Il inclut la
+l'[exemple de serveur virtuel](nginx.conf). Il inclut la
 redirection HTTPS, les en-têtes transmis à l'application et la limite nécessaire
 aux imports de questions. Il transmet également la négociation de protocole
 nécessaire aux connexions WebSocket. Conservez `proxy_http_version 1.1` et les
