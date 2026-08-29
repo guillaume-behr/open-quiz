@@ -4234,10 +4234,14 @@ def submit_student_answer(
     else:
         participant.current_position = None
     session.flush()
+    # A participant who left keeps their position so that rejoining resumes
+    # where they stopped, but they must not hold the session open: the teacher
+    # no longer sees them among the participants either.
     unfinished_count = session.scalar(
         select(func.count(QuizParticipant.id)).where(
             QuizParticipant.session_id == quiz_session.id,
             QuizParticipant.current_position.is_not(None),
+            QuizParticipant.left_at.is_(None),
         )
     )
     if unfinished_count == 0:

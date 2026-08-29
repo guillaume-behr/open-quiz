@@ -5753,3 +5753,151 @@ def test_quiz_launch_uses_a_constant_query_count(tmp_path: Path) -> None:
     assert query_counts[4] == query_counts[16], (
         f"launch queries grow with class size: {query_counts}"
     )
+
+
+def test_departed_participant_does_not_hold_the_session_open(tmp_path: Path) -> None:
+    """A student who leaves must not keep a finished exam in progress.
+
+    Their position is kept so a rejoin resumes where they stopped, but the
+    teacher no longer sees them, so counting them would leave the session
+    running until the timer expires with nobody left to answer.
+    """
+    with make_client(settings_for(tmp_path / "departed-participant.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "leave.teacher",
+                    "display_name": "Leave Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client, "leave.teacher", "a-secure-teacher-password"
+        )
+        student_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "4e B", "grade_level": "4e"},
+        ).json()
+        accounts = []
+        for first_name in ("Alpha", "Beta"):
+            account = client.post(
+                "/api/students",
+                headers=teacher_headers,
+                json={"first_name": first_name, "last_name": "Partant"},
+            ).json()
+            assert (
+                client.post(
+                    f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+                    headers=teacher_headers,
+                ).status_code
+                == 200
+            )
+            accounts.append(account)
+
+        bank = client.post(
+            "/api/question-banks",
+            headers=teacher_headers,
+            json={"grade_level": "4e", "chapter": "Départ"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/question-banks/{bank['id']}/questions",
+                headers=teacher_headers,
+                data={
+                    "payload": json.dumps(
+                        {
+                            "prompt": "Seule question",
+                            "difficulty": "easy",
+                            "answer_mode": "single",
+                            "answer_mode_disclosed": True,
+                            "choices": [
+                                {"label": "Ok", "is_correct": True, "points": 1},
+                                {"label": "No", "is_correct": False},
+                            ],
+                        }
+                    )
+                },
+            ).status_code
+            == 201
+        )
+        quiz = client.post(
+            "/api/quizzes",
+            headers=teacher_headers,
+            json={
+                "title": "Quiz avec départ",
+                "question_bank_ids": [bank["id"]],
+                "same_questions_for_all": True,
+                "easy_question_count": 1,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        ).json()
+        launched = client.post(
+            f"/api/quizzes/{quiz['id']}/launch",
+            headers=teacher_headers,
+            json={"class_id": student_class["id"]},
+        ).json()
+
+        quiz_tokens = []
+        for account in accounts:
+            student_token = client.post(
+                "/api/student-auth/login",
+                json={
+                    "identifier": account["identifier"],
+                    "password": account["generated_password"],
+                },
+            ).json()["access_token"]
+            joined = client.post(
+                "/api/quizzes/join",
+                headers={"Authorization": f"Bearer {student_token}"},
+                json={"join_code": launched["join_code"]},
+            )
+            assert joined.status_code == 201
+            quiz_tokens.append(joined.json()["participant_token"])
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+
+        join_code = launched["join_code"]
+        assert (
+            client.post(
+                f"/api/quizzes/student/sessions/{join_code}/leave",
+                headers={"X-Quiz-Token": quiz_tokens[0]},
+            ).status_code
+            == 204
+        )
+        # The teacher no longer counts the student who left.
+        in_progress = client.get(
+            f"/api/quizzes/sessions/{launched['id']}", headers=teacher_headers
+        ).json()
+        assert in_progress["participant_count"] == 1
+
+        state = client.get(
+            f"/api/quizzes/student/sessions/{join_code}",
+            headers={"X-Quiz-Token": quiz_tokens[1]},
+        ).json()
+        answered = client.post(
+            f"/api/quizzes/student/sessions/{join_code}/answer",
+            headers={"X-Quiz-Token": quiz_tokens[1]},
+            json={
+                "selected_choice_ids": [state["question"]["choices"][0]["id"]],
+            },
+        )
+        assert answered.status_code == 200
+
+        finished = client.get(
+            f"/api/quizzes/sessions/{launched['id']}", headers=teacher_headers
+        ).json()
+        assert finished["status"] == "finished"
+        # Results keep everyone who took part, including the student who left.
+        assert finished["participant_count"] == 2
