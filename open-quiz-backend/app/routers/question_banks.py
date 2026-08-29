@@ -192,7 +192,8 @@ def update_question_bank(
     question_bank = owned_question_bank(question_bank_id, professor, session)
     if question_bank.grade_level != payload.grade_level:
         mismatched_class_ids = select(StudentClass.id).where(
-            StudentClass.grade_level != payload.grade_level
+            StudentClass.owner_id == professor.id,
+            StudentClass.grade_level != payload.grade_level,
         )
         session.execute(
             delete(ClassTrainingQuestionBank).where(
