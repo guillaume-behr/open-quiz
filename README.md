@@ -290,6 +290,11 @@ Docker `open-quiz-database`. Il conserve un `.env` de développement existant et
 compatible, refuse les valeurs d’exemple et les configurations de production,
 puis vérifie que PostgreSQL accepte réellement les identifiants.
 
+Le service est démarré avec `docker-compose.dev.yml`, qui publie PostgreSQL sur
+`127.0.0.1:5432`. Cette surcharge est indispensable au développement : le
+réseau Compose de production est interne, et Docker n’y publie aucun port. Sans
+elle, l’API lancée sur la machine échoue avec « connection refused ».
+
 ```shell
 cd open-quiz-backend
 uv sync

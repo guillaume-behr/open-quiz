@@ -6,6 +6,10 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 
 ### Sécurité et corrections
 
+- `install-dev.sh` publie de nouveau PostgreSQL sur `127.0.0.1:5432` grâce à
+  `docker-compose.dev.yml` : le réseau Compose étant interne, la publication
+  déclarée était ignorée et l’API de développement échouait avec
+  « connection refused » ;
 - les questions à choix multiples sans points négatifs n’accordent plus de
   points lorsqu’une proposition incorrecte est également sélectionnée ;
 - un type de réponse masqué utilise désormais la même représentation générique

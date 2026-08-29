@@ -132,6 +132,7 @@ production :
 test -f open-quiz-backend/.env || \
     cp open-quiz-backend/.env.production.example open-quiz-backend/.env
 docker compose config --quiet
+docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
 docker compose build
 ```
 

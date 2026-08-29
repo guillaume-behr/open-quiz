@@ -6,8 +6,8 @@ services:
         environment:
             POSTGRES_DB: open_quiz
             POSTGRES_USER: open_quiz
-        ports:
-            - "127.0.0.1:5432:5432"
+        # No published port: the API reaches the database over the internal
+        # network. docker-compose.dev.yml publishes it for local development.
         networks:
             open-quiz:
                 ipv4_address: 172.28.0.4
