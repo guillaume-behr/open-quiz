@@ -760,6 +760,28 @@ def current_question_id(
     return question_ids[participant.current_position]
 
 
+def last_answered_question_id(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    session: DbSession,
+) -> int | None:
+    """The final question once a participant has answered everything.
+
+    A concurrent duplicate of the last answer can reach the server after the
+    winning request already advanced the participant past it, and even after
+    it finished the whole session (finish_when_nobody_can_answer runs in the
+    same transaction). The caller uses this to recognise that submission
+    instead of rejecting it outright.
+    """
+    if (
+        quiz_session.status not in ("in_progress", "finished")
+        or participant.current_position is not None
+    ):
+        return None
+    question_ids = session_question_ids(quiz_session, session, participant)
+    return question_ids[-1] if question_ids else None
+
+
 def session_question_count(quiz_session: QuizSession, session: DbSession) -> int:
     common_count = session.scalar(
         select(func.count(QuizSessionQuestion.question_id)).where(
@@ -4172,7 +4194,12 @@ def submit_student_answer(
         f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status != "in_progress":
+    # "finished" is allowed past this gate only so a concurrent duplicate of
+    # the last answer can still be recognised below: finish_when_nobody_can_answer
+    # runs in the same transaction as the winning submission, so a losing
+    # duplicate can reach here after that transition already committed. Any
+    # other non-"in_progress" status (paused included) still rejects outright.
+    if quiz_session.status not in ("in_progress", "finished"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Le quiz n’accepte pas de réponses actuellement",
@@ -4183,6 +4210,9 @@ def submit_student_answer(
             detail="L’élève n’existe plus",
         )
     question_id = current_question_id(quiz_session, participant, session)
+    retargeting_finished_answer = question_id is None
+    if retargeting_finished_answer:
+        question_id = last_answered_question_id(quiz_session, participant, session)
     if question_id is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -4248,6 +4278,26 @@ def submit_student_answer(
                 question_id=question.id,
                 is_correct=set(selected_ids) == set(correct_ids),
                 correct_choice_ids=correct_ids,
+            )
+
+    if retargeting_finished_answer:
+        # The participant already moved past this question: only accept the
+        # submission if it matches what a concurrent duplicate already
+        # recorded for it, rather than silently rewriting a finished answer.
+        existing_answer = session.scalar(
+            select(QuizAnswer).where(
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == participant.id,
+                QuizAnswer.question_id == question_id,
+            )
+        )
+        if (
+            existing_answer is None
+            or decoded_answer_data(existing_answer) != answer_data
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Aucune question en cours",
             )
 
     # Atomic upsert: concurrent submissions for the same question can never
