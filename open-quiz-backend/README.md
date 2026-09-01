@@ -317,7 +317,7 @@ uv run python scripts/rotate_local_secrets.py
 ```
 
 Le script révoque les sessions longues et crée dans le répertoire backend une
-sauvegarde `.env.env.<horodatage>.bak` contenant les anciens secrets. Cette
+sauvegarde `.env.<horodatage>.bak` contenant les anciens secrets. Cette
 sauvegarde n’est pas ignorée par Git : déplacez-la immédiatement vers un espace
 protégé ou supprimez-la dès qu’elle n’est plus utile. Redémarrez ensuite l’API
 pour charger les nouvelles valeurs.
