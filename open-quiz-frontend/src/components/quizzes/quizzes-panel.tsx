@@ -107,6 +107,7 @@ export function QuizzesPanel({
     const [selectedBankIds, setSelectedBankIds] = useState<number[]>([])
     const [durationMinutes, setDurationMinutes] = useState(15)
     const [allowPreviousQuestions, setAllowPreviousQuestions] = useState(false)
+    const [allowAnswerReview, setAllowAnswerReview] = useState(true)
     const [allowNegativePoints, setAllowNegativePoints] = useState(false)
     const [sameQuestionsForAll, setSameQuestionsForAll] = useState(false)
     const [difficultyCounts, setDifficultyCounts] = useState({
@@ -279,6 +280,7 @@ export function QuizzesPanel({
         setSelectedBankIds([])
         setDurationMinutes(15)
         setAllowPreviousQuestions(false)
+        setAllowAnswerReview(true)
         setAllowNegativePoints(false)
         setSameQuestionsForAll(false)
         setDifficultyCounts({ easy: 0, medium: 0, hard: 0 })
@@ -299,6 +301,7 @@ export function QuizzesPanel({
         setSelectedBankIds(quiz.question_banks.map((bank) => bank.id))
         setDurationMinutes(quiz.duration_seconds / 60)
         setAllowPreviousQuestions(quiz.allow_previous_questions)
+        setAllowAnswerReview(quiz.allow_answer_review)
         setAllowNegativePoints(quiz.allow_negative_points)
         setSameQuestionsForAll(quiz.same_questions_for_all)
         setDifficultyCounts({
@@ -601,6 +604,7 @@ export function QuizzesPanel({
                 question_bank_ids: selectedBankIds,
                 duration_seconds: durationMinutes * 60,
                 allow_previous_questions: allowPreviousQuestions,
+                allow_answer_review: allowAnswerReview,
                 allow_negative_points: allowNegativePoints,
                 same_questions_for_all: sameQuestionsForAll,
                 easy_question_count: difficultyCounts.easy,
@@ -839,6 +843,7 @@ export function QuizzesPanel({
                 durationMinutes={durationMinutes}
                 selectedBankIds={selectedBankIds}
                 allowPreviousQuestions={allowPreviousQuestions}
+                allowAnswerReview={allowAnswerReview}
                 allowNegativePoints={allowNegativePoints}
                 sameQuestionsForAll={sameQuestionsForAll}
                 difficultyCounts={difficultyCounts}
@@ -851,6 +856,7 @@ export function QuizzesPanel({
                 onDeleteGradeLevel={onDeleteGradeLevel}
                 onSelectedBankIdsChange={handleSelectedBankIdsChange}
                 onAllowPreviousQuestionsChange={setAllowPreviousQuestions}
+                onAllowAnswerReviewChange={setAllowAnswerReview}
                 onAllowNegativePointsChange={setAllowNegativePoints}
                 onSameQuestionsForAllChange={setSameQuestionsForAll}
                 onDifficultyCountsChange={handleDifficultyCountsChange}

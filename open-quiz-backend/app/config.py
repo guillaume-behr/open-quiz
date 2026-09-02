@@ -76,16 +76,16 @@ class Settings:
     frontend_origin: str
     access_token_minutes: int = 15
     refresh_token_days: int = 7
-    login_attempts: int = 5
+    login_attempts: int = 10
     login_window_seconds: int = 900
-    global_login_attempts: int = 500
+    global_login_attempts: int = 2000
     global_login_window_seconds: int = 60
-    quiz_join_attempts: int = 20
-    quiz_participant_attempts: int = 240
-    quiz_violation_attempts: int = 20
+    quiz_join_attempts: int = 60
+    quiz_participant_attempts: int = 900
+    quiz_violation_attempts: int = 60
     quiz_rate_window_seconds: int = 60
     quiz_result_retention_days: int = 365
-    problem_report_attempts: int = 30
+    problem_report_attempts: int = 60
     problem_report_window_seconds: int = 900
     problem_report_retention_days: int = 90
     max_request_body_bytes: int = 65536
@@ -167,26 +167,26 @@ class Settings:
             raise ValueError("ACCESS_TOKEN_MINUTES must be between 1 and 30")
         if not 1 <= self.refresh_token_days <= 30:
             raise ValueError("REFRESH_TOKEN_DAYS must be between 1 and 30")
-        if not 3 <= self.login_attempts <= 20:
-            raise ValueError("LOGIN_ATTEMPTS must be between 3 and 20")
+        if not 3 <= self.login_attempts <= 50:
+            raise ValueError("LOGIN_ATTEMPTS must be between 3 and 50")
         if self.login_window_seconds < 60:
             raise ValueError("LOGIN_WINDOW_SECONDS must be at least 60")
         if not 50 <= self.global_login_attempts <= 100000:
             raise ValueError("GLOBAL_LOGIN_ATTEMPTS must be between 50 and 100000")
         if not 10 <= self.global_login_window_seconds <= 3600:
             raise ValueError("GLOBAL_LOGIN_WINDOW_SECONDS must be between 10 and 3600")
-        if not 5 <= self.quiz_join_attempts <= 100:
-            raise ValueError("QUIZ_JOIN_ATTEMPTS must be between 5 and 100")
-        if not 30 <= self.quiz_participant_attempts <= 1000:
-            raise ValueError("QUIZ_PARTICIPANT_ATTEMPTS must be between 30 and 1000")
-        if not 5 <= self.quiz_violation_attempts <= 100:
-            raise ValueError("QUIZ_VIOLATION_ATTEMPTS must be between 5 and 100")
+        if not 5 <= self.quiz_join_attempts <= 500:
+            raise ValueError("QUIZ_JOIN_ATTEMPTS must be between 5 and 500")
+        if not 30 <= self.quiz_participant_attempts <= 5000:
+            raise ValueError("QUIZ_PARTICIPANT_ATTEMPTS must be between 30 and 5000")
+        if not 5 <= self.quiz_violation_attempts <= 500:
+            raise ValueError("QUIZ_VIOLATION_ATTEMPTS must be between 5 and 500")
         if not 10 <= self.quiz_rate_window_seconds <= 3600:
             raise ValueError("QUIZ_RATE_WINDOW_SECONDS must be between 10 and 3600")
         if not 1 <= self.quiz_result_retention_days <= 3650:
             raise ValueError("QUIZ_RESULT_RETENTION_DAYS must be between 1 and 3650")
-        if not 1 <= self.problem_report_attempts <= 1000:
-            raise ValueError("PROBLEM_REPORT_ATTEMPTS must be between 1 and 1000")
+        if not 1 <= self.problem_report_attempts <= 5000:
+            raise ValueError("PROBLEM_REPORT_ATTEMPTS must be between 1 and 5000")
         if not 60 <= self.problem_report_window_seconds <= 86400:
             raise ValueError(
                 "PROBLEM_REPORT_WINDOW_SECONDS must be between 60 and 86400"
@@ -251,16 +251,16 @@ def get_settings() -> Settings:
         frontend_origin=os.getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
         access_token_minutes=int(os.getenv("ACCESS_TOKEN_MINUTES", "15")),
         refresh_token_days=int(os.getenv("REFRESH_TOKEN_DAYS", "7")),
-        login_attempts=int(os.getenv("LOGIN_ATTEMPTS", "5")),
+        login_attempts=int(os.getenv("LOGIN_ATTEMPTS", "10")),
         login_window_seconds=int(os.getenv("LOGIN_WINDOW_SECONDS", "900")),
-        global_login_attempts=int(os.getenv("GLOBAL_LOGIN_ATTEMPTS", "500")),
+        global_login_attempts=int(os.getenv("GLOBAL_LOGIN_ATTEMPTS", "2000")),
         global_login_window_seconds=int(os.getenv("GLOBAL_LOGIN_WINDOW_SECONDS", "60")),
-        quiz_join_attempts=int(os.getenv("QUIZ_JOIN_ATTEMPTS", "20")),
-        quiz_participant_attempts=int(os.getenv("QUIZ_PARTICIPANT_ATTEMPTS", "240")),
-        quiz_violation_attempts=int(os.getenv("QUIZ_VIOLATION_ATTEMPTS", "20")),
+        quiz_join_attempts=int(os.getenv("QUIZ_JOIN_ATTEMPTS", "60")),
+        quiz_participant_attempts=int(os.getenv("QUIZ_PARTICIPANT_ATTEMPTS", "900")),
+        quiz_violation_attempts=int(os.getenv("QUIZ_VIOLATION_ATTEMPTS", "60")),
         quiz_rate_window_seconds=int(os.getenv("QUIZ_RATE_WINDOW_SECONDS", "60")),
         quiz_result_retention_days=int(os.getenv("QUIZ_RESULT_RETENTION_DAYS", "365")),
-        problem_report_attempts=int(os.getenv("PROBLEM_REPORT_ATTEMPTS", "30")),
+        problem_report_attempts=int(os.getenv("PROBLEM_REPORT_ATTEMPTS", "60")),
         problem_report_window_seconds=int(
             os.getenv("PROBLEM_REPORT_WINDOW_SECONDS", "900")
         ),

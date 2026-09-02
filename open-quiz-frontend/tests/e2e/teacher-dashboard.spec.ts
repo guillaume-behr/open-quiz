@@ -1438,8 +1438,8 @@ test("teacher dialog tracks progress from the active sessions stream", async ({
         ends_at: "2026-01-06T10:31:00Z",
         grades_published_at: null,
     }
-    let resolveSessionsSocket: (socket: WebSocketRoute) => void =
-        () => undefined
+    let resolveSessionsSocket: (socket: WebSocketRoute) => void = () =>
+        undefined
     const sessionsSocketReady = new Promise<WebSocketRoute>((resolve) => {
         resolveSessionsSocket = resolve
     })
@@ -1586,6 +1586,7 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
                         student_identifier: "alex-8b",
                         student_display_name: "Alex Example",
                         answered_count: 10,
+                        has_finished: true,
                         score: 999,
                         maximum_score: 10,
                         pending_manual_grading_count: 0,
@@ -1606,6 +1607,18 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
     await expect(sessionDialog.getByText("Quiz completed")).toBeVisible()
     await expect(sessionDialog.getByText(/Score:/)).toHaveCount(0)
     await expect(sessionDialog.getByText("999", { exact: true })).toHaveCount(0)
+
+    // The enlarged view is a passive mirror of this dialog, in its own tab.
+    const displayPage = await Promise.all([
+        page.context().waitForEvent("page"),
+        sessionDialog.getByRole("button", { name: "Enlarge" }).click(),
+    ]).then(([opened]) => opened)
+    await expect(displayPage).toHaveURL(/\/teacher\/session-display\/quiz-80$/)
+    await expect(displayPage.getByText("LIVE80", { exact: true })).toBeVisible()
+    await expect(displayPage.getByRole("timer")).toBeVisible()
+    await expect(displayPage.getByText("1 student finished")).toBeVisible()
+    await displayPage.close()
+
     await sessionDialog.getByRole("button", { name: "Pause quiz" }).click()
     await expect(
         sessionDialog.getByText("Quiz paused", { exact: true })
@@ -1962,9 +1975,7 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
         exact: true,
     })
     const participantRow = resultDialog.locator('[data-participant-id="91"]')
-    const participantScore = participantRow.locator(
-        "[data-participant-score]"
-    )
+    const participantScore = participantRow.locator("[data-participant-score]")
     await expect(scoreHeading).toBeVisible()
     await expect(participantScore).toContainText(/2\s*\/\s*10\s*pts?/)
     await expect

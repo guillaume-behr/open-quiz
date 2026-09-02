@@ -93,6 +93,7 @@ from app.schemas import (
     QuizParticipantResponse,
     QuizResponse,
     QuizSessionResponse,
+    StudentAnswerSummary,
     StudentQuizAnswer,
     StudentQuizChoiceResponse,
     StudentQuizHistoryAnswer,
@@ -474,6 +475,7 @@ def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse
             question_count=quiz.question_count,
             duration_seconds=quiz.duration_seconds,
             allow_previous_questions=quiz.allow_previous_questions,
+            allow_answer_review=quiz.allow_answer_review,
             allow_negative_points=quiz.allow_negative_points,
             same_questions_for_all=quiz.same_questions_for_all,
             easy_question_count=quiz.easy_question_count,
@@ -506,6 +508,7 @@ def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
         question_count=0,
         duration_seconds=28800,
         allow_previous_questions=False,
+        allow_answer_review=False,
         allow_negative_points=False,
         same_questions_for_all=False,
         easy_question_count=0,
@@ -898,6 +901,22 @@ def session_response(
     median_maximum_score = (
         float(median(maximum_scores.values())) if maximum_scores else 0
     )
+    total_questions = session_question_count(quiz_session, session)
+    review_enabled = answer_review_enabled(quiz_session, quiz)
+
+    def has_finished(participant: QuizParticipant) -> bool:
+        if participant.submitted_at is not None:
+            return True
+        # Sessions launched before the final submission existed, and quizzes
+        # without the review step, are done as soon as every answer is in.
+        answered_count = answers_by_student.get(participant.id, (0, 0, 0))[0]
+        return (
+            not review_enabled
+            and participant.current_position is None
+            and answered_count > 0
+            and answered_count >= total_questions
+        )
+
     student_ids = [
         participant.student_id
         for participant in participants
@@ -933,6 +952,7 @@ def session_response(
                     else participant.student_display_name
                 ),
                 answered_count=answers_by_student.get(participant.id, (0, 0, 0))[0],
+                has_finished=has_finished(participant),
                 score=(
                     answers_by_student.get(participant.id, (0, 0, 0))[1]
                     if quiz_session.status == "finished"
@@ -951,7 +971,7 @@ def session_response(
             )
             for participant in participants
         ],
-        total_questions=session_question_count(quiz_session, session),
+        total_questions=total_questions,
         created_at=quiz_session.created_at,
         started_at=quiz_session.started_at,
         ends_at=quiz_ends_at(quiz_session, quiz),
@@ -1164,6 +1184,19 @@ def quiz_ends_at(quiz_session: QuizSession, quiz: Quiz) -> datetime | None:
     return started_at + timedelta(seconds=duration_seconds + paused_duration)
 
 
+def answer_review_enabled(quiz_session: QuizSession, quiz: Quiz) -> bool:
+    """Whether participants must confirm their answers before finishing.
+
+    Only exams offer the final review step, and a running session keeps the
+    option it was launched with even if the quiz is edited afterwards.
+    """
+    if quiz.mode != "exam":
+        return False
+    if quiz_session.allow_answer_review is not None:
+        return quiz_session.allow_answer_review
+    return quiz.allow_answer_review
+
+
 def expire_quiz_session(
     quiz_session: QuizSession,
     quiz: Quiz,
@@ -1221,10 +1254,15 @@ def finish_when_nobody_can_answer(
     )
     if answered is None:
         return
+    still_working = QuizParticipant.current_position.is_not(None)
+    if answer_review_enabled(quiz_session, quiz):
+        # The last answer no longer ends the session on its own: a participant
+        # reviewing their answers still has to confirm them.
+        still_working = or_(still_working, QuizParticipant.submitted_at.is_(None))
     unfinished_count = session.scalar(
         select(func.count(QuizParticipant.id)).where(
             QuizParticipant.session_id == quiz_session.id,
-            QuizParticipant.current_position.is_not(None),
+            still_working,
             QuizParticipant.left_at.is_(None),
         )
     )
@@ -1451,6 +1489,74 @@ def accessible_question_positions(
     return positions
 
 
+def public_answer_mode(question: Question) -> str:
+    """The answer mode a student may see.
+
+    Hidden choice modes must have the same API and control shape. The server
+    still validates and grades against the real stored mode.
+    """
+    if not question.answer_mode_disclosed and question.answer_mode in {
+        "single",
+        "multiple",
+    }:
+        return "multiple"
+    return question.answer_mode
+
+
+def student_answer_summaries(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    question_ids: list[int],
+    session: DbSession,
+) -> list[StudentAnswerSummary]:
+    """What a participant answered, for the review before final submission.
+
+    Only the participant's own wording is returned: nothing here discloses the
+    expected answer of a question that is still running for the class.
+    """
+    answers = {
+        answer.question_id: answer
+        for answer in session.scalars(
+            select(QuizAnswer).where(
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == participant.id,
+            )
+        )
+    }
+    questions_by_id, choices_by_question = load_question_records(question_ids, session)
+    summaries: list[StudentAnswerSummary] = []
+    for position, question_id in enumerate(question_ids):
+        question = questions_by_id.get(question_id)
+        answer = answers.get(question_id)
+        if question is None or answer is None:
+            continue
+        submitted = decoded_answer_data(answer)
+        if question.answer_mode == "written":
+            submitted_answers = [str(submitted.get("written_answer", ""))]
+        else:
+            choices_by_id = {
+                choice.id: choice for choice in choices_by_question.get(question_id, [])
+            }
+            submitted_ids = submitted.get("selected_choice_ids", [])
+            if not isinstance(submitted_ids, list):
+                submitted_ids = []
+            submitted_answers = [
+                choices_by_id[choice_id].label
+                for choice_id in submitted_ids
+                if type(choice_id) is int and choice_id in choices_by_id
+            ]
+        summaries.append(
+            StudentAnswerSummary(
+                question_number=position + 1,
+                question_id=question.id,
+                prompt=question.prompt,
+                answer_mode=public_answer_mode(question),
+                submitted_answers=submitted_answers,
+            )
+        )
+    return summaries
+
+
 def student_question_response(
     question_id: int,
     quiz_session: QuizSession,
@@ -1475,19 +1581,11 @@ def student_question_response(
         ).digest()
     )
     code = session.get(QuestionCode, question.id)
-    public_answer_mode = question.answer_mode
-    if not question.answer_mode_disclosed and question.answer_mode in {
-        "single",
-        "multiple",
-    }:
-        # Hidden choice modes must have the same API and control shape. The
-        # server still validates and grades against the real stored mode.
-        public_answer_mode = "multiple"
     return StudentQuizQuestionResponse(
         id=question.id,
         prompt=question.prompt,
         difficulty=question.difficulty,
-        answer_mode=public_answer_mode,
+        answer_mode=public_answer_mode(question),
         answer_mode_disclosed=question.answer_mode_disclosed,
         response_language=question.response_language,
         allow_code_execution=question.allow_code_execution,
@@ -1549,6 +1647,18 @@ def student_state_response(
         decoded_answer_data(existing_answer) if existing_answer is not None else {}
     )
     answered_count = len(answered_question_ids)
+    review_enabled = answer_review_enabled(quiz_session, quiz)
+    # A participant who answered everything but has not confirmed yet keeps
+    # the session open for themselves: they may re-read, and correct when the
+    # quiz allows going back, until they submit their paper.
+    awaiting_final_submission = (
+        review_enabled
+        and quiz_session.status in ("in_progress", "paused")
+        and participant.submitted_at is None
+        and participant.current_position is None
+        and bool(question_ids)
+        and set(question_ids).issubset(answered_question_ids)
+    )
     accessible_positions = accessible_question_positions(
         question_ids,
         answered_question_ids,
@@ -1571,6 +1681,13 @@ def student_state_response(
             quiz_session.allow_previous_questions
             if quiz_session.allow_previous_questions is not None
             else quiz.allow_previous_questions
+        ),
+        allow_answer_review=review_enabled,
+        awaiting_final_submission=awaiting_final_submission,
+        answer_summaries=(
+            student_answer_summaries(quiz_session, participant, question_ids, session)
+            if awaiting_final_submission
+            else []
         ),
         accessible_question_numbers=[
             position + 1 for position in sorted(accessible_positions)
@@ -1717,6 +1834,7 @@ def create_quiz(
         question_count=payload.question_count,
         duration_seconds=payload.duration_seconds,
         allow_previous_questions=payload.allow_previous_questions,
+        allow_answer_review=payload.allow_answer_review,
         allow_negative_points=payload.allow_negative_points,
         same_questions_for_all=payload.same_questions_for_all,
         easy_question_count=payload.easy_question_count,
@@ -3204,6 +3322,7 @@ def start_training_quiz(
         source_language=quiz.source_language,
         duration_seconds=28800,
         allow_previous_questions=False,
+        allow_answer_review=False,
         allow_negative_points=False,
         same_questions_for_all=False,
         class_id=student_class.id,
@@ -3745,6 +3864,7 @@ def select_makeup_quiz(
         source_language=quiz.source_language,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
+        allow_answer_review=quiz.allow_answer_review,
         allow_negative_points=quiz.allow_negative_points,
         same_questions_for_all=False,
         class_id=makeup.class_id,
@@ -3857,6 +3977,7 @@ def update_quiz(
     quiz.question_count = payload.question_count
     quiz.duration_seconds = payload.duration_seconds
     quiz.allow_previous_questions = payload.allow_previous_questions
+    quiz.allow_answer_review = payload.allow_answer_review
     quiz.allow_negative_points = payload.allow_negative_points
     quiz.same_questions_for_all = payload.same_questions_for_all
     quiz.easy_question_count = payload.easy_question_count
@@ -3946,6 +4067,7 @@ def launch_quiz(
         source_language=quiz.source_language,
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
+        allow_answer_review=quiz.allow_answer_review,
         allow_negative_points=quiz.allow_negative_points,
         same_questions_for_all=quiz.same_questions_for_all,
         class_id=student_class.id,
@@ -4332,6 +4454,13 @@ def submit_student_answer(
         participant.current_position += 1
     else:
         participant.current_position = None
+    if (
+        participant.current_position is None
+        and participant.submitted_at is None
+        and not answer_review_enabled(quiz_session, quiz)
+    ):
+        # Without the review step the last answer is the final submission.
+        participant.submitted_at = datetime.now(UTC)
     session.flush()
     finish_when_nobody_can_answer(quiz_session, quiz, session)
     session.commit()
@@ -4339,12 +4468,128 @@ def submit_student_answer(
         request,
         quiz_session,
         session,
-        makeup_sessions_changed=False,
+        # Rebuilding a whole makeup session for every answer is wasteful, but
+        # its supervision view must see a participant reaching the end.
+        makeup_sessions_changed=participant.current_position is None,
     )
     state = student_state_response(quiz_session, quiz, participant, session)
     if feedback is not None:
         state.training_feedback = feedback
     return state
+
+
+def require_answer_review_offered(quiz_session: QuizSession, quiz: Quiz) -> None:
+    """Reject a review request on a quiz that has no final submission step."""
+    if not answer_review_enabled(quiz_session, quiz):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La relecture des réponses n’est pas disponible",
+        )
+
+
+def require_reviewable_participant(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    session: DbSession,
+) -> None:
+    """Reject a participant who may not reach the answer review step.
+
+    The session must still be running and every assigned question must already
+    have an answer.
+    """
+    if quiz_session.status != "in_progress":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La relecture des réponses n’est pas disponible",
+        )
+    question_ids = session_question_ids(quiz_session, session, participant)
+    answered_question_ids = set(
+        session.scalars(
+            select(QuizAnswer.question_id).where(
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == participant.id,
+            )
+        )
+    )
+    if not question_ids or not set(question_ids).issubset(answered_question_ids):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Toutes les questions doivent être répondues",
+        )
+
+
+@router.post(
+    "/student/sessions/{join_code}/review",
+    response_model=StudentQuizStateResponse,
+)
+def review_student_answers(
+    join_code: str,
+    request: Request,
+    session: DbSession,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
+) -> StudentQuizStateResponse:
+    """Leave the questions and go back to the summary of the given answers."""
+    quiz_session, quiz, participant = authenticated_participant(
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_participant_rate_limiter",
+        f"participant:{participant.id}",
+    )
+    expire_quiz_session(quiz_session, quiz, session)
+    require_answer_review_offered(quiz_session, quiz)
+    if participant.submitted_at is not None:
+        return student_state_response(quiz_session, quiz, participant, session)
+    require_reviewable_participant(quiz_session, participant, session)
+    if participant.current_position is not None:
+        participant.current_position = None
+        session.commit()
+        publish_quiz_update(
+            request,
+            quiz_session,
+            session,
+            active_sessions_changed=False,
+            makeup_sessions_changed=False,
+        )
+    return student_state_response(quiz_session, quiz, participant, session)
+
+
+@router.post(
+    "/student/sessions/{join_code}/submit",
+    response_model=StudentQuizStateResponse,
+)
+def submit_student_quiz(
+    join_code: str,
+    request: Request,
+    session: DbSession,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
+) -> StudentQuizStateResponse:
+    """Hand in a reviewed paper, which ends the quiz for this participant."""
+    quiz_session, quiz, participant = authenticated_participant(
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        session,
+        "quiz_participant_rate_limiter",
+        f"participant:{participant.id}",
+    )
+    expire_quiz_session(quiz_session, quiz, session)
+    require_answer_review_offered(quiz_session, quiz)
+    if participant.submitted_at is not None:
+        # A duplicate confirmation must not fail the student whose paper is
+        # already handed in.
+        return student_state_response(quiz_session, quiz, participant, session)
+    require_reviewable_participant(quiz_session, participant, session)
+    participant.current_position = None
+    participant.submitted_at = datetime.now(UTC)
+    session.flush()
+    finish_when_nobody_can_answer(quiz_session, quiz, session)
+    session.commit()
+    publish_quiz_update(request, quiz_session, session)
+    return student_state_response(quiz_session, quiz, participant, session)
 
 
 @router.post(
@@ -4386,10 +4631,17 @@ def navigate_student_quiz(
         answered_question_ids,
         participant.current_position,
     )
+    reviewing = (
+        participant.current_position is None
+        and participant.submitted_at is None
+        and answer_review_enabled(quiz_session, quiz)
+        and bool(question_ids)
+        and set(question_ids).issubset(answered_question_ids)
+    )
     if (
         quiz_session.status != "in_progress"
         or not allow_previous_questions
-        or participant.current_position is None
+        or (participant.current_position is None and not reviewing)
         or target_position not in accessible_positions
     ):
         raise HTTPException(

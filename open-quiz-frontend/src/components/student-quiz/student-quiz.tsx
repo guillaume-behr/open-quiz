@@ -5,6 +5,8 @@ import {
     joinQuiz,
     leaveStudentQuiz,
     navigateStudentQuiz,
+    reviewStudentAnswers,
+    submitStudentQuiz,
     submitStudentQuizAnswer,
 } from "@/api/quizzes"
 import type { StudentQuizSession } from "@/api/types"
@@ -233,6 +235,46 @@ export function StudentQuiz({
         }
     }
 
+    async function backToReview() {
+        if (!session || !participantToken) return
+
+        setError(null)
+        setIsBusy(true)
+        sessionRequestVersion.current += 1
+        const liveRevision = liveRevisionRef.current
+        try {
+            const updated = await reviewStudentAnswers(
+                session.join_code,
+                participantToken
+            )
+            if (liveRevisionRef.current === liveRevision) applySession(updated)
+        } catch {
+            setError(t("student-navigation-error"))
+        } finally {
+            setIsBusy(false)
+        }
+    }
+
+    async function submitQuiz() {
+        if (!session || !participantToken) return
+
+        setError(null)
+        setIsBusy(true)
+        sessionRequestVersion.current += 1
+        const liveRevision = liveRevisionRef.current
+        try {
+            const updated = await submitStudentQuiz(
+                session.join_code,
+                participantToken
+            )
+            if (liveRevisionRef.current === liveRevision) applySession(updated)
+        } catch {
+            setError(t("student-submit-quiz-error"))
+        } finally {
+            setIsBusy(false)
+        }
+    }
+
     async function handleAnswer(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
         if (!session?.question || !participantToken) return
@@ -314,7 +356,10 @@ export function StudentQuiz({
                 onLeave={() => void leaveQuiz()}
             />
             <StudentQuizPage
-                session={session}
+                session={{
+                    ...session,
+                    answer_summaries: translation.answerSummaries,
+                }}
                 question={translation.question}
                 participantToken={participantToken}
                 title={translation.title}
@@ -331,6 +376,8 @@ export function StudentQuiz({
                     void goToQuestion(questionNumber)
                 }
                 onSubmitAnswer={handleAnswer}
+                onBackToReview={() => void backToReview()}
+                onSubmitQuiz={() => void submitQuiz()}
                 onReturnHome={() => void leaveQuiz()}
             />
         </>

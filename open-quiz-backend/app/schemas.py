@@ -551,6 +551,7 @@ class QuizCreate(BaseModel):
     question_bank_ids: list[int] = Field(min_length=1, max_length=100)
     duration_seconds: int = Field(default=900, ge=60, le=28800)
     allow_previous_questions: bool = False
+    allow_answer_review: bool = True
     allow_negative_points: bool = False
     same_questions_for_all: bool = False
     easy_question_count: int = Field(ge=0, le=200)
@@ -604,6 +605,7 @@ class QuizResponse(BaseModel):
     question_count: int
     duration_seconds: int
     allow_previous_questions: bool
+    allow_answer_review: bool
     allow_negative_points: bool
     same_questions_for_all: bool
     easy_question_count: int
@@ -644,6 +646,7 @@ class QuizParticipantResponse(BaseModel):
     student_identifier: str
     student_display_name: str | None
     answered_count: int = 0
+    has_finished: bool = False
     score: float = 0
     maximum_score: float = 0
     pending_manual_grading_count: int = 0
@@ -720,12 +723,23 @@ class TrainingFeedback(BaseModel):
     requires_manual_review: bool = False
 
 
+class StudentAnswerSummary(BaseModel):
+    question_number: int
+    question_id: int
+    prompt: str
+    answer_mode: Literal["single", "multiple", "written"]
+    submitted_answers: list[str]
+
+
 class StudentQuizStateResponse(StudentQuizSessionResponse):
     question_number: int | None
     total_questions: int
     has_answered: bool
     answered_count: int
     allow_previous_questions: bool
+    allow_answer_review: bool = False
+    awaiting_final_submission: bool = False
+    answer_summaries: list[StudentAnswerSummary] = Field(default_factory=list)
     accessible_question_numbers: list[int] = Field(default_factory=list)
     selected_choice_ids: list[int] | None = None
     written_answer: str | None = None

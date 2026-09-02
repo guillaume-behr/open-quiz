@@ -23,6 +23,7 @@ import {
     NotFoundPage,
     PrivacyPage,
     ReportProblemPage,
+    SessionDisplayPage,
     TrainingPage,
 } from "./pages/lazy-pages.ts"
 
@@ -113,6 +114,12 @@ createRoot(document.getElementById("root")!).render(
                                 />
                                 <Route path="*" element={<NotFoundPage />} />
                             </Route>
+                            {/* Outside the shared layout: this view is meant
+                                to be projected to the class. */}
+                            <Route
+                                path="/teacher/session-display/:sessionKey"
+                                element={<SessionDisplayPage />}
+                            />
                         </Routes>
                     </Suspense>
                 </RouteErrorBoundary>

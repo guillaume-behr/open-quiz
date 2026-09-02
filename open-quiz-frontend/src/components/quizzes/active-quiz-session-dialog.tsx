@@ -1,13 +1,21 @@
 import type { MakeupSession, QuizParticipant, QuizSession } from "@/api/types"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
+import {
+    publishSessionDisplay,
+    sessionDisplayKey,
+    sessionDisplayPath,
+    sessionDisplayPayload,
+} from "@/components/quizzes/session-display"
 import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
+import { cn } from "@/lib/utils"
 import {
     AlertTriangle,
     CircleCheck,
     LoaderCircle,
+    Maximize,
     Pause,
     Play,
     RotateCcw,
@@ -15,6 +23,7 @@ import {
     UsersRound,
     XCircle,
 } from "lucide-react"
+import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 
 type SessionAction = "pause" | "resume" | "cancel" | "delete" | null
@@ -57,6 +66,10 @@ export function ActiveQuizSessionDialog({
     onConfirmDelete,
 }: ActiveQuizSessionDialogProps) {
     const { t } = useTranslation()
+    const title =
+        session && "quiz_title" in session
+            ? session.quiz_title
+            : t("makeup-tab")
 
     return (
         <Dialog
@@ -64,11 +77,7 @@ export function ActiveQuizSessionDialog({
             onOpenChange={(open) => {
                 if (!open) onClose()
             }}
-            title={
-                session && "quiz_title" in session
-                    ? session.quiz_title
-                    : t("makeup-tab")
-            }
+            title={title}
             description={
                 session
                     ? `${session.class_name} — ${t(
@@ -80,7 +89,7 @@ export function ActiveQuizSessionDialog({
         >
             {session && (
                 <div>
-                    <SessionSummary session={session} />
+                    <SessionSummary session={session} title={title} />
                     <Participants session={session} />
                     {error && <FieldError className="mt-4">{error}</FieldError>}
                     <div className="mt-5 flex flex-wrap justify-end gap-2 border-t pt-4">
@@ -170,10 +179,44 @@ export function ActiveQuizSessionDialog({
     )
 }
 
-function SessionSummary({ session }: { session: QuizSession | MakeupSession }) {
+function SessionSummary({
+    session,
+    title,
+}: {
+    session: QuizSession | MakeupSession
+    title: string
+}) {
     const { t } = useTranslation()
+
+    // The projection tab has no session of its own: this dialog mirrors every
+    // live update it receives to whichever tab is showing the code.
+    useEffect(() => {
+        publishSessionDisplay(sessionDisplayPayload(session, title))
+    }, [session, title])
+
+    function openDisplay() {
+        publishSessionDisplay(sessionDisplayPayload(session, title))
+        window.open(
+            sessionDisplayPath(sessionDisplayKey(session)),
+            "_blank",
+            "noopener"
+        )
+    }
+
     return (
-        <div className="rounded-xl bg-primary/10 p-5 text-center">
+        <div className="relative rounded-xl bg-primary/10 p-5 text-center">
+            {isActiveSessionStatus(session.status) && (
+                <Button
+                    className="absolute end-2 top-2"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={openDisplay}
+                >
+                    <Maximize />
+                    {t("enlarge-session")}
+                </Button>
+            )}
             <p className="text-sm text-muted-foreground">
                 {t("quiz-join-code")}
             </p>
@@ -204,18 +247,9 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
     const { t } = useTranslation()
     const participants = (
         [...(session.participants ?? [])] as SupervisedParticipant[]
-    ).sort((left, right) => {
-        const leftTotal =
-            left.total_questions ??
-            ("total_questions" in session ? session.total_questions : 0)
-        const rightTotal =
-            right.total_questions ??
-            ("total_questions" in session ? session.total_questions : 0)
-        return (
-            Number(right.answered_count >= rightTotal && rightTotal > 0) -
-            Number(left.answered_count >= leftTotal && leftTotal > 0)
-        )
-    })
+    ).sort(
+        (left, right) => Number(right.has_finished) - Number(left.has_finished)
+    )
     return (
         <>
             <div className="mt-5 flex items-center justify-between gap-3">
@@ -244,35 +278,32 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
                             ("total_questions" in session
                                 ? session.total_questions
                                 : 0)
-                        const hasFinished =
-                            totalQuestions > 0 &&
-                            participant.answered_count >= totalQuestions
+                        // The exam is over for this student: outline them so
+                        // the class list shows at a glance who is still
+                        // working, during the exam and during a retake alike.
+                        const showAsFinished =
+                            participant.has_finished &&
+                            ["in_progress", "paused"].includes(session.status)
                         return (
                             <li
                                 key={participant.id}
-                                className={
-                                    hasFinished &&
-                                    ["in_progress", "paused"].includes(
-                                        session.status
-                                    )
-                                        ? "rounded-lg border border-success/40 bg-success/10 px-3 py-2 font-medium"
-                                        : "rounded-lg border bg-background px-3 py-2 font-medium"
-                                }
+                                className={cn(
+                                    "rounded-lg border bg-background px-3 py-2 font-medium",
+                                    showAsFinished &&
+                                        "border-success bg-success/10 ring-2 ring-success/40"
+                                )}
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span>
                                         {participant.student_display_name ??
                                             participant.student_identifier}
                                     </span>
-                                    {hasFinished &&
-                                        ["in_progress", "paused"].includes(
-                                            session.status
-                                        ) && (
-                                            <span className="flex items-center gap-1 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-                                                <CircleCheck className="size-3.5" />
-                                                {t("quiz-finished")}
-                                            </span>
-                                        )}
+                                    {showAsFinished && (
+                                        <span className="flex items-center gap-1 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+                                            <CircleCheck className="size-3.5" />
+                                            {t("quiz-finished")}
+                                        </span>
+                                    )}
                                 </div>
                                 {participant.student_display_name && (
                                     <span className="block text-xs font-normal text-muted-foreground">

@@ -119,6 +119,124 @@ test("student authentication clears activity sessions between users", async ({
     ).toEqual({ account: null, exam: null, training: null })
 })
 
+test("a student translates a training quiz and its correction", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(globalThis, "Translator", {
+            configurable: true,
+            value: {
+                availability: async () => "available" as const,
+                create: async () => ({
+                    translate: async (text: string) =>
+                        ({
+                            "Entraînement scientifique": "Science practice",
+                            "Nommez une planète rouge.": "Name a red planet.",
+                            "Mars est la planète rouge.":
+                                "Mars is the red planet.",
+                        })[text] ?? text,
+                    destroy: () => undefined,
+                }),
+            },
+        })
+    })
+    await page.route("**/api/student-auth/login", async (route) => {
+        await route.fulfill({
+            json: { access_token: "student-token", student },
+        })
+    })
+    await page.route("**/api/quizzes/training", async (route) => {
+        await route.fulfill({
+            json: [
+                {
+                    id: 12,
+                    grade_level: "Grade 8",
+                    chapter: "Entraînement scientifique",
+                    question_count: 1,
+                    easy_question_count: 1,
+                    medium_question_count: 0,
+                    hard_question_count: 0,
+                    created_at: "2026-01-01T00:00:00Z",
+                },
+            ],
+        })
+    })
+    const session = {
+        quiz_title: "Entraînement scientifique",
+        source_language: "fr",
+        class_name: "Class 8B",
+        student_name: "Alex Example",
+        join_code: "TRAIN2",
+        status: "in_progress",
+        ends_at: null,
+        question_number: 1,
+        total_questions: 1,
+        has_answered: false,
+        answered_count: 0,
+        allow_previous_questions: false,
+        selected_choice_ids: null,
+        written_answer: null,
+        question: {
+            id: 51,
+            prompt: "Nommez une planète rouge.",
+            difficulty: "easy",
+            answer_mode: "written",
+            answer_mode_disclosed: true,
+            response_language: null,
+            has_image: false,
+            code_language: null,
+            code_content: null,
+            choices: [],
+        },
+        training_feedback: null,
+    }
+    await page.route("**/api/quizzes/training/12/start", async (route) => {
+        await route.fulfill({
+            json: { ...session, participant_token: "training-token" },
+        })
+    })
+    await page.route(
+        "**/api/quizzes/student/sessions/TRAIN2/answer",
+        async (route) => {
+            await route.fulfill({
+                json: {
+                    ...session,
+                    status: "finished",
+                    question: null,
+                    answered_count: 1,
+                    training_feedback: {
+                        question_id: 51,
+                        is_correct: null,
+                        correct_choice_ids: [],
+                        expected_answer: "Mars est la planète rouge.",
+                        submitted_answer: "Mars",
+                        requires_manual_review: true,
+                    },
+                },
+            })
+        }
+    )
+
+    await page.goto("/student/login")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
+    await page.getByRole("button", { name: "Sign in" }).click()
+    await page.getByRole("button", { name: "Training", exact: true }).click()
+    await page.getByRole("button", { name: "Start training" }).click()
+    await expect(page).toHaveURL(/\/student\/training$/)
+
+    await expect(page.getByText("Nommez une planète rouge.")).toBeVisible()
+    await page.getByRole("button", { name: "Automatic translation" }).click()
+    await page.getByRole("button", { name: "Translate the quiz" }).click()
+    await expect(page.getByText("Name a red planet.")).toBeVisible()
+    await expect(page.getByText("Science practice")).toBeVisible()
+
+    await page.getByLabel("Written answer").fill("Mars")
+    await page.getByRole("button", { name: "Submit my answer" }).click()
+    await expect(page.getByText("Mars is the red planet.")).toBeVisible()
+    await expect(page.getByText("Name a red planet.")).toBeVisible()
+})
+
 test("a student launches training and sees the correct answer", async ({
     page,
 }) => {

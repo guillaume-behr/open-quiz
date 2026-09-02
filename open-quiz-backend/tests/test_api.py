@@ -1916,7 +1916,9 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
 
 
 def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
-    with make_client(settings_for(tmp_path / "test.db")) as client:
+    # A fixed account limit keeps the failed login loop below independent from
+    # the shipped default.
+    with make_client(settings_for(tmp_path / "test.db", login_attempts=5)) as client:
         headers = login_admin(client)
         assert client.get("/api/quizzes", headers=headers).status_code == 403
 
@@ -2926,13 +2928,32 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 assert submitted.json()["question_number"] == question_number + 1
                 assert submitted.json()["question"] is not None
             else:
-                assert submitted.json()["status"] == "finished"
+                # The quiz offers the review step by default: the last answer
+                # opens the summary instead of ending the session.
+                assert submitted.json()["status"] == "in_progress"
+                assert submitted.json()["awaiting_final_submission"] is True
                 assert submitted.json()["question"] is None
+                assert [
+                    summary["question_number"]
+                    for summary in submitted.json()["answer_summaries"]
+                ] == [1, 2, 3]
+                handed_in = client.post(
+                    f"{student_state_url}/submit",
+                    headers=student_headers,
+                )
+                assert handed_in.status_code == 200
+                assert handed_in.json()["status"] == "finished"
+                assert handed_in.json()["awaiting_final_submission"] is False
+                assert handed_in.json()["question"] is None
+                assert_student_exam_payload_hides_answers(handed_in.json())
             teacher_state = client.get(
                 f"/api/quizzes/sessions/{quiz_session['id']}",
                 headers=teacher_headers,
             ).json()
             assert teacher_state["participants"][0]["answered_count"] == question_number
+            assert teacher_state["participants"][0]["has_finished"] is (
+                question_number == 3
+            )
             if question_number < 3:
                 assert teacher_state["participants"][0]["score"] == 0
             if question_number == 2:
@@ -4425,6 +4446,24 @@ def launch_and_join(
     return launched.json(), participant_headers
 
 
+def hand_in_quiz(
+    client: TestClient,
+    join_code: str,
+    participant_headers: dict[str, str],
+) -> dict[str, Any]:
+    """Confirm the reviewed answers, which is what ends an exam for a student.
+
+    Quizzes offer the review step by default, so answering the last question
+    is no longer what hands the paper in.
+    """
+    submitted = client.post(
+        f"/api/quizzes/student/sessions/{join_code}/submit",
+        headers=participant_headers,
+    )
+    assert submitted.status_code == 200
+    return submitted.json()
+
+
 def test_quiz_can_assign_the_same_draw_to_every_student(tmp_path: Path) -> None:
     database_path = tmp_path / "common-quiz.db"
     with make_client(settings_for(database_path)) as client:
@@ -4839,6 +4878,185 @@ def correct_choice_id(question: dict[str, Any]) -> int:
     return next(choice["id"] for choice in question["choices"] if choice["is_correct"])
 
 
+def wrong_choice_id(question: dict[str, Any]) -> int:
+    return next(
+        choice["id"] for choice in question["choices"] if not choice["is_correct"]
+    )
+
+
+def test_answer_review_precedes_the_final_submission(tmp_path: Path) -> None:
+    """A reviewed paper is only handed in once the student confirms it."""
+    with make_client(settings_for(tmp_path / "answer-review.db")) as client:
+        environment = exam_environment(client)
+        quiz = environment["quiz"]
+        assert quiz["allow_answer_review"] is True
+        updated = client.post(
+            f"/api/quizzes/{quiz['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "title": quiz["title"],
+                "question_bank_ids": [bank["id"] for bank in quiz["question_banks"]],
+                "allow_previous_questions": True,
+                "easy_question_count": 1,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["allow_answer_review"] is True
+        environment["quiz"] = updated.json()
+
+        launched, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        student_url = f"/api/quizzes/student/sessions/{launched['join_code']}"
+        session_url = f"/api/quizzes/sessions/{launched['id']}"
+
+        answered = client.post(
+            f"{student_url}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [wrong_choice_id(environment["question"])]},
+        )
+        assert answered.status_code == 200
+        assert answered.json()["status"] == "in_progress"
+        assert answered.json()["allow_answer_review"] is True
+        assert answered.json()["awaiting_final_submission"] is True
+        assert answered.json()["question"] is None
+        assert answered.json()["answer_summaries"] == [
+            {
+                "question_number": 1,
+                "question_id": environment["question"]["id"],
+                "prompt": environment["question"]["prompt"],
+                "answer_mode": "single",
+                "submitted_answers": ["Three"],
+            }
+        ]
+        assert_student_exam_payload_hides_answers(answered.json())
+
+        # The teacher sees the answer but not a finished student.
+        participant = client.get(
+            session_url, headers=environment["teacher_headers"]
+        ).json()["participants"][0]
+        assert participant["answered_count"] == 1
+        assert participant["has_finished"] is False
+
+        # Reviewing may lead back to a question, and back to the summary.
+        back = client.post(
+            f"{student_url}/navigate",
+            headers=participant_headers,
+            json={"question_number": 1},
+        )
+        assert back.status_code == 200
+        assert back.json()["question_number"] == 1
+        assert back.json()["awaiting_final_submission"] is False
+        corrected = client.post(
+            f"{student_url}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert corrected.status_code == 200
+        assert corrected.json()["answer_summaries"][0]["submitted_answers"] == ["Two"]
+        assert (
+            client.post(
+                f"{student_url}/navigate",
+                headers=participant_headers,
+                json={"question_number": 1},
+            ).status_code
+            == 200
+        )
+        review = client.post(f"{student_url}/review", headers=participant_headers)
+        assert review.status_code == 200
+        assert review.json()["awaiting_final_submission"] is True
+        assert review.json()["question"] is None
+
+        handed_in = client.post(f"{student_url}/submit", headers=participant_headers)
+        assert handed_in.status_code == 200
+        assert handed_in.json()["status"] == "finished"
+        assert handed_in.json()["awaiting_final_submission"] is False
+        assert handed_in.json()["answer_summaries"] == []
+        # Confirming twice must not fail a student whose paper is already in.
+        assert (
+            client.post(
+                f"{student_url}/submit", headers=participant_headers
+            ).status_code
+            == 200
+        )
+
+        finished = client.get(
+            session_url, headers=environment["teacher_headers"]
+        ).json()
+        assert finished["status"] == "finished"
+        assert finished["participants"][0]["has_finished"] is True
+        assert finished["participants"][0]["score"] == 2
+
+
+def test_quiz_without_answer_review_finishes_on_the_last_answer(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "no-answer-review.db")) as client:
+        environment = exam_environment(client)
+        quiz = environment["quiz"]
+        updated = client.post(
+            f"/api/quizzes/{quiz['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "title": quiz["title"],
+                "question_bank_ids": [bank["id"] for bank in quiz["question_banks"]],
+                "allow_answer_review": False,
+                "easy_question_count": 1,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["allow_answer_review"] is False
+        environment["quiz"] = updated.json()
+
+        launched, participant_headers = launch_and_join(client, environment)
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        student_url = f"/api/quizzes/student/sessions/{launched['join_code']}"
+        answered = client.post(
+            f"{student_url}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert answered.status_code == 200
+        assert answered.json()["status"] == "finished"
+        assert answered.json()["allow_answer_review"] is False
+        assert answered.json()["awaiting_final_submission"] is False
+        assert answered.json()["answer_summaries"] == []
+        assert (
+            client.post(
+                f"{student_url}/submit", headers=participant_headers
+            ).status_code
+            == 409
+        )
+        assert (
+            client.post(
+                f"{student_url}/review", headers=participant_headers
+            ).status_code
+            == 409
+        )
+        assert (
+            client.get(
+                f"/api/quizzes/sessions/{launched['id']}",
+                headers=environment["teacher_headers"],
+            ).json()["participants"][0]["has_finished"]
+            is True
+        )
+
+
 def test_student_password_reset_revokes_an_active_quiz_capability(
     tmp_path: Path,
 ) -> None:
@@ -5013,6 +5231,7 @@ def test_single_choice_maximum_uses_the_best_selectable_option(tmp_path: Path) -
             json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
         )
         assert answered.status_code == 200
+        hand_in_quiz(client, launched["join_code"], participant_headers)
 
         result = client.get(
             f"/api/quizzes/sessions/{launched['id']}",
@@ -5147,6 +5366,7 @@ def test_answer_points_are_summed_and_negative_points_follow_quiz_setting(
                 ).status_code
                 == 200
             )
+            hand_in_quiz(client, quiz_session["join_code"], participant_headers)
             return client.get(
                 f"/api/quizzes/sessions/{quiz_session['id']}",
                 headers=environment["teacher_headers"],
@@ -5284,7 +5504,8 @@ def test_makeup_finish_completes_paused_child_sessions(
             json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
         )
         assert answered.status_code == 200
-        assert answered.json()["status"] == "finished"
+        handed_in = hand_in_quiz(client, quiz_session["join_code"], participant_headers)
+        assert handed_in["status"] == "finished"
 
         makeup = client.post(
             "/api/quizzes/makeup/sessions",
@@ -5430,7 +5651,8 @@ def test_makeup_session_requires_quizzes_taken_by_the_class(
             json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
         )
         assert answered.status_code == 200
-        assert answered.json()["status"] == "finished"
+        handed_in = hand_in_quiz(client, quiz_session["join_code"], participant_headers)
+        assert handed_in["status"] == "finished"
 
         # Once the class has completed the quiz, the retake is allowed.
         allowed = client.post(
@@ -5510,7 +5732,10 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
                 },
             )
             assert answered.status_code == 200
-            assert answered.json()["status"] == "finished"
+            handed_in = hand_in_quiz(
+                client, quiz_session["join_code"], participant_headers
+            )
+            assert handed_in["status"] == "finished"
             return {"participant_headers": participant_headers}
 
         run_exam()
@@ -5552,7 +5777,8 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
             json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
         )
         assert answered.status_code == 200
-        assert answered.json()["status"] == "finished"
+        handed_in = hand_in_quiz(client, selected.json()["join_code"], child_headers)
+        assert handed_in["status"] == "finished"
 
         # Teacher pauses then resumes the whole makeup: the finished child must
         # remain finished instead of being reopened.
@@ -6361,6 +6587,7 @@ def test_departed_participant_does_not_hold_the_session_open(tmp_path: Path) -> 
             },
         )
         assert answered.status_code == 200
+        hand_in_quiz(client, join_code, {"X-Quiz-Token": quiz_tokens[1]})
 
         finished = client.get(
             f"/api/quizzes/sessions/{launched['id']}", headers=teacher_headers
@@ -6500,6 +6727,7 @@ def test_last_participant_leaving_finishes_the_session(tmp_path: Path) -> None:
             ).status_code
             == 200
         )
+        hand_in_quiz(client, join_code, {"X-Quiz-Token": quiz_tokens[0]})
         # The session is still running for the classmate who has not answered.
         assert (
             client.get(

@@ -207,6 +207,7 @@ class Quiz(Base):
     question_count: Mapped[int] = mapped_column(Integer)
     duration_seconds: Mapped[int] = mapped_column(Integer, default=900)
     allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
+    allow_answer_review: Mapped[bool] = mapped_column(Boolean, default=True)
     allow_negative_points: Mapped[bool] = mapped_column(Boolean, default=False)
     same_questions_for_all: Mapped[bool] = mapped_column(Boolean, default=True)
     easy_question_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -249,6 +250,7 @@ class QuizSession(Base):
     allow_previous_questions: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True
     )
+    allow_answer_review: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     allow_negative_points: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     same_questions_for_all: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     class_id: Mapped[int | None] = mapped_column(
@@ -386,6 +388,9 @@ class QuizParticipant(Base):
         DateTime(timezone=True), nullable=True
     )
     left_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     joined_at: Mapped[datetime] = mapped_column(

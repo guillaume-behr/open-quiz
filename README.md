@@ -40,6 +40,8 @@ Le déroulement d’une session reste le même quel que soit le contenu :
 ### Examens et entraînements
 
 - examens chronométrés avec salle d’attente, pause, reprise et rattrapage ;
+- relecture facultative des réponses avant la validation finale de la copie ;
+- affichage agrandi du code et du minuteur, à projeter à la classe ;
 - banques d’entraînement attribuées par classe et relançables librement ;
 - tirage commun à la classe ou individuel, selon le quiz ;
 - sujets papier nominatifs avec mise en page A4 et tirage déterministe.
@@ -56,8 +58,8 @@ Le déroulement d’une session reste le même quel que soit le contenu :
 - compte personnel et tableau de bord dédié ;
 - correction immédiate et historique de progression pour les entraînements ;
 - interface claire ou sombre disponible en huit langues ;
-- traduction locale facultative des quiz lorsque le navigateur la prend en
-  charge ;
+- traduction locale facultative des quiz, en examen comme en entraînement,
+  lorsque le navigateur la prend en charge ;
 - exécution locale de courts extraits Python avec Pyodide.
 
 ### Hébergement maîtrisé
@@ -146,11 +148,13 @@ d’accessibilité propres à votre établissement, puis relancez `sh ./update.s
 
 ### Mises à jour
 
-`sh ./update.sh` applique une mise à jour en avance rapide et reconstruit les
-conteneurs ; ajoutez `--no-pull` pour reconstruire sans récupérer de nouvelle
-révision. Le script refuse de continuer si le dépôt contient des modifications
-locales, affiche la révision avant et après la mise à jour, et rappelle de
-sauvegarder la base lorsqu’elle change.
+```shell
+sh ./update.sh
+```
+
+Le [guide de déploiement](docs/deployment.md#mettre-à-jour-open-quiz) décrit le
+déroulement complet de la mise à jour, ainsi que l’option `--no-pull` pour
+reconstruire sans récupérer de nouvelle révision.
 
 > [!CAUTION]
 > Sauvegardez PostgreSQL et `open-quiz-backend/.env` avant chaque mise à jour.

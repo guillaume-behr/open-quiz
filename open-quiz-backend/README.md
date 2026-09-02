@@ -106,16 +106,16 @@ est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` 
 | ------------------------------- | ------- | ----------------- |
 | `ACCESS_TOKEN_MINUTES`          | `15`    | 1 à 30            |
 | `REFRESH_TOKEN_DAYS`            | `7`     | 1 à 30            |
-| `LOGIN_ATTEMPTS`                | `5`     | 3 à 20            |
+| `LOGIN_ATTEMPTS`                | `10`    | 3 à 50            |
 | `LOGIN_WINDOW_SECONDS`          | `900`   | 60 minimum        |
-| `GLOBAL_LOGIN_ATTEMPTS`         | `500`   | 50 à 100 000      |
+| `GLOBAL_LOGIN_ATTEMPTS`         | `2000`  | 50 à 100 000      |
 | `GLOBAL_LOGIN_WINDOW_SECONDS`   | `60`    | 10 à 3 600        |
-| `QUIZ_JOIN_ATTEMPTS`            | `20`    | 5 à 100           |
-| `QUIZ_PARTICIPANT_ATTEMPTS`     | `240`   | 30 à 1 000        |
-| `QUIZ_VIOLATION_ATTEMPTS`       | `20`    | 5 à 100           |
+| `QUIZ_JOIN_ATTEMPTS`            | `60`    | 5 à 500           |
+| `QUIZ_PARTICIPANT_ATTEMPTS`     | `900`   | 30 à 5 000        |
+| `QUIZ_VIOLATION_ATTEMPTS`       | `60`    | 5 à 500           |
 | `QUIZ_RATE_WINDOW_SECONDS`      | `60`    | 10 à 3 600        |
 | `QUIZ_RESULT_RETENTION_DAYS`    | `365`   | 1 à 3 650 jours   |
-| `PROBLEM_REPORT_ATTEMPTS`       | `30`    | 1 à 1 000         |
+| `PROBLEM_REPORT_ATTEMPTS`       | `60`    | 1 à 5 000         |
 | `PROBLEM_REPORT_WINDOW_SECONDS` | `900`   | 60 à 86 400       |
 | `PROBLEM_REPORT_RETENTION_DAYS` | `90`    | 1 à 365 jours     |
 | `MAX_REQUEST_BODY_BYTES`        | `65536` | 1 024 à 1 048 576 |
@@ -205,6 +205,9 @@ mécanisme partagé et tester le comportement en charge.
   une proposition incorrecte annule les points de la question ;
 - une banque d’entraînement utilisée par un examen actif devient indisponible
   pour la classe jusqu’à la fin ou l’annulation de cet examen ;
+- un examen peut proposer la relecture des réponses : l’élève voit le
+  récapitulatif de sa copie et la rend explicitement, et la session reste
+  ouverte tant que toutes les copies présentes ne sont pas rendues ;
 - les questions rédactionnelles restent en attente d’une correction manuelle ;
 - les questions, leur ordre et le barème sont figés dans la session pour
   préserver les résultats historiques.

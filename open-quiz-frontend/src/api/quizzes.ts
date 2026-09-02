@@ -323,6 +323,34 @@ export function submitStudentQuizAnswer(
     )
 }
 
+export function reviewStudentAnswers(
+    joinCode: string,
+    participantToken: string
+): Promise<StudentQuizSession> {
+    return request<StudentQuizSession>(
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/review`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+        },
+        false
+    )
+}
+
+export function submitStudentQuiz(
+    joinCode: string,
+    participantToken: string
+): Promise<StudentQuizSession> {
+    return request<StudentQuizSession>(
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/submit`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+        },
+        false
+    )
+}
+
 export function navigateStudentQuiz(
     joinCode: string,
     participantToken: string,

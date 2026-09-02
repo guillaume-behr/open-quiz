@@ -30,6 +30,7 @@ type QuizFormDialogProps = {
     durationMinutes: number
     selectedBankIds: number[]
     allowPreviousQuestions: boolean
+    allowAnswerReview: boolean
     allowNegativePoints: boolean
     sameQuestionsForAll: boolean
     difficultyCounts: DifficultyValues
@@ -42,6 +43,7 @@ type QuizFormDialogProps = {
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
     onSelectedBankIdsChange: (ids: number[]) => void
     onAllowPreviousQuestionsChange: (value: boolean) => void
+    onAllowAnswerReviewChange: (value: boolean) => void
     onAllowNegativePointsChange: (value: boolean) => void
     onSameQuestionsForAllChange: (value: boolean) => void
     onDifficultyCountsChange: (values: DifficultyValues) => void
@@ -59,6 +61,7 @@ export function QuizFormDialog({
     durationMinutes,
     selectedBankIds,
     allowPreviousQuestions,
+    allowAnswerReview,
     allowNegativePoints,
     sameQuestionsForAll,
     difficultyCounts,
@@ -71,6 +74,7 @@ export function QuizFormDialog({
     onDeleteGradeLevel,
     onSelectedBankIdsChange,
     onAllowPreviousQuestionsChange,
+    onAllowAnswerReviewChange,
     onAllowNegativePointsChange,
     onSameQuestionsForAllChange,
     onDifficultyCountsChange,
@@ -184,6 +188,21 @@ export function QuizFormDialog({
                                         onAllowPreviousQuestionsChange
                                     }
                                     aria-label={t("allow-previous-questions")}
+                                />
+                            </label>
+                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
+                                <span>
+                                    <span className="block font-medium">
+                                        {t("allow-answer-review")}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {t("allow-answer-review-help")}
+                                    </span>
+                                </span>
+                                <Switch
+                                    checked={allowAnswerReview}
+                                    onCheckedChange={onAllowAnswerReviewChange}
+                                    aria-label={t("allow-answer-review")}
                                 />
                             </label>
                             <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">

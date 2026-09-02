@@ -48,4 +48,22 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                     "access_token_generation INTEGER NOT NULL DEFAULT 0"
                 )
             )
+        connection.execute(
+            text(
+                "ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS "
+                "allow_answer_review BOOLEAN NOT NULL DEFAULT TRUE"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE quiz_sessions ADD COLUMN IF NOT EXISTS "
+                "allow_answer_review BOOLEAN"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE quiz_participants ADD COLUMN IF NOT EXISTS "
+                "submitted_at TIMESTAMP WITH TIME ZONE"
+            )
+        )
     return sessionmaker(bind=engine, expire_on_commit=False)

@@ -333,16 +333,16 @@ Les valeurs ci-dessous sont fournies dans les fichiers `.env` d’exemple.
 | ------------------------------- | ------------------------------------------------------- | ----------------------------------------------- |
 | `ACCESS_TOKEN_MINUTES`          | durée des jetons d’accès privilégiés                    | `15`                                            |
 | `REFRESH_TOKEN_DAYS`            | durée maximale d’une session longue                     | `7`                                             |
-| `LOGIN_ATTEMPTS`                | tentatives par compte et par fenêtre                    | `5`                                             |
+| `LOGIN_ATTEMPTS`                | tentatives par compte et par fenêtre                    | `10`                                            |
 | `LOGIN_WINDOW_SECONDS`          | fenêtre des tentatives par compte                       | `900`                                           |
-| `GLOBAL_LOGIN_ATTEMPTS`         | tentatives de connexion pour toute l’instance           | `500`                                           |
+| `GLOBAL_LOGIN_ATTEMPTS`         | tentatives de connexion pour toute l’instance           | `2000`                                          |
 | `GLOBAL_LOGIN_WINDOW_SECONDS`   | fenêtre du quota global                                 | `60`                                            |
-| `QUIZ_JOIN_ATTEMPTS`            | tentatives pour rejoindre une session                   | `20`                                            |
-| `QUIZ_PARTICIPANT_ATTEMPTS`     | requêtes d’un participant par fenêtre                   | `240`                                           |
-| `QUIZ_VIOLATION_ATTEMPTS`       | alertes de surveillance par fenêtre                     | `20`                                            |
+| `QUIZ_JOIN_ATTEMPTS`            | tentatives pour rejoindre une session                   | `60`                                            |
+| `QUIZ_PARTICIPANT_ATTEMPTS`     | requêtes d’un participant par fenêtre                   | `900`                                           |
+| `QUIZ_VIOLATION_ATTEMPTS`       | alertes de surveillance par fenêtre                     | `60`                                            |
 | `QUIZ_RATE_WINDOW_SECONDS`      | fenêtre des limites liées aux quiz                      | `60`                                            |
 | `QUIZ_RESULT_RETENTION_DAYS`    | conservation des résultats terminés                     | `365`                                           |
-| `PROBLEM_REPORT_ATTEMPTS`       | signalements anonymes par fenêtre pour toute l’instance | `30` en local, `5` dans l’exemple de production |
+| `PROBLEM_REPORT_ATTEMPTS`       | signalements anonymes par fenêtre pour toute l’instance | `60` en local, `5` dans l’exemple de production |
 | `PROBLEM_REPORT_WINDOW_SECONDS` | fenêtre du quota de signalements                        | `900`                                           |
 | `PROBLEM_REPORT_RETENTION_DAYS` | conservation des signalements                           | `90`                                            |
 | `MAX_REQUEST_BODY_BYTES`        | taille des requêtes applicatives ordinaires             | `65536`                                         |

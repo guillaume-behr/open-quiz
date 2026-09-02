@@ -6,6 +6,8 @@ import type {
     TrainingFeedback,
 } from "@/api/types"
 import { StudentQuestionForm } from "@/components/student-quiz/student-question-form"
+import { TranslationNotice } from "@/components/student-quiz/translation-notice"
+import { useQuizTranslation } from "@/components/student-quiz/use-quiz-translation"
 import { Button } from "@/components/ui/button"
 import { PageLoader } from "@/components/ui/page-loader"
 import { NavbarAction } from "@/components/navigation/navbar-action"
@@ -35,7 +37,7 @@ function storedTraining(): {
 }
 
 export function TrainingPage() {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const navigate = useNavigate()
     const location = useLocation()
     const routeState = location.state as TrainingRouteState | null
@@ -56,10 +58,54 @@ export function TrainingPage() {
     )
     const [isBusy, setIsBusy] = useState(Boolean(!session && stored))
     const [error, setError] = useState<string | null>(null)
+    const [translatedExpectedAnswer, setTranslatedExpectedAnswer] = useState<{
+        source: string
+        text: string
+    } | null>(null)
     const questionFormRef = useRef<HTMLDivElement>(null)
     const [questionFormHeight, setQuestionFormHeight] = useState<number | null>(
         null
     )
+    const translation = useQuizTranslation(session, i18n)
+    const isTranslated = translation.viewState.active
+    const contentDirection =
+        isTranslated || !session
+            ? isRtlLanguage(i18n.resolvedLanguage)
+                ? "rtl"
+                : "ltr"
+            : isRtlLanguage(session.source_language)
+              ? "rtl"
+              : "ltr"
+    const translateText = translation.translateText
+    const expectedAnswer = feedback?.expected_answer ?? null
+
+    const shownExpectedAnswer =
+        isTranslated && translatedExpectedAnswer?.source === expectedAnswer
+            ? translatedExpectedAnswer.text
+            : null
+
+    // The correction arrives after the answer, so its expected wording is
+    // translated once it is known rather than with the question.
+    useEffect(() => {
+        if (!expectedAnswer || !isTranslated) return
+        if (translatedExpectedAnswer?.source === expectedAnswer) return
+        let current = true
+        void translateText(expectedAnswer).then((translated) => {
+            if (current && translated)
+                setTranslatedExpectedAnswer({
+                    source: expectedAnswer,
+                    text: translated,
+                })
+        })
+        return () => {
+            current = false
+        }
+    }, [
+        expectedAnswer,
+        isTranslated,
+        translateText,
+        translatedExpectedAnswer?.source,
+    ])
 
     useEffect(() => {
         if (session || !stored || !participantToken) {
@@ -85,7 +131,8 @@ export function TrainingPage() {
         setIsBusy(true)
         setError(null)
         try {
-            const question = session.question
+            // Keep whichever wording the student answered, translated or not.
+            const question = translation.question ?? session.question
             const updated = await submitStudentQuizAnswer(
                 session.join_code,
                 participantToken,
@@ -137,14 +184,33 @@ export function TrainingPage() {
                     <p className="text-sm font-semibold text-primary">
                         {t("training-mode")}
                     </p>
-                    <h1 className="text-3xl font-extrabold">
-                        {session.quiz_title}
+                    <h1
+                        className="text-3xl font-extrabold"
+                        dir={contentDirection}
+                    >
+                        {translation.title || session.quiz_title}
                     </h1>
                 </div>
+                {translation.viewState.offered && (
+                    <div className="mb-6 flex">
+                        <TranslationNotice
+                            translation={translation.viewState}
+                            onToggle={() => void translation.toggle()}
+                        />
+                    </div>
+                )}
                 {feedback && answeredQuestion ? (
                     <TrainingCorrection
                         question={answeredQuestion}
-                        feedback={feedback}
+                        feedback={
+                            shownExpectedAnswer
+                                ? {
+                                      ...feedback,
+                                      expected_answer: shownExpectedAnswer,
+                                  }
+                                : feedback
+                        }
+                        contentDirection={contentDirection}
                         questionFormHeight={questionFormHeight}
                         onContinue={continueTraining}
                     />
@@ -196,13 +262,9 @@ export function TrainingPage() {
                     <div ref={questionFormRef}>
                         <StudentQuestionForm
                             session={session}
-                            question={session.question}
+                            question={translation.question ?? session.question}
                             participantToken={participantToken}
-                            contentDirection={
-                                isRtlLanguage(session.source_language)
-                                    ? "rtl"
-                                    : "ltr"
-                            }
+                            contentDirection={contentDirection}
                             selectedChoiceIds={selectedChoiceIds}
                             writtenAnswer={writtenAnswer}
                             isBusy={isBusy}
@@ -222,11 +284,13 @@ export function TrainingPage() {
 function TrainingCorrection({
     question,
     feedback,
+    contentDirection,
     questionFormHeight,
     onContinue,
 }: {
     question: StudentQuizQuestion
     feedback: TrainingFeedback
+    contentDirection: "ltr" | "rtl"
     questionFormHeight: number | null
     onContinue: () => void
 }) {
@@ -261,7 +325,9 @@ function TrainingCorrection({
                     )}
                 </h2>
             </div>
-            <p className="mt-4 font-medium">{question.prompt}</p>
+            <p className="mt-4 font-medium" dir={contentDirection}>
+                {question.prompt}
+            </p>
             {feedback.submitted_answer && (
                 <div className="mt-4 rounded-lg bg-background/80 p-4">
                     <p className="text-sm font-semibold">
@@ -274,7 +340,7 @@ function TrainingCorrection({
             )}
             <div className="mt-4 rounded-lg bg-background/80 p-4">
                 <p className="text-sm font-semibold">{t("correct-answer")}</p>
-                <p className="mt-1">
+                <p className="mt-1" dir={contentDirection}>
                     {feedback.expected_answer ?? correctLabels.join(", ")}
                 </p>
             </div>

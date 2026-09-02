@@ -24,6 +24,12 @@ export const Dashboard = lazy(() =>
     }))
 )
 
+export const SessionDisplayPage = lazy(() =>
+    import("./SessionDisplayPage.tsx").then(({ SessionDisplayPage }) => ({
+        default: SessionDisplayPage,
+    }))
+)
+
 export const AdminDashboard = lazy(() =>
     import("./AdminDashboard.tsx").then(({ AdminDashboard }) => ({
         default: AdminDashboard,

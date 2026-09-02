@@ -429,6 +429,86 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
     await expect(page.getByText("Response recorded")).toBeVisible()
 })
 
+test("student reviews their answers before handing in the paper", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+    })
+    const reviewingSession = {
+        ...baseSession,
+        status: "in_progress",
+        total_questions: 2,
+        has_answered: true,
+        answered_count: 2,
+        allow_answer_review: true,
+        awaiting_final_submission: true,
+        answer_summaries: [
+            {
+                question_number: 1,
+                question_id: 41,
+                prompt: "Which planet is known as the Red Planet?",
+                answer_mode: "single",
+                submitted_answers: ["Mars"],
+            },
+            {
+                question_number: 2,
+                question_id: 42,
+                prompt: "Name a gas giant.",
+                answer_mode: "written",
+                submitted_answers: ["Jupiter"],
+            },
+        ],
+    }
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            json: {
+                ...reviewingSession,
+                participant_token: "participant-token",
+            },
+        })
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({ json: reviewingSession })
+    })
+    let submitCount = 0
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/submit",
+        async (route) => {
+            submitCount += 1
+            expect(route.request().headers()["x-quiz-token"]).toBe(
+                "participant-token"
+            )
+            await route.fulfill({
+                json: {
+                    ...reviewingSession,
+                    status: "finished",
+                    awaiting_final_submission: false,
+                    answer_summaries: [],
+                },
+            })
+        }
+    )
+    await joinExamViaDashboard(page, "ABCD")
+
+    await expect(
+        page.getByRole("heading", { name: "Review your answers" })
+    ).toBeVisible()
+    await expect(page.getByText("Mars", { exact: true })).toBeVisible()
+    await expect(page.getByText("Jupiter", { exact: true })).toBeVisible()
+    // Going back is only offered when the quiz allows previous questions.
+    await expect(page.getByRole("button", { name: "Change" })).toHaveCount(0)
+
+    await page.getByRole("button", { name: "Hand in my paper" }).click()
+    await expect(
+        page.getByText("The quiz is over. Thank you for your participation!")
+    ).toBeVisible()
+    expect(submitCount).toBe(1)
+})
+
 test("hidden choice mode uses a generic multi-select control", async ({
     page,
 }) => {

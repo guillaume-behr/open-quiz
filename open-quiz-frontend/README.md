@@ -105,6 +105,14 @@ conteneurs du projet.
 | `/teacher/dashboard` | élèves, classes, contenus, sessions et résultats  |
 | `/admin/dashboard`   | comptes enseignants et signalements               |
 
+| Route                                     | Usage                              |
+| ----------------------------------------- | ---------------------------------- |
+| `/teacher/session-display/:sessionKey`    | code et minuteur agrandis          |
+
+La vue agrandie est ouverte par le bouton « Agrandir » d’une session en cours.
+Elle ne s’authentifie pas : elle reçoit ses mises à jour de l’onglet du tableau
+de bord, qui doit rester ouvert.
+
 La saisie d’un code d’examen se fait depuis le tableau de bord élève.
 `/student/exam` redirige l’utilisateur lorsqu’aucune session valide n’est
 enregistrée. La route `/` redirige vers `/student/login`.

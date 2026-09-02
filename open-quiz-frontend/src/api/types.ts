@@ -179,6 +179,7 @@ export type Quiz = {
     question_count: number
     duration_seconds: number
     allow_previous_questions: boolean
+    allow_answer_review: boolean
     allow_negative_points: boolean
     same_questions_for_all: boolean
     easy_question_count: number
@@ -203,6 +204,7 @@ export type NewQuiz = {
     question_bank_ids: number[]
     duration_seconds: number
     allow_previous_questions: boolean
+    allow_answer_review: boolean
     allow_negative_points: boolean
     same_questions_for_all: boolean
     easy_question_count: number
@@ -215,6 +217,7 @@ export type QuizParticipant = {
     student_identifier: string
     student_display_name: string | null
     answered_count: number
+    has_finished: boolean
     score: number
     maximum_score: number
     pending_manual_grading_count: number
@@ -336,6 +339,9 @@ export type StudentQuizSession = {
     has_answered: boolean
     answered_count: number
     allow_previous_questions: boolean
+    allow_answer_review: boolean
+    awaiting_final_submission: boolean
+    answer_summaries: StudentAnswerSummary[]
     accessible_question_numbers: number[]
     selected_choice_ids: number[] | null
     written_answer: string | null
@@ -344,6 +350,14 @@ export type StudentQuizSession = {
     potential_score: number | null
     potential_maximum_score: number | null
     pending_manual_review_count: number
+}
+
+export type StudentAnswerSummary = {
+    question_number: number
+    question_id: number
+    prompt: string
+    answer_mode: AnswerMode
+    submitted_answers: string[]
 }
 
 export type TrainingFeedback = {

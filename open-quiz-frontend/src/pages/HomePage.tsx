@@ -22,7 +22,12 @@ import {
 } from "@/components/student-quiz/student-quiz-session"
 import { Button } from "@/components/ui/button"
 import { PageLoader } from "@/components/ui/page-loader"
-import { ClipboardPenLine, Dumbbell, History, RotateCcw } from "lucide-react"
+import {
+    ChartColumn,
+    ClipboardPenLine,
+    Dumbbell,
+    RotateCcw,
+} from "lucide-react"
 import { lazy, type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { localizedAuthErrorMessage } from "@/lib/errors"
@@ -102,7 +107,8 @@ export function HomePage({
         },
         {
             id: "results",
-            icon: History,
+            // The same icon as the teacher's results section.
+            icon: ChartColumn,
             label: t("results"),
             description: t("quiz-history-empty-help"),
         },

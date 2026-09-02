@@ -1,4 +1,8 @@
-import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
+import type {
+    StudentAnswerSummary,
+    StudentQuizQuestion,
+    StudentQuizSession,
+} from "@/api/types"
 import {
     createBrowserTranslator,
     translationLanguage,
@@ -6,7 +10,10 @@ import {
 } from "@/lib/browser-translator"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { i18n } from "i18next"
-import { translateQuestion } from "./student-quiz-translation"
+import {
+    translateAnswerSummary,
+    translateQuestion,
+} from "./student-quiz-translation"
 
 export function useQuizTranslation(
     session: StudentQuizSession | null,
@@ -17,6 +24,10 @@ export function useQuizTranslation(
     const [translatedTitle, setTranslatedTitle] = useState<string | null>(null)
     const [translatedQuestion, setTranslatedQuestion] =
         useState<StudentQuizQuestion | null>(null)
+    const [translatedSummaries, setTranslatedSummaries] = useState<{
+        signature: string
+        items: StudentAnswerSummary[]
+    } | null>(null)
     const [isTranslating, setIsTranslating] = useState(false)
     const [isDownloading, setIsDownloading] = useState(false)
     const [errorPair, setErrorPair] = useState<string | null>(null)
@@ -47,6 +58,7 @@ export function useQuizTranslation(
             setTranslatedPair(null)
             setTranslatedTitle(null)
             setTranslatedQuestion(null)
+            setTranslatedSummaries(null)
             setErrorPair(null)
             setIsTranslating(false)
             setIsDownloading(false)
@@ -72,6 +84,45 @@ export function useQuizTranslation(
             current = false
         }
     }, [active, pair, session?.question, translatedQuestion?.id])
+
+    // The answer review lists teacher wording too, and it only exists once
+    // every question has been answered.
+    const summaries = session?.answer_summaries ?? []
+    const summariesSignature = summaries
+        .map(
+            (summary) =>
+                `${summary.question_id}:${summary.submitted_answers.join("|")}`
+        )
+        .join("~")
+
+    useEffect(() => {
+        const translator = translatorRef.current
+        if (!active || !translator || !summariesSignature) return
+        if (translatedSummaries?.signature === summariesSignature) return
+
+        let current = true
+        void Promise.all(
+            summaries.map((summary) =>
+                translateAnswerSummary(translator, summary)
+            )
+        )
+            .then((items) => {
+                if (current)
+                    setTranslatedSummaries({
+                        signature: summariesSignature,
+                        items,
+                    })
+            })
+            .catch(() => {
+                if (current) setErrorPair(pair)
+            })
+        return () => {
+            current = false
+        }
+        // The signature stands for the summaries themselves, which are rebuilt
+        // by every state refresh.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [active, pair, summariesSignature, translatedSummaries?.signature])
 
     const toggle = useCallback(async () => {
         if (active) {
@@ -134,6 +185,21 @@ export function useQuizTranslation(
         }
     }, [active, offered, pair, session, sourceLanguage, targetLanguage])
 
+    // Correction feedback is fetched after a question has been translated:
+    // let a caller translate that extra teacher wording with the same model.
+    const translateText = useCallback(
+        async (value: string): Promise<string | null> => {
+            const translator = translatorRef.current
+            if (!active || !translator || !value) return null
+            try {
+                return await translator.translate(value)
+            } catch {
+                return null
+            }
+        },
+        [active]
+    )
+
     const reset = useCallback(() => {
         operationVersionRef.current += 1
         translatorRef.current?.destroy()
@@ -143,6 +209,7 @@ export function useQuizTranslation(
         setTranslatedPair(null)
         setTranslatedTitle(null)
         setTranslatedQuestion(null)
+        setTranslatedSummaries(null)
         setErrorPair(null)
         setIsTranslating(false)
         setIsDownloading(false)
@@ -156,6 +223,10 @@ export function useQuizTranslation(
 
     return {
         question,
+        answerSummaries:
+            active && translatedSummaries?.signature === summariesSignature
+                ? translatedSummaries.items
+                : summaries,
         title:
             active && translatedTitle
                 ? translatedTitle
@@ -168,6 +239,7 @@ export function useQuizTranslation(
             isDownloading,
         },
         toggle,
+        translateText,
         reset,
     }
 }
