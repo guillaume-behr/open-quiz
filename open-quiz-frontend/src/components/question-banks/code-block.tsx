@@ -231,7 +231,7 @@ export function CodeBlock({
                         </pre>
                         {editable && (
                             <textarea
-                                className={`absolute inset-0 z-10 h-full w-full resize-none overflow-auto border-0 bg-transparent pt-4 pr-4 pb-4 pl-14 font-mono text-sm leading-6 text-transparent caret-white outline-none selection:bg-primary/40 [font-variant-ligatures:none] ${
+                                className={`absolute inset-0 z-10 h-full w-full resize-none overflow-auto border-0 bg-transparent pt-4 pr-4 pb-4 pl-14 font-mono text-sm leading-6 text-transparent caret-white outline-none [font-variant-ligatures:none] selection:bg-primary/40 ${
                                     canRun ? "pr-28" : ""
                                 }`}
                                 value={code}

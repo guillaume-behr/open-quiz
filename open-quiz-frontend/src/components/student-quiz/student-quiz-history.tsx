@@ -185,8 +185,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                         ", "
                                                     ) || t("no-answer")}
                                                 </p>
-                                                {answer.is_correct ===
-                                                    null && (
+                                                {answer.is_correct === null && (
                                                     <p className="mt-2 text-xs font-medium text-muted-foreground">
                                                         {t(
                                                             "training-manual-review"
@@ -214,9 +213,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
             </Accordion.Root>
             <Dialog
                 open={provisionalNoticeItem !== null}
-                onOpenChange={(open) =>
-                    !open && setProvisionalNoticeItem(null)
-                }
+                onOpenChange={(open) => !open && setProvisionalNoticeItem(null)}
                 title={t("provisional-grades-title")}
                 description={provisionalNoticeItem?.quiz_title}
                 size="sm"
