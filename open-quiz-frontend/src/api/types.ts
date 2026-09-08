@@ -242,16 +242,14 @@ export type QuizAnswerReview = {
     is_correct: boolean | null
 }
 
-type StudentQuizHistoryAnswer = Omit<
-    QuizAnswerReview,
-    "id" | "score" | "max_score" | "is_graded" | "is_correct"
-> & { is_correct: boolean | null }
+type StudentQuizHistoryAnswer = Omit<QuizAnswerReview, "id" | "is_graded">
 
 export type StudentQuizHistoryItem = {
     session_id: number
     quiz_title: string
     class_name: string
     started_at: string
+    grades_published: boolean
     score: number | null
     maximum_score: number | null
     answers: StudentQuizHistoryAnswer[]

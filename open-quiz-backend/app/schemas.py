@@ -790,6 +790,8 @@ class StudentQuizHistoryAnswer(BaseModel):
     answer_mode: Literal["single", "multiple", "written"]
     submitted_answers: list[str]
     expected_answers: list[str]
+    score: float
+    max_score: float
     is_correct: bool | None
 
 
@@ -798,6 +800,7 @@ class StudentQuizHistoryItem(BaseModel):
     quiz_title: str
     class_name: str
     started_at: datetime
+    grades_published: bool
     score: float | None = None
     maximum_score: float | None = None
     answers: list[StudentQuizHistoryAnswer]
