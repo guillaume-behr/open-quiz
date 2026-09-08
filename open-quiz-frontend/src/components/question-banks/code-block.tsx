@@ -45,7 +45,7 @@ export function StaticCodeBlock({
                     getTokenProps,
                 }) => (
                     <pre
-                        className={`${className} overflow-x-auto p-4 font-mono text-sm leading-6`}
+                        className={`${className} overflow-x-auto p-4 font-mono text-sm leading-6 [font-variant-ligatures:none]`}
                         style={style}
                         dir="ltr"
                     >
@@ -192,7 +192,7 @@ export function CodeBlock({
                         )}
                         <pre
                             ref={highlightedCodeRef}
-                            className={`${className} p-4 font-mono text-sm leading-6 ${
+                            className={`${className} p-4 font-mono text-sm leading-6 [font-variant-ligatures:none] ${
                                 editable
                                     ? `overflow-hidden ${editorClassName}`
                                     : "overflow-x-auto"
@@ -231,7 +231,7 @@ export function CodeBlock({
                         </pre>
                         {editable && (
                             <textarea
-                                className={`absolute inset-0 z-10 h-full w-full resize-none overflow-auto border-0 bg-transparent pt-4 pr-4 pb-4 pl-14 font-mono text-sm leading-6 text-transparent caret-white outline-none selection:bg-primary/40 ${
+                                className={`absolute inset-0 z-10 h-full w-full resize-none overflow-auto border-0 bg-transparent pt-4 pr-4 pb-4 pl-14 font-mono text-sm leading-6 text-transparent caret-white outline-none selection:bg-primary/40 [font-variant-ligatures:none] ${
                                     canRun ? "pr-28" : ""
                                 }`}
                                 value={code}
@@ -243,6 +243,8 @@ export function CodeBlock({
                                 maxLength={maxLength}
                                 required={required}
                                 spellCheck={false}
+                                autoCorrect="off"
+                                autoCapitalize="off"
                                 aria-label={t("source-code")}
                             />
                         )}
