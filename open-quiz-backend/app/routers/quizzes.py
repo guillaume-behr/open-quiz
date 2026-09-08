@@ -2281,6 +2281,8 @@ def list_student_quiz_history(
                     question_points.get(question.id, 0),
                 )
                 submitted_answers = review.submitted_answers
+                score = review.score
+                max_score = review.max_score
                 if question.answer_mode == "written":
                     is_correct = (
                         answer.is_graded
@@ -2294,6 +2296,8 @@ def list_student_quiz_history(
                     is_correct = selected_choice_ids(answer) == correct_ids
             else:
                 submitted_answers = []
+                score = 0.0
+                max_score = float(question_points.get(question.id, 0))
                 is_correct = False
             answers.append(
                 StudentQuizHistoryAnswer(
@@ -2306,6 +2310,8 @@ def list_student_quiz_history(
                     expected_answers=[
                         choice.label for choice in question_choices if choice.is_correct
                     ],
+                    score=score,
+                    max_score=max_score,
                     is_correct=is_correct,
                 )
             )

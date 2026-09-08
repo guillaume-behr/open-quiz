@@ -1,8 +1,27 @@
 import { clsx, type ClassValue } from "clsx"
+import type { CSSProperties } from "react"
 import { twMerge } from "tailwind-merge"
 
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
+}
+
+/** Color/border/background for a graded score, blended from destructive (0)
+ * to success (max) so partial credit doesn't read as a plain failure. */
+export function scoreGradientStyle(
+    score: number,
+    maxScore: number
+): CSSProperties {
+    const ratio = maxScore > 0 ? Math.max(0, Math.min(1, score / maxScore)) : 0
+    const successPercent = Math.round(ratio * 100)
+    const color = `color-mix(in oklch, var(--destructive) ${
+        100 - successPercent
+    }%, var(--success) ${successPercent}%)`
+    return {
+        color,
+        borderColor: color,
+        backgroundColor: `color-mix(in oklch, ${color} 12%, transparent)`,
+    }
 }
 
 export function isRtlLanguage(language: string | null | undefined): boolean {

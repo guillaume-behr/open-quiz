@@ -3,6 +3,7 @@ import { formatScore } from "@/components/results/results-utils"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { scoreGradientStyle } from "@/lib/utils"
 import { LoaderCircle, Save } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -125,7 +126,9 @@ function AnswerReview({
                     value={
                         answer.submitted_answers.join(", ") || t("no-answer")
                     }
-                    correctness={answer.is_correct}
+                    graded={answer.is_correct !== null}
+                    score={answer.score}
+                    maxScore={answer.max_score}
                 />
                 <AnswerText
                     label={t("expected-answer-help")}
@@ -179,31 +182,38 @@ function AnswerText({
     label,
     value,
     highlighted = false,
-    correctness,
+    graded = false,
+    score,
+    maxScore,
 }: {
     label: string
     value: string
     highlighted?: boolean
-    correctness?: boolean | null
+    graded?: boolean
+    score?: number
+    maxScore?: number
 }) {
     const { t } = useTranslation()
+    const style =
+        graded && score !== undefined && maxScore !== undefined
+            ? scoreGradientStyle(score, maxScore)
+            : undefined
     return (
         <div
             className={
                 highlighted
                     ? "rounded-lg bg-primary/5 p-3"
-                    : correctness === true
-                      ? "rounded-lg border border-success/40 bg-success/10 p-3 text-success"
-                      : correctness === false
-                        ? "rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive"
-                        : "rounded-lg bg-muted/60 p-3"
+                    : style
+                      ? "rounded-lg border p-3"
+                      : "rounded-lg bg-muted/60 p-3"
             }
+            style={style}
         >
             <p className="text-xs font-medium">
                 {label}
-                {correctness !== undefined && correctness !== null && (
+                {style && score !== undefined && maxScore !== undefined && (
                     <span className="sr-only">
-                        {` — ${t(correctness ? "training-correct" : "training-incorrect")}`}
+                        {` — ${t(score >= maxScore ? "training-correct" : "training-incorrect")}`}
                     </span>
                 )}
             </p>

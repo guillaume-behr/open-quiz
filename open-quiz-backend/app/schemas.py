@@ -790,6 +790,8 @@ class StudentQuizHistoryAnswer(BaseModel):
     answer_mode: Literal["single", "multiple", "written"]
     submitted_answers: list[str]
     expected_answers: list[str]
+    score: float
+    max_score: float
     is_correct: bool | None
 
 

@@ -1,5 +1,6 @@
 import { getStudentQuizHistory } from "@/api/student-auth"
 import type { StudentQuizHistoryItem } from "@/api/types"
+import { scoreGradientStyle } from "@/lib/utils"
 import { Accordion } from "@base-ui/react/accordion"
 import { BookOpenCheck, ChevronDown, LoaderCircle } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
@@ -114,18 +115,22 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                             className={
                                                 answer.is_correct === null
                                                     ? "rounded-lg border bg-muted/30 p-3"
-                                                    : answer.is_correct
-                                                      ? "p-3"
-                                                      : "rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive"
+                                                    : "rounded-lg border p-3"
+                                            }
+                                            style={
+                                                answer.is_correct === null
+                                                    ? undefined
+                                                    : scoreGradientStyle(
+                                                          answer.score,
+                                                          answer.max_score
+                                                      )
                                             }
                                         >
                                             <p
                                                 className={
                                                     answer.is_correct === null
                                                         ? "font-medium text-muted-foreground"
-                                                        : answer.is_correct
-                                                          ? "font-medium text-muted-foreground"
-                                                          : "font-medium"
+                                                        : "font-medium"
                                                 }
                                             >
                                                 {t("student-answer")}
@@ -136,9 +141,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                     </span>
                                                 )}
                                             </p>
-                                            <p
-                                                className={`mt-1 whitespace-pre-wrap ${answer.is_correct === false ? "text-destructive" : ""}`}
-                                            >
+                                            <p className="mt-1 whitespace-pre-wrap">
                                                 {answer.submitted_answers.join(
                                                     ", "
                                                 ) || t("no-answer")}
