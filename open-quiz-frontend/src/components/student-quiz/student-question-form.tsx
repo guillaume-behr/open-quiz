@@ -4,6 +4,7 @@ import {
     CodeBlock,
     StaticCodeBlock,
 } from "@/components/question-banks/code-block"
+import { indentCode } from "@/components/question-banks/code-editor-utils"
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
@@ -217,6 +218,9 @@ function WrittenAnswer({
                         editable
                         runnable={question.allow_code_execution}
                         onCodeChange={onAnswerChange}
+                        onCodeKeyDown={(event) =>
+                            indentCode(event, answer, onAnswerChange)
+                        }
                         editorClassName="min-h-96 lg:min-h-[32rem]"
                         required
                     />
