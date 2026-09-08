@@ -107,7 +107,10 @@ Les changements importants d’Open Quiz sont regroupés dans ce fichier.
 - mises à jour temps réel des sessions actives, rattrapages, participants et
   résultats par WebSocket authentifié ;
 - publication des notes après correction complète et historique consultable
-  par l’élève.
+  par l’élève ;
+- correction partielle visible par l’élève dès la fin de l’examen, avant la
+  publication des notes par l’enseignant, avec un avertissement rappelant que
+  la note affichée est provisoire.
 
 ### Interface
 

@@ -2200,7 +2200,6 @@ def list_student_quiz_history(
             .where(
                 QuizParticipant.student_id.in_(membership_ids),
                 QuizSession.status == "finished",
-                QuizSession.grades_published_at.is_not(None),
                 QuizSession.started_at.is_not(None),
                 Quiz.mode == "exam",
             )
@@ -2285,9 +2284,9 @@ def list_student_quiz_history(
                 max_score = review.max_score
                 if question.answer_mode == "written":
                     is_correct = (
-                        answer.is_graded
-                        and review.max_score > 0
-                        and answer.score >= review.max_score
+                        (answer.score >= review.max_score)
+                        if answer.is_graded and review.max_score > 0
+                        else None
                     )
                 else:
                     correct_ids = {
@@ -2328,28 +2327,21 @@ def list_student_quiz_history(
                     else quiz_session.class_name
                 ),
                 started_at=quiz_session.started_at,
-                score=(
-                    round(
-                        sum(
-                            answer.score
-                            for answer in answers_by_question.values()
-                            if answer is not None
-                        ),
-                        2,
-                    )
-                    if quiz_session.grades_published_at is not None
-                    else None
+                grades_published=quiz_session.grades_published_at is not None,
+                score=round(
+                    sum(
+                        answer.score
+                        for answer in answers_by_question.values()
+                        if answer is not None
+                    ),
+                    2,
                 ),
-                maximum_score=(
-                    round(
-                        sum(
-                            question_points.get(question_id, 0)
-                            for question_id in question_ids
-                        ),
-                        2,
-                    )
-                    if quiz_session.grades_published_at is not None
-                    else None
+                maximum_score=round(
+                    sum(
+                        question_points.get(question_id, 0)
+                        for question_id in question_ids
+                    ),
+                    2,
                 ),
                 answers=answers,
             )

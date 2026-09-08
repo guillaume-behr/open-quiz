@@ -800,6 +800,7 @@ class StudentQuizHistoryItem(BaseModel):
     quiz_title: str
     class_name: str
     started_at: datetime
+    grades_published: bool
     score: float | None = None
     maximum_score: float | None = None
     answers: list[StudentQuizHistoryAnswer]

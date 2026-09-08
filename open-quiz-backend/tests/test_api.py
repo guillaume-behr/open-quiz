@@ -3029,13 +3029,24 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 assert resubmitted.json()["question_number"] == 3
 
         assert teacher_state["status"] == "finished"
-        student_history = client.get(
+        assert teacher_state["participants"][0]["score"] > 0
+        partial_history = client.get(
             "/api/quizzes/student/results",
             headers=exam_account_headers,
         )
-        assert student_history.status_code == 200
-        assert student_history.json() == []
-        assert teacher_state["participants"][0]["score"] > 0
+        assert partial_history.status_code == 200
+        partial_item = partial_history.json()[0]
+        assert partial_item["session_id"] == quiz_session["id"]
+        assert partial_item["grades_published"] is False
+        assert partial_item["score"] == teacher_state["participants"][0]["score"]
+        assert 0 < partial_item["score"] < partial_item["maximum_score"]
+        partial_written = next(
+            answer
+            for answer in partial_item["answers"]
+            if answer["answer_mode"] == "written"
+        )
+        assert partial_written["is_correct"] is None
+        assert partial_written["score"] == 0
         assert (
             client.get(
                 "/api/quizzes/sessions/active",
@@ -3185,6 +3196,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         ).json()[0]
         assert published_history["session_id"] == quiz_session["id"]
         assert published_history["quiz_title"] == quiz["title"]
+        assert published_history["grades_published"] is True
         assert (
             published_history["score"] == published.json()["participants"][0]["score"]
         )
@@ -3192,8 +3204,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert len(published_history["answers"]) == 3
         assert all(answer["is_correct"] for answer in published_history["answers"])
         assert all(
-            {"score", "max_score", "is_graded"}.isdisjoint(answer)
-            for answer in published_history["answers"]
+            {"is_graded"}.isdisjoint(answer) for answer in published_history["answers"]
         )
         assert (
             client.post(

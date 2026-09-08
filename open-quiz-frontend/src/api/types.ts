@@ -249,6 +249,7 @@ export type StudentQuizHistoryItem = {
     quiz_title: string
     class_name: string
     started_at: string
+    grades_published: boolean
     score: number | null
     maximum_score: number | null
     answers: StudentQuizHistoryAnswer[]
