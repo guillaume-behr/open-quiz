@@ -8,19 +8,7 @@ Consultez aussi le [README principal](../README.md), le
 [guide de déploiement](../docs/deployment.md) et le
 [guide de contribution](../CONTRIBUTING.md).
 
-## Installation avec Docker
-
-Le backend fait partie de l’installation Docker Compose d’Open Quiz, qui
-configure également PostgreSQL et le frontend. Depuis la racine du dépôt,
-suivez la [procédure d’installation recommandée](../README.md#installation) :
-
-```shell
-sh ./install.sh
-```
-
-Le lancement direct avec Python décrit plus bas est réservé au développement.
-
-## Technologies
+## 🧰 Technologies
 
 - Python 3.14 et uv ;
 - FastAPI et Uvicorn ;
@@ -28,7 +16,7 @@ Le lancement direct avec Python décrit plus bas est réservé au développement
 - Argon2, JWT, TOTP et Fernet pour les mécanismes d’authentification ;
 - pytest, Ruff et pip-audit pour la qualité et la sécurité.
 
-## Développement local
+## 💻 Développement local
 
 Cette procédure lance uniquement l’API en mode développement. Elle ne remplace
 pas l’installation Docker Compose recommandée pour utiliser une instance.
@@ -77,7 +65,7 @@ OpenAPI sont disponibles sur :
 
 Ces trois routes sont désactivées en production.
 
-## Configuration
+## ⚙️ Configuration
 
 Les valeurs sont chargées depuis `.env`. Ce fichier est protégé en mode `0600`
 sur les systèmes POSIX.
@@ -102,23 +90,25 @@ est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` 
 
 ### Sessions, limites et conservation
 
-| Variable                        | Défaut  | Valeurs acceptées |
-| ------------------------------- | ------- | ----------------- |
-| `ACCESS_TOKEN_MINUTES`          | `15`    | 1 à 30            |
-| `REFRESH_TOKEN_DAYS`            | `7`     | 1 à 30            |
-| `LOGIN_ATTEMPTS`                | `10`    | 3 à 50            |
-| `LOGIN_WINDOW_SECONDS`          | `900`   | 60 minimum        |
-| `GLOBAL_LOGIN_ATTEMPTS`         | `2000`  | 50 à 100 000      |
-| `GLOBAL_LOGIN_WINDOW_SECONDS`   | `60`    | 10 à 3 600        |
-| `QUIZ_JOIN_ATTEMPTS`            | `60`    | 5 à 500           |
-| `QUIZ_PARTICIPANT_ATTEMPTS`     | `900`   | 30 à 5 000        |
-| `QUIZ_VIOLATION_ATTEMPTS`       | `60`    | 5 à 500           |
-| `QUIZ_RATE_WINDOW_SECONDS`      | `60`    | 10 à 3 600        |
-| `QUIZ_RESULT_RETENTION_DAYS`    | `365`   | 1 à 3 650 jours   |
-| `PROBLEM_REPORT_ATTEMPTS`       | `60`    | 1 à 5 000         |
-| `PROBLEM_REPORT_WINDOW_SECONDS` | `900`   | 60 à 86 400       |
-| `PROBLEM_REPORT_RETENTION_DAYS` | `90`    | 1 à 365 jours     |
-| `MAX_REQUEST_BODY_BYTES`        | `65536` | 1 024 à 1 048 576 |
+| Variable                           | Défaut  | Valeurs acceptées |
+| ---------------------------------- | ------- | ----------------- |
+| `ACCESS_TOKEN_MINUTES`             | `15`    | 1 à 30            |
+| `REFRESH_TOKEN_DAYS`               | `7`     | 1 à 30            |
+| `LOGIN_ATTEMPTS`                   | `10`    | 3 à 50            |
+| `LOGIN_WINDOW_SECONDS`             | `900`   | 60 minimum        |
+| `GLOBAL_LOGIN_ATTEMPTS`            | `2000`  | 50 à 100 000      |
+| `GLOBAL_LOGIN_WINDOW_SECONDS`      | `60`    | 10 à 3 600        |
+| `QUIZ_JOIN_ATTEMPTS`               | `60`    | 5 à 500           |
+| `QUIZ_PARTICIPANT_ATTEMPTS`        | `900`   | 30 à 5 000        |
+| `QUIZ_VIOLATION_ATTEMPTS`          | `60`    | 5 à 500           |
+| `QUIZ_RATE_WINDOW_SECONDS`         | `60`    | 10 à 3 600        |
+| `QUIZ_RESULT_RETENTION_DAYS`       | `365`   | 1 à 3 650 jours   |
+| `TRAINING_RESULT_RETENTION_DAYS`   | `365`   | 1 à 3 650 jours   |
+| `ABANDONED_SESSION_RETENTION_DAYS` | `7`     | 1 à 90 jours      |
+| `PROBLEM_REPORT_ATTEMPTS`          | `60`    | 1 à 5 000         |
+| `PROBLEM_REPORT_WINDOW_SECONDS`    | `900`   | 60 à 86 400       |
+| `PROBLEM_REPORT_RETENTION_DAYS`    | `90`    | 1 à 365 jours     |
+| `MAX_REQUEST_BODY_BYTES`           | `65536` | 1 024 à 1 048 576 |
 
 Le modèle de production réduit volontairement
 `PROBLEM_REPORT_ATTEMPTS` à `5`. Ce quota concerne toute l’instance et évite
@@ -131,10 +121,10 @@ import peut contenir jusqu’à 64 Mio d’images décodées et chaque image jus
 20 Mio. Un reverse proxy placé devant l’API doit conserver une exception
 équivalente pour ces routes.
 
-Les variables légales et d’accessibilité sont décrites dans le
-[guide de déploiement](../docs/deployment.md#renseigner-les-informations-publiques).
+Les variables RGPD, légales et d’accessibilité sont décrites une à une dans le
+[guide de déploiement](../docs/deployment.md#-configurer-les-mentions-rgpd-et-légales).
 
-## Vue d’ensemble de l’API
+## 🗺️ Vue d’ensemble de l’API
 
 La documentation OpenAPI locale reste la source la plus précise pour les
 schémas de requête et de réponse.
@@ -190,7 +180,7 @@ Le bus temps réel est conservé en mémoire. Le conteneur utilise donc un seul
 worker Uvicorn. N’activez pas plusieurs workers sans remplacer ce bus par un
 mécanisme partagé et tester le comportement en charge.
 
-## Modèle fonctionnel
+## 🧩 Modèle fonctionnel
 
 - l’administrateur crée et gère les comptes enseignants ;
 - chaque enseignant possède ses comptes élèves, ses classes et ses banques ;
@@ -216,7 +206,7 @@ Les notes publiées sont verrouillées. Les alertes de surveillance envoyées pa
 le navigateur sont informatives, non exhaustives et falsifiables ; elles ne
 doivent jamais déclencher seules une sanction ou une décision automatique.
 
-## Imports et exports
+## 🔁 Imports et exports
 
 ### Classes et élèves
 
@@ -259,7 +249,7 @@ avant stockage. Les métadonnées et les trames d’animation ne sont pas
 conservées. Une image destinée à un élève n’est accessible qu’avec le jeton de
 sa participation et pendant une session valide.
 
-## Stockage et conservation
+## 🗄️ Stockage et conservation
 
 Docker Compose exécute PostgreSQL dans `open-quiz-database` et conserve ses
 données dans le volume `open-quiz-postgres-data`. Le backend accepte uniquement
@@ -267,14 +257,30 @@ une URL PostgreSQL et crée le schéma courant dans une base vide au démarrage.
 Il n’existe pas de reprise depuis les anciennes bases : le passage à cette
 version nécessite un nouveau volume PostgreSQL.
 
-La purge des résultats et signalements expirés s’exécute au démarrage puis
-toutes les heures. Un enseignant peut aussi supprimer immédiatement un résultat
-et toutes ses participations, réponses et alertes associées.
+La purge s’exécute au démarrage puis toutes les heures. Elle couvre les
+résultats d’examens et les entraînements terminés au-delà de leur durée, les
+signalements expirés, les sessions de rafraîchissement et défis
+d’authentification périmés, et les compteurs de limitation obsolètes.
+
+La même passe solde les sessions qu’un enseignant n’a jamais clôturées. Une
+session ne quitte son statut actif que lorsque son propriétaire ouvre son
+tableau de bord : un compte désactivé ou parti figerait sinon indéfiniment les
+noms, les copies et les alertes de surveillance. Passé
+`ABANDONED_SESSION_RETENTION_DAYS`, un examen qui a recueilli des réponses est
+noté puis conservé au titre de `QUIZ_RESULT_RETENTION_DAYS`, tandis qu’une
+salle d’attente restée sans réponse et les entraînements interrompus sont
+supprimés.
+
+Un enseignant peut aussi supprimer immédiatement un résultat et toutes ses
+participations, réponses et alertes associées. Un administrateur peut supprimer
+un compte enseignant : le compte et tout ce qu’il détient — classes, comptes
+élèves, banques, questions, quiz, sessions et copies — sont effacés, l’opération
+étant refusée tant qu’une session d’examen est en cours.
 
 Pour une procédure de sauvegarde et restauration PostgreSQL, consultez le
-[guide d’exploitation](../docs/deployment.md#sauvegarder-les-données).
+[guide d’exploitation](../docs/deployment.md#-sauvegarder-les-données).
 
-## Sécurité et exploitation
+## 🛡️ Sécurité et exploitation
 
 - tous les mots de passe sont hachés avec Argon2 ;
 - les secrets TOTP et les copies récupérables des mots de passe élèves sont
@@ -291,7 +297,7 @@ Le conteneur limite Uvicorn à 1 024 connexions concurrentes, mais ce nombre
 n’est pas une garantie de capacité. Dimensionnez et testez l’instance selon la
 machine, la taille des classes, les images et le trafic attendu.
 
-## Scripts d’administration
+## 📜 Scripts d’administration
 
 ### Réinitialiser le TOTP d’un compte
 
@@ -329,21 +335,16 @@ Ce script vise uniquement un environnement de développement local. Avec
 l’installation Docker Compose, modifiez le fichier `.env` de l’hôte, protégez
 l’ancienne copie puis recréez le service.
 
-## Vérifications
+## ✅ Vérifications
 
 Les tests ont besoin du rôle et de la base `open_quiz_test`, créés par
 `sh ./install-dev.sh` depuis la racine du dépôt. Définissez `TEST_DATABASE_URL`
 pour viser un autre serveur PostgreSQL.
 
-Installez les dépendances de développement puis reproduisez les contrôles CI :
+Lancez la suite seule pendant le développement :
 
 ```shell
-uv sync --frozen --dev
-uv run --frozen ruff check app tests main.py scripts
-uv run --frozen ruff check --select S app main.py scripts
-uv run --frozen ruff format --check app tests main.py scripts
-uv run --frozen pytest -q
-uv run --frozen pip-audit
+uv run pytest -q
 ```
 
 Appliquez le formatage avec :
@@ -351,6 +352,10 @@ Appliquez le formatage avec :
 ```shell
 uv run ruff format app tests main.py scripts
 ```
+
+La liste ordonnée des contrôles à reproduire avant une pull request — lint,
+règles de sécurité, formatage, tests et audit des dépendances — est tenue dans
+le [guide de contribution](../CONTRIBUTING.md#-vérifications).
 
 Avant de contribuer, consultez [CONTRIBUTING.md](../CONTRIBUTING.md). Signalez
 les vulnérabilités selon [SECURITY.md](../SECURITY.md), jamais dans une issue

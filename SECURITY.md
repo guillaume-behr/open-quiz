@@ -4,7 +4,7 @@ La sécurité des comptes et des données scolaires est une priorité d’Open Q
 Merci de signaler les vulnérabilités de manière privée afin de laisser le temps
 d’analyser et de corriger le problème avant sa divulgation.
 
-## Versions prises en charge
+## 📌 Versions prises en charge
 
 Open Quiz est encore en préversion et seule la branche par défaut est maintenue.
 
@@ -13,10 +13,11 @@ Open Quiz est encore en préversion et seule la branche par défaut est maintenu
 | Dernier état de `master`       | oui                    |
 | Versions et commits antérieurs | non                    |
 
-Le [journal des versions](CHANGELOG.md) indique les changements incompatibles
-et les précautions de mise à jour.
+Les changements incompatibles et les précautions de mise à jour sont décrits
+dans les notes de chaque release et dans le
+[guide de déploiement](docs/deployment.md#-mettre-à-jour-open-quiz).
 
-## Signaler une vulnérabilité
+## 🚨 Signaler une vulnérabilité
 
 Utilisez le
 [formulaire privé de vulnérabilité GitHub](https://github.com/guillaume-behr/open-quiz/security/advisories/new).
@@ -41,7 +42,7 @@ partageront l’état d’avancement dans l’advisory et coordonneront la divul
 Si vous n’avez reçu aucun retour après sept jours, relancez dans le même canal
 privé.
 
-## Périmètre
+## 🎯 Périmètre
 
 Sont notamment dans le périmètre :
 
@@ -61,7 +62,7 @@ Ne sont pas considérés comme une vulnérabilité du projet :
 - les attaques par déni de service nécessitant de perturber une instance réelle ;
 - les failles d’un service tiers sans impact démontré sur Open Quiz.
 
-## Recherche de bonne foi
+## 🤝 Recherche de bonne foi
 
 Pour limiter les risques :
 
@@ -77,7 +78,7 @@ Les recherches qui respectent ces règles seront traitées comme des démarches 
 bonne foi. La divulgation publique sera coordonnée après la disponibilité d’un
 correctif ou d’une mesure de réduction du risque.
 
-## Frontières de confiance
+## 🧱 Frontières de confiance
 
 Les alertes de surveillance d’un quiz proviennent du navigateur de l’élève.
 Elles sont informatives, non exhaustives et non résistantes à la falsification.
@@ -93,7 +94,7 @@ Les sessions privilégiées exigent une preuve de renouvellement conservée dans
 la fenêtre principale et inaccessible au Worker Python. Les autorisations et la
 notation restent appliquées par le backend.
 
-## Réagir à un secret compromis
+## 🔥 Réagir à un secret compromis
 
 Révoquez ou remplacez d’abord le secret dans le système actif. Nettoyer
 l’historique Git ne suffit pas à rendre un secret sûr.
@@ -110,5 +111,5 @@ l’historique Git ne suffit pas à rendre un secret sûr.
 7. examinez les événements d’audit, les accès à la base et les sauvegardes ;
 8. retirez enfin le secret de l’historique accessible et des caches associés.
 
-Le [guide d’exploitation](docs/deployment.md#gérer-les-secrets-et-les-accès)
+Le [guide d’exploitation](docs/deployment.md#-gérer-les-secrets-et-les-accès)
 détaille les effets de chaque rotation.

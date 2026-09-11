@@ -6825,23 +6825,6 @@ def test_leaving_without_answering_keeps_the_session_rejoinable(
         assert rejoined.status_code == 201
 
 
-def test_the_changelog_documents_the_released_version() -> None:
-    """The newest changelog entry must name the version being shipped."""
-    repository = Path(__file__).resolve().parent.parent.parent
-    version = tomllib.loads(
-        (repository / "open-quiz-backend" / "pyproject.toml").read_text()
-    )["project"]["version"]
-    headings = [
-        line
-        for line in (repository / "CHANGELOG.md").read_text().splitlines()
-        if line.startswith("## ")
-    ]
-    assert headings, "the changelog has no version heading"
-    assert headings[0].startswith(f"## {version} "), (
-        f"newest changelog heading is {headings[0]!r}, expected version {version}"
-    )
-
-
 def test_the_four_version_fields_agree() -> None:
     """The published version is written in four files that must not drift.
 
