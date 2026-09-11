@@ -1,5 +1,6 @@
 import {
     createUser,
+    deleteUser,
     getUsers,
     resetUserCredentials,
     updateUserStatus,
@@ -26,6 +27,7 @@ import { errorMessage } from "@/lib/errors"
 import {
     LoaderCircle,
     KeyRound,
+    Trash2,
     LogOut,
     MessageSquareWarning,
     ShieldCheck,
@@ -64,6 +66,7 @@ export function AdminDashboard() {
     const [success, setSuccess] = useState("")
     const [isCreating, setIsCreating] = useState(false)
     const [recoveryUser, setRecoveryUser] = useState<User | null>(null)
+    const [deletingUser, setDeletingUser] = useState<User | null>(null)
     const [isUpdatingUser, setIsUpdatingUser] = useState(false)
 
     async function loadUsers(page: number) {
@@ -178,6 +181,24 @@ export function AdminDashboard() {
             )
         } catch (caught) {
             setError(errorMessage(caught, t("user-update-error")))
+        } finally {
+            setIsUpdatingUser(false)
+        }
+    }
+
+    async function handleDelete() {
+        if (!deletingUser) return
+        setError("")
+        setSuccess("")
+        setIsUpdatingUser(true)
+        try {
+            const { id, username } = deletingUser
+            await deleteUser(id)
+            setDeletingUser(null)
+            await loadUsers(usersPage)
+            setSuccess(t("user-deleted", { username }))
+        } catch (caught) {
+            setError(errorMessage(caught, t("user-delete-error")))
         } finally {
             setIsUpdatingUser(false)
         }
@@ -483,6 +504,21 @@ export function AdminDashboard() {
                                                                 : "enable"
                                                         )}
                                                     </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        onClick={() =>
+                                                            setDeletingUser(
+                                                                user
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            isUpdatingUser
+                                                        }
+                                                    >
+                                                        <Trash2 />
+                                                        {t("delete")}
+                                                    </Button>
                                                 </>
                                             )}
                                         </div>
@@ -496,6 +532,37 @@ export function AdminDashboard() {
                             />
                         </section>
                     </div>
+                    <Dialog
+                        open={deletingUser !== null}
+                        onOpenChange={(open) => {
+                            if (!open && !isUpdatingUser) setDeletingUser(null)
+                        }}
+                        title={t("delete-user")}
+                        description={t("delete-user-help", {
+                            username: deletingUser?.username,
+                        })}
+                        size="sm"
+                    >
+                        <div className="mt-4 flex justify-end gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setDeletingUser(null)}
+                                disabled={isUpdatingUser}
+                            >
+                                {t("cancel")}
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={() => void handleDelete()}
+                                disabled={isUpdatingUser}
+                            >
+                                {isUpdatingUser && (
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                                )}
+                                {t("delete")}
+                            </Button>
+                        </div>
+                    </Dialog>
                     <Dialog
                         open={recoveryUser !== null}
                         onOpenChange={(open) => {

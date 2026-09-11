@@ -256,6 +256,7 @@ export function PrivacyPage() {
     const { information, loadFailed } = usePublicInformation()
     const pending = !information && !loadFailed
     const quizDays = information?.privacy.quiz_result_retention_days
+    const trainingDays = information?.privacy.training_result_retention_days
     const reportDays = information?.privacy.problem_report_retention_days
 
     return (
@@ -312,6 +313,9 @@ export function PrivacyPage() {
                 <h2>{t("privacy-data-title")}</h2>
                 <p>{t("privacy-data-text")}</p>
                 <p className="mt-3">{t("privacy-data-source")}</p>
+                <p className="mt-3 text-muted-foreground">
+                    {t("privacy-data-obligation")}
+                </p>
             </section>
 
             <section>
@@ -326,6 +330,11 @@ export function PrivacyPage() {
             </section>
 
             <section>
+                <h2>{t("privacy-transfers-title")}</h2>
+                <p>{t("privacy-transfers-text")}</p>
+            </section>
+
+            <section>
                 <h2>{t("privacy-retention-title")}</h2>
                 <dl>
                     <Definition term={t("privacy-retention-quiz-label")}>
@@ -334,6 +343,15 @@ export function PrivacyPage() {
                         ) : (
                             t("privacy-retention-quiz-value", {
                                 count: quizDays,
+                            })
+                        )}
+                    </Definition>
+                    <Definition term={t("privacy-retention-training-label")}>
+                        {trainingDays === undefined ? (
+                            <ConfigValue value="" pending={pending} />
+                        ) : (
+                            t("privacy-retention-training-value", {
+                                count: trainingDays,
                             })
                         )}
                     </Definition>
@@ -365,6 +383,9 @@ export function PrivacyPage() {
                         )}
                     </Definition>
                 </dl>
+                <p className="mt-4 text-muted-foreground">
+                    {t("privacy-retention-deletion-note")}
+                </p>
             </section>
 
             <section>
@@ -375,6 +396,7 @@ export function PrivacyPage() {
             <section>
                 <h2>{t("privacy-rights-title")}</h2>
                 <p>{t("privacy-rights-text")}</p>
+                <p className="mt-3">{t("privacy-rights-consent-text")}</p>
                 <p className="mt-3">
                     {t("privacy-complaint-before-link")}{" "}
                     <OfficialLink href="https://www.cnil.fr/fr/plaintes">

@@ -24,6 +24,7 @@ test.beforeEach(async ({ page }) => {
                     student_data_retention: "Until class deletion",
                     security_log_retention: "One year",
                     quiz_result_retention_days: 365,
+                    training_result_retention_days: 365,
                     problem_report_retention_days: 90,
                 },
                 cookies: { authentication_max_age_days: 30 },
@@ -62,7 +63,7 @@ test("legal notice reports unavailable instance information", async ({
 test("footer links open each public information page", async ({ page }) => {
     await page.goto("/student/login")
 
-    await expect(page.locator("footer")).toContainText("0.2.1")
+    await expect(page.locator("footer")).toContainText("0.3.0")
 
     const destinations = [
         ["Personal data", "/privacy"],
@@ -109,6 +110,7 @@ test("unsafe configured external URLs are not rendered as links", async ({
                     student_data_retention: "Until class deletion",
                     security_log_retention: "One year",
                     quiz_result_retention_days: 365,
+                    training_result_retention_days: 365,
                     problem_report_retention_days: 90,
                 },
                 cookies: { authentication_max_age_days: 30 },
