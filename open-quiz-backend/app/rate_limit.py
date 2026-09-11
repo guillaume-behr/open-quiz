@@ -61,7 +61,12 @@ def _reserve_window(
 class LoginRateLimiter:
     """Database-backed authentication limiter shared by all API workers."""
 
-    BUCKET_HEX_CHARACTERS = 4
+    # 16.7M buckets. The bound exists to stop attacker-chosen identifiers from
+    # growing the table without limit, not to be small: at four characters two
+    # unrelated accounts collided often enough that failed logins against one
+    # locked the other out. Expired rows are deleted on every reservation, so
+    # the extra width costs far less than that collateral lockout.
+    BUCKET_HEX_CHARACTERS = 6
 
     def __init__(
         self,
