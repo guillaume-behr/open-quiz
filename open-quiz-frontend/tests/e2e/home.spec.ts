@@ -602,6 +602,9 @@ test("a student reviews the correction history", async ({ page }) => {
                     started_at: "2026-01-06T10:01:00Z",
                     score: 7,
                     maximum_score: 10,
+                    // Without this the panel opens the provisional-grade
+                    // dialog, which hides the accordion behind a modal.
+                    grades_published: true,
                     answers: [
                         {
                             question_id: 93,
@@ -612,6 +615,8 @@ test("a student reviews the correction history", async ({ page }) => {
                             submitted_answers: ["Venus"],
                             expected_answers: ["Mars"],
                             is_correct: false,
+                            score: 0,
+                            max_score: 1,
                         },
                     ],
                 },
@@ -634,8 +639,13 @@ test("a student reviews the correction history", async ({ page }) => {
     await expect(correctionTrigger).toHaveAttribute("aria-expanded", "true")
     await expect(page.getByText("Grade: 7 / 10")).toBeVisible()
     await expect(page.getByText("Which planet is red?")).toBeVisible()
-    await expect(page.getByText("Venus", { exact: true })).toHaveClass(
-        /text-destructive/
+    // A wrong answer sits at the destructive end of the same gradient, which
+    // the surrounding block carries as an inline style rather than a class.
+    await expect(
+        page.getByText("Venus", { exact: true }).locator("..")
+    ).toHaveAttribute(
+        "style",
+        /var\(--destructive\) 100%, var\(--success\) 0%/
     )
     await expect(page.getByText("Review this answer")).toBeAttached()
     await expect(page.getByText("Mars", { exact: true })).toBeVisible()

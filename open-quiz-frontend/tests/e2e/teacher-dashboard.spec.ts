@@ -2038,9 +2038,15 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await answersDialog.getByLabel("Awarded score").fill("3.5")
     await answersDialog.getByRole("button", { name: "Confirm grade" }).click()
     await expect(answersDialog.getByText("3.5 / 5")).toBeVisible()
+    // Partial credit is coloured by an inline gradient, not a class: 3.5 out
+    // of 5 sits 70% of the way from destructive to success. A solid red here
+    // would mean partial credit reads as an outright failure again.
     await expect(
         answersDialog.getByText("Energy moves between systems.").locator("..")
-    ).toHaveClass(/text-destructive/)
+    ).toHaveAttribute(
+        "style",
+        /var\(--destructive\) 30%, var\(--success\) 70%/
+    )
     expect(
         requests
             .find((request) =>
