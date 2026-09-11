@@ -1,4 +1,12 @@
 import { expect, test } from "@playwright/test"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+
+// Read the shipped version instead of restating it: the footer literal
+// had already drifted two releases behind the rest of the project.
+const { version } = JSON.parse(
+    readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8")
+) as { version: string }
 
 test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -63,7 +71,7 @@ test("legal notice reports unavailable instance information", async ({
 test("footer links open each public information page", async ({ page }) => {
     await page.goto("/student/login")
 
-    await expect(page.locator("footer")).toContainText("0.3.0")
+    await expect(page.locator("footer")).toContainText(version)
 
     const destinations = [
         ["Personal data", "/privacy"],
