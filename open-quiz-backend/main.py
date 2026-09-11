@@ -42,6 +42,10 @@ from app.routers import (
     users,
 )
 from app.security import hash_password, verify_password
+from app.session_retention import (
+    close_abandoned_sessions,
+    expired_training_session_ids,
+)
 
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
 MANAGED_ADMIN_KEY = "managed_admin_user_id"
@@ -186,6 +190,12 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
     quiz_cutoff = datetime.now(UTC) - timedelta(
         days=settings.quiz_result_retention_days
     )
+    training_cutoff = datetime.now(UTC) - timedelta(
+        days=settings.training_result_retention_days
+    )
+    abandoned_cutoff = datetime.now(UTC) - timedelta(
+        days=settings.abandoned_session_retention_days
+    )
     report_cutoff = datetime.now(UTC) - timedelta(
         days=settings.problem_report_retention_days
     )
@@ -195,6 +205,9 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
         settings.problem_report_window_seconds,
     )
     with session_factory() as session:
+        closed_count, discarded_count = close_abandoned_sessions(
+            abandoned_cutoff, session
+        )
         expired_quiz_session_ids = list(
             session.scalars(
                 select(QuizSession.id)
@@ -208,6 +221,9 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
             )
         )
         delete_quiz_session_records(expired_quiz_session_ids, session)
+
+        expired_training_ids = expired_training_session_ids(training_cutoff, session)
+        delete_quiz_session_records(expired_training_ids, session)
 
         expired_refresh_session_ids = select(RefreshSession.id).where(
             RefreshSession.expires_at <= now
@@ -238,6 +254,9 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
     if any(
         (
             expired_quiz_session_ids,
+            expired_training_ids,
+            closed_count,
+            discarded_count,
             expired_refresh_count,
             expired_challenge_count,
             expired_report_count,
@@ -246,10 +265,49 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
         audit_event(
             "security.data_retention_enforced",
             quiz_sessions=len(expired_quiz_session_ids),
+            training_sessions=len(expired_training_ids),
+            abandoned_sessions_closed=closed_count,
+            abandoned_sessions_discarded=discarded_count,
             refresh_sessions=expired_refresh_count,
             authentication_challenges=expired_challenge_count,
             problem_reports=expired_report_count,
         )
+
+
+PUBLIC_INFORMATION_VARIABLES = (
+    ("LEGAL_HOST_NAME", "legal_host_name"),
+    ("LEGAL_HOST_ADDRESS", "legal_host_address"),
+    # The legal notice flags the host as incomplete without its phone number,
+    # so the startup warning has to consider it required too.
+    ("LEGAL_HOST_PHONE", "legal_host_phone"),
+    ("PRIVACY_CONTROLLER_NAME", "privacy_controller_name"),
+    ("PRIVACY_CONTROLLER_CONTACT", "privacy_controller_contact"),
+    ("PRIVACY_LEGAL_BASIS", "privacy_legal_basis"),
+    ("PRIVACY_RECIPIENTS", "privacy_recipients"),
+    ("PRIVACY_TEACHER_DATA_RETENTION", "privacy_teacher_data_retention"),
+    ("PRIVACY_STUDENT_DATA_RETENTION", "privacy_student_data_retention"),
+    ("PRIVACY_SECURITY_LOG_RETENTION", "privacy_security_log_retention"),
+)
+
+
+def warn_missing_public_information(settings: Settings) -> list[str]:
+    """Name the legal mentions a production instance still has to publish.
+
+    An empty value never blocks the start: an instance may legitimately run
+    before its operator has settled who the controller is. It must not do so
+    silently, because the public pages then carry no identity to address a
+    rights request to.
+    """
+    if settings.environment != "production":
+        return []
+    missing = [
+        name
+        for name, attribute in PUBLIC_INFORMATION_VARIABLES
+        if not getattr(settings, attribute).strip()
+    ]
+    if missing:
+        audit_event("security.public_information_incomplete", variables=missing)
+    return missing
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -259,6 +317,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         synchronize_security_state(session_factory, settings)
+        warn_missing_public_information(settings)
         enforce_data_retention(session_factory, settings)
 
         async def maintain_data_retention() -> None:
@@ -277,7 +336,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     production = settings.environment == "production"
     app = FastAPI(
         title="Open Quiz API",
-        version="0.3.0",
+        version="0.3.5",
         lifespan=lifespan,
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",

@@ -10,6 +10,8 @@ from app.dependencies import AdminUser, DbSession
 from app.grade_levels import ensure_default_grade_levels
 from app.models import (
     AuthenticationChallenge,
+    Quiz,
+    QuizSession,
     RefreshSession,
     TwoFactorCredential,
     User,
@@ -23,6 +25,8 @@ from app.schemas import (
     UserStatusUpdate,
 )
 from app.security import hash_password
+from app.session_status import ACTIVE_SESSION_STATUSES
+from app.user_records import delete_user_records
 
 router = APIRouter(prefix="/api/admin", tags=["administration"])
 
@@ -170,3 +174,41 @@ def reset_user_credentials(
         reset_two_factor=payload.reset_two_factor,
     )
     return user
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: int,
+    admin_user: AdminUser,
+    session: DbSession,
+) -> Response:
+    """Erase a professor account and every record it owns.
+
+    Deactivating a departing teacher leaves their classes, students and
+    results in place with no term, so an erasure request has to have a path
+    that actually removes them.
+    """
+    user = professor_account(user_id, session)
+    running = session.scalar(
+        select(QuizSession.id)
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(
+            Quiz.owner_id == user.id,
+            Quiz.mode == "exam",
+            QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
+        )
+        .limit(1)
+    )
+    if running is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cet enseignant anime une session d’examen en cours",
+        )
+    delete_user_records(user.id, session)
+    session.commit()
+    audit_event(
+        "admin.user_deleted",
+        actor_id=admin_user.id,
+        deleted_user_id=user_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

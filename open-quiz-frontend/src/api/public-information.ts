@@ -16,6 +16,7 @@ export type PublicInformation = {
         student_data_retention: string
         security_log_retention: string
         quiz_result_retention_days: number
+        training_result_retention_days: number
         problem_report_retention_days: number
     }
     cookies: {

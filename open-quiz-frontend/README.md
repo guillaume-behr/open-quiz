@@ -8,19 +8,7 @@ Consultez aussi le [README principal](../README.md), le
 [guide de contribution](../CONTRIBUTING.md) et le
 [guide de déploiement](../docs/deployment.md).
 
-## Installation avec Docker
-
-Le frontend est construit et servi avec le reste d’Open Quiz par Docker
-Compose. Depuis la racine du dépôt, suivez la
-[procédure d’installation recommandée](../README.md#installation) :
-
-```shell
-sh ./install.sh
-```
-
-Le serveur Vite décrit plus bas est réservé au développement.
-
-## Technologies
+## 🧰 Technologies
 
 - React 19 et React Router ;
 - TypeScript, Vite et Tailwind CSS ;
@@ -28,7 +16,7 @@ Le serveur Vite décrit plus bas est réservé au développement.
 - Playwright pour les parcours navigateur ;
 - Pyodide pour l’exécution locale de Python.
 
-## Développement local
+## 💻 Développement local
 
 Cette procédure lance le serveur Vite pour modifier et tester l’interface. Elle
 ne remplace pas l’installation Docker Compose recommandée pour utiliser une
@@ -53,7 +41,7 @@ pnpm dev
 Ouvrez `http://localhost:5173`. Vite transmet les requêtes HTTP et WebSocket
 commençant par `/api` au backend local.
 
-## Configuration
+## ⚙️ Configuration
 
 | Variable                | Portée                        | Défaut                  | Usage                                       |
 | ----------------------- | ----------------------------- | ----------------------- | ------------------------------------------- |
@@ -71,7 +59,7 @@ VITE_API_PROXY_TARGET=http://localhost:9000 pnpm dev
 Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 `VITE_*`, elle est publique et ne doit jamais contenir de secret.
 
-## Commandes disponibles
+## ⌨️ Commandes disponibles
 
 | Commande            | Rôle                                                     |
 | ------------------- | -------------------------------------------------------- |
@@ -81,7 +69,7 @@ Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 | `pnpm lint`         | exécute ESLint                                           |
 | `pnpm format`       | applique Prettier aux sources et catalogues              |
 | `pnpm format:check` | vérifie le formatage                                     |
-| `pnpm test`         | valide la cohérence des huit catalogues de traduction    |
+| `pnpm test`         | valide les huit catalogues et les étiquettes de classe   |
 | `pnpm typecheck`    | vérifie `src/` et la configuration Vite                  |
 | `pnpm test:e2e`     | lance les parcours Playwright dans Chromium              |
 | `pnpm test:e2e:ui`  | ouvre l’interface Playwright                             |
@@ -90,7 +78,7 @@ Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 une valeur `VITE_API_URL` au moment de la compilation ou utilisez les
 conteneurs du projet.
 
-## Routes
+## 🗺️ Routes
 
 ### Espaces applicatifs
 
@@ -105,9 +93,9 @@ conteneurs du projet.
 | `/teacher/dashboard` | élèves, classes, contenus, sessions et résultats  |
 | `/admin/dashboard`   | comptes enseignants et signalements               |
 
-| Route                                     | Usage                              |
-| ----------------------------------------- | ---------------------------------- |
-| `/teacher/session-display/:sessionKey`    | code et minuteur agrandis          |
+| Route                                  | Usage                     |
+| -------------------------------------- | ------------------------- |
+| `/teacher/session-display/:sessionKey` | code et minuteur agrandis |
 
 La vue agrandie est ouverte par le bouton « Agrandir » d’une session en cours.
 Elle ne s’authentifie pas : elle reçoit ses mises à jour de l’onglet du tableau
@@ -127,7 +115,7 @@ enregistrée. La route `/` redirige vers `/student/login`.
 
 Toute route inconnue affiche la page 404.
 
-## Organisation du code
+## 🗂️ Organisation du code
 
 ```text
 src/
@@ -149,7 +137,7 @@ backend. Le frontend conserve les jetons d’accès privilégiés en mémoire et
 sessions élève dans `sessionStorage`. Les sessions longues des enseignants et
 administrateurs utilisent un cookie HttpOnly géré par l’API.
 
-## Tests navigateur
+## 🧪 Tests navigateur
 
 Installez Chromium une première fois, puis lancez les tests :
 
@@ -172,7 +160,7 @@ La CI principale exécute ESLint, Prettier, la validation des catalogues, le
 typecheck, le build et l’audit des dépendances. Les tests E2E restent une
 vérification locale distincte.
 
-## Internationalisation
+## 🌍 Internationalisation
 
 Les catalogues se trouvent dans `public/locales/<langue>/translation.json`.
 L’anglais sert de référence structurelle et l’interface prend actuellement en
@@ -192,7 +180,7 @@ Pour ajouter une langue :
 textuelles, les variables d’interpolation différentes et les traductions
 restées identiques à l’anglais hors liste autorisée.
 
-## Traduction des quiz
+## 🔠 Traduction des quiz
 
 Lorsque la langue d’origine du quiz diffère de celle de l’interface, l’élève
 peut demander une traduction du titre, des questions et des réponses. Le code
@@ -204,7 +192,7 @@ navigateur. Aucun fournisseur distant ni aucune clé d’API ne sont configurés
 par Open Quiz. Si le navigateur ou la paire de langues n’est pas compatible,
 le contenu original reste affiché.
 
-## Exécution Python
+## 🐍 Exécution Python
 
 Les courts extraits Python s’exécutent avec les ressources Pyodide fournies
 dans `public/pyodide`. Le runtime est chargé dans un Web Worker, puis les API
@@ -220,7 +208,7 @@ Les limites actuelles sont :
 Une expiration ou un dépassement de sortie termine le Worker afin de ne pas
 bloquer l’interface.
 
-## Production
+## 🚀 Production
 
 Le `Dockerfile` compile l’application avec Node.js puis sert `dist/` avec Caddy
 sur le port 8080. Le conteneur :
@@ -234,7 +222,7 @@ Un hébergement alternatif doit reproduire le fallback SPA et transmettre les
 connexions WebSocket. Le déploiement de référence est décrit dans
 [`docs/deployment.md`](../docs/deployment.md).
 
-## Contribution
+## 🤝 Contribution
 
 Avant un changement, consultez [CONTRIBUTING.md](../CONTRIBUTING.md). Signalez
 les vulnérabilités selon [SECURITY.md](../SECURITY.md), jamais dans une issue

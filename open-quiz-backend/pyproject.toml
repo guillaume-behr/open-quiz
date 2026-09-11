@@ -1,6 +1,6 @@
 [project]
 name = "open-quiz-backend"
-version = "0.3.0"
+version = "0.3.5"
 description = "FastAPI backend for the Open Quiz classroom quiz platform"
 readme = "README.md"
 requires-python = ">=3.14"

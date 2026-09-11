@@ -12,6 +12,7 @@ from hashlib import sha256
 from hmac import new as hmac_new
 from importlib.util import find_spec
 from pathlib import Path
+from re import search
 from threading import Barrier
 from time import sleep, time
 from typing import Any
@@ -47,6 +48,7 @@ from app.models import (
     QuestionBank,
     QuestionChoice,
     Quiz,
+    QuizAnswer,
     QuizParticipant,
     QuizQuestionBank,
     QuizSession,
@@ -719,6 +721,7 @@ def test_public_information_describes_instance_settings(tmp_path: Path) -> None:
         accessibility_contact="Accessibility contact",
         refresh_token_days=9,
         quiz_result_retention_days=120,
+        training_result_retention_days=45,
     )
     with make_client(settings) as client:
         response = client.get("/api/public-information")
@@ -732,6 +735,7 @@ def test_public_information_describes_instance_settings(tmp_path: Path) -> None:
     }
     assert response.json()["privacy"]["controller_name"] == "Test controller"
     assert response.json()["privacy"]["quiz_result_retention_days"] == 120
+    assert response.json()["privacy"]["training_result_retention_days"] == 45
     assert response.json()["cookies"]["authentication_max_age_days"] == 9
     assert response.json()["accessibility"]["contact"] == "Accessibility contact"
     assert response.headers["cache-control"] == "no-store"
@@ -818,6 +822,20 @@ def test_production_allows_missing_public_information(tmp_path: Path) -> None:
 
     assert settings.legal_host_name == ""
     assert settings.privacy_controller_name == ""
+    missing = main.warn_missing_public_information(settings)
+    assert "PRIVACY_CONTROLLER_NAME" in missing
+    assert "LEGAL_HOST_NAME" in missing
+    # The legal notice calls the host incomplete without a phone number.
+    assert "LEGAL_HOST_PHONE" in missing
+    # Optional for the software, whatever the operator's own situation asks.
+    assert "PRIVACY_DPO_CONTACT" not in missing
+    assert "ACCESSIBILITY_CONTACT" not in missing
+
+
+def test_development_does_not_warn_about_public_information(tmp_path: Path) -> None:
+    settings = settings_for(tmp_path / "development-public-information.db")
+
+    assert main.warn_missing_public_information(settings) == []
 
 
 def test_quiz_join_requires_an_authenticated_student(tmp_path: Path) -> None:
@@ -6807,13 +6825,14 @@ def test_leaving_without_answering_keeps_the_session_rejoinable(
         assert rejoined.status_code == 201
 
 
-def test_the_three_version_fields_agree() -> None:
-    """The published version is written in three files that must not drift.
+def test_the_four_version_fields_agree() -> None:
+    """The published version is written in four files that must not drift.
 
     The backend image installs its dependencies with --no-install-project, so
     the API cannot read its version from package metadata and every file holds
     a literal. A release that updates only some of them ships an API reporting
-    one version and an interface built as another.
+    one version and an interface built as another, and the footer is the one
+    users read: it drifted to 0.2.1 while the other three said 0.3.0.
     """
     repository = Path(__file__).resolve().parent.parent.parent
     backend = tomllib.loads(
@@ -6823,25 +6842,14 @@ def test_the_three_version_fields_agree() -> None:
         (repository / "open-quiz-frontend" / "package.json").read_text()
     )["version"]
     served = main.app.version
-    assert backend == frontend == served, (
-        f"pyproject {backend}, package.json {frontend}, API {served}"
-    )
-
-
-def test_the_changelog_documents_the_released_version() -> None:
-    """The newest changelog entry must name the version being shipped."""
-    repository = Path(__file__).resolve().parent.parent.parent
-    version = tomllib.loads(
-        (repository / "open-quiz-backend" / "pyproject.toml").read_text()
-    )["project"]["version"]
-    headings = [
-        line
-        for line in (repository / "CHANGELOG.md").read_text().splitlines()
-        if line.startswith("## ")
-    ]
-    assert headings, "the changelog has no version heading"
-    assert headings[0].startswith(f"## {version} "), (
-        f"newest changelog heading is {headings[0]!r}, expected version {version}"
+    layout = (
+        repository / "open-quiz-frontend" / "src" / "layouts" / "main-layout.tsx"
+    ).read_text()
+    displayed = search(r'"app-version", \{ version: "([^"]+)" \}', layout)
+    assert displayed is not None, "the footer no longer states a literal version"
+    assert backend == frontend == served == displayed.group(1), (
+        f"pyproject {backend}, package.json {frontend}, API {served}, "
+        f"footer {displayed.group(1)}"
     )
 
 
@@ -7224,3 +7232,355 @@ def test_startup_refuses_the_example_secrets(
 
     with pytest.raises(ValueError, match=f"{message} is still set to its example"):
         settings_for(tmp_path / "example-secret.db", **{setting_name: placeholder})
+
+
+def seeded_exam_session(
+    session: Any,
+    owner_id: int,
+    *,
+    join_code: str,
+    status_value: str,
+    created_at: datetime,
+    with_answer: bool,
+) -> int:
+    """Build a session an owner never came back to close."""
+    bank = QuestionBank(
+        owner_id=owner_id,
+        grade_level="6e",
+        chapter=f"Abandoned {join_code}",
+    )
+    session.add(bank)
+    session.flush()
+    question = Question(
+        question_bank_id=bank.id,
+        prompt="2 + 2 ?",
+        difficulty="easy",
+        answer_mode="single",
+        correction_mode="automatic",
+    )
+    session.add(question)
+    session.flush()
+    choice = QuestionChoice(
+        question_id=question.id,
+        label="4",
+        is_correct=True,
+        points=2.0,
+        position=0,
+    )
+    session.add(choice)
+    quiz = Quiz(owner_id=owner_id, title=f"Quiz {join_code}", question_count=1)
+    session.add(quiz)
+    session.flush()
+    quiz_session = QuizSession(
+        quiz_id=quiz.id,
+        class_name="Abandoned class",
+        join_code=join_code,
+        status=status_value,
+        created_at=created_at,
+        started_at=created_at,
+    )
+    session.add(quiz_session)
+    session.flush()
+    participant = QuizParticipant(
+        session_id=quiz_session.id,
+        student_identifier=f"pupil.{join_code.lower()}",
+        student_display_name="Abandoned Pupil",
+        current_position=0,
+    )
+    session.add(participant)
+    session.flush()
+    if with_answer:
+        session.add(
+            QuizAnswer(
+                session_id=quiz_session.id,
+                participant_id=participant.id,
+                question_id=question.id,
+                answer_data=json.dumps({"selected_choice_ids": [choice.id]}),
+            )
+        )
+    session.flush()
+    return quiz_session.id
+
+
+def test_retention_settles_sessions_their_teacher_never_closed(
+    tmp_path: Path,
+) -> None:
+    """A session only expires when its owner signs in; retention cannot wait."""
+    settings = settings_for(
+        tmp_path / "abandoned-sessions",
+        abandoned_session_retention_days=7,
+    )
+    app = create_app(settings)
+    with make_client(settings):
+        pass
+
+    abandoned_at = datetime.now(UTC) - timedelta(days=10)
+    with app.state.session_factory() as session:
+        admin = session.scalar(select(User).where(User.is_admin.is_(True)))
+        assert admin is not None
+        graded_id = seeded_exam_session(
+            session,
+            admin.id,
+            join_code="GRADED1",
+            status_value="in_progress",
+            created_at=abandoned_at,
+            with_answer=True,
+        )
+        empty_id = seeded_exam_session(
+            session,
+            admin.id,
+            join_code="EMPTY01",
+            status_value="waiting",
+            created_at=abandoned_at,
+            with_answer=False,
+        )
+        recent_id = seeded_exam_session(
+            session,
+            admin.id,
+            join_code="RECENT1",
+            status_value="in_progress",
+            created_at=datetime.now(UTC),
+            with_answer=True,
+        )
+        session.commit()
+
+    main.enforce_data_retention(app.state.session_factory, settings)
+
+    with app.state.session_factory() as session:
+        graded = session.get(QuizSession, graded_id)
+        assert graded is not None
+        assert graded.status == "finished"
+        answer = session.scalar(
+            select(QuizAnswer).where(QuizAnswer.session_id == graded_id)
+        )
+        assert answer is not None
+        assert answer.is_graded
+        assert answer.score == 2.0
+        participant = session.scalar(
+            select(QuizParticipant).where(QuizParticipant.session_id == graded_id)
+        )
+        assert participant is not None
+        assert participant.current_position is None
+
+        # A waiting room nobody used holds names and nothing to grade.
+        assert session.get(QuizSession, empty_id) is None
+        assert (
+            session.scalar(
+                select(QuizParticipant).where(QuizParticipant.session_id == empty_id)
+            )
+            is None
+        )
+
+        recent = session.get(QuizSession, recent_id)
+        assert recent is not None
+        assert recent.status == "in_progress"
+
+
+def test_retention_purges_finished_training_attempts(tmp_path: Path) -> None:
+    settings = settings_for(
+        tmp_path / "training-retention",
+        training_result_retention_days=30,
+    )
+    app = create_app(settings)
+    with make_client(settings):
+        pass
+
+    with app.state.session_factory() as session:
+        admin = session.scalar(select(User).where(User.is_admin.is_(True)))
+        assert admin is not None
+        quiz = Quiz(
+            owner_id=admin.id,
+            mode="training",
+            title="Training quiz",
+            question_count=1,
+        )
+        session.add(quiz)
+        session.flush()
+        expired = QuizSession(
+            quiz_id=quiz.id,
+            class_name="Training class",
+            join_code="TRAIN01",
+            status="finished",
+            created_at=datetime.now(UTC) - timedelta(days=45),
+        )
+        kept = QuizSession(
+            quiz_id=quiz.id,
+            class_name="Training class",
+            join_code="TRAIN02",
+            status="finished",
+            created_at=datetime.now(UTC) - timedelta(days=5),
+        )
+        session.add_all([expired, kept])
+        session.flush()
+        session.add(
+            QuizParticipant(
+                session_id=expired.id,
+                student_identifier="pupil.training",
+                student_display_name="Training Pupil",
+            )
+        )
+        expired_id, kept_id = expired.id, kept.id
+        session.commit()
+
+    main.enforce_data_retention(app.state.session_factory, settings)
+
+    with app.state.session_factory() as session:
+        assert session.get(QuizSession, expired_id) is None
+        assert (
+            session.scalar(
+                select(QuizParticipant).where(QuizParticipant.session_id == expired_id)
+            )
+            is None
+        )
+        assert session.get(QuizSession, kept_id) is not None
+
+
+def test_admin_deletes_a_professor_and_every_record_it_owns(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "delete-professor.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "departing.teacher",
+                    "display_name": "Departing Teacher",
+                    "password": "a-secure-departing-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client,
+            "departing.teacher",
+            "a-secure-departing-password",
+        )
+        student_class = client.post(
+            "/api/classes",
+            headers=teacher_headers,
+            json={"name": "Departing class", "grade_level": "6e"},
+        ).json()
+        account = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Departing", "last_name": "Pupil"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/classes/{student_class['id']}/accounts/{account['id']}",
+                headers=teacher_headers,
+            ).status_code
+            == 200
+        )
+
+        with client.app.state.session_factory() as session:
+            teacher_id = session.scalar(
+                select(User.id).where(User.username == "departing.teacher")
+            )
+            assert teacher_id is not None
+            finished = seeded_exam_session(
+                session,
+                teacher_id,
+                join_code="LEAVER1",
+                status_value="finished",
+                created_at=datetime.now(UTC),
+                with_answer=True,
+            )
+            session.commit()
+
+        users = client.get("/api/admin/users", headers=admin_headers).json()
+        assert any(user["username"] == "departing.teacher" for user in users)
+
+        deleted = client.delete(
+            f"/api/admin/users/{teacher_id}",
+            headers=admin_headers,
+        )
+        assert deleted.status_code == 204
+
+        remaining = client.get("/api/admin/users", headers=admin_headers).json()
+        assert all(user["username"] != "departing.teacher" for user in remaining)
+
+        with client.app.state.session_factory() as session:
+            assert session.get(User, teacher_id) is None
+            assert session.get(QuizSession, finished) is None
+            for model, column in (
+                (StudentClass, StudentClass.owner_id),
+                (StudentAccount, StudentAccount.owner_id),
+                (QuestionBank, QuestionBank.owner_id),
+                (Quiz, Quiz.owner_id),
+            ):
+                assert session.scalar(select(model).where(column == teacher_id)) is None
+            assert (
+                session.scalar(
+                    select(Student).where(Student.class_id == student_class["id"])
+                )
+                is None
+            )
+            assert (
+                session.scalar(
+                    select(QuizAnswer).where(QuizAnswer.session_id == finished)
+                )
+                is None
+            )
+            assert (
+                session.scalar(
+                    select(QuizParticipant).where(
+                        QuizParticipant.session_id == finished
+                    )
+                )
+                is None
+            )
+            assert (
+                session.scalar(
+                    select(RefreshSession).where(RefreshSession.user_id == teacher_id)
+                )
+                is None
+            )
+
+        assert (
+            client.delete(
+                f"/api/admin/users/{teacher_id}",
+                headers=admin_headers,
+            ).status_code
+            == 404
+        )
+
+
+def test_admin_cannot_delete_a_professor_running_an_exam(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "delete-busy-professor.db")) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "busy.teacher",
+                    "display_name": "Busy Teacher",
+                    "password": "a-secure-busy-password",
+                },
+            ).status_code
+            == 201
+        )
+        with client.app.state.session_factory() as session:
+            teacher_id = session.scalar(
+                select(User.id).where(User.username == "busy.teacher")
+            )
+            assert teacher_id is not None
+            seeded_exam_session(
+                session,
+                teacher_id,
+                join_code="RUNNING",
+                status_value="in_progress",
+                created_at=datetime.now(UTC),
+                with_answer=True,
+            )
+            session.commit()
+
+        refused = client.delete(
+            f"/api/admin/users/{teacher_id}",
+            headers=admin_headers,
+        )
+
+        assert refused.status_code == 409
+        with client.app.state.session_factory() as session:
+            assert session.get(User, teacher_id) is not None

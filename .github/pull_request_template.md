@@ -14,7 +14,7 @@ Résumez le changement et les décisions importantes.
 - [ ] typecheck et build frontend, ou sans objet
 - [ ] tests E2E si un parcours utilisateur change, ou sans objet
 - [ ] validation Docker si le déploiement change, ou sans objet
-- [ ] documentation et changelog mis à jour, ou sans objet
+- [ ] documentation mise à jour, ou sans objet
 
 Indiquez les commandes réellement exécutées et leurs résultats.
 

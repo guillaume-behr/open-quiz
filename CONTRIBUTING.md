@@ -3,24 +3,24 @@
 Merci de votre intérêt pour Open Quiz. Les corrections ciblées, tests,
 traductions et améliorations de documentation sont les bienvenues.
 
-## Sommaire
+## 📖 Sommaire
 
-- [Avant de commencer](#avant-de-commencer)
-- [Préparer l’environnement de développement](#préparer-lenvironnement-de-développement)
-- [Préparer une branche](#préparer-une-branche)
-- [Principes de contribution](#principes-de-contribution)
-- [Selon la nature du changement](#selon-la-nature-du-changement)
-- [Vérifications](#vérifications)
-- [Ouvrir une pull request](#ouvrir-une-pull-request)
+- [Avant de commencer](#-avant-de-commencer)
+- [Préparer l’environnement de développement](#-préparer-lenvironnement-de-développement)
+- [Préparer une branche](#-préparer-une-branche)
+- [Principes de contribution](#-principes-de-contribution)
+- [Selon la nature du changement](#-selon-la-nature-du-changement)
+- [Vérifications](#-vérifications)
+- [Ouvrir une pull request](#-ouvrir-une-pull-request)
 
-## Avant de commencer
+## 👋 Avant de commencer
 
 1. consultez les
    [issues ouvertes](https://github.com/guillaume-behr/open-quiz/issues) et les
    [pull requests](https://github.com/guillaume-behr/open-quiz/pulls) ;
 2. ouvrez une issue avant une évolution importante, une transition de données
    ou un changement de comportement public ;
-3. préparez l’[environnement de développement](#préparer-lenvironnement-de-développement) ;
+3. préparez l’[environnement de développement](#-préparer-lenvironnement-de-développement) ;
 4. ne publiez jamais de secret, de donnée d’élève ou de vulnérabilité : utilisez
    la procédure privée de [SECURITY.md](SECURITY.md).
 
@@ -28,11 +28,11 @@ Une petite correction évidente peut être proposée directement. Pour une
 fonctionnalité, décrivez d’abord le besoin utilisateur et les contraintes afin
 d’éviter un travail incompatible avec la direction du projet.
 
-## Préparer l’environnement de développement
+## 🛠️ Préparer l’environnement de développement
 
 Cette procédure sert au développement et à l’évaluation du projet. Pour
 installer une instance à utiliser, suivez la procédure Docker du
-[README](README.md#installation).
+[README](README.md#-installation).
 
 ### Prérequis
 
@@ -94,7 +94,7 @@ pnpm dev
 Ouvrez `http://localhost:5173`. Le serveur de développement transmet
 automatiquement les requêtes `/api` au backend.
 
-## Préparer une branche
+## 🌿 Préparer une branche
 
 Créez une branche courte depuis la branche par défaut à jour :
 
@@ -106,7 +106,7 @@ git switch -c type/description-courte
 
 Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/`.
 
-## Principes de contribution
+## 🧭 Principes de contribution
 
 - limitez chaque pull request à un problème cohérent ;
 - conservez les interfaces existantes, sauf changement discuté et documenté ;
@@ -119,7 +119,7 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
 - utilisez des messages de commit compréhensibles. Conventional Commits est
   accepté sans être obligatoire.
 
-## Selon la nature du changement
+## 🗂️ Selon la nature du changement
 
 ### API, données et sécurité
 
@@ -130,8 +130,8 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
   de déploiement et des tests correspondants ;
 - documentez les changements d’API, de configuration, de conservation ou de
   sécurité ;
-- ajoutez une entrée à [CHANGELOG.md](CHANGELOG.md) pour tout changement visible
-  ou incompatible.
+- signalez tout changement visible ou incompatible dans la description de la
+  pull request, afin qu’il figure dans les notes de la release.
 
 ### Interface et accessibilité
 
@@ -151,23 +151,23 @@ Toute nouvelle chaîne visible doit exister dans les huit catalogues de
 - conservez exactement les variables `{{...}}` et les suffixes de pluriel ;
 - exécutez `pnpm test` pour contrôler les catalogues ;
 - pour ajouter une langue, suivez la section internationalisation du
-  [README frontend](open-quiz-frontend/README.md#internationalisation).
+  [README frontend](open-quiz-frontend/README.md#-internationalisation).
 
 ### Documentation
 
 - utilisez des chemins et commandes réellement présents dans le dépôt ;
 - évitez de dupliquer les détails d’exploitation dans plusieurs fichiers ;
 - vérifiez les liens relatifs et les ancres ;
-- mettez à jour le changelog si la documentation accompagne une évolution
-  visible.
+- documentez un fait au seul endroit qui en est responsable, et renvoyez-y
+  depuis les autres.
 
-## Vérifications
+## ✅ Vérifications
 
 Exécutez les contrôles correspondant aux fichiers modifiés. Les mêmes contrôles
 principaux sont exécutés par
 [GitHub Actions](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml),
-qui fait autorité pour les contrôles obligatoires. Chaque bloc ci-dessous part de la racine du
-dépôt ; revenez-y avant de passer à un autre composant.
+qui fait autorité pour les contrôles obligatoires. Chaque bloc ci-dessous
+part de la racine du dépôt ; revenez-y avant de passer à un autre composant.
 
 ### Backend
 
@@ -217,7 +217,7 @@ docker compose build
 N’utilisez ces valeurs d’exemple que pour valider la structure. Une instance
 réelle exige des secrets robustes et distincts.
 
-## Ouvrir une pull request
+## 🔀 Ouvrir une pull request
 
 Avant l’envoi :
 

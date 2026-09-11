@@ -92,6 +92,15 @@ test("joining a waiting quiz immediately requests full screen", async ({
     await expect(page.getByText("Signed in as Alex Example")).toHaveCount(0)
     await expect(page.getByText("Alex Example", { exact: true })).toHaveCount(1)
     await expect(page.getByText("Full-screen mode is required")).toBeVisible()
+    // The monitored events are named before the exam hides the footer.
+    await expect(
+        page.getByText(
+            /switch window or tab, move the pointer out of the page, copy or paste content/
+        )
+    ).toBeVisible()
+    await expect(
+        page.getByRole("link", { name: "Personal data" })
+    ).toHaveAttribute("href", "/privacy")
     await expect
         .poll(() =>
             page.evaluate(() =>

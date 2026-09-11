@@ -82,7 +82,7 @@ export function MainLayout() {
                 <footer className="mt-3 flex w-full shrink-0 flex-wrap items-center justify-center gap-x-5 gap-y-3 bg-sidebar-primary px-4 py-3 text-sidebar-foreground sm:justify-between sm:px-10">
                     <div className="flex shrink-0 items-center gap-3">
                         <p className="text-sm whitespace-nowrap">
-                            {t("app-version", { version: "0.2.1" })}
+                            {t("app-version", { version: "0.3.5" })}
                         </p>
                         <LanguageSelector />
                         <ThemeSelector />

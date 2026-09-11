@@ -35,3 +35,7 @@ export function resetUserCredentials(
         }),
     })
 }
+
+export function deleteUser(userId: number): Promise<void> {
+    return request<void>(`/api/admin/users/${userId}`, { method: "DELETE" })
+}

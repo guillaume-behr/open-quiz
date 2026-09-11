@@ -3,72 +3,90 @@
 [![CI](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml/badge.svg)](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
-Plateforme libre et auto-hébergeable pour créer des quiz, organiser des examens
-en classe et proposer des entraînements aux élèves.
+Plateforme libre et auto-hébergeable permettant de créer des quiz,
+d’organiser des examens en classe et de proposer des entraînements aux
+élèves.
 
 Open Quiz réunit trois espaces dans une même application : l’administrateur
 gère les enseignants, les enseignants préparent les contenus et les sessions,
 et les élèves passent leurs examens ou s’entraînent depuis leur tableau de bord.
 
-> [!IMPORTANT]
-> **Préversion 0.3.0.** Le projet est fonctionnel et testé, mais son schéma de
-> données et ses interfaces peuvent encore évoluer avant la version 1.0.
-> Sauvegardez vos données avant chaque mise à jour et consultez le
-> [journal des versions](CHANGELOG.md).
+## 📖 Sommaire
 
-## Sommaire
+- [Fonctionnalités](#-fonctionnalités)
+- [Installation](#-installation)
+- [Premiers pas](#-premiers-pas)
+- [Développement](#-développement)
+- [Documentation](#-documentation)
 
-- [Fonctionnalités](#fonctionnalités)
-- [Installation](#installation)
-- [Premiers pas](#premiers-pas)
-- [Configuration](#configuration)
-- [Architecture](#architecture)
-- [Développement](#développement)
-- [Documentation](#documentation)
+## ✨ Fonctionnalités
 
-## Fonctionnalités
-
-Le déroulement d’une session reste le même quel que soit le contenu :
+Open Quiz ne présuppose aucune discipline. Quelle que soit la matière, une
+session suit toujours le même déroulement :
 
 1. l’administrateur crée les comptes enseignants ;
 2. l’enseignant crée ses élèves, ses classes et ses banques de questions ;
-3. il prépare un examen ou ouvre des banques à l’entraînement ;
+3. il prépare un examen, ou ouvre des banques à l’entraînement ;
 4. les élèves se connectent et rejoignent leur activité ;
-5. l’enseignant corrige les réponses rédactionnelles puis publie ou exporte les
-   résultats.
+5. l’enseignant corrige les réponses rédactionnelles, puis publie les notes ou
+   les exporte.
 
-### Examens et entraînements
-
-- examens chronométrés avec salle d’attente, pause, reprise et rattrapage ;
-- relecture facultative des réponses avant la validation finale de la copie ;
-- affichage agrandi du code et du minuteur, à projeter à la classe ;
-- banques d’entraînement attribuées par classe et relançables librement ;
-- tirage commun à la classe ou individuel, selon le quiz ;
-- sujets papier nominatifs avec mise en page A4 et tirage déterministe.
-
-### Questions et correction
+### Banques de questions
 
 - choix unique, choix multiple et réponse rédactionnelle ;
-- images privées, extraits de code et réponses attendues dans un langage donné ;
-- barème défini réponse par réponse, avec points négatifs facultatifs ;
-- correction automatique ou manuelle, publication des notes et export CSV.
+- énoncés illustrés d’images, extraits de code mis en forme, et réponse
+  attendue dans un langage donné ;
+- questions réparties en trois niveaux de difficulté, dans lesquels chaque quiz
+  pioche selon le barème que vous lui fixez ;
+- points définis proposition par proposition, avec points négatifs facultatifs ;
+- import et export JSON d’une banque complète, images comprises, en une seule
+  transaction : rien n’est créé si une ligne est invalide.
 
-### Expérience élève
+### Examens
 
+- salle d’attente, minuteur, pause et reprise pour toute la classe ;
+- même tirage pour tout le monde, ou sujet individuel tiré par élève ;
+- relecture facultative de la copie avant la remise définitive ;
+- l’enseignant est prévenu si un élève quitte le plein écran, change d’onglet,
+  copie, colle ou lance une impression : ces alertes sont informatives et ne
+  déclenchent jamais de sanction automatique ;
+- rattrapage : faire repasser à des élèves choisis une sélection d’examens
+  déjà passés ;
+- sujets papier nominatifs en A4, au tirage déterministe : un même élève
+  retrouve le même sujet ;
+- affichage agrandi du code de session et du minuteur, à projeter à la classe.
+
+### Correction et notes
+
+- correction automatique des questions à choix, manuelle pour les réponses
+  rédactionnelles ;
+- l’élève voit sa correction à titre provisoire, et la publication fige la
+  note ;
+- export CSV des résultats, et suppression immédiate d’un résultat par
+  l’enseignant.
+
+### Entraînement et expérience élève
+
+- banques ouvertes à l’entraînement classe par classe, avec le nombre de
+  questions de votre choix, relançables librement ;
+- correction immédiate et historique de progression ;
 - compte personnel et tableau de bord dédié ;
-- correction immédiate et historique de progression pour les entraînements ;
-- interface claire ou sombre disponible en huit langues ;
-- traduction locale facultative des quiz, en examen comme en entraînement,
-  lorsque le navigateur la prend en charge ;
-- exécution locale de courts extraits Python avec Pyodide.
+- interface claire ou sombre, disponible en huit langues ;
+- traduction du quiz sur l’appareil de l’élève, lorsque son navigateur la prend
+  en charge ;
+- exécution de courts extraits Python dans le navigateur, avec Pyodide.
 
-### Hébergement maîtrisé
+### Hébergement et données personnelles
 
 - déploiement autonome avec Docker Compose, Caddy et PostgreSQL ;
-- mots de passe Argon2, TOTP pour les comptes privilégiés et cookies HttpOnly ;
-- limites de débit, journaux de sécurité et données persistantes sauvegardables.
+- mots de passe Argon2, TOTP pour les comptes privilégiés, cookies HttpOnly et
+  limites de débit ;
+- aucune adresse IP traitée, aucun service tiers appelé, aucune mesure
+  d’audience ni publicité ;
+- durées de conservation appliquées automatiquement, et pages légales à
+  renseigner instance par instance.
 
-## Installation
+## 📦 Installation
 
 Docker Compose est la méthode recommandée pour installer et utiliser Open Quiz.
 Cette section couvre le premier démarrage. Le
@@ -95,27 +113,19 @@ cd open-quiz
 sh ./install.sh
 ```
 
-Le script demande uniquement le nom de domaine, sans `https://` ni `/` final.
-Il génère tous les secrets et le mot de passe administrateur, crée
-`open-quiz-backend/.env` avec les variables de production, puis construit et
-démarre les conteneurs.
+Le script demande le nom de domaine, sans `https://` ni `/` final. Il génère
+les secrets et le mot de passe administrateur, écrit
+`open-quiz-backend/.env`, puis construit et démarre les conteneurs. Passez
+`--domain quiz.example.com` pour une installation non interactive, et
+`--help` pour les autres options.
 
 > [!IMPORTANT]
 > Le mot de passe administrateur n’est affiché qu’une seule fois. Enregistrez-le
 > avant de fermer le terminal.
 
-Le domaine peut aussi être passé en argument, ce qui permet une installation non
-interactive :
-
-```shell
-sh ./install.sh --domain quiz.example.com
-```
-
-`sh ./install.sh --help` décrit les options disponibles. Le script vérifie le
-domaine et l’absence de configuration existante avant de contrôler Docker, et
-n’écrit aucun secret tant que ces vérifications n’ont pas abouti. Il refuse
-d’écraser une configuration existante : sur un déploiement déjà installé,
-utilisez directement `sh ./update.sh`.
+Sur un déploiement déjà installé, l’installation refuse d’écraser la
+configuration existante : utilisez `sh ./update.sh`. Le guide de déploiement
+[détaille chaque étape du script](docs/deployment.md#-préparer-linstance).
 
 ### 3. Publier l’instance en HTTPS
 
@@ -132,7 +142,7 @@ quiz.example.com {
 
 Un [exemple de configuration Nginx](docs/nginx.conf) est également fourni ;
 remplacez son domaine et ses chemins de certificats avant de l’activer. Le
-[guide de déploiement](docs/deployment.md#publier-lapplication-en-https) décrit
+[guide de déploiement](docs/deployment.md#-publier-lapplication-en-https) décrit
 les en-têtes à transmettre, notamment pour les connexions WebSocket.
 
 ### 4. Vérifier l’instance
@@ -143,8 +153,8 @@ curl --fail --show-error https://quiz.example.com/api/health
 
 La réponse attendue est `{"status":"ok"}`.
 
-Renseignez enfin dans `.env` les informations légales, de confidentialité et
-d’accessibilité propres à votre établissement, puis relancez `sh ./update.sh`.
+L’instance est installée. La suite — première connexion, mentions RGPD et
+premier examen — se trouve dans [Premiers pas](#-premiers-pas).
 
 ### Mises à jour
 
@@ -152,7 +162,7 @@ d’accessibilité propres à votre établissement, puis relancez `sh ./update.s
 sh ./update.sh
 ```
 
-Le [guide de déploiement](docs/deployment.md#mettre-à-jour-open-quiz) décrit le
+Le [guide de déploiement](docs/deployment.md#-mettre-à-jour-open-quiz) décrit le
 déroulement complet de la mise à jour, ainsi que l’option `--no-pull` pour
 reconstruire sans récupérer de nouvelle révision.
 
@@ -160,172 +170,126 @@ reconstruire sans récupérer de nouvelle révision.
 > Sauvegardez PostgreSQL et `open-quiz-backend/.env` avant chaque mise à jour.
 > Les procédures de sauvegarde, de restauration et de rotation des secrets sont
 > décrites dans le
-> [guide de déploiement](docs/deployment.md#sauvegarder-les-données).
+> [guide de déploiement](docs/deployment.md#-sauvegarder-les-données).
 
-Le passage à PostgreSQL réinitialise le stockage : aucune reprise de la base
-historique n’est fournie. Consultez le [journal des versions](CHANGELOG.md).
+## 🚀 Premiers pas
 
-## Premiers pas
+L’instance démarre vide : un seul compte administrateur existe, et rien d’autre.
+Les quatre étapes ci-dessous mènent de là au premier examen.
 
-Les chemins ci-dessous sont à ajouter au domaine configuré pendant
-l’installation. En développement local, utilisez `http://localhost:5173`.
+Les chemins s’ajoutent au domaine configuré pendant l’installation. En
+développement local, utilisez `http://localhost:5173`.
 
-| Espace         | Chemin             | Première action                                                                      |
-| -------------- | ------------------ | ------------------------------------------------------------------------------------ |
-| Administration | `/admin/dashboard` | Se connecter avec les identifiants de `.env`, configurer TOTP et créer un enseignant |
-| Enseignant     | `/teacher/login`   | Configurer TOTP, puis créer les élèves, classes et banques                           |
-| Élève          | `/student/login`   | Se connecter avec le compte fourni par l’enseignant                                  |
+| Espace         | Chemin             | Qui s’y connecte                       |
+| -------------- | ------------------ | -------------------------------------- |
+| Administration | `/admin/dashboard` | le compte créé par l’installation      |
+| Enseignant     | `/teacher/login`   | les comptes créés par l’administrateur |
+| Élève          | `/student/login`   | les comptes créés par un enseignant    |
 
-La racine de l’application redirige vers la connexion élève. Les tableaux de
-bord protégés renvoient vers leur écran de connexion lorsque la session est
-absente ou expirée.
+### 1. Se connecter comme administrateur
 
-Les questions sont tirées au lancement d’une session, pas à la création du
-quiz. L’enseignant peut choisir un tirage commun à la classe ou un tirage
-individuel. Les questions, leur ordre et le barème sont ensuite figés pour
-préserver la correction historique, même si la banque évolue.
+Rendez-vous sur `/admin/dashboard` avec les identifiants affichés pendant
+l’installation, puis configurez immédiatement la double authentification : elle
+est obligatoire pour les comptes privilégiés.
 
-## Configuration
+L’administrateur ne crée ni contenu ni élève. Il gère les comptes enseignants
+et les signalements de problèmes.
 
-Les secrets du backend sont stockés dans `open-quiz-backend/.env`, ignoré par
-Git. Les principales variables sont :
+### 2. Renseigner les mentions RGPD
 
-| Variable                            | Rôle                                               | Exemple de développement |
-| ----------------------------------- | -------------------------------------------------- | ------------------------ |
-| `DATABASE_URL`                      | Base PostgreSQL via SQLAlchemy                     | `postgresql+psycopg://…` |
-| `POSTGRES_PASSWORD`                 | Mot de passe du rôle PostgreSQL                    | obligatoire              |
-| `JWT_SECRET`                        | Signature des jetons, 32 caractères minimum        | obligatoire              |
-| `TOTP_ENCRYPTION_KEY`               | Chiffrement TOTP, distinct du secret JWT           | obligatoire              |
-| `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | Chiffrement des mots de passe élèves récupérables  | obligatoire              |
-| `ADMIN_USERNAME`                    | Identifiant administrateur                         | `admin`                  |
-| `ADMIN_PASSWORD`                    | Mot de passe administrateur, 16 caractères minimum | obligatoire              |
-| `FRONTEND_ORIGIN`                   | Origine HTTP(S) exacte, sans `/` final             | `http://localhost:5173`  |
-| `APP_ENV`                           | `development`, `test` ou `production`              | `development`            |
+Les pages `/privacy`, `/legal-notice` et `/accessibility` n’embarquent aucun
+texte propre à votre établissement : elles affichent ce que vous déclarez ici.
+Tant qu’une valeur reste vide, la page affiche « Non renseigné » en rouge, et
+l’instance publie une politique de confidentialité sans responsable
+identifiable.
 
-Les fichiers [`open-quiz-backend/.env.example`](open-quiz-backend/.env.example)
-et
-[`open-quiz-backend/.env.production.example`](open-quiz-backend/.env.production.example)
-listent toutes les variables disponibles. Le
-[guide de déploiement](docs/deployment.md#configurer-la-conservation-et-les-limites)
-explique les limites et les durées de conservation.
+Ces variables ne sont pas des secrets, mais elles se placent dans le même
+fichier que le reste de la configuration :
 
-Le frontend accepte aussi `VITE_API_URL`. Laissez cette variable vide avec le
-proxy Vite ou le déploiement Caddy fourni. Utilisez une URL absolue uniquement
-si l’API est servie sur une autre origine, avec la configuration CORS et CSP
-correspondante.
+```shell
+$EDITOR open-quiz-backend/.env
+sh ./update.sh
+```
+
+Identité de l’hébergeur, exigée pour les mentions légales :
+
+| Variable             | Ce qu’elle publie                |
+| -------------------- | -------------------------------- |
+| `LEGAL_HOST_NAME`    | la raison sociale de l’hébergeur |
+| `LEGAL_HOST_ADDRESS` | son adresse postale              |
+| `LEGAL_HOST_PHONE`   | son numéro de téléphone          |
+
+Responsable du traitement et exercice des droits, exigés par les articles 13
+et 14 du RGPD :
+
+| Variable                     | Ce qu’elle publie                         |
+| ---------------------------- | ----------------------------------------- |
+| `PRIVACY_CONTROLLER_NAME`    | l’établissement responsable du traitement |
+| `PRIVACY_CONTROLLER_CONTACT` | l’adresse où exercer ses droits           |
+| `PRIVACY_LEGAL_BASIS`        | la base légale retenue, en toutes lettres |
+| `PRIVACY_RECIPIENTS`         | qui accède aux données, hébergeur compris |
+
+Ce sont les sept valeurs sans lesquelles les pages publiques restent
+incomplètes. Les durées appliquées par la purge — résultats d’examens,
+entraînements, signalements — ont déjà une valeur par défaut et s’affichent
+toutes seules : vous n’avez rien à recopier.
+
+Restent facultatives pour le logiciel : le contact du DPO, les deux URL
+d’accessibilité, et les trois durées que vous annoncez en toutes lettres pour
+ce que la purge ne couvre pas, comme la durée de vie d’un compte élève. Le
+guide de déploiement
+[décrit chacune](docs/deployment.md#-configurer-les-mentions-rgpd-et-légales),
+et l’API énumère au démarrage celles qu’elle juge obligatoires, sous
+l’événement `security.public_information_incomplete`.
+
+### 3. Créer un compte enseignant
+
+Depuis le tableau de bord d’administration, créez le compte et transmettez ses
+identifiants à l’enseignant. À sa première connexion sur `/teacher/login`, il
+configure à son tour sa double authentification.
+
+### 4. Préparer et lancer une activité
+
+L’enseignant travaille ensuite depuis son propre espace : il crée ses classes
+et ses comptes élèves, remplit ses banques de questions, puis lance un examen
+ou ouvre des banques à l’entraînement. Les élèves se connectent sur
+`/student/login` avec les identifiants qu’il leur remet.
 
 > [!CAUTION]
 > L’auto-hébergement ne vaut ni homologation, ni conformité automatique. Avant
-> une mise en service, faites valider la base légale, les durées de conservation,
-> les sous-traitants et l’information des utilisateurs par l’établissement ou
-> son DPO. Conservez la mention « Accessibilité : non conforme » tant qu’aucun
-> audit RGAA complet n’a été réalisé.
+> d’ouvrir l’instance à des élèves, faites valider la base légale, les durées de
+> conservation, les sous-traitants et l’information des utilisateurs par
+> l’établissement ou son DPO. Conservez la mention « Accessibilité : non
+> conforme » tant qu’aucun audit RGAA complet n’a été réalisé.
 
-## Architecture
+## 🛠️ Développement
 
-| Partie            | Technologies principales                               |
-| ----------------- | ------------------------------------------------------ |
-| API               | Python 3.14, FastAPI, SQLAlchemy, PostgreSQL           |
-| Interface         | React 19, TypeScript, Vite, Tailwind CSS               |
-| Sécurité          | JWT, cookies HttpOnly, TOTP, Argon2, Fernet            |
-| Python navigateur | Pyodide dans un Web Worker                             |
-| Production        | Docker Compose et Caddy                                |
-| Qualité           | pytest, Ruff, ESLint, Prettier, TypeScript, Playwright |
-
-```text
-Navigateur (élève, enseignant ou administrateur)
-          │ HTTPS
-          ▼
-Reverse proxy TLS de l’hôte
-          │ HTTP sur 127.0.0.1:7800
-          ▼
-Caddy (SPA, CSP, fichiers statiques, proxy /api)
-          │ réseau Docker interne
-          ▼
-FastAPI (authentification, règles métier, limites de débit)
-          │
-          ▼
-PostgreSQL (volume persistant)
-```
-
-### Structure du dépôt
-
-```text
-.
-├── .github/                 CI, Dependabot et modèles de contribution
-├── docs/                    guides d’exploitation et exemple Nginx
-├── open-quiz-backend/       API FastAPI, scripts et tests
-├── open-quiz-frontend/      application React, traductions et tests E2E
-├── scripts/                 fonctions communes aux scripts shell
-├── CHANGELOG.md             historique des versions
-├── CONTRIBUTING.md          guide de contribution
-├── docker-compose.dev.yml   surcharge de développement
-├── docker-compose.yml       déploiement autonome
-├── install-dev.sh           préparation de l’environnement de développement
-├── install.sh               installation Docker guidée sous Unix
-├── SECURITY.md              signalement privé des vulnérabilités
-└── update.sh                mise à jour sous Unix
-```
-
-## Développement
-
-Ces commandes sont destinées au développement et à l’évaluation du projet. Pour
-installer une instance à utiliser, suivez la procédure
-[Installation](#installation).
-
-Depuis la racine du dépôt, générez les identifiants de développement et démarrez
-PostgreSQL :
+Pour installer une instance à utiliser, suivez la procédure
+[Installation](#-installation). Pour travailler sur le code, un script prépare
+les secrets de développement et démarre PostgreSQL :
 
 ```shell
 sh ./install-dev.sh
 ```
 
-Lancez l’API dans un terminal :
+L’API se lance ensuite avec `uv run fastapi dev main.py` depuis
+`open-quiz-backend`, et l’interface avec `pnpm dev` depuis
+`open-quiz-frontend`.
 
-```shell
-cd open-quiz-backend
-uv sync
-uv run fastapi dev main.py
-```
+Le [guide de contribution](CONTRIBUTING.md#-préparer-lenvironnement-de-développement)
+détaille les prérequis, le rôle de chaque script et les vérifications à
+exécuter avant une pull request.
 
-Puis l’interface dans un second :
-
-```shell
-cd open-quiz-frontend
-corepack enable
-pnpm install --frozen-lockfile
-pnpm dev
-```
-
-Ouvrez `http://localhost:5173` ; le serveur de développement transmet les
-requêtes `/api` à l’API, disponible sur `http://localhost:8000` avec sa
-documentation interactive sur `http://localhost:8000/docs`.
-
-Le [guide de contribution](CONTRIBUTING.md#préparer-lenvironnement-de-développement)
-décrit les prérequis, le rôle de chaque script et les vérifications à exécuter
-avant une pull request.
-
-## Documentation
+## 📚 Documentation
 
 | Ressource                                              | Contenu                                            |
 | ------------------------------------------------------ | -------------------------------------------------- |
 | [Déploiement et exploitation](docs/deployment.md)      | production, sauvegardes, mises à jour et dépannage |
 | [Documentation backend](open-quiz-backend/README.md)   | API, sécurité, stockage et exploitation            |
 | [Documentation frontend](open-quiz-frontend/README.md) | interface, routes, traduction et tests navigateur  |
-| [Journal des versions](CHANGELOG.md)                   | nouveautés et transitions incompatibles            |
 | [Guide de contribution](CONTRIBUTING.md)               | environnement, conventions et vérifications        |
 | [Politique de sécurité](SECURITY.md)                   | procédure privée de signalement                    |
 
-Les corrections ciblées, tests, traductions et améliorations de documentation
-sont les bienvenues. Pour une évolution importante, ouvrez d’abord une issue afin
-d’échanger sur le besoin et l’approche.
-
-Ne publiez jamais une vulnérabilité, un secret ou des données d’élève dans une
-issue publique. Suivez la procédure décrite dans [SECURITY.md](SECURITY.md).
-
-## Licence et remerciements
+## ⚖️ Licence
 
 Open Quiz est distribué sous [licence MIT](LICENSE).
-
-Le projet s’appuie notamment sur FastAPI, React, Pyodide, Caddy et les nombreux
-projets libres référencés dans ses fichiers de verrouillage.

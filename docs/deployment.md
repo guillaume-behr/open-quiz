@@ -4,27 +4,30 @@ Ce guide complète le [README principal](../README.md). Il s’adresse aux
 personnes qui administrent une instance Open Quiz avec Docker Compose.
 
 > [!IMPORTANT]
-> Open Quiz est encore en préversion. Sauvegardez la base et les secrets avant
-> chaque mise à jour, puis consultez le [journal des versions](../CHANGELOG.md).
+> Open Quiz est encore en préversion. Son schéma de données et ses interfaces
+> peuvent évoluer : sauvegardez la base et les secrets avant chaque mise à jour,
+> puis lisez les notes de la release visée.
 
-## Sommaire
+## 📖 Sommaire
 
-- [Préparer l’instance](#préparer-linstance)
-- [Démarrer les services](#démarrer-les-services)
-- [Publier l’application en HTTPS](#publier-lapplication-en-https)
-- [Vérifier et surveiller l’instance](#vérifier-et-surveiller-linstance)
-- [Sauvegarder les données](#sauvegarder-les-données)
-- [Mettre à jour Open Quiz](#mettre-à-jour-open-quiz)
-- [Gérer les secrets et les accès](#gérer-les-secrets-et-les-accès)
-- [Configurer la conservation et les limites](#configurer-la-conservation-et-les-limites)
-- [Renseigner les informations publiques](#renseigner-les-informations-publiques)
-- [Dépannage](#dépannage)
+- [Préparer l’instance](#-préparer-linstance)
+- [Démarrer les services](#-démarrer-les-services)
+- [Publier l’application en HTTPS](#-publier-lapplication-en-https)
+- [Vérifier et surveiller l’instance](#-vérifier-et-surveiller-linstance)
+- [Sauvegarder les données](#-sauvegarder-les-données)
+- [Mettre à jour Open Quiz](#-mettre-à-jour-open-quiz)
+- [Gérer les secrets et les accès](#-gérer-les-secrets-et-les-accès)
+- [Configurer la conservation et les limites](#-configurer-la-conservation-et-les-limites)
+- [Configurer les mentions RGPD et légales](#-configurer-les-mentions-rgpd-et-légales)
+- [Répondre à une demande d’effacement](#-répondre-à-une-demande-deffacement)
+- [Dépannage](#-dépannage)
 
-## Préparer l’instance
+## 🧱 Préparer l’instance
 
 ### Prérequis
 
-- Docker Engine avec un plugin Compose prenant en charge `docker compose up --wait` ;
+- Docker Engine avec un plugin Compose prenant en charge
+  `docker compose up --wait` ;
 - Git et un shell compatible POSIX (Linux, macOS ou WSL sous Windows) ;
 - un nom de domaine valide et un reverse proxy HTTPS ;
 - une stratégie de sauvegarde hors de la machine qui héberge l’application.
@@ -66,40 +69,53 @@ illisibles.
 
 Le script ne modifie ni le DNS, ni le pare-feu, ni la configuration TLS ou le
 reverse proxy de l’hôte. Configurez ces éléments séparément dans la section
-[Publier l’application en HTTPS](#publier-lapplication-en-https).
+[Publier l’application en HTTPS](#-publier-lapplication-en-https).
 
 ### Secrets obligatoires
 
-`install.sh` renseigne automatiquement toutes les valeurs obligatoires dans
-`open-quiz-backend/.env`.
+Tous les secrets vivent dans `open-quiz-backend/.env`, que Git ignore.
+`install.sh` les génère au premier démarrage : vous n’avez rien à écrire
+vous-même.
 
-| Variable                            | Exigence                                                                  |
-| ----------------------------------- | ------------------------------------------------------------------------- |
-| `JWT_SECRET`                        | valeur aléatoire d’au moins 32 caractères                                 |
-| `TOTP_ENCRYPTION_KEY`               | valeur aléatoire distincte d’au moins 32 caractères                       |
-| `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | troisième valeur aléatoire distincte d’au moins 32 caractères             |
-| `ADMIN_PASSWORD`                    | mot de passe robuste de 16 à 256 caractères, différent des autres secrets |
-| `POSTGRES_PASSWORD`                 | mot de passe aléatoire robuste du rôle PostgreSQL                         |
+| Variable                            | Rôle                                               | Exigence                                   |
+| ----------------------------------- | -------------------------------------------------- | ------------------------------------------ |
+| `POSTGRES_PASSWORD`                 | mot de passe du rôle PostgreSQL                    | valeur aléatoire robuste                   |
+| `DATABASE_URL`                      | accès à la base depuis l’API                       | URL PostgreSQL SQLAlchemy                  |
+| `JWT_SECRET`                        | signature des jetons de session                    | 32 caractères aléatoires au moins          |
+| `TOTP_ENCRYPTION_KEY`               | chiffrement des secrets de double authentification | 32 caractères, distincts du secret JWT     |
+| `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | chiffrement des mots de passe élèves relisibles    | 32 caractères, distincts des deux autres   |
+| `ADMIN_PASSWORD`                    | mot de passe du compte administrateur              | 16 à 256 caractères, différent des secrets |
 
-Conservez le fichier généré dans une sauvegarde chiffrée. Ne placez ses valeurs
-ni dans Git, ni dans une issue, ni dans les journaux d’exploitation.
+Les trois clés doivent être distinctes les unes des autres : l’API refuse de
+démarrer si deux d’entre elles coïncident, ou si l’une a gardé sa valeur
+d’exemple.
 
-Après le premier démarrage, vous pouvez adapter :
+> [!CAUTION]
+> Conservez `.env` dans une sauvegarde chiffrée. Ne placez jamais ses valeurs
+> dans Git, dans une issue, ni dans les journaux d’exploitation.
 
-- `ADMIN_USERNAME`, l’identifiant du compte administrateur géré par
-  l’application ;
-- `FRONTEND_ORIGIN`, si le nom de domaine change ; sa valeur doit être l’origine
-  HTTPS exacte visible dans le navigateur, sans `/` final.
+### Réglages non secrets
 
-Conservez `APP_ENV=production` pour une instance publique. Après toute
-modification, relancez `sh ./update.sh` et mettez également à jour le reverse
-proxy lorsque le domaine change.
+Ces variables se modifient à tout moment. Relancez `sh ./update.sh` ensuite, et
+mettez aussi à jour le reverse proxy lorsque le domaine change.
+
+| Variable          | Rôle                                      | Valeur attendue                         |
+| ----------------- | ----------------------------------------- | --------------------------------------- |
+| `ADMIN_USERNAME`  | identifiant du compte administrateur      | 1 à 80 caractères                       |
+| `FRONTEND_ORIGIN` | origine exacte visible dans le navigateur | HTTPS, sans chemin ni `/` final         |
+| `APP_ENV`         | mode d’exécution                          | `production` pour une instance publique |
 
 Le compte administrateur est créé au premier démarrage. Ensuite,
 `ADMIN_USERNAME` et `ADMIN_PASSWORD` continuent de piloter ce même compte : une
 modification du mot de passe révoque ses sessions actives.
 
-## Démarrer les services
+Les fichiers [`.env.example`](../open-quiz-backend/.env.example) et
+[`.env.production.example`](../open-quiz-backend/.env.production.example)
+listent toutes les variables disponibles, y compris celles décrites plus loin
+dans [la conservation et les limites](#-configurer-la-conservation-et-les-limites)
+et dans [les mentions RGPD](#-configurer-les-mentions-rgpd-et-légales).
+
+## ▶️ Démarrer les services
 
 Le premier démarrage est effectué automatiquement par `install.sh` via
 `update.sh`. Pour contrôler le résultat :
@@ -119,7 +135,7 @@ Le déploiement crée trois services :
 Le backend n’est pas publié sur l’hôte. Le frontend écoute uniquement sur
 `127.0.0.1:7800` afin qu’un reverse proxy soit le seul point d’entrée public.
 
-## Publier l’application en HTTPS
+## 🔒 Publier l’application en HTTPS
 
 Placez un reverse proxy HTTPS devant `127.0.0.1:7800`. Exemple Caddy :
 
@@ -170,7 +186,7 @@ Si le reverse proxy externe limite la taille des requêtes, prévoyez jusqu’à
 questions. Les requêtes ordinaires restent limitées par
 `MAX_REQUEST_BODY_BYTES`.
 
-## Vérifier et surveiller l’instance
+## 🩺 Vérifier et surveiller l’instance
 
 Le contrôle de disponibilité vérifie le processus HTTP et l’accès à la base :
 
@@ -205,7 +221,7 @@ Les journaux peuvent contenir des informations d’audit. Centralisez-les dans u
 espace à accès restreint et appliquez la durée de conservation validée pour
 votre instance.
 
-## Sauvegarder les données
+## 💾 Sauvegarder les données
 
 Une sauvegarde exploitable comprend :
 
@@ -261,11 +277,11 @@ l’instance isolée.
 > conservez une copie supplémentaire de l’état présent et validez la procédure
 > sur une instance de test avant toute restauration en production.
 
-## Mettre à jour Open Quiz
+## ⬆️ Mettre à jour Open Quiz
 
 Avant une mise à jour :
 
-1. lisez le [journal des versions](../CHANGELOG.md) ;
+1. lisez les notes de la release visée ;
 2. sauvegardez la base et le fichier `.env` ;
 3. vérifiez que le dépôt ne contient aucune modification locale à préserver.
 
@@ -293,7 +309,7 @@ neuf pour la transition.
 Après la mise à jour, vérifiez `docker compose ps`, `/api/health`, la connexion
 des trois rôles et les journaux du backend.
 
-## Gérer les secrets et les accès
+## 🔑 Gérer les secrets et les accès
 
 ### Effet d’une rotation
 
@@ -325,55 +341,168 @@ docker compose exec open-quiz-backend \
 La commande demande une confirmation. Ajoutez `--yes` uniquement dans une
 procédure automatisée qui a déjà validé l’identifiant ciblé.
 
-## Configurer la conservation et les limites
+## ⏳ Configurer la conservation et les limites
 
 Les valeurs ci-dessous sont fournies dans les fichiers `.env` d’exemple.
 
-| Variable                        | Rôle                                                    | Défaut                                          |
-| ------------------------------- | ------------------------------------------------------- | ----------------------------------------------- |
-| `ACCESS_TOKEN_MINUTES`          | durée des jetons d’accès privilégiés                    | `15`                                            |
-| `REFRESH_TOKEN_DAYS`            | durée maximale d’une session longue                     | `7`                                             |
-| `LOGIN_ATTEMPTS`                | tentatives par compte et par fenêtre                    | `10`                                            |
-| `LOGIN_WINDOW_SECONDS`          | fenêtre des tentatives par compte                       | `900`                                           |
-| `GLOBAL_LOGIN_ATTEMPTS`         | tentatives de connexion pour toute l’instance           | `2000`                                          |
-| `GLOBAL_LOGIN_WINDOW_SECONDS`   | fenêtre du quota global                                 | `60`                                            |
-| `QUIZ_JOIN_ATTEMPTS`            | tentatives pour rejoindre une session                   | `60`                                            |
-| `QUIZ_PARTICIPANT_ATTEMPTS`     | requêtes d’un participant par fenêtre                   | `900`                                           |
-| `QUIZ_VIOLATION_ATTEMPTS`       | alertes de surveillance par fenêtre                     | `60`                                            |
-| `QUIZ_RATE_WINDOW_SECONDS`      | fenêtre des limites liées aux quiz                      | `60`                                            |
-| `QUIZ_RESULT_RETENTION_DAYS`    | conservation des résultats terminés                     | `365`                                           |
-| `PROBLEM_REPORT_ATTEMPTS`       | signalements anonymes par fenêtre pour toute l’instance | `60` en local, `5` dans l’exemple de production |
-| `PROBLEM_REPORT_WINDOW_SECONDS` | fenêtre du quota de signalements                        | `900`                                           |
-| `PROBLEM_REPORT_RETENTION_DAYS` | conservation des signalements                           | `90`                                            |
-| `MAX_REQUEST_BODY_BYTES`        | taille des requêtes applicatives ordinaires             | `65536`                                         |
+| Variable                           | Rôle                                                    | Défaut                                          |
+| ---------------------------------- | ------------------------------------------------------- | ----------------------------------------------- |
+| `ACCESS_TOKEN_MINUTES`             | durée des jetons d’accès privilégiés                    | `15`                                            |
+| `REFRESH_TOKEN_DAYS`               | durée maximale d’une session longue                     | `7`                                             |
+| `LOGIN_ATTEMPTS`                   | tentatives par compte et par fenêtre                    | `10`                                            |
+| `LOGIN_WINDOW_SECONDS`             | fenêtre des tentatives par compte                       | `900`                                           |
+| `GLOBAL_LOGIN_ATTEMPTS`            | tentatives de connexion pour toute l’instance           | `2000`                                          |
+| `GLOBAL_LOGIN_WINDOW_SECONDS`      | fenêtre du quota global                                 | `60`                                            |
+| `QUIZ_JOIN_ATTEMPTS`               | tentatives pour rejoindre une session                   | `60`                                            |
+| `QUIZ_PARTICIPANT_ATTEMPTS`        | requêtes d’un participant par fenêtre                   | `900`                                           |
+| `QUIZ_VIOLATION_ATTEMPTS`          | alertes de surveillance par fenêtre                     | `60`                                            |
+| `QUIZ_RATE_WINDOW_SECONDS`         | fenêtre des limites liées aux quiz                      | `60`                                            |
+| `QUIZ_RESULT_RETENTION_DAYS`       | conservation des résultats terminés                     | `365`                                           |
+| `TRAINING_RESULT_RETENTION_DAYS`   | conservation des entraînements terminés                 | `365`                                           |
+| `ABANDONED_SESSION_RETENTION_DAYS` | délai avant de solder une session jamais clôturée       | `7`                                             |
+| `PROBLEM_REPORT_ATTEMPTS`          | signalements anonymes par fenêtre pour toute l’instance | `60` en local, `5` dans l’exemple de production |
+| `PROBLEM_REPORT_WINDOW_SECONDS`    | fenêtre du quota de signalements                        | `900`                                           |
+| `PROBLEM_REPORT_RETENTION_DAYS`    | conservation des signalements                           | `90`                                            |
+| `MAX_REQUEST_BODY_BYTES`           | taille des requêtes applicatives ordinaires             | `65536`                                         |
 
 La suppression des données expirées est appliquée au démarrage, puis toutes les
 heures. Adaptez ces valeurs à la politique validée pour votre instance avant de
 collecter des données réelles.
 
+Une session n’est clôturée par son enseignant que lorsqu’il ouvre son tableau
+de bord. Passé `ABANDONED_SESSION_RETENTION_DAYS`, la maintenance s’en charge à
+sa place : un examen qui a recueilli des réponses est noté puis conservé au
+titre de `QUIZ_RESULT_RETENTION_DAYS`, tandis qu’une salle d’attente sans
+réponse et les entraînements interrompus sont supprimés. Un enseignant
+désactivé ou parti ne laisse donc plus de données sans terme.
+
 `MAX_REQUEST_BODY_BYTES` ne couvre pas les routes authentifiées de création,
 modification et import de questions : elles disposent d’une limite de 96 Mio
 pour transporter les images encodées.
 
-## Renseigner les informations publiques
+## 🛡️ Configurer les mentions RGPD et légales
 
-Les pages `/legal-notice`, `/privacy`, `/accessibility` et `/cookie-settings`
-chargent les informations publiques depuis l’API. Une valeur absente ne bloque
-pas le démarrage, mais laisse apparaître un avertissement dans l’interface.
+Les pages publiques `/legal-notice`, `/privacy`, `/accessibility` et
+`/cookie-settings` n’embarquent aucun texte propre à votre établissement :
+elles lisent ces variables via `/api/public-information`. Une valeur absente ne
+bloque pas le démarrage, mais s’affiche en rouge sur la page sous la mention
+« Non renseigné », et l’instance publie alors une politique sans responsable
+identifiable.
 
-| Groupe          | Variables                                                                                                                   |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Hébergeur       | `LEGAL_HOST_NAME`, `LEGAL_HOST_ADDRESS`, `LEGAL_HOST_PHONE`                                                                 |
-| Confidentialité | `PRIVACY_CONTROLLER_NAME`, `PRIVACY_CONTROLLER_CONTACT`, `PRIVACY_DPO_CONTACT`, `PRIVACY_LEGAL_BASIS`, `PRIVACY_RECIPIENTS` |
-| Conservation    | `PRIVACY_TEACHER_DATA_RETENTION`, `PRIVACY_STUDENT_DATA_RETENTION`, `PRIVACY_SECURITY_LOG_RETENTION`                        |
-| Accessibilité   | `ACCESSIBILITY_CONTACT`, `ACCESSIBILITY_SCHEME_URL`, `ACCESSIBILITY_ACTION_PLAN_URL`                                        |
+Renseignez-les dans `open-quiz-backend/.env`, puis redémarrez l’API. En
+production, les mentions obligatoires laissées vides sont énumérées au
+démarrage dans les journaux, sous l’événement
+`security.public_information_incomplete`. Le contact du DPO et les deux URL
+d’accessibilité en sont exclus : ils restent facultatifs pour le logiciel, pas
+nécessairement pour vous.
+
+### Responsable du traitement et droits
+
+Ce bloc porte les mentions exigées par les articles 13 et 14 du RGPD. Sans lui,
+une personne concernée n’a aucune adresse à qui écrire pour exercer ses droits.
+
+- **`PRIVACY_CONTROLLER_NAME`** — l’entité qui décide du traitement :
+  établissement, collectivité ou académie, jamais une personne physique.
+  Exemple : `Collège Jean-Moulin`.
+- **`PRIVACY_CONTROLLER_CONTACT`** — l’adresse où envoyer une demande d’accès,
+  de rectification ou d’effacement. Exemple : `rgpd@college-jean-moulin.fr`.
+- **`PRIVACY_DPO_CONTACT`** — le délégué à la protection des données compétent,
+  distinct du responsable. Exemple : `dpo@ac-exemple.fr`.
+- **`PRIVACY_LEGAL_BASIS`** — la base légale retenue, en toutes lettres. Dans
+  l’enseignement public, c’est une mission d’intérêt public et non le
+  consentement. Exemple : `Mission d’intérêt public (article 6.1.e)`.
+- **`PRIVACY_RECIPIENTS`** — qui accède aux données, hébergeur et prestataires
+  techniques compris. Exemple : `Enseignants de l’établissement et hébergeur`.
+
+> [!IMPORTANT]
+> Si vous inscrivez le consentement comme base légale, la page ajoute
+> d’elle-même la portabilité et le droit de retrait. Vérifiez que ce fondement
+> est réellement celui de votre traitement : pour une autorité publique, il ne
+> l’est généralement pas.
+
+### Durées de conservation
+
+Quatre durées sont réellement appliquées par la purge et publiées
+automatiquement sur `/privacy`. Trois autres sont du texte libre : elles
+décrivent ce que le logiciel ne peut pas appliquer seul, et c’est à vous de
+les tenir.
+
+| Variable                         | Ce qu’elle fait                           |
+| -------------------------------- | ----------------------------------------- |
+| `QUIZ_RESULT_RETENTION_DAYS`     | supprime les résultats d’examens terminés |
+| `TRAINING_RESULT_RETENTION_DAYS` | supprime les entraînements terminés       |
+| `PROBLEM_REPORT_RETENTION_DAYS`  | supprime les signalements                 |
+| `REFRESH_TOKEN_DAYS`             | borne le cookie d’authentification        |
+
+Les trois variables en texte libre :
+
+- **`PRIVACY_TEACHER_DATA_RETENTION`** — la durée de vie d’un compte
+  enseignant, que vous appliquez en le supprimant depuis l’espace
+  administrateur.
+- **`PRIVACY_STUDENT_DATA_RETENTION`** — la durée de vie des classes et des
+  comptes élèves, généralement l’année scolaire.
+- **`PRIVACY_SECURITY_LOG_RETENTION`** — la durée de vos journaux, fixée par la
+  rotation Docker et par votre collecte.
+
+> [!WARNING]
+> Une durée annoncée en texte libre qui contredit une durée appliquée rend
+> l’information inexacte. Relisez les deux ensemble après chaque changement, et
+> alignez la rétention de vos sauvegardes : une sauvegarde conservée au-delà
+> contient toujours les données que la purge a effacées.
+
+### Hébergeur et accessibilité
+
+`LEGAL_HOST_*` remplit les mentions légales imposées par la loi pour la
+confiance dans l’économie numérique. L’éditeur d’une instance non
+professionnelle peut rester anonyme, mais l’hébergeur doit être identifiable.
+
+| Variable                        | Ce qu’elle affiche                                   |
+| ------------------------------- | ---------------------------------------------------- |
+| `LEGAL_HOST_NAME`               | la raison sociale de l’hébergeur                     |
+| `LEGAL_HOST_ADDRESS`            | son adresse postale                                  |
+| `LEGAL_HOST_PHONE`              | son numéro de téléphone                              |
+| `ACCESSIBILITY_CONTACT`         | le contact pour signaler un défaut d’accessibilité   |
+| `ACCESSIBILITY_SCHEME_URL`      | l’URL du schéma pluriannuel de mise en accessibilité |
+| `ACCESSIBILITY_ACTION_PLAN_URL` | l’URL du plan d’action annuel                        |
+
+Les deux URL sont validées au démarrage : absolues, sans identifiants, et en
+HTTPS lorsque `APP_ENV=production`. Une valeur invalide empêche le démarrage,
+et une URL non HTTP(S) s’affiche en texte simple plutôt qu’en lien.
 
 Utilisez des contacts institutionnels ou fonctionnels, jamais l’adresse
-personnelle d’un enseignant. Faites valider le contenu par l’établissement ou
-son DPO. L’auto-hébergement ne vaut pas homologation et les tests automatisés ne
-remplacent pas un audit RGAA.
+personnelle d’un enseignant. Faites valider l’ensemble par l’établissement ou
+son DPO : renseigner ces variables ne remplace ni l’inscription au registre des
+traitements, ni l’analyse d’impact lorsqu’elle est requise, ni l’information des
+élèves et de leurs représentants légaux. L’auto-hébergement ne vaut pas
+homologation et les tests automatisés ne remplacent pas un audit RGAA.
 
-## Dépannage
+## 🧹 Répondre à une demande d’effacement
+
+Les trois niveaux de suppression se font depuis l’interface, sans intervention
+en base.
+
+**Un compte élève** — espace enseignant, onglet des élèves. Efface le compte,
+son rattachement à la classe et les tentatives encore en cours. Les examens déjà
+terminés sont conservés jusqu’à leur échéance, sous le nom enregistré le jour de
+l’épreuve, pour qu’une note reste attribuable.
+
+**Une classe entière** — espace enseignant, onglet des classes. Efface la classe
+et les élèves qui s’y rattachent.
+
+**Un compte enseignant** — espace administrateur, bouton « Supprimer ». Efface
+le compte et tout ce qu’il détient : classes, comptes élèves, banques,
+questions, quiz, sessions et copies. L’opération est refusée tant qu’une session
+d’examen est en cours ; attendez sa clôture ou terminez-la.
+
+Chaque suppression est tracée dans les journaux de sécurité, sans donnée
+personnelle.
+
+> [!WARNING]
+> Une sauvegarde prise avant l’effacement contient toujours les données
+> supprimées. Alignez la durée de rétention de vos sauvegardes sur celle que
+> vous annoncez aux personnes concernées.
+
+## 🔧 Dépannage
 
 | Symptôme                             | Vérifications                                                                                                        |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
