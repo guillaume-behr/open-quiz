@@ -15,6 +15,19 @@ services:
             - open-quiz-postgres-data:/var/lib/postgresql/data
         init: true
         shm_size: 256mb
+        # PostgreSQL writes to its data directory, so read_only is not
+        # available here as it is for the other two services. The capability
+        # set and no-new-privileges still are: keep them in step.
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - SETGID
+            - SETUID
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U open_quiz -d open_quiz"]
             interval: 10s
