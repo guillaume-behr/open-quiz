@@ -85,6 +85,8 @@ class Settings:
     quiz_violation_attempts: int = 60
     quiz_rate_window_seconds: int = 60
     quiz_result_retention_days: int = 365
+    training_result_retention_days: int = 365
+    abandoned_session_retention_days: int = 7
     problem_report_attempts: int = 60
     problem_report_window_seconds: int = 900
     problem_report_retention_days: int = 90
@@ -185,6 +187,14 @@ class Settings:
             raise ValueError("QUIZ_RATE_WINDOW_SECONDS must be between 10 and 3600")
         if not 1 <= self.quiz_result_retention_days <= 3650:
             raise ValueError("QUIZ_RESULT_RETENTION_DAYS must be between 1 and 3650")
+        if not 1 <= self.training_result_retention_days <= 3650:
+            raise ValueError(
+                "TRAINING_RESULT_RETENTION_DAYS must be between 1 and 3650"
+            )
+        if not 1 <= self.abandoned_session_retention_days <= 90:
+            raise ValueError(
+                "ABANDONED_SESSION_RETENTION_DAYS must be between 1 and 90"
+            )
         if not 1 <= self.problem_report_attempts <= 5000:
             raise ValueError("PROBLEM_REPORT_ATTEMPTS must be between 1 and 5000")
         if not 60 <= self.problem_report_window_seconds <= 86400:
@@ -260,6 +270,12 @@ def get_settings() -> Settings:
         quiz_violation_attempts=int(os.getenv("QUIZ_VIOLATION_ATTEMPTS", "60")),
         quiz_rate_window_seconds=int(os.getenv("QUIZ_RATE_WINDOW_SECONDS", "60")),
         quiz_result_retention_days=int(os.getenv("QUIZ_RESULT_RETENTION_DAYS", "365")),
+        training_result_retention_days=int(
+            os.getenv("TRAINING_RESULT_RETENTION_DAYS", "365")
+        ),
+        abandoned_session_retention_days=int(
+            os.getenv("ABANDONED_SESSION_RETENTION_DAYS", "7")
+        ),
         problem_report_attempts=int(os.getenv("PROBLEM_REPORT_ATTEMPTS", "60")),
         problem_report_window_seconds=int(
             os.getenv("PROBLEM_REPORT_WINDOW_SECONDS", "900")

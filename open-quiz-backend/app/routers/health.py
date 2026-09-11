@@ -39,6 +39,7 @@ def public_information(request: Request) -> dict[str, object]:
             "student_data_retention": (settings.privacy_student_data_retention),
             "security_log_retention": (settings.privacy_security_log_retention),
             "quiz_result_retention_days": (settings.quiz_result_retention_days),
+            "training_result_retention_days": (settings.training_result_retention_days),
             "problem_report_retention_days": (settings.problem_report_retention_days),
         },
         "cookies": {
