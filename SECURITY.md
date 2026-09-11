@@ -94,6 +94,28 @@ Les sessions privilégiées exigent une preuve de renouvellement conservée dans
 la fenêtre principale et inaccessible au Worker Python. Les autorisations et la
 notation restent appliquées par le backend.
 
+Les mots de passe élèves sont volontairement réversibles : l’enseignant doit
+pouvoir réimprimer une carte d’identifiants sans réinitialiser le compte. Ils
+sont donc stockés deux fois, sous forme de condensat Argon2 pour la
+vérification et sous forme chiffrée par `STUDENT_CREDENTIAL_ENCRYPTION_KEY`
+pour la consultation. Ce choix a une conséquence à assumer : le chiffrement
+protège une base seule — une sauvegarde égarée, un export de table — mais pas
+un hôte compromis, car dans le déploiement Compose par défaut la clé et
+`DATABASE_URL` résident dans le même fichier `.env`, sur la même machine. Qui
+lit la base peut donc, en pratique, lire aussi la clé.
+
+Deux conséquences en découlent. Les élèves réutilisant fréquemment leurs mots
+de passe ailleurs, la portée d’une compromission dépasse cette application :
+traitez ces identifiants comme des données personnelles à part entière.
+Si les sauvegardes constituent le risque principal du déploiement, fournir
+`STUDENT_CREDENTIAL_ENCRYPTION_KEY` par variable d’environnement injectée au
+démarrage, plutôt que par un fichier voisin des données, rétablit l’essentiel
+du bénéfice attendu.
+
+Les comptes enseignants et administrateurs ne sont pas concernés : leurs mots
+de passe ne sont stockés que sous forme de condensat et ne sont jamais
+consultables.
+
 ## 🔥 Réagir à un secret compromis
 
 Révoquez ou remplacez d’abord le secret dans le système actif. Nettoyer

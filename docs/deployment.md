@@ -215,7 +215,11 @@ Surveillez au minimum :
 - la validité du certificat TLS ;
 - les redémarrages ou états `unhealthy` des conteneurs ;
 - les événements JSON `security.*`, `auth.login_rate_limited` et
-  `auth.refresh_reuse_detected`.
+  `auth.refresh_reuse_detected` ;
+- l’événement `auth.global_budget_floor_used`, émis lorsque le budget
+  d’authentification de l’instance est épuisé et qu’un compte connu est tout de
+  même servi. Isolé, il ne signale rien ; répété, il indique que quelqu’un
+  sature les connexions et que seuls les comptes déjà existants passent encore.
 
 Les journaux peuvent contenir des informations d’audit. Centralisez-les dans un
 espace à accès restreint et appliquez la durée de conservation validée pour

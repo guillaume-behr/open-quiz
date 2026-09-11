@@ -111,21 +111,45 @@ def password_rate_subject(username: str) -> str:
     return f"password:identity:{username}"
 
 
-def enforce_global_auth_limit(request: Request, session: DbSession) -> None:
+def enforce_global_auth_limit(
+    request: Request,
+    session: DbSession,
+    *,
+    known_identity: bool = False,
+) -> None:
     """Bound total authentication hashing work instance-wide regardless of source.
 
     Unlike per-account buckets, this single budget cannot be evaded by
     rotating usernames, so it caps the CPU cost an attacker can force.
+
+    Exhausting the budget must not take the instance offline. Without a floor,
+    anyone able to send a few thousand requests a minute denies every teacher
+    and student their login for the rest of the window, which during a lesson
+    costs more than the hashing the budget exists to bound. So a request that
+    names an account the instance already knows still proceeds: that account's
+    own bucket caps how much hashing it can be made to cost, leaving total work
+    bounded by the number of real accounts rather than by the request rate.
+
+    The floor is a deliberate trade. While the budget is exhausted, the
+    difference between 429 and 401 tells a caller that an identifier exists,
+    which the constant-time password path otherwise hides. Opening that oracle
+    costs a sustained flood that this function audits on every request, and the
+    identifiers it discloses are already derived from names the attacker would
+    have to know to ask the question.
     """
     retry_after = request.app.state.auth_global_rate_limiter.reserve(
         session, "instance"
     )
-    if retry_after:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=auth_error("AUTH_RATE_LIMITED"),
-            headers={"Retry-After": str(retry_after)},
-        )
+    if not retry_after:
+        return
+    if known_identity:
+        audit_event("auth.global_budget_floor_used")
+        return
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=auth_error("AUTH_RATE_LIMITED"),
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 def two_factor_rate_subject(user_id: int) -> str:
@@ -284,10 +308,16 @@ def login(
 ) -> LoginResponse:
     """Verify a password and begin 2FA setup or verification."""
     validate_origin(request)
-    enforce_global_auth_limit(request, session)
+    user = session.scalar(select(User).where(User.username == payload.username))
+    # Resolving the account before the budget check is what lets a real
+    # teacher still sign in while an anonymous flood holds the budget open.
+    enforce_global_auth_limit(
+        request,
+        session,
+        known_identity=user is not None and user.is_active,
+    )
     limiter = request.app.state.login_rate_limiter
     rate_subject = password_rate_subject(payload.username)
-    user = session.scalar(select(User).where(User.username == payload.username))
     retry_after = limiter.reserve(session, rate_subject)
     if retry_after:
         audit_event("auth.login_rate_limited")
@@ -380,23 +410,41 @@ def verify_two_factor(
 ) -> TokenResponse:
     """Complete 2FA setup or verify a login challenge."""
     validate_origin(request)
-    enforce_global_auth_limit(request, session)
     settings = request.app.state.settings
     try:
-        user_id, purpose, token_id_hash = decode_two_factor_token(
+        decoded = decode_two_factor_token(
             payload.challenge_token,
             settings.jwt_secret,
         )
     except jwt.PyJWTError, ValueError, KeyError:
+        decoded = None
+
+    now = int(time())
+    challenge = (
+        session.get(AuthenticationChallenge, decoded[2])
+        if decoded is not None
+        else None
+    )
+    # Holding a live challenge means the password step already succeeded, so
+    # this caller earns the same budget floor as a known account.
+    enforce_global_auth_limit(
+        request,
+        session,
+        known_identity=(
+            challenge is not None
+            and challenge.used_at is None
+            and challenge.expires_at > now
+        ),
+    )
+    if decoded is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=auth_error("AUTH_2FA_CHALLENGE_INVALID"),
-        ) from None
+        )
+    user_id, purpose, token_id_hash = decoded
 
     user = session.get(User, user_id)
     two_factor = session.get(TwoFactorCredential, user_id)
-    now = int(time())
-    challenge = session.get(AuthenticationChallenge, token_id_hash)
     expected_purpose = (
         "two_factor_verification"
         if two_factor is not None and two_factor.confirmed
