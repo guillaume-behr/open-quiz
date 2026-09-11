@@ -80,7 +80,16 @@ def login_student(
     session: DbSession,
 ) -> StudentLoginResponse:
     validate_origin(request)
-    enforce_global_auth_limit(request, session)
+    account = session.scalar(
+        select(StudentAccount).where(StudentAccount.identifier == payload.identifier)
+    )
+    # Resolving the account first keeps real students able to sign in while an
+    # anonymous flood holds the instance-wide budget open.
+    enforce_global_auth_limit(
+        request,
+        session,
+        known_identity=account is not None and account.is_active,
+    )
     subject = f"student-password:identity:{payload.identifier}"
     limiter = request.app.state.login_rate_limiter
     retry_after = limiter.reserve(session, subject)
@@ -90,9 +99,6 @@ def login_student(
             detail=auth_error("AUTH_RATE_LIMITED"),
             headers={"Retry-After": str(retry_after)},
         )
-    account = session.scalar(
-        select(StudentAccount).where(StudentAccount.identifier == payload.identifier)
-    )
     encoded = account.password_hash if account else DUMMY_PASSWORD_HASH
     # Always run the password verification, even for unknown identifiers, so
     # the response time does not reveal whether the account exists.

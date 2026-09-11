@@ -3975,6 +3975,134 @@ def test_global_auth_rate_limit_is_shared_across_login_flows(
     assert int(limited.headers["retry-after"]) > 0
 
 
+def test_an_exhausted_global_budget_still_admits_a_known_teacher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An anonymous flood must not lock real teachers out of their instance."""
+    app_settings = settings_for(
+        tmp_path / "global-auth-floor.db",
+        global_login_attempts=50,
+    )
+    with make_client(app_settings) as client:
+        monkeypatch.setattr(
+            "app.routers.auth.verify_password",
+            lambda password, _: password == ADMIN_PASSWORD,
+        )
+        for attempt in range(50):
+            client.post(
+                "/api/auth/login",
+                json={
+                    "username": f"unknown-{attempt}",
+                    "password": "incorrect-password",
+                },
+            )
+
+        unknown = client.post(
+            "/api/auth/login",
+            json={"username": "still-unknown", "password": "incorrect-password"},
+        )
+        assert unknown.status_code == 429
+        assert unknown.json()["detail"]["code"] == "AUTH_RATE_LIMITED"
+
+        admitted = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+        assert admitted.status_code == 200
+        assert admitted.json()["status"] == "setup_required"
+
+        # The floor admits the account, it does not excuse it from the password
+        # check or from its own per-account budget.
+        rejected = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": "incorrect-password"},
+        )
+        assert rejected.status_code == 401
+        assert rejected.json()["detail"]["code"] == "AUTH_INVALID_CREDENTIALS"
+
+
+def test_an_exhausted_global_budget_admits_only_active_students(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings_for(
+        tmp_path / "global-auth-floor-student.db",
+        global_login_attempts=50,
+    )
+    with make_client(app_settings) as client:
+        admin_headers = login_admin(client)
+        assert (
+            client.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "username": "floor.teacher",
+                    "display_name": "Floor Teacher",
+                    "password": "a-secure-teacher-password",
+                },
+            ).status_code
+            == 201
+        )
+        teacher_headers, _ = complete_first_login(
+            client,
+            "floor.teacher",
+            "a-secure-teacher-password",
+        )
+        account = client.post(
+            "/api/students",
+            headers=teacher_headers,
+            json={"first_name": "Floor", "last_name": "Student"},
+        ).json()
+        student_password = account["generated_password"]
+
+        monkeypatch.setattr("app.routers.auth.verify_password", lambda *_: False)
+        monkeypatch.setattr(
+            "app.routers.student_auth.verify_password",
+            lambda password, _: password == student_password,
+        )
+        for attempt in range(50):
+            client.post(
+                "/api/auth/login",
+                json={
+                    "username": f"unknown-{attempt}",
+                    "password": "incorrect-password",
+                },
+            )
+
+        unknown = client.post(
+            "/api/student-auth/login",
+            json={"identifier": "unknown.student", "password": "incorrect-password"},
+        )
+        assert unknown.status_code == 429
+
+        admitted = client.post(
+            "/api/student-auth/login",
+            json={"identifier": account["identifier"], "password": student_password},
+        )
+        assert admitted.status_code == 200
+
+        assert (
+            client.post(
+                f"/api/students/{account['id']}/update",
+                headers=teacher_headers,
+                json={
+                    "identifier": account["identifier"],
+                    "display_name": account["display_name"],
+                    "is_active": False,
+                },
+            ).status_code
+            == 200
+        )
+        # A disabled account is not a user the instance needs to keep serving,
+        # so it falls back behind the budget like any unknown identifier.
+        disabled = client.post(
+            "/api/student-auth/login",
+            json={"identifier": account["identifier"], "password": student_password},
+        )
+        assert disabled.status_code == 429
+
+
 def test_correct_password_does_not_reset_two_factor_throttling(
     tmp_path: Path,
 ) -> None:
