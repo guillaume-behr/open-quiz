@@ -29,6 +29,11 @@ import { StudentQuizPage } from "./student-quiz-page"
 import { useQuizMonitoring } from "./use-quiz-monitoring"
 import { useQuizTranslation } from "./use-quiz-translation"
 
+type AnswerDraft = {
+    selectedChoiceIds: number[]
+    writtenAnswer: string
+}
+
 export function StudentQuiz({
     studentToken,
     onSessionCleared,
@@ -52,6 +57,11 @@ export function StudentQuiz({
     const sessionRequestVersion = useRef(0)
     const liveSessionRef = useRef<StudentQuizSession | null>(session)
     const liveRevisionRef = useRef(0)
+    // What the student has entered on each question they visited, so that
+    // stepping back to an earlier question and returning does not throw away
+    // an answer that is not submitted yet.
+    const answerDraftsRef = useRef(new Map<number, AnswerDraft>())
+    const draftedQuestionIdRef = useRef<number | null>(null)
     const { isFullscreen, enterFullscreen } = useQuizMonitoring(
         session,
         participantToken,
@@ -69,15 +79,47 @@ export function StudentQuiz({
               : "ltr"
     const liveJoinCode = session?.join_code
 
-    const applySession = useCallback((updated: StudentQuizSession) => {
-        setSession(updated)
-        setSelectedChoiceIds(updated.selected_choice_ids ?? [])
-        setWrittenAnswer(updated.written_answer ?? "")
+    // Show the question being opened with the draft kept for it, and fall back
+    // to the answer already recorded by the server when there is none.
+    const applyAnswerState = useCallback((updated: StudentQuizSession) => {
+        const questionId = updated.question?.id ?? null
+        draftedQuestionIdRef.current = questionId
+        const draft =
+            questionId === null
+                ? undefined
+                : answerDraftsRef.current.get(questionId)
+        setSelectedChoiceIds(
+            draft?.selectedChoiceIds.length
+                ? draft.selectedChoiceIds
+                : (updated.selected_choice_ids ?? [])
+        )
+        setWrittenAnswer(
+            draft?.writtenAnswer
+                ? draft.writtenAnswer
+                : (updated.written_answer ?? "")
+        )
     }, [])
+
+    const applySession = useCallback(
+        (updated: StudentQuizSession) => {
+            setSession(updated)
+            applyAnswerState(updated)
+        },
+        [applyAnswerState]
+    )
 
     useEffect(() => {
         liveSessionRef.current = session
     }, [session])
+
+    useEffect(() => {
+        const questionId = draftedQuestionIdRef.current
+        if (questionId === null) return
+        answerDraftsRef.current.set(questionId, {
+            selectedChoiceIds,
+            writtenAnswer,
+        })
+    }, [selectedChoiceIds, writtenAnswer])
 
     useEffect(() => {
         if (!restoredSession) return
@@ -131,10 +173,8 @@ export function StudentQuiz({
                     updated.question &&
                     updated.question.id !== current?.question?.id &&
                     current?.status !== "paused"
-                ) {
-                    setSelectedChoiceIds(updated.selected_choice_ids ?? [])
-                    setWrittenAnswer(updated.written_answer ?? "")
-                }
+                )
+                    applyAnswerState(updated)
                 const next =
                     current?.question &&
                     current.question.id === updated.question?.id
@@ -145,7 +185,7 @@ export function StudentQuiz({
             },
             onUnavailable: () => setError(t("student-session-error")),
         })
-    }, [liveJoinCode, participantToken, t])
+    }, [applyAnswerState, liveJoinCode, participantToken, t])
 
     async function handleJoin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -183,6 +223,8 @@ export function StudentQuiz({
             return
         }
         clearStoredQuizSession()
+        answerDraftsRef.current.clear()
+        draftedQuestionIdRef.current = null
         setSession(null)
         setParticipantToken(null)
         setJoinCode("")
@@ -283,6 +325,7 @@ export function StudentQuiz({
         setIsBusy(true)
         sessionRequestVersion.current += 1
         const liveRevision = liveRevisionRef.current
+        const answeredQuestionId = session.question.id
         try {
             const updated = await submitStudentQuizAnswer(
                 session.join_code,
@@ -298,8 +341,9 @@ export function StudentQuiz({
                             : undefined,
                 }
             )
-            setSelectedChoiceIds([])
-            setWrittenAnswer("")
+            // The server now holds this answer: coming back to the question
+            // must show what was submitted, not a stale draft.
+            answerDraftsRef.current.delete(answeredQuestionId)
             if (liveRevisionRef.current === liveRevision) applySession(updated)
         } catch {
             setError(t("student-answer-error"))

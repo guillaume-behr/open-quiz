@@ -920,3 +920,143 @@ test("student can submit a written answer", async ({ page }) => {
             .getByRole("button", { name: "Join another quiz" })
     ).toBeVisible()
 })
+
+const writtenQuestion = (id: number, prompt: string) => ({
+    id,
+    prompt,
+    difficulty: "medium",
+    answer_mode: "written",
+    answer_mode_disclosed: true,
+    response_language: null,
+    has_image: false,
+    code_language: null,
+    code_content: null,
+    choices: [],
+})
+
+const writtenExamState = (
+    questionNumber: number,
+    writtenAnswer: string | null
+) => ({
+    ...baseSession,
+    status: "in_progress",
+    total_questions: 2,
+    question_number: questionNumber,
+    answered_count: writtenAnswer === null ? 0 : 1,
+    has_answered: writtenAnswer !== null,
+    allow_previous_questions: true,
+    accessible_question_numbers: [1, 2],
+    written_answer: writtenAnswer,
+    question: writtenQuestion(
+        41 + questionNumber,
+        questionNumber === 1 ? "First question" : "Second question"
+    ),
+})
+
+test("student keeps a written answer when stepping back to an earlier question", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+    })
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
+        (socket) => socket.onMessage(() => {})
+    )
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            json: {
+                ...writtenExamState(2, null),
+                participant_token: "participant-token",
+            },
+        })
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({ json: writtenExamState(2, null) })
+    })
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/navigate",
+        async (route) => {
+            const target = route.request().postDataJSON()
+                .question_number as number
+            await route.fulfill({
+                json:
+                    target === 1
+                        ? writtenExamState(1, "Chlorophyll captures light.")
+                        : writtenExamState(2, null),
+            })
+        }
+    )
+
+    await joinExamViaDashboard(page, "ABCD")
+    const writtenAnswer = page.getByLabel("Written answer")
+    await writtenAnswer.fill("An essay that is still being written")
+
+    // Reading an earlier question shows the answer recorded for it.
+    await page.getByRole("button", { name: "Question 1 on 2" }).click()
+    await expect(writtenAnswer).toHaveValue("Chlorophyll captures light.")
+
+    // Coming back must not throw away the essay left in progress.
+    await page.getByRole("button", { name: "Question 2 on 2" }).click()
+    await expect(writtenAnswer).toHaveValue(
+        "An essay that is still being written"
+    )
+})
+
+test("a submitted written answer replaces the draft kept for its question", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+    })
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
+        (socket) => socket.onMessage(() => {})
+    )
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            json: {
+                ...writtenExamState(1, null),
+                participant_token: "participant-token",
+            },
+        })
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({ json: writtenExamState(1, null) })
+    })
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/answer",
+        async (route) => {
+            expect(route.request().postDataJSON()).toEqual({
+                written_answer: "Photosynthesis feeds the plant.",
+            })
+            await route.fulfill({ json: writtenExamState(2, null) })
+        }
+    )
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/navigate",
+        async (route) => {
+            await route.fulfill({
+                json: writtenExamState(1, "Photosynthesis feeds the plant."),
+            })
+        }
+    )
+
+    await joinExamViaDashboard(page, "ABCD")
+    const writtenAnswer = page.getByLabel("Written answer")
+    await writtenAnswer.fill("Photosynthesis feeds the plant.")
+    await page.getByRole("button", { name: "Submit my answer" }).click()
+    await expect(
+        page.getByRole("heading", { name: "Second question" })
+    ).toBeVisible()
+    await expect(writtenAnswer).toHaveValue("")
+
+    await page.getByRole("button", { name: "Question 1 on 2" }).click()
+    await expect(writtenAnswer).toHaveValue("Photosynthesis feeds the plant.")
+})
