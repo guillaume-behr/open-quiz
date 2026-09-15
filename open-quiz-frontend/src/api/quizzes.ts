@@ -376,7 +376,6 @@ export function reportStudentQuizViolation(
         | "window_blur"
         | "page_hidden"
         | "copy_attempt"
-        | "paste_attempt"
         | "context_menu"
         | "print_attempt"
 ): Promise<void> {
