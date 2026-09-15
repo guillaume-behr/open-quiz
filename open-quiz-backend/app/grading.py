@@ -18,10 +18,23 @@ def selected_choice_score(
     *,
     allow_negative_points: bool,
 ) -> float:
+    """Score one answer, never paying for a selection wider than the key.
+
+    Picking an incorrect choice has to cost something, or ticking every box
+    collects every positive point and scores full marks without reading the
+    question. Without negative points nothing can express that cost, so any
+    incorrect choice zeroes the question.
+
+    Enabling negative points must not weaken that. A choice the teacher gave a
+    negative value carries its own penalty and is charged as written; one still
+    sitting at zero or above carries none — the editor defaults distractors to
+    zero — so it falls back to the same rule rather than being free.
+    """
     selected = [choice for choice in choices if choice.id in selected_ids]
-    if not allow_negative_points and any(not choice.is_correct for choice in selected):
-        # Otherwise selecting every option earns every positive point while
-        # wrong zero-point options are silently ignored.
+    if any(
+        not choice.is_correct and (not allow_negative_points or choice.points >= 0)
+        for choice in selected
+    ):
         return 0.0
     return round(
         sum(
