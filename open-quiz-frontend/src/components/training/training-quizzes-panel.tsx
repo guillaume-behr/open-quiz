@@ -10,6 +10,7 @@ import type {
 } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
+import { Grade } from "@/components/ui/grade"
 import {
     TRAINING_SESSION_STORAGE_KEY,
     storeStudentSession,
@@ -364,13 +365,18 @@ function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
                                 timeStyle: "short",
                             }).format(new Date(item.started_at))}
                         </time>
-                        <span className="font-semibold">
-                            {t("training-history-score", {
-                                score: item.score,
-                                maximum: item.maximum_score,
-                                percent: Math.round(percentages[index]),
-                            })}
-                        </span>
+                        <Grade
+                            className="font-semibold"
+                            score={item.score}
+                            maximumScore={item.maximum_score}
+                            format={(grade, scale) =>
+                                t("training-history-score", {
+                                    grade,
+                                    scale,
+                                    percent: Math.round(percentages[index]),
+                                })
+                            }
+                        />
                     </li>
                 ))}
             </ol>

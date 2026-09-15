@@ -2,6 +2,7 @@ import { getStudentQuizHistory } from "@/api/student-auth"
 import type { StudentQuizHistoryItem } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
+import { Grade } from "@/components/ui/grade"
 import { scoreGradientStyle } from "@/lib/utils"
 import { Accordion } from "@base-ui/react/accordion"
 import {
@@ -109,13 +110,22 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                     {item.score !== null &&
                                         item.maximum_score !== null && (
                                             <span className="mt-2 flex flex-wrap items-center gap-2">
-                                                <span className="font-bold text-primary">
-                                                    {t("published-grade", {
-                                                        score: item.score,
-                                                        maximum:
-                                                            item.maximum_score,
-                                                    })}
-                                                </span>
+                                                <Grade
+                                                    className="font-bold text-primary"
+                                                    score={item.score}
+                                                    maximumScore={
+                                                        item.maximum_score
+                                                    }
+                                                    format={(grade, scale) =>
+                                                        t("published-grade", {
+                                                            grade,
+                                                            scale,
+                                                        })
+                                                    }
+                                                    // The grade sits inside
+                                                    // the accordion trigger.
+                                                    focusable={false}
+                                                />
                                                 {!item.grades_published && (
                                                     <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
                                                         <TriangleAlert className="size-3" />

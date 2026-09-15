@@ -1,5 +1,5 @@
 import type { QuizAnswerReview, QuizParticipant } from "@/api/types"
-import { formatScore } from "@/components/results/results-utils"
+import { formatScore } from "@/lib/grades"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"

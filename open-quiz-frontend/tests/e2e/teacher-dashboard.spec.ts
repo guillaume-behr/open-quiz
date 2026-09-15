@@ -1971,13 +1971,21 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     await expect(
         resultDialog.getByText("Median available points")
     ).toBeVisible()
-    const scoreHeading = resultDialog.getByText("Points / possible total", {
+    const scoreHeading = resultDialog.getByText("Grade", {
         exact: true,
     })
     const participantRow = resultDialog.locator('[data-participant-id="91"]')
     const participantScore = participantRow.locator("[data-participant-score]")
     await expect(scoreHeading).toBeVisible()
-    await expect(participantScore).toContainText(/2\s*\/\s*10\s*pts?/)
+    // Whatever a paper is marked out of, the grade is read on the same scale.
+    await expect(participantScore).toContainText(/4\s*\/\s*20/)
+    await participantScore.getByText("4 / 20").hover()
+    // The tooltip is portalled out of the dialog.
+    await expect(
+        page.getByRole("tooltip").filter({
+            hasText: "Full grade: 2 / 10 points",
+        })
+    ).toBeVisible()
     await expect
         .poll(() =>
             resultDialog.evaluate((element) =>
@@ -2043,10 +2051,7 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     // would mean partial credit reads as an outright failure again.
     await expect(
         answersDialog.getByText("Energy moves between systems.").locator("..")
-    ).toHaveAttribute(
-        "style",
-        /var\(--destructive\) 30%, var\(--success\) 70%/
-    )
+    ).toHaveAttribute("style", /var\(--destructive\) 30%, var\(--success\) 70%/)
     expect(
         requests
             .find((request) =>

@@ -9,6 +9,7 @@ import { StudentQuestionForm } from "@/components/student-quiz/student-question-
 import { TranslationNotice } from "@/components/student-quiz/translation-notice"
 import { useQuizTranslation } from "@/components/student-quiz/use-quiz-translation"
 import { Button } from "@/components/ui/button"
+import { Grade } from "@/components/ui/grade"
 import { PageLoader } from "@/components/ui/page-loader"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import {
@@ -226,14 +227,19 @@ export function TrainingPage() {
                         {session.potential_score !== null && (
                             <div className="mx-auto mt-5 flex w-fit items-center gap-2 rounded-lg border bg-background px-4 py-3">
                                 <Scale className="size-5 text-primary" />
-                                <span className="font-semibold">
-                                    {t("training-potential-score", {
-                                        score: session.potential_score,
-                                        maximum:
-                                            session.potential_maximum_score ??
-                                            0,
-                                    })}
-                                </span>
+                                <Grade
+                                    className="font-semibold"
+                                    score={session.potential_score}
+                                    maximumScore={
+                                        session.potential_maximum_score ?? 0
+                                    }
+                                    format={(grade, scale) =>
+                                        t("training-potential-score", {
+                                            grade,
+                                            scale,
+                                        })
+                                    }
+                                />
                                 <button
                                     type="button"
                                     className="rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"

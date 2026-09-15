@@ -331,6 +331,8 @@ test("a student launches training and sees the correct answer", async ({
                         correct_choice_ids: [101],
                         expected_answer: null,
                     },
+                    potential_score: 3,
+                    potential_maximum_score: 4,
                 },
             })
         }
@@ -389,6 +391,15 @@ test("a student launches training and sees the correct answer", async ({
         Math.abs(continueButtonBox!.y - submitButtonBox!.y)
     ).toBeLessThanOrEqual(25)
     await page.getByRole("button", { name: "Continue" }).click()
+    // A training worth four points is read on the same scale as an exam.
+    const potentialGrade = page.getByText("Potential grade: 15 / 20")
+    await expect(potentialGrade).toBeVisible()
+    await potentialGrade.hover()
+    await expect(
+        page.getByRole("tooltip").filter({
+            hasText: "Full grade: 3 / 4 points",
+        })
+    ).toBeVisible()
     await page.getByRole("button", { name: "Back to home" }).click()
     await expect(page).toHaveURL(/\/student\/dashboard$/)
 })
@@ -467,7 +478,7 @@ test("training history ignores a response from a previously closed dialog", asyn
         .filter({ hasText: "Practice maths" })
         .getByRole("button", { name: "View history" })
         .click()
-    await expect(page.getByText("4 / 4 (100%)")).toBeVisible()
+    await expect(page.getByText("20 / 20 (100%)")).toBeVisible()
 
     const staleResponse = page.waitForResponse(
         "**/api/quizzes/training/12/history"
@@ -475,8 +486,8 @@ test("training history ignores a response from a previously closed dialog", asyn
     releaseFirstHistory?.()
     await staleResponse
     await page.waitForTimeout(100)
-    await expect(page.getByText("4 / 4 (100%)")).toBeVisible()
-    await expect(page.getByText("1 / 4 (25%)")).toHaveCount(0)
+    await expect(page.getByText("20 / 20 (100%)")).toBeVisible()
+    await expect(page.getByText("5 / 20 (25%)")).toHaveCount(0)
 })
 
 test("a student joins a retake room and selects an eligible quiz", async ({
@@ -637,16 +648,21 @@ test("a student reviews the correction history", async ({ page }) => {
     await expect(correctionTrigger).toHaveAttribute("aria-expanded", "false")
     await correctionTrigger.click()
     await expect(correctionTrigger).toHaveAttribute("aria-expanded", "true")
-    await expect(page.getByText("Grade: 7 / 10")).toBeVisible()
+    const grade = page.getByText("Grade: 14 / 20")
+    await expect(grade).toBeVisible()
+    // The points the grade was rebased from stay one hover away.
+    await grade.hover()
+    await expect(
+        page.getByRole("tooltip").filter({
+            hasText: "Full grade: 7 / 10 points",
+        })
+    ).toBeVisible()
     await expect(page.getByText("Which planet is red?")).toBeVisible()
     // A wrong answer sits at the destructive end of the same gradient, which
     // the surrounding block carries as an inline style rather than a class.
     await expect(
         page.getByText("Venus", { exact: true }).locator("..")
-    ).toHaveAttribute(
-        "style",
-        /var\(--destructive\) 100%, var\(--success\) 0%/
-    )
+    ).toHaveAttribute("style", /var\(--destructive\) 100%, var\(--success\) 0%/)
     await expect(page.getByText("Review this answer")).toBeAttached()
     await expect(page.getByText("Mars", { exact: true })).toBeVisible()
     await correctionTrigger.click()

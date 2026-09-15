@@ -17,13 +17,15 @@ import type {
 } from "@/api/types"
 import { ParticipantAnswersDialog } from "@/components/results/participant-answers-dialog"
 import { ResultsSchedule } from "@/components/results/results-schedule"
-import { formatScore, resultStart } from "@/components/results/results-utils"
+import { resultStart } from "@/components/results/results-utils"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Grade } from "@/components/ui/grade"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
+import { formatScore } from "@/lib/grades"
 import { cn, formatClassName, saveBlob } from "@/lib/utils"
 import { Tooltip } from "@base-ui/react/tooltip"
 import {
@@ -929,18 +931,14 @@ export function ResultsPanel({
                                                         :{" "}
                                                     </span>
                                                     <span className="inline-flex items-center justify-end gap-1">
-                                                        <span>
-                                                            {formatScore(
-                                                                participant.score,
-                                                                i18n.language
-                                                            )}{" "}
-                                                            /{" "}
-                                                            {formatScore(
-                                                                participant.maximum_score,
-                                                                i18n.language
-                                                            )}{" "}
-                                                            {t("points-short")}
-                                                        </span>
+                                                        <Grade
+                                                            score={
+                                                                participant.score
+                                                            }
+                                                            maximumScore={
+                                                                participant.maximum_score
+                                                            }
+                                                        />
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
