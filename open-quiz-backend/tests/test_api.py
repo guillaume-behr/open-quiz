@@ -49,6 +49,7 @@ from app.models import (
     QuestionChoice,
     Quiz,
     QuizAnswer,
+    QuizJoinCode,
     QuizParticipant,
     QuizQuestionBank,
     QuizSession,
@@ -61,6 +62,7 @@ from app.models import (
     User,
 )
 from app.rate_limit import LoginRateLimiter
+from app.routers import quizzes as quizzes_router
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.routers.quizzes import (
     generate_join_code,
@@ -7755,3 +7757,62 @@ def test_admin_cannot_delete_a_professor_running_an_exam(tmp_path: Path) -> None
         assert refused.status_code == 409
         with client.app.state.session_factory() as session:
             assert session.get(User, teacher_id) is not None
+
+
+def test_discarded_sessions_release_their_join_codes(tmp_path: Path) -> None:
+    """A join code is reserved for the life of its session, not forever.
+
+    Restarting training discards the previous attempt, so a student who keeps
+    restarting would otherwise burn one row of the reservation table per
+    attempt, with nothing in the retention sweep to reclaim it.
+    """
+    with make_client(settings_for(tmp_path / "join-code-release.db")) as client:
+        environment = exam_environment(client)
+        bank_id = environment["question"]["question_bank_id"]
+        assert (
+            client.put(
+                f"/api/quizzes/training/classes/"
+                f"{environment['student_class']['id']}/question-banks",
+                headers=environment["teacher_headers"],
+                json={"question_bank_ids": [bank_id]},
+            ).status_code
+            == 200
+        )
+        for _ in range(4):
+            assert (
+                client.post(
+                    f"/api/quizzes/training/{bank_id}/start",
+                    headers=environment["student_headers"],
+                ).status_code
+                == 201
+            )
+
+        with client.app.state.session_factory() as session:
+            live_codes = set(session.scalars(select(QuizSession.join_code)))
+            reserved_codes = set(session.scalars(select(QuizJoinCode.code)))
+        assert reserved_codes == live_codes
+
+
+def test_idle_live_socket_still_receives_a_keepalive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every live endpoint reconciles on a timer, so a quiet socket must ping.
+
+    Without it an idle connection puts nothing on the wire, and a proxy that
+    drops it leaves the dashboard stale behind a close the client never sees.
+    """
+    monkeypatch.setattr(quizzes_router, "LIVE_HEARTBEAT_SECONDS", 0.2)
+    monkeypatch.setattr(quizzes_router, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.1)
+    with make_client(settings_for(tmp_path / "live-heartbeat.db")) as client:
+        environment = exam_environment(client)
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+        with client.websocket_connect(
+            "/api/quizzes/live/teacher/sessions",
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as socket:
+            socket.send_json({"token": teacher_token})
+            assert socket.receive_json() == {"type": "active_sessions", "data": []}
+            # Nothing changes from here on, so only a keepalive can arrive.
+            assert socket.receive_json() == {"type": "ping"}

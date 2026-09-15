@@ -25,7 +25,10 @@ from app.models import (
     TwoFactorCredential,
     User,
 )
-from app.quiz_session_records import delete_quiz_session_records
+from app.quiz_session_records import (
+    delete_quiz_session_records,
+    release_join_codes,
+)
 
 
 def delete_user_records(user_id: int, session: Session) -> None:
@@ -104,7 +107,13 @@ def delete_user_records(user_id: int, session: Session) -> None:
     session.execute(
         delete(MakeupSessionQuiz).where(MakeupSessionQuiz.session_id.in_(makeup_ids))
     )
+    makeup_join_codes = list(
+        session.scalars(
+            select(MakeupSession.join_code).where(MakeupSession.id.in_(makeup_ids))
+        )
+    )
     session.execute(delete(MakeupSession).where(MakeupSession.id.in_(makeup_ids)))
+    release_join_codes(makeup_join_codes, session)
     session.execute(
         delete(ClassTrainingQuestionBank).where(
             or_(
