@@ -893,6 +893,19 @@ def session_response(
         participant_id: (answered_count, float(score), pending_count or 0)
         for participant_id, answered_count, score, pending_count in answer_rows
     }
+    if quiz_session.status not in ACTIVE_SESSION_STATUSES:
+        participants = [
+            p
+            for p in participants
+            if not (
+                p.left_at is not None
+                and (
+                    quiz_session.started_at is None
+                    or p.left_at <= quiz_session.started_at
+                )
+                and answers_by_student.get(p.id, (0, 0, 0))[0] == 0
+            )
+        ]
     maximum_scores = participant_maximum_scores(quiz_session, participants, session)
     median_maximum_score = (
         float(median(maximum_scores.values())) if maximum_scores else 0
@@ -954,15 +967,27 @@ def session_response(
                     if quiz_session.status == "finished"
                     else 0
                 ),
-                maximum_score=maximum_scores[participant.id],
+                maximum_score=maximum_scores.get(participant.id, 0.0),
                 pending_manual_grading_count=(
                     answers_by_student.get(participant.id, (0, 0, 0))[2]
                     if quiz_session.status == "finished"
                     else 0
                 ),
-                violation_count=participant.violation_count,
-                last_violation_type=participant.last_violation_type,
-                last_violation_at=participant.last_violation_at,
+                violation_count=(
+                    0
+                    if participant.last_violation_type == "paste_attempt"
+                    else participant.violation_count
+                ),
+                last_violation_type=(
+                    None
+                    if participant.last_violation_type == "paste_attempt"
+                    else participant.last_violation_type
+                ),
+                last_violation_at=(
+                    None
+                    if participant.last_violation_type == "paste_attempt"
+                    else participant.last_violation_at
+                ),
                 joined_at=participant.joined_at,
             )
             for participant in participants
@@ -996,9 +1021,6 @@ def finished_session_responses(
             )
         )
     )
-    for participant in participants:
-        participants_by_session[participant.session_id].append(participant)
-
     answer_statistics = {
         (session_id, participant_id): (
             answered_count,
@@ -1017,6 +1039,21 @@ def finished_session_responses(
             .group_by(QuizAnswer.session_id, QuizAnswer.participant_id)
         )
     }
+
+    sessions_by_id = {quiz_session.id: quiz_session for quiz_session, _ in rows}
+    for participant in participants:
+        qs = sessions_by_id.get(participant.session_id)
+        answered_count = answer_statistics.get(
+            (participant.session_id, participant.id), (0, 0, 0)
+        )[0]
+        if (
+            participant.left_at is not None
+            and qs is not None
+            and (qs.started_at is None or participant.left_at <= qs.started_at)
+            and answered_count == 0
+        ):
+            continue
+        participants_by_session[participant.session_id].append(participant)
 
     (
         common_by_session,
@@ -1118,9 +1155,21 @@ def finished_session_responses(
                         pending_manual_grading_count=answer_statistics.get(
                             (quiz_session.id, participant.id), (0, 0, 0)
                         )[2],
-                        violation_count=participant.violation_count,
-                        last_violation_type=participant.last_violation_type,
-                        last_violation_at=participant.last_violation_at,
+                        violation_count=(
+                            0
+                            if participant.last_violation_type == "paste_attempt"
+                            else participant.violation_count
+                        ),
+                        last_violation_type=(
+                            None
+                            if participant.last_violation_type == "paste_attempt"
+                            else participant.last_violation_type
+                        ),
+                        last_violation_at=(
+                            None
+                            if participant.last_violation_type == "paste_attempt"
+                            else participant.last_violation_at
+                        ),
                         joined_at=participant.joined_at,
                     )
                     for participant in session_participants
@@ -2062,6 +2111,7 @@ def answer_review(
     position: int,
     choices: list[QuestionChoice],
     max_score: float,
+    code: QuestionCode | None = None,
 ) -> QuizAnswerReview:
     submitted = decoded_answer_data(answer)
     choices_by_id = {choice.id: choice for choice in choices}
@@ -2094,12 +2144,16 @@ def answer_review(
         prompt=question.prompt,
         difficulty=question.difficulty,
         answer_mode=question.answer_mode,
+        code_content=code.content if code else None,
+        code_language=code.language if code else None,
+        response_language=question.response_language,
         submitted_answers=submitted_answers,
         expected_answers=expected_answers,
         score=answer.score,
         max_score=max_score,
         is_graded=answer.is_graded,
         is_correct=is_correct,
+        feedback=answer.feedback,
     )
 
 
@@ -2140,6 +2194,18 @@ def list_participant_answers(
             )
         )
     )
+    if (
+        participant.left_at is not None
+        and (
+            quiz_session.started_at is None
+            or participant.left_at <= quiz_session.started_at
+        )
+        and len(rows) == 0
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Participant introuvable",
+        )
     question_order = {
         question_id: position
         for position, question_id in enumerate(
@@ -2150,6 +2216,7 @@ def list_participant_answers(
     rows.sort(key=lambda row: question_order.get(row[1].id, len(question_order)))
     question_ids = [question.id for _, question in rows]
     choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
+    codes_by_question: dict[int, QuestionCode] = {}
     if question_ids:
         for choice in session.scalars(
             select(QuestionChoice)
@@ -2157,6 +2224,10 @@ def list_participant_answers(
             .order_by(QuestionChoice.position, QuestionChoice.id)
         ):
             choices_by_question[choice.question_id].append(choice)
+        for code in session.scalars(
+            select(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
+        ):
+            codes_by_question[code.question_id] = code
     return [
         answer_review(
             answer,
@@ -2164,6 +2235,7 @@ def list_participant_answers(
             question_order.get(question.id, 0),
             choices_by_question[question.id],
             question_points.get(question.id, 0),
+            codes_by_question.get(question.id),
         )
         for answer, question in rows
     ]
@@ -2241,6 +2313,13 @@ def list_student_quiz_history(
         )
     }
 
+    codes_by_question = {
+        code.question_id: code
+        for code in session.scalars(
+            select(QuestionCode).where(QuestionCode.question_id.in_(all_question_ids))
+        )
+    }
+
     history: list[StudentQuizHistoryItem] = []
     for quiz_session, participant in rows:
         question_ids = question_ids_by_participant[participant.id]
@@ -2256,7 +2335,9 @@ def list_student_quiz_history(
             if question is None:
                 continue
             question_choices = choices_by_question[question.id]
+            q_code = codes_by_question.get(question.id)
             answer = answers_by_question.get(question.id)
+            review = None
             if answer is not None:
                 review = answer_review(
                     answer,
@@ -2264,6 +2345,7 @@ def list_student_quiz_history(
                     position,
                     question_choices,
                     question_points.get(question.id, 0),
+                    q_code,
                 )
                 submitted_answers = review.submitted_answers
                 score = review.score
@@ -2291,6 +2373,9 @@ def list_student_quiz_history(
                     prompt=question.prompt,
                     difficulty=question.difficulty,
                     answer_mode=question.answer_mode,
+                    code_content=q_code.content if q_code else None,
+                    code_language=q_code.language if q_code else None,
+                    response_language=question.response_language,
                     submitted_answers=submitted_answers,
                     expected_answers=[
                         choice.label for choice in question_choices if choice.is_correct
@@ -2298,6 +2383,7 @@ def list_student_quiz_history(
                     score=score,
                     max_score=max_score,
                     is_correct=is_correct,
+                    feedback=review.feedback if review else None,
                 )
             )
         history.append(
@@ -2443,8 +2529,14 @@ def grade_written_answer(
         )
     answer.score = payload.score
     answer.is_graded = True
+    answer.feedback = (
+        payload.feedback.strip()
+        if payload.feedback and payload.feedback.strip()
+        else None
+    )
     session.commit()
-    return answer_review(answer, question, position, choices, max_score)
+    code = session.get(QuestionCode, question.id)
+    return answer_review(answer, question, position, choices, max_score, code)
 
 
 def live_teacher_active_sessions_snapshot(

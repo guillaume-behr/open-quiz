@@ -37,7 +37,7 @@ installer une instance à utiliser, suivez la procédure Docker du
 ### Prérequis
 
 - Python 3.14 et [uv](https://docs.astral.sh/uv/) ;
-- Node.js 24, Corepack et pnpm 11 ;
+- Node.js 24 et pnpm 11 ;
 - Docker avec le plugin Compose, pour PostgreSQL ;
 - Git.
 
@@ -86,7 +86,6 @@ Dans un second terminal, depuis la racine du dépôt :
 
 ```shell
 cd open-quiz-frontend
-corepack enable
 pnpm install --frozen-lockfile
 pnpm dev
 ```

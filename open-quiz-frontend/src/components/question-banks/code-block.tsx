@@ -49,7 +49,7 @@ export function StaticCodeBlock({
                         style={style}
                         dir="ltr"
                     >
-                        <code>
+                        <code className="table min-w-full" dir="ltr">
                             {tokens.map((line, lineIndex) => (
                                 <span
                                     key={lineIndex}
@@ -62,13 +62,21 @@ export function StaticCodeBlock({
                                     >
                                         {lineIndex + 1}
                                     </span>
-                                    <span className="table-cell">
-                                        {line.map((token, tokenIndex) => (
-                                            <span
-                                                key={tokenIndex}
-                                                {...getTokenProps({ token })}
-                                            />
-                                        ))}
+                                    <span className="table-cell whitespace-pre">
+                                        {line.length === 0 ||
+                                        (line.length === 1 &&
+                                            line[0].content === "") ? (
+                                            <span>&#8203;</span>
+                                        ) : (
+                                            line.map((token, tokenIndex) => (
+                                                <span
+                                                    key={tokenIndex}
+                                                    {...getTokenProps({
+                                                        token,
+                                                    })}
+                                                />
+                                            ))
+                                        )}
                                     </span>
                                 </span>
                             ))}
@@ -202,7 +210,7 @@ export function CodeBlock({
                             role="region"
                             aria-label={t("code-block-region")}
                         >
-                            <code>
+                            <code className="table min-w-full" dir="ltr">
                                 {tokens.map((line, lineIndex) => (
                                     <span
                                         key={lineIndex}
@@ -215,15 +223,23 @@ export function CodeBlock({
                                         >
                                             {lineIndex + 1}
                                         </span>
-                                        <span className="table-cell">
-                                            {line.map((token, tokenIndex) => (
-                                                <span
-                                                    key={tokenIndex}
-                                                    {...getTokenProps({
-                                                        token,
-                                                    })}
-                                                />
-                                            ))}
+                                        <span className="table-cell whitespace-pre">
+                                            {line.length === 0 ||
+                                            (line.length === 1 &&
+                                                line[0].content === "") ? (
+                                                <span>&#8203;</span>
+                                            ) : (
+                                                line.map(
+                                                    (token, tokenIndex) => (
+                                                        <span
+                                                            key={tokenIndex}
+                                                            {...getTokenProps({
+                                                                token,
+                                                            })}
+                                                        />
+                                                    )
+                                                )
+                                            )}
                                         </span>
                                     </span>
                                 ))}
@@ -231,6 +247,7 @@ export function CodeBlock({
                         </pre>
                         {editable && (
                             <textarea
+                                wrap="off"
                                 className={`absolute inset-0 z-10 h-full w-full resize-none overflow-auto border-0 bg-transparent pt-4 pr-4 pb-4 pl-14 font-mono text-sm leading-6 text-transparent caret-white outline-none [font-variant-ligatures:none] selection:bg-primary/40 ${
                                     canRun ? "pr-28" : ""
                                 }`}

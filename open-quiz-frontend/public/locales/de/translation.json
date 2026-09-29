@@ -629,6 +629,8 @@
     "expected-answer-help": "Erwartete Antwort — Bewertungshilfe",
     "no-answer": "Keine Antwort",
     "manual-score": "Vergebene Punkte",
+    "teacher-feedback": "Lehrer-Feedback",
+    "teacher-feedback-placeholder": "Feedback für den Schüler hinzufügen...",
     "grade-answer": "Bewertung bestätigen",
     "update-grade": "Punkte ändern",
     "delete-grade-level": "Klassenstufe {{level}} löschen",

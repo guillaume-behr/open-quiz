@@ -10,6 +10,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
+import { StaticCodeBlock } from "@/components/question-banks/code-block"
 import {
     LoaderCircle,
     Play,
@@ -76,13 +77,22 @@ export function QuizPreviewDialog({
                     {questions.map((question, index) => (
                         <li key={question.id} className="rounded-xl border p-4">
                             <div className="flex items-start justify-between gap-3">
-                                <p className="font-semibold">
+                                <p className="font-semibold whitespace-pre-wrap">
                                     {index + 1}. {question.prompt}
                                 </p>
                                 <span className="rounded-full bg-muted px-2 py-1 text-xs">
                                     {t(`difficulty-${question.difficulty}`)}
                                 </span>
                             </div>
+                            {question.code_content &&
+                                question.code_language && (
+                                    <div className="mt-3">
+                                        <StaticCodeBlock
+                                            code={question.code_content}
+                                            language={question.code_language}
+                                        />
+                                    </div>
+                                )}
                             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                                 {question.choices.map((choice) => (
                                     <li

@@ -66,4 +66,14 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
                 "submitted_at TIMESTAMP WITH TIME ZONE"
             )
         )
+        connection.execute(
+            text("ALTER TABLE quiz_answers ADD COLUMN IF NOT EXISTS feedback TEXT")
+        )
+        connection.execute(
+            text(
+                "UPDATE quiz_participants SET violation_count = 0, "
+                "last_violation_type = NULL, last_violation_at = NULL "
+                "WHERE last_violation_type = 'paste_attempt'"
+            )
+        )
     return sessionmaker(bind=engine, expire_on_commit=False)

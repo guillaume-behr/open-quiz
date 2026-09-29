@@ -1,8 +1,13 @@
-import type { QuizAnswerReview, QuizParticipant } from "@/api/types"
+import type {
+    CodeLanguage,
+    QuizAnswerReview,
+    QuizParticipant,
+} from "@/api/types"
 import { formatScore } from "@/lib/grades"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { StaticCodeBlock } from "@/components/question-banks/code-block"
 import { scoreGradientStyle } from "@/lib/utils"
 import { LoaderCircle, Save } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -13,11 +18,13 @@ type ParticipantAnswersDialogProps = {
     isLoading: boolean
     hasError: boolean
     scoreDrafts: Record<number, string>
+    feedbackDrafts: Record<number, string>
     gradingAnswerId: number | null
     isReadOnly: boolean
     locale: string
     onClose: () => void
     onScoreDraftChange: (answerId: number, score: string) => void
+    onFeedbackDraftChange: (answerId: number, feedback: string) => void
     onGrade: (answer: QuizAnswerReview) => void
 }
 
@@ -27,11 +34,13 @@ export function ParticipantAnswersDialog({
     isLoading,
     hasError,
     scoreDrafts,
+    feedbackDrafts,
     gradingAnswerId,
     isReadOnly,
     locale,
     onClose,
     onScoreDraftChange,
+    onFeedbackDraftChange,
     onGrade,
 }: ParticipantAnswersDialogProps) {
     const { t } = useTranslation()
@@ -72,11 +81,15 @@ export function ParticipantAnswersDialog({
                             key={answer.id}
                             answer={answer}
                             scoreDraft={scoreDrafts[answer.id] ?? ""}
+                            feedbackDraft={feedbackDrafts[answer.id] ?? ""}
                             isGrading={gradingAnswerId === answer.id}
                             isReadOnly={isReadOnly}
                             locale={locale}
                             onScoreDraftChange={(score) =>
                                 onScoreDraftChange(answer.id, score)
+                            }
+                            onFeedbackDraftChange={(feedback) =>
+                                onFeedbackDraftChange(answer.id, feedback)
                             }
                             onGrade={() => onGrade(answer)}
                         />
@@ -90,21 +103,42 @@ export function ParticipantAnswersDialog({
 function AnswerReview({
     answer,
     scoreDraft,
+    feedbackDraft,
     isGrading,
     isReadOnly,
     locale,
     onScoreDraftChange,
+    onFeedbackDraftChange,
     onGrade,
 }: {
     answer: QuizAnswerReview
     scoreDraft: string
+    feedbackDraft: string
     isGrading: boolean
     isReadOnly: boolean
     locale: string
     onScoreDraftChange: (score: string) => void
+    onFeedbackDraftChange: (feedback: string) => void
     onGrade: () => void
 }) {
     const { t } = useTranslation()
+    const hasStudentAnswer =
+        answer.submitted_answers.length > 0 &&
+        answer.submitted_answers.some((item) => item.trim() !== "")
+    const studentAnswerValue = hasStudentAnswer
+        ? answer.response_language
+            ? answer.submitted_answers.join("\n")
+            : answer.submitted_answers.join(", ")
+        : t("no-answer")
+    const hasExpectedAnswer =
+        answer.expected_answers.length > 0 &&
+        answer.expected_answers.some((item) => item.trim() !== "")
+    const expectedAnswerValue = hasExpectedAnswer
+        ? answer.response_language
+            ? answer.expected_answers.join("\n")
+            : answer.expected_answers.join(", ")
+        : "—"
+
     return (
         <article className="rounded-xl border p-4">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -113,7 +147,17 @@ function AnswerReview({
                         {t("question-number", { number: answer.position })} ·{" "}
                         {t(`difficulty-${answer.difficulty}`)}
                     </p>
-                    <h3 className="mt-1 font-semibold">{answer.prompt}</h3>
+                    <h3 className="mt-1 font-semibold whitespace-pre-wrap">
+                        {answer.prompt}
+                    </h3>
+                    {answer.code_content && answer.code_language && (
+                        <div className="mt-3">
+                            <StaticCodeBlock
+                                code={answer.code_content}
+                                language={answer.code_language}
+                            />
+                        </div>
+                    )}
                 </div>
                 <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium whitespace-nowrap tabular-nums">
                     {formatScore(answer.score, locale)} /{" "}
@@ -123,55 +167,84 @@ function AnswerReview({
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <AnswerText
                     label={t("student-answer")}
-                    value={
-                        answer.submitted_answers.join(", ") || t("no-answer")
-                    }
+                    value={studentAnswerValue}
+                    language={answer.response_language}
                     graded={answer.is_correct !== null}
                     score={answer.score}
                     maxScore={answer.max_score}
                 />
                 <AnswerText
                     label={t("expected-answer-help")}
-                    value={answer.expected_answers.join(", ")}
+                    value={expectedAnswerValue}
+                    language={answer.response_language}
                     highlighted
                 />
             </div>
             {answer.answer_mode === "written" && (
-                <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
-                    <label className="text-sm font-medium">
-                        {t("manual-score")}
-                        <span className="mt-1 flex items-center gap-2">
-                            <Input
-                                className="w-28"
-                                type="number"
-                                min={0}
-                                max={answer.max_score}
-                                step="0.25"
-                                value={scoreDraft}
-                                disabled={isReadOnly}
-                                onChange={(event) =>
-                                    onScoreDraftChange(event.target.value)
-                                }
-                            />
-                            <span className="whitespace-nowrap text-muted-foreground tabular-nums">
-                                / {formatScore(answer.max_score, locale)}{" "}
-                                {t("points-short")}
-                            </span>
-                        </span>
+                <div className="mt-3 space-y-3 border-t pt-3">
+                    <label className="block text-sm font-medium">
+                        {t("teacher-feedback")}
+                        <textarea
+                            className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                            rows={2}
+                            placeholder={t("teacher-feedback-placeholder")}
+                            value={feedbackDraft}
+                            disabled={isReadOnly}
+                            onChange={(event) =>
+                                onFeedbackDraftChange(event.target.value)
+                            }
+                        />
                     </label>
-                    <Button
-                        type="button"
-                        size="sm"
-                        disabled={isGrading || isReadOnly}
-                        onClick={onGrade}
-                    >
-                        {isGrading ? (
-                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                        ) : (
-                            <Save />
-                        )}
-                        {t(answer.is_graded ? "update-grade" : "grade-answer")}
-                    </Button>
+                    <div className="flex flex-wrap items-end gap-2">
+                        <label className="text-sm font-medium">
+                            {t("manual-score")}
+                            <span className="mt-1 flex items-center gap-2">
+                                <Input
+                                    className="w-28"
+                                    type="number"
+                                    min={0}
+                                    max={answer.max_score}
+                                    step="0.25"
+                                    value={scoreDraft}
+                                    disabled={isReadOnly}
+                                    onChange={(event) =>
+                                        onScoreDraftChange(event.target.value)
+                                    }
+                                />
+                                <span className="whitespace-nowrap text-muted-foreground tabular-nums">
+                                    / {formatScore(answer.max_score, locale)}{" "}
+                                    {t("points-short")}
+                                </span>
+                            </span>
+                        </label>
+                        <Button
+                            type="button"
+                            size="sm"
+                            disabled={isGrading || isReadOnly}
+                            onClick={onGrade}
+                        >
+                            {isGrading ? (
+                                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                            ) : (
+                                <Save />
+                            )}
+                            {t(
+                                answer.is_graded
+                                    ? "update-grade"
+                                    : "grade-answer"
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            )}
+            {answer.answer_mode !== "written" && answer.feedback && (
+                <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                    <p className="font-semibold text-primary">
+                        {t("teacher-feedback")}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-foreground">
+                        {answer.feedback}
+                    </p>
                 </div>
             )}
         </article>
@@ -181,6 +254,7 @@ function AnswerReview({
 function AnswerText({
     label,
     value,
+    language,
     highlighted = false,
     graded = false,
     score,
@@ -188,6 +262,7 @@ function AnswerText({
 }: {
     label: string
     value: string
+    language?: CodeLanguage | null
     highlighted?: boolean
     graded?: boolean
     score?: number
@@ -198,6 +273,10 @@ function AnswerText({
         graded && score !== undefined && maxScore !== undefined
             ? scoreGradientStyle(score, maxScore)
             : undefined
+    const isCode = Boolean(
+        language && value && value !== t("no-answer") && value !== "—"
+    )
+
     return (
         <div
             className={
@@ -217,7 +296,13 @@ function AnswerText({
                     </span>
                 )}
             </p>
-            <p className="mt-1 text-sm whitespace-pre-wrap">{value}</p>
+            {isCode ? (
+                <div className="mt-2">
+                    <StaticCodeBlock code={value} language={language!} />
+                </div>
+            ) : (
+                <p className="mt-1 text-sm whitespace-pre-wrap">{value}</p>
+            )}
         </div>
     )
 }

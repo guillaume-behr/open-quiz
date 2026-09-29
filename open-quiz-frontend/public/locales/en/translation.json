@@ -629,6 +629,8 @@
     "expected-answer-help": "Expected answer — grading aid",
     "no-answer": "No answer",
     "manual-score": "Awarded score",
+    "teacher-feedback": "Teacher feedback",
+    "teacher-feedback-placeholder": "Add feedback for the student...",
     "grade-answer": "Confirm grade",
     "update-grade": "Update score",
     "delete-grade-level": "Delete grade level {{level}}",

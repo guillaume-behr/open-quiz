@@ -418,6 +418,7 @@ class QuizAnswer(Base):
     answer_data: Mapped[str] = mapped_column(Text)
     score: Mapped[float] = mapped_column(Float, default=0.0)
     is_graded: Mapped[bool] = mapped_column(Boolean, default=False)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )

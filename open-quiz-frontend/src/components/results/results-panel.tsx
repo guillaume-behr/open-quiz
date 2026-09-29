@@ -120,6 +120,9 @@ export function ResultsPanel({
     const [areAnswersLoading, setAreAnswersLoading] = useState(false)
     const [answersError, setAnswersError] = useState(false)
     const [scoreDrafts, setScoreDrafts] = useState<Record<number, string>>({})
+    const [feedbackDrafts, setFeedbackDrafts] = useState<
+        Record<number, string>
+    >({})
     const [gradingAnswerId, setGradingAnswerId] = useState<number | null>(null)
     const [publishingSessionId, setPublishingSessionId] = useState<
         number | null
@@ -281,6 +284,14 @@ export function ResultsPanel({
                     ])
                 )
             )
+            setFeedbackDrafts(
+                Object.fromEntries(
+                    loadedAnswers.map((answer) => [
+                        answer.id,
+                        answer.feedback ?? "",
+                    ])
+                )
+            )
         } catch {
             if (requestVersion === answersRequestVersion.current) {
                 setAnswersError(true)
@@ -297,13 +308,15 @@ export function ResultsPanel({
             return
         const score = Number(scoreDrafts[answer.id])
         if (!Number.isFinite(score)) return
+        const feedback = feedbackDrafts[answer.id] ?? null
         setGradingAnswerId(answer.id)
         setAnswersError(false)
         try {
             const graded = await gradeWrittenAnswer(
                 selectedResult.id,
                 answer.id,
-                score
+                score,
+                feedback
             )
             const scoreDifference = graded.score - answer.score
             const pendingDifference = answer.is_graded ? 0 : -1
@@ -978,6 +991,7 @@ export function ResultsPanel({
                 isLoading={areAnswersLoading}
                 hasError={answersError}
                 scoreDrafts={scoreDrafts}
+                feedbackDrafts={feedbackDrafts}
                 gradingAnswerId={gradingAnswerId}
                 isReadOnly={selectedResult?.grades_published_at != null}
                 locale={i18n.language}
@@ -990,6 +1004,12 @@ export function ResultsPanel({
                     setScoreDrafts((current) => ({
                         ...current,
                         [answerId]: score,
+                    }))
+                }
+                onFeedbackDraftChange={(answerId, feedback) =>
+                    setFeedbackDrafts((current) => ({
+                        ...current,
+                        [answerId]: feedback,
                     }))
                 }
                 onGrade={(answer) => void handleGrade(answer)}

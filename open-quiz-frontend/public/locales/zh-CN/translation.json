@@ -629,6 +629,8 @@
     "expected-answer-help": "预期答案 — 批改参考",
     "no-answer": "未作答",
     "manual-score": "给定分数",
+    "teacher-feedback": "教师评语",
+    "teacher-feedback-placeholder": "为学生添加评语...",
     "grade-answer": "确认批改",
     "update-grade": "修改分数",
     "delete-grade-level": "删除年级 {{level}}",

@@ -3,6 +3,7 @@ import type { StudentQuizHistoryItem } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Grade } from "@/components/ui/grade"
+import { StaticCodeBlock } from "@/components/question-banks/code-block"
 import { scoreGradientStyle } from "@/lib/utils"
 import { Accordion } from "@base-ui/react/accordion"
 import {
@@ -155,9 +156,22 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                 number: answer.position,
                                             })}
                                         </p>
-                                        <h3 className="mt-1 font-semibold">
+                                        <h3 className="mt-1 font-semibold whitespace-pre-wrap">
                                             {answer.prompt}
                                         </h3>
+                                        {answer.code_content &&
+                                            answer.code_language && (
+                                                <div className="mt-2">
+                                                    <StaticCodeBlock
+                                                        code={
+                                                            answer.code_content
+                                                        }
+                                                        language={
+                                                            answer.code_language
+                                                        }
+                                                    />
+                                                </div>
+                                            )}
                                         <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                                             <div
                                                 className={
@@ -190,11 +204,33 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                         </span>
                                                     )}
                                                 </p>
-                                                <p className="mt-1 whitespace-pre-wrap">
-                                                    {answer.submitted_answers.join(
-                                                        ", "
-                                                    ) || t("no-answer")}
-                                                </p>
+                                                {answer.response_language &&
+                                                answer.submitted_answers.some(
+                                                    (item) => item.trim() !== ""
+                                                ) ? (
+                                                    <div className="mt-2">
+                                                        <StaticCodeBlock
+                                                            code={answer.submitted_answers.join(
+                                                                "\n"
+                                                            )}
+                                                            language={
+                                                                answer.response_language
+                                                            }
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <p className="mt-1 whitespace-pre-wrap">
+                                                        {answer.submitted_answers.filter(
+                                                            (item) =>
+                                                                item.trim() !==
+                                                                ""
+                                                        ).length > 0
+                                                            ? answer.submitted_answers.join(
+                                                                  ", "
+                                                              )
+                                                            : t("no-answer")}
+                                                    </p>
+                                                )}
                                                 {answer.is_correct === null && (
                                                     <p className="mt-2 text-xs font-medium text-muted-foreground">
                                                         {t(
@@ -207,13 +243,45 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                 <p className="font-medium text-success">
                                                     {t("correct-answer")}
                                                 </p>
-                                                <p className="mt-1 whitespace-pre-wrap">
-                                                    {answer.expected_answers.join(
-                                                        ", "
-                                                    ) || "—"}
-                                                </p>
+                                                {answer.response_language &&
+                                                answer.expected_answers.some(
+                                                    (item) => item.trim() !== ""
+                                                ) ? (
+                                                    <div className="mt-2">
+                                                        <StaticCodeBlock
+                                                            code={answer.expected_answers.join(
+                                                                "\n"
+                                                            )}
+                                                            language={
+                                                                answer.response_language
+                                                            }
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <p className="mt-1 whitespace-pre-wrap">
+                                                        {answer.expected_answers.filter(
+                                                            (item) =>
+                                                                item.trim() !==
+                                                                ""
+                                                        ).length > 0
+                                                            ? answer.expected_answers.join(
+                                                                  ", "
+                                                              )
+                                                            : "—"}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
+                                        {answer.feedback && (
+                                            <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                                                <p className="font-semibold text-primary">
+                                                    {t("teacher-feedback")}
+                                                </p>
+                                                <p className="mt-1 whitespace-pre-wrap text-foreground">
+                                                    {answer.feedback}
+                                                </p>
+                                            </div>
+                                        )}
                                     </article>
                                 ))}
                             </div>

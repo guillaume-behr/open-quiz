@@ -213,13 +213,19 @@ export function getParticipantAnswers(
 export function gradeWrittenAnswer(
     sessionId: number,
     answerId: number,
-    score: number
+    score: number,
+    feedback?: string | null
 ): Promise<QuizAnswerReview> {
+    const trimmedFeedback = feedback?.trim()
     return request<QuizAnswerReview>(
         `/api/quizzes/sessions/${sessionId}/answers/${answerId}/grade`,
         {
             method: "POST",
-            body: JSON.stringify({ score }),
+            body: JSON.stringify(
+                trimmedFeedback
+                    ? { score, feedback: trimmedFeedback }
+                    : { score }
+            ),
         }
     )
 }

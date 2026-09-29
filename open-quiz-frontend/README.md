@@ -25,7 +25,6 @@ instance.
 ### Prérequis
 
 - Node.js 24 ;
-- Corepack ;
 - pnpm 11.15.1 ;
 - le backend lancé sur `http://localhost:8000` pour utiliser l’application
   manuellement.
@@ -33,7 +32,6 @@ instance.
 Depuis le dossier `open-quiz-frontend` :
 
 ```shell
-corepack enable
 pnpm install --frozen-lockfile
 pnpm dev
 ```

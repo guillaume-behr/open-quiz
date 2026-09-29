@@ -336,7 +336,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     production = settings.environment == "production"
     app = FastAPI(
         title="Open Quiz API",
-        version="0.3.5",
+        version="0.4.0",
         lifespan=lifespan,
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",

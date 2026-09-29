@@ -629,6 +629,8 @@
     "expected-answer-help": "Réponse attendue — aide à la correction",
     "no-answer": "Aucune réponse",
     "manual-score": "Note attribuée",
+    "teacher-feedback": "Remarque de l’enseignant",
+    "teacher-feedback-placeholder": "Ajouter une remarque pour l’élève...",
     "grade-answer": "Valider la correction",
     "update-grade": "Modifier la note",
     "delete-grade-level": "Supprimer le niveau {{level}}",

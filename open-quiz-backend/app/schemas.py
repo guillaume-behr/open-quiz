@@ -435,7 +435,7 @@ class QuestionCreate(BaseModel):
     @field_validator("prompt")
     @classmethod
     def normalize_prompt(cls, value: str) -> str:
-        normalized = " ".join(value.split())
+        normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
         if not normalized:
             raise ValueError("La question ne peut pas être vide")
         return normalized
@@ -765,6 +765,7 @@ class StudentQuizAnswer(BaseModel):
 
 class QuizAnswerGrade(BaseModel):
     score: float = Field(ge=0)
+    feedback: str | None = Field(default=None, max_length=2000)
 
 
 class QuizAnswerReview(BaseModel):
@@ -774,12 +775,16 @@ class QuizAnswerReview(BaseModel):
     prompt: str
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
+    code_content: str | None = None
+    code_language: str | None = None
+    response_language: str | None = None
     submitted_answers: list[str]
     expected_answers: list[str]
     score: float
     max_score: float
     is_graded: bool
     is_correct: bool | None
+    feedback: str | None = None
 
 
 class StudentQuizHistoryAnswer(BaseModel):
@@ -788,11 +793,15 @@ class StudentQuizHistoryAnswer(BaseModel):
     prompt: str
     difficulty: Literal["easy", "medium", "hard"]
     answer_mode: Literal["single", "multiple", "written"]
+    code_content: str | None = None
+    code_language: str | None = None
+    response_language: str | None = None
     submitted_answers: list[str]
     expected_answers: list[str]
     score: float
     max_score: float
     is_correct: bool | None
+    feedback: str | None = None
 
 
 class StudentQuizHistoryItem(BaseModel):

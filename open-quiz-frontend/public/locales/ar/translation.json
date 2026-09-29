@@ -685,6 +685,8 @@
     "expected-answer-help": "الإجابة المتوقعة — مساعدة للتصحيح",
     "no-answer": "لا توجد إجابة",
     "manual-score": "الدرجة الممنوحة",
+    "teacher-feedback": "ملاحظة المعلم",
+    "teacher-feedback-placeholder": "إضافة ملاحظة للطالب...",
     "grade-answer": "تأكيد التصحيح",
     "update-grade": "تعديل الدرجة",
     "delete-grade-level": "حذف المستوى الدراسي {{level}}",

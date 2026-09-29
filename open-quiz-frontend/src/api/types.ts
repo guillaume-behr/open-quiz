@@ -240,6 +240,10 @@ export type QuizAnswerReview = {
     max_score: number
     is_graded: boolean
     is_correct: boolean | null
+    code_content?: string | null
+    code_language?: CodeLanguage | null
+    response_language?: CodeLanguage | null
+    feedback?: string | null
 }
 
 type StudentQuizHistoryAnswer = Omit<QuizAnswerReview, "id" | "is_graded">

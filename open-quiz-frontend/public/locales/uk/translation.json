@@ -657,6 +657,8 @@
     "expected-answer-help": "Очікувана відповідь — допомога для оцінювання",
     "no-answer": "Немає відповіді",
     "manual-score": "Виставлений бал",
+    "teacher-feedback": "Відгук викладача",
+    "teacher-feedback-placeholder": "Додати коментар для учня...",
     "grade-answer": "Підтвердити оцінку",
     "update-grade": "Змінити бал",
     "delete-grade-level": "Видалити рівень {{level}}",

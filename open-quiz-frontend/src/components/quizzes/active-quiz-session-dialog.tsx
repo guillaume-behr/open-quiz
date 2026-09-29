@@ -13,6 +13,7 @@ import { FieldError } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
 import {
     AlertTriangle,
+    BookOpen,
     CircleCheck,
     LoaderCircle,
     Maximize,
@@ -311,7 +312,8 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
                                     </span>
                                 )}
                                 {participant.quiz_title && (
-                                    <span className="block text-xs font-normal text-muted-foreground">
+                                    <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                        <BookOpen className="size-3" />
                                         {participant.quiz_title}
                                     </span>
                                 )}
@@ -325,17 +327,20 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
                                         })}
                                     </span>
                                 )}
-                                {participant.violation_count > 0 && (
-                                    <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
-                                        <AlertTriangle className="size-3" />
-                                        {t("student-monitoring-alert", {
-                                            count: participant.violation_count,
-                                            event: t(
-                                                `violation-${participant.last_violation_type}`
-                                            ),
-                                        })}
-                                    </span>
-                                )}
+                                {participant.violation_count > 0 &&
+                                    participant.last_violation_type !==
+                                        "paste_attempt" &&
+                                    participant.last_violation_type && (
+                                        <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
+                                            <AlertTriangle className="size-3" />
+                                            {t("student-monitoring-alert", {
+                                                count: participant.violation_count,
+                                                event: t(
+                                                    `violation-${participant.last_violation_type}`
+                                                ),
+                                            })}
+                                        </span>
+                                    )}
                             </li>
                         )
                     })}
