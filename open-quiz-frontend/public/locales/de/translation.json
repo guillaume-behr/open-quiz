@@ -668,7 +668,7 @@
     "makeup-select-error": "Dieses Quiz kann nicht ausgewählt werden.",
     "makeup-code-help": "Geben Sie den Code Ihrer Lehrkraft ein.",
     "makeup-choose-help": "Wählen Sie ein Quiz für die Klasse {{className}}.",
-    "makeup-no-eligible-quiz": "Keines der erlaubten Quizze wurde bereits absolviert.",
+    "makeup-no-eligible-quiz": "Für diese Nachholprüfung ist kein zulässiges Quiz verfügbar.",
     "makeup-session-summary": "{{quizzes}} Quiz(ze) · {{students}} Schüler",
     "makeup-status-waiting": "Wartend",
     "makeup-status-in_progress": "Läuft",

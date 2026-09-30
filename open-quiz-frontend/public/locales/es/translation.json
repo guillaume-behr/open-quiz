@@ -668,7 +668,7 @@
     "makeup-select-error": "No se pudo seleccionar este cuestionario.",
     "makeup-code-help": "Introduce el código proporcionado por tu profesor.",
     "makeup-choose-help": "Elige un cuestionario para la clase {{className}}.",
-    "makeup-no-eligible-quiz": "No has realizado ninguno de los cuestionarios permitidos.",
+    "makeup-no-eligible-quiz": "No hay cuestionarios autorizados disponibles para esta recuperación.",
     "makeup-session-summary": "{{quizzes}} cuestionario(s) · {{students}} alumno(s)",
     "makeup-status-waiting": "En espera",
     "makeup-status-in_progress": "En curso",

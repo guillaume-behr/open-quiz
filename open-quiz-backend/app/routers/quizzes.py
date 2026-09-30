@@ -3824,17 +3824,6 @@ def join_makeup_session(
             .join(MakeupSessionQuiz, MakeupSessionQuiz.quiz_id == Quiz.id)
             .where(
                 MakeupSessionQuiz.session_id == makeup.id,
-                Quiz.id.in_(
-                    select(QuizSession.quiz_id)
-                    .join(
-                        QuizParticipant,
-                        QuizParticipant.session_id == QuizSession.id,
-                    )
-                    .where(
-                        QuizParticipant.student_id == membership.id,
-                        QuizSession.status == "finished",
-                    )
-                ),
             )
             .order_by(Quiz.title, Quiz.id)
         )
@@ -3896,19 +3885,6 @@ def select_makeup_quiz(
             Quiz.id == payload.quiz_id,
         )
     )
-    passed = (
-        session.scalar(
-            select(QuizParticipant.id)
-            .join(QuizSession, QuizSession.id == QuizParticipant.session_id)
-            .where(
-                QuizParticipant.student_id == (membership.id if membership else -1),
-                QuizSession.quiz_id == payload.quiz_id,
-                QuizSession.status == "finished",
-            )
-            .limit(1)
-        )
-        is not None
-    )
     existing = session.scalar(
         select(QuizSession.id)
         .join(QuizParticipant, QuizParticipant.session_id == QuizSession.id)
@@ -3917,7 +3893,7 @@ def select_makeup_quiz(
             QuizParticipant.student_id == (membership.id if membership else -1),
         )
     )
-    if membership is None or quiz is None or not passed or existing is not None:
+    if membership is None or quiz is None or existing is not None:
         raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
     waiting = session.execute(
         update(MakeupSession)

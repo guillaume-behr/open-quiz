@@ -668,7 +668,7 @@
     "makeup-select-error": "无法选择此测验。",
     "makeup-code-help": "请输入老师提供的代码。",
     "makeup-choose-help": "请选择 {{className}} 班要重做的测验。",
-    "makeup-no-eligible-quiz": "此账户尚未完成任何获准的测验。",
+    "makeup-no-eligible-quiz": "本次补考暂无可用的获准测验。",
     "makeup-session-summary": "{{quizzes}} 个测验 · {{students}} 名学生",
     "makeup-status-waiting": "等待中",
     "makeup-status-in_progress": "进行中",

@@ -696,7 +696,7 @@
     "makeup-select-error": "Не вдалося вибрати тест.",
     "makeup-code-help": "Введіть код від учителя.",
     "makeup-choose-help": "Виберіть тест для класу {{className}}.",
-    "makeup-no-eligible-quiz": "Жоден дозволений тест ще не було пройдено.",
+    "makeup-no-eligible-quiz": "Для цього надолуження немає доступних дозволених тестів.",
     "makeup-session-summary": "{{quizzes}} тест(ів) · {{students}} учнів",
     "makeup-status-waiting": "Очікування",
     "makeup-status-in_progress": "Триває",

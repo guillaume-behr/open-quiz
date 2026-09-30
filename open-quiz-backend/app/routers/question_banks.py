@@ -17,24 +17,33 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, union
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
 from app.grade_levels import ensure_grade_level, grade_level_import_context
+from app.grading import compute_final_scores
 from app.images import (
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
     InvalidImage,
     normalize_image,
 )
+from app.live_quiz import (
+    active_quiz_sessions_topic,
+    makeup_sessions_topic,
+    quiz_session_topic,
+    student_session_topic,
+)
 from app.models import (
     ClassTrainingQuestionBank,
+    MakeupSession,
     Question,
     QuestionBank,
     QuestionChoice,
     QuestionCode,
     Quiz,
+    QuizAnswer,
     QuizQuestionBank,
     QuizSession,
     QuizSessionQuestion,
@@ -872,12 +881,68 @@ def create_question(
     return question_response(question, choices, code)
 
 
+def regrade_affected_sessions(
+    question_id: int,
+    professor_id: int,
+    request: Request,
+    session: DbSession,
+) -> None:
+    session_ids = list(
+        session.scalars(
+            select(QuizSession.id).where(
+                QuizSession.id.in_(
+                    union(
+                        select(QuizSessionQuestion.session_id).where(
+                            QuizSessionQuestion.question_id == question_id
+                        ),
+                        select(QuizSessionStudentQuestion.session_id).where(
+                            QuizSessionStudentQuestion.question_id == question_id
+                        ),
+                        select(QuizAnswer.session_id).where(
+                            QuizAnswer.question_id == question_id
+                        ),
+                    )
+                )
+            )
+        )
+    )
+    if not session_ids:
+        session.commit()
+        return
+
+    affected_sessions = list(
+        session.scalars(
+            select(QuizSession).where(QuizSession.id.in_(session_ids))
+        )
+    )
+
+    has_makeup_child = False
+    for quiz_session in affected_sessions:
+        if quiz_session.status == "finished":
+            compute_final_scores(quiz_session, session)
+        if quiz_session.makeup_session_id is not None:
+            has_makeup_child = True
+
+    session.commit()
+
+    hub = getattr(getattr(request, "app", None), "state", None)
+    if hub and hasattr(hub, "live_quiz_hub"):
+        live_hub = hub.live_quiz_hub
+        for quiz_session in affected_sessions:
+            live_hub.publish(quiz_session_topic(quiz_session.id))
+            live_hub.publish(student_session_topic(quiz_session.join_code))
+        live_hub.publish(active_quiz_sessions_topic(professor_id))
+        if has_makeup_child:
+            live_hub.publish(makeup_sessions_topic(professor_id))
+
+
 @router.post(
     "/questions/{question_id}/update",
     response_model=QuestionResponse,
 )
 def update_question(
     question_id: int,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
     payload: str = Form(),
@@ -885,11 +950,6 @@ def update_question(
 ) -> QuestionResponse:
     """Update a professor's question and replace its answer configuration."""
     question = owned_question(question_id, professor, session)
-    if question_is_in_launched_quiz(question_id, session):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cette question est utilisée par un quiz déjà lancé",
-        )
     try:
         question_payload = QuestionUpdate.model_validate(json.loads(payload))
     except json.JSONDecodeError, ValidationError:
@@ -1024,7 +1084,7 @@ def update_question(
         )
         session.add(code)
     session.flush()
-    session.commit()
+    regrade_affected_sessions(question.id, professor.id, request, session)
     session.refresh(question)
     return question_response(question, choices, code)
 

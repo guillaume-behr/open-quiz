@@ -724,7 +724,7 @@
     "makeup-select-error": "تعذر اختيار هذا الاختبار.",
     "makeup-code-help": "أدخل الرمز الذي قدمه الأستاذ.",
     "makeup-choose-help": "اختر اختبارًا للفصل {{className}}.",
-    "makeup-no-eligible-quiz": "لم يسبق لك اجتياز أي اختبار مسموح.",
+    "makeup-no-eligible-quiz": "لا يوجد أي اختبار مسموح به متاح لهذا الاستدراك.",
     "makeup-session-summary": "{{quizzes}} اختبار · {{students}} طالب",
     "makeup-status-waiting": "في الانتظار",
     "makeup-status-in_progress": "جارٍ",

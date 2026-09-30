@@ -668,7 +668,7 @@
     "makeup-select-error": "Não foi possível selecionar este quiz.",
     "makeup-code-help": "Introduza o código fornecido pelo professor.",
     "makeup-choose-help": "Escolha um quiz para a turma {{className}}.",
-    "makeup-no-eligible-quiz": "Nenhum dos quizzes permitidos foi realizado antes.",
+    "makeup-no-eligible-quiz": "Nenhum quiz autorizado está disponível para esta recuperação.",
     "makeup-session-summary": "{{quizzes}} quiz(zes) · {{students}} aluno(s)",
     "makeup-status-waiting": "Em espera",
     "makeup-status-in_progress": "Em curso",

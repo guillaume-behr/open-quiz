@@ -3252,6 +3252,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     "id": choice["id"],
                     "label": choice["label"],
                     "is_correct": choice["is_correct"],
+                    "points": choice["points"],
                     "code_language": choice["code_language"],
                     "code_content": choice["code_content"],
                 }
@@ -3263,15 +3264,21 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
             data={"payload": json.dumps(regraded_payload)},
         )
-        assert regraded.status_code == 409
-        assert regraded.json()["detail"] == (
-            "Cette question est utilisée par un quiz déjà lancé"
-        )
+        assert regraded.status_code == 200
         refreshed_results = client.get(
             "/api/quizzes/sessions/results",
             headers=teacher_headers,
         ).json()
         assert refreshed_results == graded_results
+
+        blocked_delete = client.delete(
+            f"/api/question-banks/questions/{regraded_question['id']}",
+            headers=teacher_headers,
+        )
+        assert blocked_delete.status_code == 409
+        assert blocked_delete.json()["detail"] == (
+            "Cette question est utilisée par un quiz déjà lancé"
+        )
 
         makeup_created = client.post(
             "/api/quizzes/makeup/sessions",
@@ -7816,3 +7823,275 @@ def test_idle_live_socket_still_receives_a_keepalive(
             assert socket.receive_json() == {"type": "active_sessions", "data": []}
             # Nothing changes from here on, so only a keepalive can arrive.
             assert socket.receive_json() == {"type": "ping"}
+
+
+def test_makeup_session_allows_absent_student_to_take_quiz(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "makeup-absent-student.db")) as client:
+        environment = exam_environment(client)
+        absent_account = client.post(
+            "/api/students",
+            headers=environment["teacher_headers"],
+            json={"first_name": "Absent", "last_name": "Student"},
+        ).json()
+        assert (
+            client.post(
+                f"/api/classes/{environment['student_class']['id']}/accounts/{absent_account['id']}",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        absent_login = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": absent_account["identifier"],
+                "password": absent_account["generated_password"],
+            },
+        )
+        assert absent_login.status_code == 200
+        absent_headers = {
+            "Authorization": f"Bearer {absent_login.json()['access_token']}"
+        }
+
+        # Launch the quiz for the class
+        launched = client.post(
+            f"/api/quizzes/{environment['quiz']['id']}/launch",
+            headers=environment["teacher_headers"],
+            json={"class_id": environment["student_class"]["id"]},
+        )
+        assert launched.status_code == 201
+        quiz_session = launched.json()
+
+        # Present student joins and finishes the quiz; absent student does NOT join
+        joined = client.post(
+            "/api/quizzes/join",
+            headers=environment["student_headers"],
+            json={"join_code": quiz_session["join_code"]},
+        )
+        assert joined.status_code == 201
+        present_token = joined.json()["participant_token"]
+
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{quiz_session['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+                headers={"X-Quiz-Token": present_token},
+                json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            ).status_code
+            == 200
+        )
+        handed_in = hand_in_quiz(
+            client, quiz_session["join_code"], {"X-Quiz-Token": present_token}
+        )
+        assert handed_in["status"] == "finished"
+
+        # Teacher creates a makeup session for the class with the completed quiz
+        makeup = client.post(
+            "/api/quizzes/makeup/sessions",
+            headers=environment["teacher_headers"],
+            json={
+                "class_id": environment["student_class"]["id"],
+                "quiz_ids": [environment["quiz"]["id"]],
+            },
+        )
+        assert makeup.status_code == 201
+        makeup_data = makeup.json()
+
+        # The absent student can join the makeup session and sees the quiz
+        makeup_join = client.post(
+            "/api/quizzes/makeup/join",
+            headers=absent_headers,
+            json={"join_code": makeup_data["join_code"]},
+        )
+        assert makeup_join.status_code == 200
+        assert [q["id"] for q in makeup_join.json()["quizzes"]] == [
+            environment["quiz"]["id"]
+        ]
+
+        # The absent student can select the quiz
+        makeup_selected = client.post(
+            f"/api/quizzes/makeup/{makeup_data['join_code']}/select",
+            headers=absent_headers,
+            json={"quiz_id": environment["quiz"]["id"]},
+        )
+        assert makeup_selected.status_code == 201
+        assert makeup_selected.json()["status"] == "waiting"
+        absent_token = makeup_selected.json()["participant_token"]
+
+        # Teacher starts makeup session
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup_data['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+
+        # Absent student answers and hands in
+        state = client.get(
+            f"/api/quizzes/student/sessions/{makeup_selected.json()['join_code']}",
+            headers={"X-Quiz-Token": absent_token},
+        )
+        assert state.status_code == 200
+        assert state.json()["status"] == "in_progress"
+        assert (
+            client.post(
+                f"/api/quizzes/student/sessions/{makeup_selected.json()['join_code']}/answer",
+                headers={"X-Quiz-Token": absent_token},
+                json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            ).status_code
+            == 200
+        )
+        hand_in_quiz(
+            client, makeup_selected.json()["join_code"], {"X-Quiz-Token": absent_token}
+        )
+
+        # Teacher finishes makeup session
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup_data['id']}/finish",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+
+        # Absent student sees their completed exam in history
+        student_results = client.get(
+            "/api/quizzes/student/results",
+            headers=absent_headers,
+        )
+        assert student_results.status_code == 200
+        results_list = student_results.json()
+        assert len(results_list) == 1
+        assert results_list[0]["score"] == 2.0
+
+        # Teacher export includes absent student's result
+        export = client.get(
+            f"/api/quizzes/sessions/results/export?class_id={environment['student_class']['id']}",
+            headers=environment["teacher_headers"],
+        )
+        assert export.status_code == 200
+        assert absent_account["identifier"] in export.text
+
+
+def test_update_question_in_used_bank_regrades_affected_sessions(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "regrade-bank.db")) as client:
+        environment = exam_environment(client)
+        quiz_session, participant_headers = launch_and_join(client, environment)
+
+        assert (
+            client.post(
+                f"/api/quizzes/sessions/{quiz_session['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+
+        wrong_choice = next(
+            c for c in environment["question"]["choices"] if not c["is_correct"]
+        )
+        correct_choice = next(
+            c for c in environment["question"]["choices"] if c["is_correct"]
+        )
+
+        # Student picks the initially wrong choice
+        answer_response = client.post(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [wrong_choice["id"]]},
+        )
+        assert answer_response.status_code == 200
+
+        hand_in_quiz(client, quiz_session["join_code"], participant_headers)
+
+        # Initially, student has score 0.0 and max score 2.0
+        results = client.get(
+            "/api/quizzes/sessions/results",
+            headers=environment["teacher_headers"],
+        ).json()
+        assert len(results) == 1
+        assert results[0]["participants"][0]["score"] == 0.0
+        assert results[0]["participants"][0]["maximum_score"] == 2.0
+
+        history = client.get(
+            "/api/quizzes/student/results",
+            headers=environment["student_headers"],
+        ).json()
+        assert len(history) == 1
+        assert history[0]["score"] == 0.0
+        assert history[0]["maximum_score"] == 2.0
+        assert history[0]["answers"][0]["is_correct"] is False
+
+        # Teacher corrects the question in the question bank:
+        # Changes the key so the chosen choice is now correct (3 points),
+        # and the other choice is incorrect (0 points).
+        updated_payload = {
+            "prompt": "One plus one? (Updated)",
+            "difficulty": "easy",
+            "answer_mode": "single",
+            "answer_mode_disclosed": True,
+            "choices": [
+                {
+                    "id": correct_choice["id"],
+                    "label": "Two",
+                    "is_correct": False,
+                    "points": 0.0,
+                },
+                {
+                    "id": wrong_choice["id"],
+                    "label": "Three (Corrected)",
+                    "is_correct": True,
+                    "points": 3.0,
+                },
+            ],
+        }
+        update_response = client.post(
+            f"/api/question-banks/questions/{environment['question']['id']}/update",
+            headers=environment["teacher_headers"],
+            data={"payload": json.dumps(updated_payload)},
+        )
+        assert update_response.status_code == 200
+
+        # Teacher results are regraded: student score is now 3.0, max score is 3.0
+        regraded_results = client.get(
+            "/api/quizzes/sessions/results",
+            headers=environment["teacher_headers"],
+        ).json()
+        assert regraded_results[0]["participants"][0]["score"] == 3.0
+        assert regraded_results[0]["participants"][0]["maximum_score"] == 3.0
+
+        # Student results are regraded: student score is now 3.0 and answer is marked correct
+        regraded_history = client.get(
+            "/api/quizzes/student/results",
+            headers=environment["student_headers"],
+        ).json()
+        assert regraded_history[0]["score"] == 3.0
+        assert regraded_history[0]["maximum_score"] == 3.0
+        assert regraded_history[0]["answers"][0]["is_correct"] is True
+
+        # Export CSV reflects the updated score
+        export = client.get(
+            f"/api/quizzes/sessions/results/export?class_id={environment['student_class']['id']}",
+            headers=environment["teacher_headers"],
+        )
+        assert export.status_code == 200
+        assert "3.0" in export.text
+
+        # Deleting the question is still blocked because it is used in a launched quiz
+        delete_response = client.delete(
+            f"/api/question-banks/questions/{environment['question']['id']}",
+            headers=environment["teacher_headers"],
+        )
+        assert delete_response.status_code == 409
+        assert delete_response.json()["detail"] == (
+            "Cette question est utilisée par un quiz déjà lancé"
+        )
