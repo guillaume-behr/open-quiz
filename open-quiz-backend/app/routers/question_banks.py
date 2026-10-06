@@ -37,7 +37,6 @@ from app.live_quiz import (
 )
 from app.models import (
     ClassTrainingQuestionBank,
-    MakeupSession,
     Question,
     QuestionBank,
     QuestionChoice,
