@@ -7883,7 +7883,9 @@ def test_makeup_session_allows_absent_student_to_take_quiz(
             client.post(
                 f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
                 headers={"X-Quiz-Token": present_token},
-                json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+                json={
+                    "selected_choice_ids": [correct_choice_id(environment["question"])]
+                },
             ).status_code
             == 200
         )
@@ -7945,7 +7947,9 @@ def test_makeup_session_allows_absent_student_to_take_quiz(
             client.post(
                 f"/api/quizzes/student/sessions/{makeup_selected.json()['join_code']}/answer",
                 headers={"X-Quiz-Token": absent_token},
-                json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+                json={
+                    "selected_choice_ids": [correct_choice_id(environment["question"])]
+                },
             ).status_code
             == 200
         )

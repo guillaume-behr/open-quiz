@@ -37,7 +37,6 @@ from app.live_quiz import (
 )
 from app.models import (
     ClassTrainingQuestionBank,
-    MakeupSession,
     Question,
     QuestionBank,
     QuestionChoice,
@@ -911,9 +910,7 @@ def regrade_affected_sessions(
         return
 
     affected_sessions = list(
-        session.scalars(
-            select(QuizSession).where(QuizSession.id.in_(session_ids))
-        )
+        session.scalars(select(QuizSession).where(QuizSession.id.in_(session_ids)))
     )
 
     has_makeup_child = False
