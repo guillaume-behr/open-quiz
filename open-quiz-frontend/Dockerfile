@@ -1,8 +1,8 @@
-FROM node:24.17.0-alpine3.23@sha256:7c70d1235c0b4c2bc9eeed5393d19f1bbdde6885ba0d58ba62bb385d7b0f3ff1 AS build
+FROM node:latest AS build
 
 WORKDIR /app
 
-RUN corepack enable
+RUN npm install -g corepack && corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -13,7 +13,7 @@ ENV VITE_API_URL=${VITE_API_URL}
 RUN pnpm build
 
 
-FROM caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+FROM caddy:latest
 
 ARG VITE_API_URL=""
 ENV API_ORIGIN=${VITE_API_URL}
