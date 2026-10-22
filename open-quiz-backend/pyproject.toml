@@ -11,9 +11,10 @@ authors = [
 ]
 dependencies = [
     "argon2-cffi>=25.1.0",
+    "certifi>=2026.10.19",
     "cryptography>=50.0.0",
     "fastapi[standard]>=0.139.2",
-    "pillow>=12.1.0",
+    "pillow>=13.0.0",
     "psycopg[binary]>=3.2.10",
     "pwdlib>=0.3.0",
     "pyjwt>=2.15.1",
