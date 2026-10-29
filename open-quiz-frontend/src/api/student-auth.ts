@@ -45,6 +45,21 @@ export async function loginStudent(
     return { student: result.student, token: result.access_token }
 }
 
+export async function logoutStudent(token: string): Promise<void> {
+    try {
+        await request<void>(
+            "/api/student-auth/logout",
+            {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+            },
+            false
+        )
+    } catch {
+        // The caller still drops the token locally; it then expires by itself.
+    }
+}
+
 export function restoreStudent(token: string): Promise<StudentAccount> {
     return request<StudentAccount>(
         "/api/student-auth/me",

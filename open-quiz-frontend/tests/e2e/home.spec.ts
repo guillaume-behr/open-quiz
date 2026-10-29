@@ -107,8 +107,18 @@ test("student authentication clears activity sessions between users", async ({
         sessionStorage.setItem("open-quiz-student-session", "current-exam")
         sessionStorage.setItem("open-quiz-training-session", "current-training")
     })
+    const serverLogout = page.waitForRequest(
+        (request) =>
+            new URL(request.url()).pathname === "/api/student-auth/logout" &&
+            request.method() === "POST" &&
+            request.headers().authorization === "Bearer student-token"
+    )
+    await page.route("**/api/student-auth/logout", async (route) => {
+        await route.fulfill({ status: 204 })
+    })
     await page.getByRole("button", { name: "Log out" }).click()
 
+    await serverLogout
     await expect(page).toHaveURL(/\/student\/login$/)
     expect(
         await page.evaluate(() => ({

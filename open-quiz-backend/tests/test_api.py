@@ -7808,3 +7808,216 @@ def test_update_question_in_used_bank_regrades_affected_sessions(
         assert delete_response.json()["detail"] == (
             "Cette question est utilisée par un quiz déjà lancé"
         )
+
+
+def test_teacher_unlocks_a_student_locked_out_by_failed_logins(
+    tmp_path: Path,
+) -> None:
+    settings = settings_for(tmp_path / "student-unlock.db", login_attempts=3)
+    with make_client(settings) as client:
+        environment = exam_environment(client)
+        account = environment["account"]
+        credentials = {
+            "identifier": account["identifier"],
+            "password": account["generated_password"],
+        }
+        # A classmate who guesses the identifier exhausts its attempts.
+        for _ in range(3):
+            failed = client.post(
+                "/api/student-auth/login",
+                json={**credentials, "password": "not-the-password"},
+            )
+            assert failed.status_code == 401
+        locked = client.post("/api/student-auth/login", json=credentials)
+        assert locked.status_code == 429
+
+        saved = client.post(
+            f"/api/students/{account['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "identifier": account["identifier"],
+                "display_name": account["display_name"],
+                "is_active": True,
+            },
+        )
+        assert saved.status_code == 200
+        assert (
+            client.post("/api/student-auth/login", json=credentials).status_code == 200
+        )
+
+        # Renaming the identifier releases the new name as well.
+        for _ in range(3):
+            client.post(
+                "/api/student-auth/login",
+                json={"identifier": "edge.renamed", "password": "not-the-password"},
+            )
+        renamed = client.post(
+            f"/api/students/{account['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "identifier": "edge.renamed",
+                "display_name": account["display_name"],
+                "is_active": True,
+            },
+        )
+        assert renamed.status_code == 200
+        assert (
+            client.post(
+                "/api/student-auth/login",
+                json={**credentials, "identifier": "edge.renamed"},
+            ).status_code
+            == 200
+        )
+
+
+def start_makeup_with_open_training(
+    client: TestClient,
+    environment: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, str], str]:
+    """Let the class take the exam, then open a training before the makeup."""
+    quiz_session, participant_headers = launch_and_join(client, environment)
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/start",
+            headers=environment["teacher_headers"],
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        ).status_code
+        == 200
+    )
+    hand_in_quiz(client, quiz_session["join_code"], participant_headers)
+    bank_id = environment["question"]["question_bank_id"]
+    assert (
+        client.put(
+            f"/api/quizzes/training/classes/{environment['student_class']['id']}"
+            "/question-banks",
+            headers=environment["teacher_headers"],
+            json={"question_bank_ids": [bank_id]},
+        ).status_code
+        == 200
+    )
+    makeup = client.post(
+        "/api/quizzes/makeup/sessions",
+        headers=environment["teacher_headers"],
+        json={
+            "class_id": environment["student_class"]["id"],
+            "quiz_ids": [environment["quiz"]["id"]],
+        },
+    ).json()
+    training = client.post(
+        f"/api/quizzes/training/{bank_id}/start",
+        headers=environment["student_headers"],
+    )
+    assert training.status_code == 201
+    training_headers = {"X-Quiz-Token": training.json()["participant_token"]}
+    selected = client.post(
+        f"/api/quizzes/makeup/{makeup['join_code']}/select",
+        headers=environment["student_headers"],
+        json={"quiz_id": environment["quiz"]["id"]},
+    )
+    assert selected.status_code == 201
+    return makeup, training_headers, training.json()["join_code"]
+
+
+def test_makeup_discards_trainings_open_on_its_question_banks(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "makeup-training.db")) as client:
+        environment = exam_environment(client)
+        _, training_headers, training_code = start_makeup_with_open_training(
+            client, environment
+        )
+
+        answered = client.post(
+            f"/api/quizzes/student/sessions/{training_code}/answer",
+            headers=training_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert answered.status_code == 401
+
+
+def test_training_gives_no_feedback_while_an_exam_uses_its_bank(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A training started concurrently with the exam escapes the discard; the
+    # answer endpoint must still refuse to reveal the correction.
+    monkeypatch.setattr(
+        "app.routers.quizzes.discard_active_training_sessions",
+        lambda *arguments: None,
+    )
+    with make_client(settings_for(tmp_path / "training-guard.db")) as client:
+        environment = exam_environment(client)
+        _, training_headers, training_code = start_makeup_with_open_training(
+            client, environment
+        )
+
+        answered = client.post(
+            f"/api/quizzes/student/sessions/{training_code}/answer",
+            headers=training_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        )
+        assert answered.status_code == 409
+        assert "training_feedback" not in answered.text
+
+
+def test_student_tokens_default_to_two_hours_and_reject_shorter_lifetimes(
+    tmp_path: Path,
+) -> None:
+    for hours in (1, 13):
+        with pytest.raises(ValueError, match="STUDENT_ACCESS_TOKEN_HOURS"):
+            settings_for(
+                tmp_path / "student-token-bounds.db",
+                student_access_token_hours=hours,
+            )
+
+    for overrides, expected_hours in (({}, 2), ({"student_access_token_hours": 5}, 5)):
+        settings = settings_for(
+            tmp_path / f"student-token-{expected_hours}h.db", **overrides
+        )
+        with make_client(settings) as client:
+            environment = exam_environment(client)
+            token = environment["student_headers"]["Authorization"].split()[1]
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        assert payload["exp"] - payload["iat"] == expected_hours * 3600
+
+
+def test_student_logout_revokes_tokens_but_keeps_quiz_participation(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "student-logout.db")) as client:
+        environment = exam_environment(client)
+        quiz_session, participant_headers = launch_and_join(client, environment)
+        student_headers = environment["student_headers"]
+
+        logged_out = client.post("/api/student-auth/logout", headers=student_headers)
+        assert logged_out.status_code == 204
+        assert (
+            client.get("/api/student-auth/me", headers=student_headers).status_code
+            == 401
+        )
+        assert (
+            client.post("/api/student-auth/logout", headers=student_headers).status_code
+            == 401
+        )
+        assert (
+            client.get(
+                f"/api/quizzes/student/sessions/{quiz_session['join_code']}",
+                headers=participant_headers,
+            ).status_code
+            == 200
+        )
+        relogin = client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": environment["account"]["identifier"],
+                "password": environment["account"]["generated_password"],
+            },
+        )
+        assert relogin.status_code == 200

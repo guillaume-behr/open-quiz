@@ -353,6 +353,7 @@ Les valeurs ci-dessous sont fournies dans les fichiers `.env` d’exemple.
 | ---------------------------------- | ------------------------------------------------------- | ----------------------------------------------- |
 | `ACCESS_TOKEN_MINUTES`             | durée des jetons d’accès privilégiés                    | `15`                                            |
 | `REFRESH_TOKEN_DAYS`               | durée maximale d’une session longue                     | `7`                                             |
+| `STUDENT_ACCESS_TOKEN_HOURS`       | durée des sessions élève (2 à 12)                       | `2`                                             |
 | `LOGIN_ATTEMPTS`                   | tentatives par compte et par fenêtre                    | `10`                                            |
 | `LOGIN_WINDOW_SECONDS`             | fenêtre des tentatives par compte                       | `900`                                           |
 | `GLOBAL_LOGIN_ATTEMPTS`            | tentatives de connexion pour toute l’instance           | `2000`                                          |

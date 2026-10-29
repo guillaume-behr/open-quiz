@@ -1,5 +1,9 @@
 import { logout } from "@/api/auth"
-import { clearStudentSession } from "@/api/student-auth"
+import {
+    clearStudentSession,
+    logoutStudent,
+    readStudentToken,
+} from "@/api/student-auth"
 import {
     getPublicInformation,
     type PublicInformation,
@@ -508,6 +512,8 @@ export function CookiesPage() {
 
     async function clearLocalData() {
         await logout().catch(() => undefined)
+        const studentToken = readStudentToken()
+        if (studentToken) await logoutStudent(studentToken)
         try {
             for (const key of LOCAL_STORAGE_KEYS) {
                 localStorage.removeItem(key)

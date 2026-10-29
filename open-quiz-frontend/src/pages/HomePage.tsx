@@ -1,6 +1,7 @@
 import {
     clearStudentSession,
     loginStudent,
+    logoutStudent,
     readStudentToken,
     restoreStudent,
 } from "@/api/student-auth"
@@ -190,6 +191,7 @@ export function HomePage({
     }
 
     function logout() {
+        if (token) void logoutStudent(token)
         clearStudentSession()
         setStudent(null)
         setToken(null)

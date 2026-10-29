@@ -3,7 +3,7 @@ import io
 import json
 from asyncio import Queue, to_thread, wait_for
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -28,7 +28,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, case, delete, func, or_, select, update
+from sqlalchemy import Select, and_, case, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from starlette.requests import HTTPConnection
@@ -3246,6 +3246,34 @@ def update_class_training_question_banks(
     ]
 
 
+def discard_active_training_sessions(
+    student_ids: Iterable[int] | Select,
+    bank_ids: Iterable[int],
+    session: DbSession,
+) -> None:
+    """Remove running trainings on an exam's banks before the exam opens.
+
+    Training answers reveal the expected answer, so a training session left
+    open on one of the exam's banks would let its student consult the
+    correction while sitting the exam.
+    """
+    active_training_ids = list(
+        session.scalars(
+            select(QuizSession.id)
+            .join(
+                QuizParticipant,
+                QuizParticipant.session_id == QuizSession.id,
+            )
+            .where(
+                QuizParticipant.student_id.in_(student_ids),
+                QuizSession.training_question_bank_id.in_(bank_ids),
+                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
+            )
+        )
+    )
+    delete_quiz_session_records(active_training_ids, session)
+
+
 def active_exam_bank_ids_for_class(class_id: int, session: DbSession) -> set[int]:
     return set(
         session.scalars(
@@ -3904,6 +3932,9 @@ def select_makeup_quiz(
     )
     if claimed_student_id is None:
         raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
+    discard_active_training_sessions(
+        [membership.id], quiz_bank_ids(quiz.id, session), session
+    )
     child = QuizSession(
         quiz_id=quiz.id,
         quiz_title=quiz.title,
@@ -4084,29 +4115,11 @@ def launch_quiz(
             status_code=status.HTTP_409_CONFLICT,
             detail="La classe doit contenir au moins un élève",
         )
-    exam_bank_ids = set(
-        session.scalars(
-            select(QuizQuestionBank.question_bank_id).where(
-                QuizQuestionBank.quiz_id == quiz.id
-            )
-        )
+    discard_active_training_sessions(
+        select(Student.id).where(Student.class_id == student_class.id),
+        quiz_bank_ids(quiz.id, session),
+        session,
     )
-    active_training_ids = list(
-        session.scalars(
-            select(QuizSession.id)
-            .join(
-                QuizParticipant,
-                QuizParticipant.session_id == QuizSession.id,
-            )
-            .join(Student, Student.id == QuizParticipant.student_id)
-            .where(
-                Student.class_id == student_class.id,
-                QuizSession.training_question_bank_id.in_(exam_bank_ids),
-                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
-            )
-        )
-    )
-    delete_quiz_session_records(active_training_ids, session)
     quiz_session = QuizSession(
         quiz_id=quiz.id,
         quiz_title=quiz.title,
@@ -4376,6 +4389,18 @@ def submit_student_answer(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="L’élève n’existe plus",
+        )
+    if (
+        quiz_session.training_question_bank_id is not None
+        and quiz_session.class_id is not None
+        and quiz_session.training_question_bank_id
+        in active_exam_bank_ids_for_class(quiz_session.class_id, session)
+    ):
+        # Opening an exam discards these trainings; this also covers one
+        # started concurrently, which must not give feedback during the exam.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cet entraînement est indisponible pendant un examen",
         )
     question_id = current_question_id(quiz_session, participant, session)
     retargeting_finished_answer = question_id is None

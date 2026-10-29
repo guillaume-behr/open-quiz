@@ -2,7 +2,7 @@ from hmac import compare_digest
 from typing import Annotated
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 
@@ -26,6 +26,10 @@ from app.student_accounts import student_account_response
 
 router = APIRouter(prefix="/api/student-auth", tags=["student authentication"])
 student_bearer = HTTPBearer(auto_error=False)
+
+
+def student_password_rate_subject(identifier: str) -> str:
+    return f"student-password:identity:{identifier}"
 
 
 def student_from_token(
@@ -90,7 +94,7 @@ def login_student(
         session,
         known_identity=account is not None and account.is_active,
     )
-    subject = f"student-password:identity:{payload.identifier}"
+    subject = student_password_rate_subject(payload.identifier)
     limiter = request.app.state.login_rate_limiter
     retry_after = limiter.reserve(session, subject)
     if retry_after:
@@ -118,10 +122,29 @@ def login_student(
             request.app.state.settings.jwt_secret,
             account.access_token_generation,
         ),
+        request.app.state.settings.student_access_token_hours,
     )
     return StudentLoginResponse(
         access_token=token, student=student_account_response(account, session)
     )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout_student(
+    account: Annotated[StudentAccount, Depends(current_student)],
+    session: DbSession,
+) -> Response:
+    """Revoke every access token of this student account.
+
+    Student tokens are stateless, so a shared classroom computer would keep a
+    usable token until it expires. Bumping the generation revokes the account's
+    tokens on every device, which is the safe side for a shared computer.
+    Quiz participation tokens are separate and stay valid.
+    """
+    account.access_token_generation += 1
+    session.commit()
+    audit_event("student_auth.logout", account_id=account.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/me", response_model=StudentAccountResponse)

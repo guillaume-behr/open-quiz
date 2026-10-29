@@ -212,8 +212,18 @@ test("cookie settings clear local quiz and preference data", async ({
     await page.route("**/api/auth/logout", async (route) => {
         await route.fulfill({ status: 204 })
     })
+    await page.route("**/api/student-auth/logout", async (route) => {
+        await route.fulfill({ status: 204 })
+    })
+    const studentLogout = page.waitForRequest(
+        (request) =>
+            new URL(request.url()).pathname === "/api/student-auth/logout" &&
+            request.headers().authorization === "Bearer student-token"
+    )
     await page.goto("/cookie-settings")
     await page.getByRole("button", { name: "Clear and sign out" }).click()
+
+    await studentLogout
 
     await expect(page.getByRole("status")).toHaveText(
         "Local data and the sign-in session have been cleared."
