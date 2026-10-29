@@ -393,12 +393,8 @@ def add_question(
     *,
     image_data: bytes | None = None,
     image_content_type: str | None = None,
-    choice_images: list[tuple[bytes | None, str | None]] | None = None,
+    choice_images: list[tuple[bytes | None, str | None]],
 ) -> tuple[Question, list[QuestionChoice], QuestionCode | None]:
-    if choice_images is None:
-        choice_images = [
-            decode_image_payload(choice.image) for choice in payload.choices
-        ]
     if any(
         not choice.label and choice_image_data is None and choice.code_content is None
         for choice, (choice_image_data, _) in zip(
@@ -922,15 +918,13 @@ def regrade_affected_sessions(
 
     session.commit()
 
-    hub = getattr(getattr(request, "app", None), "state", None)
-    if hub and hasattr(hub, "live_quiz_hub"):
-        live_hub = hub.live_quiz_hub
-        for quiz_session in affected_sessions:
-            live_hub.publish(quiz_session_topic(quiz_session.id))
-            live_hub.publish(student_session_topic(quiz_session.join_code))
-        live_hub.publish(active_quiz_sessions_topic(professor_id))
-        if has_makeup_child:
-            live_hub.publish(makeup_sessions_topic(professor_id))
+    live_hub = request.app.state.live_quiz_hub
+    for quiz_session in affected_sessions:
+        live_hub.publish(quiz_session_topic(quiz_session.id))
+        live_hub.publish(student_session_topic(quiz_session.join_code))
+    live_hub.publish(active_quiz_sessions_topic(professor_id))
+    if has_makeup_child:
+        live_hub.publish(makeup_sessions_topic(professor_id))
 
 
 @router.post(

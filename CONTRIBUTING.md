@@ -178,9 +178,13 @@ uv sync --frozen --dev
 uv run --frozen ruff check app tests main.py scripts migrations
 uv run --frozen ruff check --select S app main.py scripts migrations
 uv run --frozen ruff format --check app tests main.py scripts migrations
-uv run --frozen pytest -q
+uv run --frozen pytest -q --cov --cov-report=term-missing
 uv run --frozen pip-audit
 ```
+
+La suite backend doit couvrir 100 % des lignes et des branches de `app`,
+`main.py` et `scripts` : la commande de tests échoue en dessous. Les aides
+partagées des tests se trouvent dans `tests/support.py`.
 
 ### Frontend
 

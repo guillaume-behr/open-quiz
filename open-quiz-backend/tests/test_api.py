@@ -3,16 +3,12 @@ import io
 import json
 import os
 import stat
-import subprocess
-import sys
 import tomllib
-from base64 import b64decode, b64encode
+from base64 import b64encode
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from hmac import new as hmac_new
-from importlib.util import find_spec
 from pathlib import Path
 from re import search
 from threading import Barrier
@@ -20,24 +16,19 @@ from time import sleep, time
 from typing import Any
 
 import jwt
-import psycopg
 import pyotp
 import pytest
-from alembic.autogenerate import compare_metadata
-from alembic.runtime.migration import MigrationContext
-from alembic.script import ScriptDirectory
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import ValidationError
 from sqlalchemy import create_engine, event, inspect, select
-from sqlalchemy.orm import Session as DbSession
 from starlette.websockets import WebSocketDisconnect
 
 import main
 from app.class_names import format_class_name
-from app.config import Settings, secure_private_file, write_private_file
-from app.database import Base, migration_config, postgres_url
+from app.config import secure_private_file, write_private_file
+from app.database import postgres_url
 from app.grading import selected_choice_score
 from app.images import (
     MAX_IMAGE_BYTES,
@@ -97,117 +88,25 @@ from app.security import (
 from main import create_app
 from scripts.reset_two_factor import reset
 
-JWT_SECRET = "test-secret-that-is-at-least-32-bytes-long"
-TOTP_ENCRYPTION_KEY = "test-totp-key-that-is-at-least-32-bytes"
-STUDENT_CREDENTIAL_ENCRYPTION_KEY = (
-    "test-student-credential-key-with-enough-variety-4567"
+from support import (
+    ADMIN_PASSWORD,
+    FRONTEND_ORIGIN,
+    JWT_SECRET,
+    TEST_CLIENT_BACKEND_OPTIONS,
+    VALID_PNG,
+    assert_student_exam_payload_hides_answers,
+    complete_first_login,
+    correct_choice_id,
+    database_connection,
+    exam_environment,
+    hand_in_quiz,
+    launch_and_join,
+    login_admin,
+    make_client,
+    refresh_headers,
+    settings_for,
+    wrong_choice_id,
 )
-ADMIN_PASSWORD = "a-strong-test-password"
-FRONTEND_ORIGIN = "http://localhost:5173"
-VALID_PNG = b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
-    "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
-)
-TEST_CLIENT_BACKEND_OPTIONS = {"use_uvloop": True} if find_spec("uvloop") else {}
-# install-dev.sh creates the role and database of this default; keep both in
-# step when changing it.
-TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "postgresql+psycopg://open_quiz_test:open-quiz-test-password@127.0.0.1:5432/open_quiz_test",
-)
-PREPARED_TEST_SCHEMAS: set[str] = set()
-STUDENT_EXAM_FORBIDDEN_ANSWER_FIELDS = {
-    "correct_choice_ids",
-    "correction_mode",
-    "expected_answer",
-    "expected_answers",
-    "is_correct",
-    "max_score",
-    "points",
-    "score",
-}
-
-
-@pytest.fixture(scope="session", autouse=True)
-def cleanup_test_schemas():
-    yield
-    if not PREPARED_TEST_SCHEMAS:
-        return
-    engine = create_engine(postgres_url(TEST_DATABASE_URL))
-    try:
-        for schema in PREPARED_TEST_SCHEMAS:
-            with engine.begin() as connection:
-                connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
-    finally:
-        engine.dispose()
-
-
-def nested_keys(value: Any) -> set[str]:
-    if isinstance(value, dict):
-        return set(value) | {
-            key for child in value.values() for key in nested_keys(child)
-        }
-    if isinstance(value, list):
-        return {key for child in value for key in nested_keys(child)}
-    return set()
-
-
-def assert_student_exam_payload_hides_answers(payload: Any) -> None:
-    assert nested_keys(payload).isdisjoint(STUDENT_EXAM_FORBIDDEN_ANSWER_FIELDS)
-
-
-def database_url_for(database: Path) -> str:
-    schema = f"test_{sha256(str(database).encode()).hexdigest()[:24]}"
-    base_url = postgres_url(TEST_DATABASE_URL)
-    if schema not in PREPARED_TEST_SCHEMAS:
-        engine = create_engine(base_url)
-        with engine.begin() as connection:
-            connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
-            connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
-        engine.dispose()
-        PREPARED_TEST_SCHEMAS.add(schema)
-    return base_url.update_query_dict(
-        {"options": f"-csearch_path={schema}"}
-    ).render_as_string(hide_password=False)
-
-
-@contextmanager
-def database_connection(database: Path):
-    url = postgres_url(database_url_for(database)).set(drivername="postgresql")
-    with psycopg.connect(url.render_as_string(hide_password=False)) as connection:
-        yield connection
-
-
-def settings_for(database: Path, **overrides: Any) -> Settings:
-    values: dict[str, Any] = {
-        "database_url": database_url_for(database),
-        "jwt_secret": JWT_SECRET,
-        "totp_encryption_key": TOTP_ENCRYPTION_KEY,
-        "student_credential_encryption_key": STUDENT_CREDENTIAL_ENCRYPTION_KEY,
-        "admin_username": "root-admin",
-        "admin_password": ADMIN_PASSWORD,
-        "frontend_origin": FRONTEND_ORIGIN,
-        "access_token_minutes": 5,
-        "environment": "test",
-    }
-    values.update(overrides)
-    return Settings(**values)
-
-
-def make_client(settings: Settings) -> TestClient:
-    return TestClient(
-        create_app(settings),
-        headers={"Origin": FRONTEND_ORIGIN},
-        backend_options=TEST_CLIENT_BACKEND_OPTIONS,
-    )
-
-
-def refresh_headers(client: TestClient, secret: str = JWT_SECRET) -> dict[str, str]:
-    refresh_token = client.cookies.get(REFRESH_COOKIE)
-    assert refresh_token
-    return {
-        REFRESH_PROOF_HEADER: refresh_request_proof(refresh_token, secret),
-    }
 
 
 def test_health_checks_database_readiness(tmp_path: Path) -> None:
@@ -218,140 +117,6 @@ def test_health_checks_database_readiness(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert response.headers["cache-control"] == "no-store"
-
-
-def assert_schema_matches_models(database_url: str) -> None:
-    engine = create_engine(postgres_url(database_url))
-    try:
-        with engine.connect() as connection:
-            context = MigrationContext.configure(
-                connection, opts={"compare_type": True}
-            )
-            head = ScriptDirectory.from_config(migration_config()).get_current_head()
-            assert context.get_current_revision() == head
-            assert compare_metadata(context, Base.metadata) == []
-    finally:
-        engine.dispose()
-
-
-def test_migrations_build_the_schema_the_models_describe(tmp_path: Path) -> None:
-    """A database migrated from empty matches the models exactly.
-
-    A model change committed without its migration fails here. Generate one
-    with `uv run alembic revision --autogenerate`.
-    """
-    settings = settings_for(tmp_path / "migrated")
-    with make_client(settings):
-        pass
-
-    assert_schema_matches_models(settings.database_url)
-
-
-def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None:
-    """Startup carries a database from 0.4.0 or earlier over to migrations.
-
-    Those releases created tables with create_all() and added late columns at
-    startup, so an older instance can lack tables, columns and indexes. The
-    baseline fills them in, keeps every row, and the paste alerts those
-    releases recorded are cleared once.
-    """
-    database = tmp_path / "pre-migrations"
-    database_url = database_url_for(database)
-    engine = create_engine(postgres_url(database_url))
-    try:
-        Base.metadata.create_all(engine)
-        with DbSession(engine) as session:
-            teacher = User(
-                username="legacy-teacher",
-                display_name="Legacy teacher",
-                password_hash="x",
-            )
-            session.add(teacher)
-            session.flush()
-            quiz = Quiz(
-                owner_id=teacher.id,
-                title="Legacy quiz",
-                question_count=1,
-                easy_question_count=1,
-                medium_question_count=0,
-                hard_question_count=0,
-            )
-            session.add(quiz)
-            session.flush()
-            quiz_session = QuizSession(
-                quiz_id=quiz.id,
-                class_name="Legacy class",
-                join_code="LEG123",
-                status="finished",
-            )
-            session.add(quiz_session)
-            session.flush()
-            session.add(
-                QuizParticipant(
-                    session_id=quiz_session.id,
-                    student_identifier="legacy.student",
-                    violation_count=1,
-                    last_violation_type="paste_attempt",
-                    last_violation_at=datetime.now(UTC),
-                )
-            )
-            session.commit()
-        with engine.begin() as connection:
-            connection.exec_driver_sql("ALTER TABLE quiz_answers DROP COLUMN feedback")
-            connection.exec_driver_sql(
-                "ALTER TABLE quiz_participants DROP COLUMN submitted_at"
-            )
-            connection.exec_driver_sql(
-                "ALTER TABLE quizzes DROP COLUMN allow_answer_review"
-            )
-            connection.exec_driver_sql(
-                "DROP INDEX ix_login_rate_limits_window_started_at"
-            )
-            connection.exec_driver_sql("DROP TABLE makeup_session_selections")
-    finally:
-        engine.dispose()
-
-    with make_client(settings_for(database)):
-        pass
-
-    assert_schema_matches_models(database_url)
-    with database_connection(database) as connection:
-        assert connection.execute(
-            "SELECT title, allow_answer_review FROM quizzes"
-        ).fetchall() == [("Legacy quiz", True)]
-        assert connection.execute(
-            "SELECT violation_count, last_violation_type, last_violation_at"
-            " FROM quiz_participants"
-        ).fetchall() == [(0, None, None)]
-
-
-def test_concurrent_startups_migrate_the_database_once(tmp_path: Path) -> None:
-    """Workers starting together on an empty database do not race each other.
-
-    Each worker is its own process, so the migrations serialize on a
-    PostgreSQL advisory lock rather than on anything held in memory.
-    """
-    database_url = database_url_for(tmp_path / "concurrent-migrations")
-    script = (
-        "import sys\n"
-        "from sqlalchemy import create_engine\n"
-        "from app.database import migrate_database, postgres_url\n"
-        "migrate_database(create_engine(postgres_url(sys.argv[1])))\n"
-    )
-    workers = [
-        subprocess.Popen(
-            [sys.executable, "-c", script, database_url],
-            cwd=Path(__file__).resolve().parent.parent,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-        for _ in range(4)
-    ]
-    for worker in workers:
-        _, errors = worker.communicate(timeout=60)
-        assert worker.returncode == 0, errors.decode()
-
-    assert_schema_matches_models(database_url)
 
 
 def test_rate_limit_expiration_has_a_supporting_index(tmp_path: Path) -> None:
@@ -1023,62 +788,6 @@ def test_invalid_participant_tokens_share_a_bounded_session_rate_limit(
             headers={"X-Quiz-Token": "another-invalid-token"},
         )
         assert different_token.status_code == 429
-
-
-def complete_first_login(
-    client: TestClient,
-    username: str,
-    password: str,
-) -> tuple[dict[str, str], str]:
-    response = client.post(
-        "/api/auth/login",
-        json={"username": username, "password": password},
-    )
-    assert response.status_code == 200
-    challenge = response.json()
-    assert challenge["status"] == "setup_required"
-    assert "access_token" not in challenge
-    assert challenge["provisioning_uri"].startswith("otpauth://totp/")
-    secret = challenge["secret"]
-    valid_code = pyotp.TOTP(secret).now()
-    invalid_code = "000000" if valid_code != "000000" else "111111"
-
-    invalid = client.post(
-        "/api/auth/2fa/verify",
-        json={
-            "challenge_token": challenge["challenge_token"],
-            "code": invalid_code,
-        },
-    )
-    assert invalid.status_code == 401
-    assert invalid.json()["detail"]["code"] == "AUTH_2FA_CODE_INVALID"
-
-    verified = client.post(
-        "/api/auth/2fa/verify",
-        json={
-            "challenge_token": challenge["challenge_token"],
-            "code": valid_code,
-        },
-    )
-    assert verified.status_code == 200
-    cookie = verified.headers["set-cookie"]
-    assert "HttpOnly" in cookie
-    assert "SameSite=strict" in cookie
-    refresh_token = client.cookies.get(REFRESH_COOKIE)
-    assert refresh_token
-    assert verified.json()["refresh_proof"] == refresh_request_proof(
-        refresh_token,
-        JWT_SECRET,
-    )
-    return (
-        {"Authorization": f"Bearer {verified.json()['access_token']}"},
-        secret,
-    )
-
-
-def login_admin(client: TestClient) -> dict[str, str]:
-    headers, _ = complete_first_login(client, "root-admin", ADMIN_PASSWORD)
-    return headers
 
 
 def test_teacher_lists_use_constant_query_counts(tmp_path: Path) -> None:
@@ -4640,136 +4349,6 @@ def test_rejects_unsafe_quiz_rate_limit_configuration(
         )
 
 
-def exam_environment(client: TestClient) -> dict[str, Any]:
-    """Provision a teacher, a class with one student and a one-question quiz."""
-    admin_headers = login_admin(client)
-    assert (
-        client.post(
-            "/api/admin/users",
-            headers=admin_headers,
-            json={
-                "username": "edge.teacher",
-                "display_name": "Edge Teacher",
-                "password": "a-secure-edge-password",
-            },
-        ).status_code
-        == 201
-    )
-    teacher_headers, _ = complete_first_login(
-        client, "edge.teacher", "a-secure-edge-password"
-    )
-    student_class = client.post(
-        "/api/classes",
-        headers=teacher_headers,
-        json={"name": "5e A", "grade_level": "5e"},
-    ).json()
-    account = client.post(
-        "/api/students",
-        headers=teacher_headers,
-        json={"first_name": "Edge", "last_name": "Student"},
-    ).json()
-    assert (
-        client.post(
-            f"/api/classes/{student_class['id']}/accounts/{account['id']}",
-            headers=teacher_headers,
-        ).status_code
-        == 200
-    )
-    student_login = client.post(
-        "/api/student-auth/login",
-        json={
-            "identifier": account["identifier"],
-            "password": account["generated_password"],
-        },
-    )
-    assert student_login.status_code == 200
-    student_headers = {
-        "Authorization": f"Bearer {student_login.json()['access_token']}"
-    }
-    bank = client.post(
-        "/api/question-banks",
-        headers=teacher_headers,
-        json={"grade_level": "5e", "chapter": "Edge cases"},
-    ).json()
-    question = client.post(
-        f"/api/question-banks/{bank['id']}/questions",
-        headers=teacher_headers,
-        data={
-            "payload": json.dumps(
-                {
-                    "prompt": "One plus one?",
-                    "points": 2,
-                    "difficulty": "easy",
-                    "answer_mode": "single",
-                    "answer_mode_disclosed": True,
-                    "choices": [
-                        {"label": "Two", "is_correct": True, "points": 2},
-                        {"label": "Three", "is_correct": False, "points": -3},
-                    ],
-                }
-            )
-        },
-    ).json()
-    quiz = client.post(
-        "/api/quizzes",
-        headers=teacher_headers,
-        json={
-            "title": "Edge quiz",
-            "question_bank_ids": [bank["id"]],
-            "allow_previous_questions": False,
-            "easy_question_count": 1,
-            "medium_question_count": 0,
-            "hard_question_count": 0,
-        },
-    ).json()
-    return {
-        "teacher_headers": teacher_headers,
-        "student_headers": student_headers,
-        "student_class": student_class,
-        "account": account,
-        "question": question,
-        "quiz": quiz,
-    }
-
-
-def launch_and_join(
-    client: TestClient,
-    environment: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, str]]:
-    launched = client.post(
-        f"/api/quizzes/{environment['quiz']['id']}/launch",
-        headers=environment["teacher_headers"],
-        json={"class_id": environment["student_class"]["id"]},
-    )
-    assert launched.status_code == 201
-    joined = client.post(
-        "/api/quizzes/join",
-        headers=environment["student_headers"],
-        json={"join_code": launched.json()["join_code"]},
-    )
-    assert joined.status_code == 201
-    participant_headers = {"X-Quiz-Token": joined.json()["participant_token"]}
-    return launched.json(), participant_headers
-
-
-def hand_in_quiz(
-    client: TestClient,
-    join_code: str,
-    participant_headers: dict[str, str],
-) -> dict[str, Any]:
-    """Confirm the reviewed answers, which is what ends an exam for a student.
-
-    Quizzes offer the review step by default, so answering the last question
-    is no longer what hands the paper in.
-    """
-    submitted = client.post(
-        f"/api/quizzes/student/sessions/{join_code}/submit",
-        headers=participant_headers,
-    )
-    assert submitted.status_code == 200
-    return submitted.json()
-
-
 def test_quiz_can_assign_the_same_draw_to_every_student(tmp_path: Path) -> None:
     database_path = tmp_path / "common-quiz.db"
     with make_client(settings_for(database_path)) as client:
@@ -5178,16 +4757,6 @@ def test_concurrent_session_reads_finalize_an_expired_quiz_once(
             ]
 
         assert results == [(status.HTTP_200_OK, "finished")] * 2
-
-
-def correct_choice_id(question: dict[str, Any]) -> int:
-    return next(choice["id"] for choice in question["choices"] if choice["is_correct"])
-
-
-def wrong_choice_id(question: dict[str, Any]) -> int:
-    return next(
-        choice["id"] for choice in question["choices"] if not choice["is_correct"]
-    )
 
 
 def test_answer_review_precedes_the_final_submission(tmp_path: Path) -> None:

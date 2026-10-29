@@ -15,3 +15,24 @@ TEST_ENVIRONMENT = {
 
 for name, value in TEST_ENVIRONMENT.items():
     os.environ.setdefault(name, value)
+
+import pytest  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+
+from app.database import postgres_url  # noqa: E402
+
+from support import PREPARED_TEST_SCHEMAS, TEST_DATABASE_URL  # noqa: E402
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_schemas():
+    yield
+    if not PREPARED_TEST_SCHEMAS:
+        return
+    engine = create_engine(postgres_url(TEST_DATABASE_URL))
+    try:
+        for schema in PREPARED_TEST_SCHEMAS:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+    finally:
+        engine.dispose()
