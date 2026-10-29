@@ -317,7 +317,12 @@ def update_student_account(
             payload.password,
             request.app.state.settings.student_credential_encryption_key,
         )
-    membership = session.scalar(select(Student).where(Student.account_id == account.id))
+    # Flushing the new identifier here would raise a duplicate outside the
+    # IntegrityError handler below and turn a conflict into a server error.
+    with session.no_autoflush:
+        membership = session.scalar(
+            select(Student).where(Student.account_id == account.id)
+        )
     if membership is not None:
         membership.identifier = account.identifier
         membership.display_name = account.display_name

@@ -52,7 +52,7 @@ jobs:
           ADMIN_PASSWORD: ci-test-admin-password-2026
           DATABASE_URL: postgresql+psycopg://open_quiz_test:ci-test-postgres-password-2026@127.0.0.1:5432/open_quiz_test
           TEST_DATABASE_URL: postgresql+psycopg://open_quiz_test:ci-test-postgres-password-2026@127.0.0.1:5432/open_quiz_test
-        run: uv run --frozen pytest -q
+        run: uv run --frozen pytest -q --cov --cov-report=term-missing
       - run: uv run --frozen pip-audit
 
   frontend:
