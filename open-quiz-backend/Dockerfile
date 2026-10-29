@@ -14,7 +14,8 @@ COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
-COPY main.py ./
+COPY migrations ./migrations
+COPY alembic.ini main.py ./
 COPY scripts ./scripts
 
 USER 10001:10001

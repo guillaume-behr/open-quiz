@@ -125,8 +125,10 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
 - validez les entrées côté backend, même si le frontend les contrôle déjà ;
 - vérifiez les permissions avec les rôles administrateur, enseignant et élève ;
 - préservez l’atomicité des imports et opérations concurrentes ;
-- accompagnez toute évolution du schéma PostgreSQL d’une stratégie explicite
-  de déploiement et des tests correspondants ;
+- accompagnez toute évolution du schéma PostgreSQL d’une migration Alembic
+  qui préserve les données des instances en service, et des tests
+  correspondants (voir
+  [Faire évoluer le schéma](open-quiz-backend/README.md#faire-évoluer-le-schéma)) ;
 - documentez les changements d’API, de configuration, de conservation ou de
   sécurité ;
 - signalez tout changement visible ou incompatible dans la description de la
@@ -173,9 +175,9 @@ part de la racine du dépôt ; revenez-y avant de passer à un autre composant.
 ```shell
 cd open-quiz-backend
 uv sync --frozen --dev
-uv run --frozen ruff check app tests main.py scripts
-uv run --frozen ruff check --select S app main.py scripts
-uv run --frozen ruff format --check app tests main.py scripts
+uv run --frozen ruff check app tests main.py scripts migrations
+uv run --frozen ruff check --select S app main.py scripts migrations
+uv run --frozen ruff format --check app tests main.py scripts migrations
 uv run --frozen pytest -q
 uv run --frozen pip-audit
 ```

@@ -307,8 +307,15 @@ avoir modifié `.env` :
 sh ./update.sh --no-pull
 ```
 
-Cette version ne migre pas les anciennes bases : utilisez un volume PostgreSQL
-neuf pour la transition.
+Au démarrage, le backend applique lui-même les migrations du schéma en
+attente, dans une seule transaction : en cas d’échec, la base reste dans son
+état précédent et le backend redémarre sans devenir sain. Une base créée par la
+version 0.4.0 ou antérieure est reprise automatiquement, sans perte de
+données. Pour connaître la révision d’une base :
+
+```shell
+docker compose exec open-quiz-backend /app/.venv/bin/alembic current
+```
 
 Après la mise à jour, vérifiez `docker compose ps`, `/api/health`, la connexion
 des trois rôles et les journaux du backend.
@@ -511,6 +518,7 @@ personnelle.
 | Symptôme                             | Vérifications                                                                                                        |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | L’API refuse de démarrer             | recherchez une valeur `replace-with-`, vérifiez la longueur et l’unicité des secrets, `APP_ENV` et `FRONTEND_ORIGIN` |
+| Une migration échoue au démarrage    | lisez l’erreur Alembic dans les journaux du backend : la base est restée dans son état précédent                     |
 | Boucle de redirection HTTP/HTTPS     | vérifiez `FRONTEND_ORIGIN` et les en-têtes de protocole transmis par les proxies                                     |
 | Le navigateur bloque les appels API  | faites correspondre l’origine visible, `FRONTEND_ORIGIN`, `VITE_API_URL`, CORS et CSP                                |
 | Un conteneur reste `unhealthy`       | consultez `docker compose ps` puis les journaux des trois services                                                   |

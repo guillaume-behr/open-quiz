@@ -38,9 +38,9 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --dev
-      - run: uv run --frozen ruff check app tests main.py scripts
-      - run: uv run --frozen ruff check --select S app main.py scripts
-      - run: uv run --frozen ruff format --check app tests main.py scripts
+      - run: uv run --frozen ruff check app tests main.py scripts migrations
+      - run: uv run --frozen ruff check --select S app main.py scripts migrations
+      - run: uv run --frozen ruff format --check app tests main.py scripts migrations
       - name: Run backend tests
         env:
           # Disposable values, only used by the ephemeral CI test database.
