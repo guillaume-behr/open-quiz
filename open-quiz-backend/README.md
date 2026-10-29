@@ -94,6 +94,7 @@ est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` 
 | ---------------------------------- | ------- | ----------------- |
 | `ACCESS_TOKEN_MINUTES`             | `15`    | 1 à 30            |
 | `REFRESH_TOKEN_DAYS`               | `7`     | 1 à 30            |
+| `STUDENT_ACCESS_TOKEN_HOURS`       | `2`     | 2 à 12            |
 | `LOGIN_ATTEMPTS`                   | `10`    | 3 à 50            |
 | `LOGIN_WINDOW_SECONDS`             | `900`   | 60 minimum        |
 | `GLOBAL_LOGIN_ATTEMPTS`            | `2000`  | 50 à 100 000      |
@@ -157,8 +158,15 @@ schémas de requête et de réponse.
 Les jetons d’accès enseignant et administrateur sont courts. Leur session
 longue utilise un cookie HttpOnly rotatif et une nouvelle validation TOTP est
 requise au plus tard après sept jours par défaut, ou sur un nouvel appareil.
-Les jetons élève expirent après 12 heures et n’utilisent ni TOTP ni cookie de
-renouvellement.
+Les jetons élève expirent après `STUDENT_ACCESS_TOKEN_HOURS` heures, deux par
+défaut, et n’utilisent ni TOTP ni cookie de renouvellement. La déconnexion
+révoque côté serveur tous les jetons du compte élève, sur tous ses appareils ;
+les jetons de participation à un quiz en cours restent valides.
+
+Les identifiants élève se devinent à partir des noms : un camarade peut donc
+épuiser volontairement les tentatives de connexion d’un élève. L’enseignant
+lève ce blocage en enregistrant le compte de l’élève, et peut en changer
+l’identifiant pour le soustraire à une attaque répétée.
 
 ### Pagination
 

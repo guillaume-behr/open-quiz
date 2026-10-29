@@ -81,7 +81,7 @@ def decode_access_token(token: str, secret: str) -> tuple[int, str]:
 
 
 def create_student_access_token(
-    student_id: int, secret: str, version: str, expires_hours: int = 12
+    student_id: int, secret: str, version: str, expires_hours: int
 ) -> str:
     now = datetime.now(UTC)
     return jwt.encode(

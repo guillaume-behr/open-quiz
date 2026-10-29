@@ -18,6 +18,7 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.routers.student_auth import student_password_rate_subject
 from app.schemas import (
     StudentAccountCreate,
     StudentAccountCreatedResponse,
@@ -300,6 +301,7 @@ def update_student_account(
     request: Request,
 ) -> StudentAccountResponse:
     account = owned_student_account(account_id, professor.id, session)
+    previous_identifier = account.identifier
     status_changed = account.is_active != payload.is_active
     credentials_changed = payload.password is not None or (
         status_changed and not payload.is_active
@@ -328,6 +330,13 @@ def update_student_account(
         raise HTTPException(
             status_code=409, detail="Cet identifiant élève est déjà utilisé"
         ) from None
+    # Student identifiers are easy to guess, so a classmate can exhaust a
+    # student's login attempts on purpose. Saving the account is the teacher's
+    # way to let that student sign in again; renaming the identifier also
+    # moves the student out of reach of whoever targeted the old one.
+    limiter = request.app.state.login_rate_limiter
+    for identifier in {previous_identifier, account.identifier}:
+        limiter.clear_subject(session, student_password_rate_subject(identifier))
     audit_event(
         "students.account_updated",
         professor_id=professor.id,

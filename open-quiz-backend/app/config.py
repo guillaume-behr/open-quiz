@@ -76,6 +76,7 @@ class Settings:
     frontend_origin: str
     access_token_minutes: int = 15
     refresh_token_days: int = 7
+    student_access_token_hours: int = 2
     login_attempts: int = 10
     login_window_seconds: int = 900
     global_login_attempts: int = 2000
@@ -169,6 +170,10 @@ class Settings:
             raise ValueError("ACCESS_TOKEN_MINUTES must be between 1 and 30")
         if not 1 <= self.refresh_token_days <= 30:
             raise ValueError("REFRESH_TOKEN_DAYS must be between 1 and 30")
+        # A student session has no refresh step, so it must outlast a lesson:
+        # below two hours students would be signed out mid-class.
+        if not 2 <= self.student_access_token_hours <= 12:
+            raise ValueError("STUDENT_ACCESS_TOKEN_HOURS must be between 2 and 12")
         if not 3 <= self.login_attempts <= 50:
             raise ValueError("LOGIN_ATTEMPTS must be between 3 and 50")
         if self.login_window_seconds < 60:
@@ -261,6 +266,7 @@ def get_settings() -> Settings:
         frontend_origin=os.getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
         access_token_minutes=int(os.getenv("ACCESS_TOKEN_MINUTES", "15")),
         refresh_token_days=int(os.getenv("REFRESH_TOKEN_DAYS", "7")),
+        student_access_token_hours=int(os.getenv("STUDENT_ACCESS_TOKEN_HOURS", "2")),
         login_attempts=int(os.getenv("LOGIN_ATTEMPTS", "10")),
         login_window_seconds=int(os.getenv("LOGIN_WINDOW_SECONDS", "900")),
         global_login_attempts=int(os.getenv("GLOBAL_LOGIN_ATTEMPTS", "2000")),
