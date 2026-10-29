@@ -435,3 +435,30 @@ def test_grade_levels_survive_concurrent_creation(tmp_path: Path) -> None:
         ):
             client.post("/api/grade-levels", headers=headers, json={"name": "CM1"})
         assert len(fired) == 2
+
+
+def test_a_two_factor_code_used_concurrently_is_refused(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "two-factor-counter")) as client:
+        challenge = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        ).json()
+        with concurrent_writes(
+            client,
+            (
+                "UPDATE two_factor_credentials SET",
+                lambda connection: connection.execute(
+                    update(TwoFactorCredential).values(last_counter=2**31 - 1)
+                ),
+            ),
+        ) as fired:
+            response = client.post(
+                "/api/auth/2fa/verify",
+                json={
+                    "challenge_token": challenge["challenge_token"],
+                    "code": pyotp.TOTP(challenge["secret"]).now(),
+                },
+            )
+        assert fired
+        assert response.status_code == 401
+        assert response.json()["detail"]["code"] == "AUTH_2FA_CODE_USED"
