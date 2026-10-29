@@ -44,3 +44,15 @@ ignore = [
     # FastAPI dependency declarations intentionally call parameter helpers.
     "B008",
 ]
+
+[tool.ruff.lint.isort]
+known-local-folder = ["support"]
+
+[tool.coverage.run]
+branch = true
+source = ["app", "main", "scripts"]
+
+[tool.coverage.report]
+exclude_also = ['if __name__ == "__main__":']
+show_missing = true
+skip_covered = true
