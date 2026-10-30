@@ -155,8 +155,9 @@ et 4180 doivent être disponibles. Les tests couvrent aussi le proxy HTTP et
 WebSocket local.
 
 La CI principale exécute ESLint, Prettier, la validation des catalogues, le
-typecheck, le build et l’audit des dépendances. Les tests E2E restent une
-vérification locale distincte.
+typecheck, le build et l’audit des dépendances. Le job `e2e` lance ensuite
+cette suite Playwright sur chaque pull request et conserve les traces des tests
+en échec comme artefact `playwright-test-results`.
 
 ## 🌍 Internationalisation
 

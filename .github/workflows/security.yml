@@ -90,6 +90,35 @@ jobs:
       - run: pnpm build
       - run: pnpm audit --audit-level low
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: open-quiz-frontend
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.0.2
+      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6.0.2
+        with:
+          version: 11.15.1
+          run_install: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.3.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: open-quiz-frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # The browser build has to match the locked @playwright/test version.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - name: Keep traces of failed tests
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-test-results
+          path: open-quiz-frontend/test-results/
+          retention-days: 7
+
   containers:
     runs-on: ubuntu-latest
     timeout-minutes: 20
