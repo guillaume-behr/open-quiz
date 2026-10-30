@@ -1,6 +1,8 @@
-FROM ghcr.io/astral-sh/uv:latest AS uv
+# Base images are pinned by version and digest so a rebuild is reproducible;
+# Dependabot proposes the updates (.github/dependabot.yml).
+FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
 
-FROM python:3.14-slim
+FROM python:3.14.10-slim@sha256:3cabfd7d7aaf394e6040e79fa1eec6ca1c52b74ed9188650472695d9a9326999
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

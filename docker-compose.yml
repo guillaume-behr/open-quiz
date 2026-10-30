@@ -1,6 +1,8 @@
 services:
     open-quiz-database:
-        image: postgres:17.10-alpine3.24
+        # Keep in step with the backend job in .github/workflows/security.yml,
+        # which checks that both name the same image.
+        image: postgres:17.10-alpine3.24@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
         env_file:
             - ./open-quiz-backend/.env
         environment:

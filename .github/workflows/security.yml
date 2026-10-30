@@ -17,7 +17,8 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:latest
+        # The image docker-compose.yml deploys; the next step checks it.
+        image: postgres:17.10-alpine3.24@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
         env:
           POSTGRES_DB: open_quiz_test
           POSTGRES_USER: open_quiz_test
@@ -37,6 +38,15 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
+      - name: Test against the PostgreSQL image production runs
+        working-directory: .
+        run: |
+          deployed=$(sed -n 's/^ *image: *\(postgres:.*\)$/\1/p' docker-compose.yml)
+          tested=$(sed -n 's/^ *image: *\(postgres:.*\)$/\1/p' .github/workflows/security.yml)
+          if [ -z "$deployed" ] || [ "$deployed" != "$tested" ]; then
+            echo "::error::CI tests $tested but docker-compose.yml deploys $deployed"
+            exit 1
+          fi
       - run: uv sync --frozen --dev
       - run: uv run --frozen ruff check app tests main.py scripts migrations
       - run: uv run --frozen ruff check --select S app main.py scripts migrations
