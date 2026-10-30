@@ -112,6 +112,10 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
 - gardez les règles métier et les autorisations côté backend ;
 - ajoutez un test ciblé pour toute correction de comportement ;
 - ne modifiez les fichiers de verrouillage que lorsqu’une dépendance change ;
+- épinglez chaque image Docker par version et par empreinte
+  (`image:version@sha256:…`), jamais `latest` : Dependabot propose ensuite les
+  mises à jour. L’image PostgreSQL de `docker-compose.yml` et celle de la CI
+  doivent rester identiques, ce que la CI vérifie ;
 - ne modifiez pas `public/pyodide` sans documenter la provenance et la procédure
   de mise à jour ;
 - ne mélangez jamais données réelles et jeux de test ;
