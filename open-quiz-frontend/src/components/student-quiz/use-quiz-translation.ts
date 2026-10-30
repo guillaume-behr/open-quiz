@@ -49,11 +49,14 @@ export function useQuizTranslation(
     )
 
     useEffect(() => {
-        operationVersionRef.current += 1
+        const resetVersion = ++operationVersionRef.current
         translatorRef.current?.destroy()
         translatorRef.current = null
         translatorPairRef.current = null
         const timeout = window.setTimeout(() => {
+            // A busy page can run this after the student already asked for a
+            // translation with the new pair: leave that newer one in place.
+            if (operationVersionRef.current !== resetVersion) return
             setEnabled(false)
             setTranslatedPair(null)
             setTranslatedTitle(null)
