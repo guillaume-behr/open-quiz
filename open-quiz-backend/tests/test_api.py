@@ -2547,7 +2547,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             json={"join_code": quiz_session["join_code"]},
         )
         assert joined_again.status_code == 403
-        assert joined_again.json()["detail"] == "Impossible de rejoindre ce quiz"
+        assert joined_again.json()["detail"]["code"] == "QUIZ_JOIN_REJECTED"
         participant_token = joined.json()["participant_token"]
         student_headers = {"X-Quiz-Token": participant_token}
         assert (
@@ -2653,7 +2653,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             json={"join_code": quiz_session["join_code"]},
         )
         assert late_join.status_code == 403
-        assert late_join.json()["detail"] == "Impossible de rejoindre ce quiz"
+        assert late_join.json()["detail"]["code"] == "QUIZ_JOIN_REJECTED"
         original_ends_at = started.json()["ends_at"]
         paused = client.post(
             f"/api/quizzes/sessions/{quiz_session['id']}/pause",

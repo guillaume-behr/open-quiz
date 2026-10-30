@@ -59,18 +59,18 @@ Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 
 ## ⌨️ Commandes disponibles
 
-| Commande            | Rôle                                                     |
-| ------------------- | -------------------------------------------------------- |
-| `pnpm dev`          | démarre Vite avec le proxy de développement              |
-| `pnpm build`        | vérifie les types puis produit `dist/`                   |
-| `pnpm preview`      | sert le build localement, sans le proxy de développement |
-| `pnpm lint`         | exécute ESLint                                           |
-| `pnpm format`       | applique Prettier aux sources et catalogues              |
-| `pnpm format:check` | vérifie le formatage                                     |
-| `pnpm test`         | valide les huit catalogues et les étiquettes de classe   |
-| `pnpm typecheck`    | vérifie `src/` et la configuration Vite                  |
-| `pnpm test:e2e`     | lance les parcours Playwright dans Chromium              |
-| `pnpm test:e2e:ui`  | ouvre l’interface Playwright                             |
+| Commande            | Rôle                                                          |
+| ------------------- | ------------------------------------------------------------- |
+| `pnpm dev`          | démarre Vite avec le proxy de développement                   |
+| `pnpm build`        | vérifie les types puis produit `dist/`                        |
+| `pnpm preview`      | sert le build localement, sans le proxy de développement      |
+| `pnpm lint`         | exécute ESLint                                                |
+| `pnpm format`       | applique Prettier aux sources et catalogues                   |
+| `pnpm format:check` | vérifie le formatage                                          |
+| `pnpm test`         | valide les catalogues, étiquettes de classe et codes d’erreur |
+| `pnpm typecheck`    | vérifie `src/` et la configuration Vite                       |
+| `pnpm test:e2e`     | lance les parcours Playwright dans Chromium                   |
+| `pnpm test:e2e:ui`  | ouvre l’interface Playwright                                  |
 
 `pnpm preview` ne transmet pas `/api`. Pour tester un build complet, fournissez
 une valeur `VITE_API_URL` au moment de la compilation ou utilisez les

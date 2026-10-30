@@ -1,4 +1,5 @@
 import { joinMakeupSession, selectMakeupQuiz } from "@/api/quizzes"
+import { localizedErrorMessage } from "@/lib/errors"
 import type { MakeupJoin } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,8 +33,8 @@ export function StudentMakeupPanel({ token }: { token: string }) {
         setError(null)
         try {
             setLobby(await joinMakeupSession(code.trim().toUpperCase(), token))
-        } catch {
-            setError(t("makeup-join-error"))
+        } catch (caught) {
+            setError(localizedErrorMessage(caught, t, t("makeup-join-error")))
         } finally {
             setBusy(false)
         }
@@ -54,8 +55,8 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                 participantToken: joined.participant_token,
             })
             navigate("/student/exam")
-        } catch {
-            setError(t("makeup-select-error"))
+        } catch (caught) {
+            setError(localizedErrorMessage(caught, t, t("makeup-select-error")))
         } finally {
             setBusy(false)
         }

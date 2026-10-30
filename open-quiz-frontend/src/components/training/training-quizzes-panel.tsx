@@ -3,6 +3,7 @@ import {
     getTrainingQuestionBanks,
     startTrainingQuiz,
 } from "@/api/quizzes"
+import { localizedErrorMessage } from "@/lib/errors"
 import type {
     QuestionBank,
     StudentAccount,
@@ -69,8 +70,10 @@ export function TrainingQuizzesPanel({
             navigate("/student/training", {
                 state: { student, token, session, participantToken },
             })
-        } catch {
-            setError(t("training-start-error"))
+        } catch (caught) {
+            setError(
+                localizedErrorMessage(caught, t, t("training-start-error"))
+            )
         } finally {
             setStartingId(null)
         }
