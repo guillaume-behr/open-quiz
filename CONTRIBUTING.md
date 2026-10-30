@@ -203,7 +203,9 @@ pnpm build
 pnpm audit --audit-level low
 ```
 
-Pour un parcours utilisateur ou une modification du proxy HTTP/WebSocket :
+Pour un parcours utilisateur ou une modification du proxy HTTP/WebSocket,
+lancez aussi les tests Playwright, que le job `e2e` de la CI exécute de toute
+façon :
 
 ```shell
 pnpm exec playwright install chromium
