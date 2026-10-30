@@ -1,8 +1,16 @@
 import os
+from pathlib import Path
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import URL, make_url
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine
+from sqlalchemy.engine import URL, Engine, make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+MIGRATIONS_DIRECTORY = Path(__file__).resolve().parent.parent / "migrations"
+# Arbitrary application-wide key for pg_advisory_xact_lock: "openquiz" read as
+# a big-endian 64-bit integer.
+MIGRATION_LOCK_KEY = 0x6F70656E7175697A
 
 
 class Base(DeclarativeBase):
@@ -31,49 +39,28 @@ def postgres_url(database_url: str) -> URL:
     return url
 
 
+def migration_config() -> Config:
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_DIRECTORY))
+    return config
+
+
+def migrate_database(engine: Engine) -> None:
+    """Bring the schema to the latest migration before the application serves.
+
+    Every migration runs in one transaction: PostgreSQL rolls the schema back
+    as a whole if any step fails, rather than leaving it half upgraded.
+    """
+    config = migration_config()
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "head")
+
+
 def build_session_factory(database_url: str) -> sessionmaker[Session]:
     engine = create_engine(
         postgres_url(database_url),
         pool_pre_ping=True,
     )
-    Base.metadata.create_all(engine)
-    # create_all() does not add columns to installations with an existing
-    # database. Keep this small, idempotent security migration here until the
-    # project adopts a general migration framework.
-    with engine.begin() as connection:
-        for table in ("users", "student_accounts"):
-            connection.execute(
-                text(
-                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
-                    "access_token_generation INTEGER NOT NULL DEFAULT 0"
-                )
-            )
-        connection.execute(
-            text(
-                "ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS "
-                "allow_answer_review BOOLEAN NOT NULL DEFAULT TRUE"
-            )
-        )
-        connection.execute(
-            text(
-                "ALTER TABLE quiz_sessions ADD COLUMN IF NOT EXISTS "
-                "allow_answer_review BOOLEAN"
-            )
-        )
-        connection.execute(
-            text(
-                "ALTER TABLE quiz_participants ADD COLUMN IF NOT EXISTS "
-                "submitted_at TIMESTAMP WITH TIME ZONE"
-            )
-        )
-        connection.execute(
-            text("ALTER TABLE quiz_answers ADD COLUMN IF NOT EXISTS feedback TEXT")
-        )
-        connection.execute(
-            text(
-                "UPDATE quiz_participants SET violation_count = 0, "
-                "last_violation_type = NULL, last_violation_at = NULL "
-                "WHERE last_violation_type = 'paste_attempt'"
-            )
-        )
+    migrate_database(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)

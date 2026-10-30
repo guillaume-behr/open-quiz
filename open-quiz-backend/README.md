@@ -12,7 +12,7 @@ Consultez aussi le [README principal](../README.md), le
 
 - Python 3.14 et uv ;
 - FastAPI et Uvicorn ;
-- SQLAlchemy avec PostgreSQL et Psycopg ;
+- SQLAlchemy avec PostgreSQL et Psycopg, Alembic pour les migrations ;
 - Argon2, JWT, TOTP et Fernet pour les mécanismes d’authentification ;
 - pytest, Ruff et pip-audit pour la qualité et la sécurité.
 
@@ -261,9 +261,35 @@ sa participation et pendant une session valide.
 
 Docker Compose exécute PostgreSQL dans `open-quiz-database` et conserve ses
 données dans le volume `open-quiz-postgres-data`. Le backend accepte uniquement
-une URL PostgreSQL et crée le schéma courant dans une base vide au démarrage.
-Il n’existe pas de reprise depuis les anciennes bases : le passage à cette
-version nécessite un nouveau volume PostgreSQL.
+une URL PostgreSQL. Au démarrage, il applique avec
+[Alembic](https://alembic.sqlalchemy.org/) les migrations en attente, dans une
+seule transaction : une base vide reçoit le schéma complet, et une base déjà
+en service passe à la dernière révision ou reste intacte en cas d’échec. Un
+verrou consultatif PostgreSQL empêche deux processus de migrer en même temps.
+
+Une base PostgreSQL créée par la version 0.4.0 ou une version antérieure, avant
+l’arrivée des migrations, est reprise automatiquement : la révision de
+référence `0001` complète les tables, colonnes et index manquants sans toucher
+aux données existantes. Les anciennes bases SQLite ne sont pas reprises.
+
+### Faire évoluer le schéma
+
+Toute modification de `app/models.py` s’accompagne d’une migration dans
+`migrations/versions/`. Depuis `open-quiz-backend`, avec la base de
+développement à jour, générez-la puis relisez-la :
+
+```shell
+uv run alembic upgrade head
+uv run alembic revision --autogenerate --rev-id 0003 -m "describe the change"
+```
+
+La commande lit `DATABASE_URL` dans l’environnement ou dans `.env`. Numérotez
+les révisions à la suite et vérifiez que la migration préserve les données des
+instances en service : une colonne obligatoire ajoutée à une table existante
+doit par exemple recevoir une valeur par défaut. Le test
+`test_migrations_build_the_schema_the_models_describe` échoue tant qu’un modèle
+diffère des migrations. `uv run alembic current` et `uv run alembic history`
+indiquent l’état d’une base.
 
 La purge s’exécute au démarrage puis toutes les heures. Elle couvre les
 résultats d’examens et les entraînements terminés au-delà de leur durée, les
@@ -358,7 +384,7 @@ uv run pytest -q
 Appliquez le formatage avec :
 
 ```shell
-uv run ruff format app tests main.py scripts
+uv run ruff format app tests main.py scripts migrations
 ```
 
 La liste ordonnée des contrôles à reproduire avant une pull request — lint,
