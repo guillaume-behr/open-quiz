@@ -35,6 +35,7 @@ from app.routers import (
     grade_levels,
     health,
     live,
+    makeup,
     problem_reports,
     question_banks,
     quizzes,
@@ -428,6 +429,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(student_auth.router)
     app.include_router(grade_levels.router)
     app.include_router(quizzes.router)
+    app.include_router(makeup.router)
     app.include_router(live.router)
     app.include_router(question_banks.router)
     return app
