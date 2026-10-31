@@ -36,6 +36,7 @@ from starlette.requests import HTTPConnection
 from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser, authenticated_user_from_token
+from app.errors import ErrorCode, api_error
 from app.grading import (
     compute_final_scores,
     decoded_answer_data,
@@ -265,7 +266,9 @@ def enforce_public_rate_limit(
     if retry_after:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Trop de tentatives pour rejoindre le quiz",
+            detail=api_error(
+                ErrorCode.QUIZ_RATE_LIMITED, "Trop de tentatives pour rejoindre le quiz"
+            ),
             headers={"Retry-After": str(retry_after)},
         )
 
@@ -273,7 +276,9 @@ def enforce_public_rate_limit(
 def quiz_join_rejected() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Impossible de rejoindre ce quiz",
+        detail=api_error(
+            ErrorCode.QUIZ_JOIN_REJECTED, "Impossible de rejoindre ce quiz"
+        ),
     )
 
 
@@ -1467,7 +1472,10 @@ def authenticated_participant(
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Jeton de participation au quiz manquant",
+            detail=api_error(
+                ErrorCode.QUIZ_PARTICIPANT_TOKEN_MISSING,
+                "Jeton de participation au quiz manquant",
+            ),
         )
     row = session.execute(
         select(QuizSession, Quiz, QuizParticipant)
@@ -1491,7 +1499,10 @@ def authenticated_participant(
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Jeton de participation au quiz invalide",
+            detail=api_error(
+                ErrorCode.QUIZ_PARTICIPANT_TOKEN_INVALID,
+                "Jeton de participation au quiz invalide",
+            ),
         )
     participant = row[2]
     active_account = session.scalar(
@@ -1502,7 +1513,10 @@ def authenticated_participant(
     if active_account is not True:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Jeton de participation au quiz invalide",
+            detail=api_error(
+                ErrorCode.QUIZ_PARTICIPANT_TOKEN_INVALID,
+                "Jeton de participation au quiz invalide",
+            ),
         )
     return row
 
@@ -1606,7 +1620,10 @@ def student_question_response(
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La question actuelle n’est pas disponible",
+            detail=api_error(
+                ErrorCode.QUIZ_QUESTION_UNAVAILABLE,
+                "La question actuelle n’est pas disponible",
+            ),
         )
     choices = (
         []
@@ -3334,7 +3351,11 @@ def list_student_training_history(
     membership = session.scalar(select(Student).where(Student.account_id == student.id))
     if membership is None:
         raise HTTPException(
-            status_code=409, detail="L’élève doit être affecté à une classe"
+            status_code=409,
+            detail=api_error(
+                ErrorCode.TRAINING_CLASS_REQUIRED,
+                "L’élève doit être affecté à une classe",
+            ),
         )
     rows = list(
         session.execute(
@@ -3386,11 +3407,17 @@ def start_training_quiz(
     if membership is None:
         raise HTTPException(
             status_code=409,
-            detail="L’élève doit être affecté à une classe",
+            detail=api_error(
+                ErrorCode.TRAINING_CLASS_REQUIRED,
+                "L’élève doit être affecté à une classe",
+            ),
         )
     class_student, student_class = membership
     if question_bank_id in active_exam_bank_ids_for_class(student_class.id, session):
-        raise HTTPException(status_code=404, detail="Entraînement introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(ErrorCode.TRAINING_NOT_FOUND, "Entraînement introuvable"),
+        )
     assigned = session.execute(
         select(QuestionBank, ClassTrainingQuestionBank.question_count)
         .join(
@@ -3405,13 +3432,19 @@ def start_training_quiz(
         )
     ).first()
     if assigned is None:
-        raise HTTPException(status_code=404, detail="Entraînement introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(ErrorCode.TRAINING_NOT_FOUND, "Entraînement introuvable"),
+        )
     bank, configured_count = assigned
     question_ids = draw_training_question_ids(bank.id, session)[:configured_count]
     if not question_ids:
         raise HTTPException(
             status_code=409,
-            detail="Cette banque ne contient encore aucune question",
+            detail=api_error(
+                ErrorCode.TRAINING_BANK_EMPTY,
+                "Cette banque ne contient encore aucune question",
+            ),
         )
     quiz = training_profile_quiz(student.owner_id, session)
     discard_previous_training_sessions(student, class_student, session)
@@ -3816,7 +3849,10 @@ def join_makeup_session(
             f"makeup-join:account:{account.id}",
         )
         raise HTTPException(
-            status_code=403, detail="Impossible de rejoindre ce rattrapage"
+            status_code=403,
+            detail=api_error(
+                ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
+            ),
         )
     membership = session.scalar(
         select(Student).where(
@@ -3826,7 +3862,10 @@ def join_makeup_session(
     )
     if membership is None:
         raise HTTPException(
-            status_code=403, detail="Impossible de rejoindre ce rattrapage"
+            status_code=403,
+            detail=api_error(
+                ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
+            ),
         )
     eligible = list(
         session.scalars(
@@ -3879,7 +3918,11 @@ def select_makeup_quiz(
             f"makeup-join:account:{account.id}",
         )
         raise HTTPException(
-            status_code=409, detail="Ce rattrapage n’accepte plus de choix"
+            status_code=409,
+            detail=api_error(
+                ErrorCode.MAKEUP_SELECTION_CLOSED,
+                "Ce rattrapage n’accepte plus de choix",
+            ),
         )
     membership = session.scalar(
         select(Student).where(
@@ -3904,7 +3947,12 @@ def select_makeup_quiz(
         )
     )
     if membership is None or quiz is None or existing is not None:
-        raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
+            ),
+        )
     waiting = session.execute(
         update(MakeupSession)
         .where(
@@ -3917,7 +3965,11 @@ def select_makeup_quiz(
     if waiting.rowcount != 1:
         session.rollback()
         raise HTTPException(
-            status_code=409, detail="Ce rattrapage n’accepte plus de choix"
+            status_code=409,
+            detail=api_error(
+                ErrorCode.MAKEUP_SELECTION_CLOSED,
+                "Ce rattrapage n’accepte plus de choix",
+            ),
         )
     claimed_student_id = session.scalar(
         insert(MakeupSessionSelection)
@@ -3931,7 +3983,12 @@ def select_makeup_quiz(
         .returning(MakeupSessionSelection.student_id)
     )
     if claimed_student_id is None:
-        raise HTTPException(status_code=409, detail="Sélection de quiz invalide")
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
+            ),
+        )
     discard_active_training_sessions(
         [membership.id], quiz_bank_ids(quiz.id, session), session
     )
@@ -4383,12 +4440,15 @@ def submit_student_answer(
     if quiz_session.status not in ("in_progress", "finished"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Le quiz n’accepte pas de réponses actuellement",
+            detail=api_error(
+                ErrorCode.QUIZ_NOT_ACCEPTING_ANSWERS,
+                "Le quiz n’accepte pas de réponses actuellement",
+            ),
         )
     if participant.student_id is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="L’élève n’existe plus",
+            detail=api_error(ErrorCode.QUIZ_STUDENT_REMOVED, "L’élève n’existe plus"),
         )
     if (
         quiz_session.training_question_bank_id is not None
@@ -4400,7 +4460,10 @@ def submit_student_answer(
         # started concurrently, which must not give feedback during the exam.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cet entraînement est indisponible pendant un examen",
+            detail=api_error(
+                ErrorCode.TRAINING_BLOCKED_BY_EXAM,
+                "Cet entraînement est indisponible pendant un examen",
+            ),
         )
     question_id = current_question_id(quiz_session, participant, session)
     retargeting_finished_answer = question_id is None
@@ -4409,14 +4472,19 @@ def submit_student_answer(
     if question_id is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Aucune question en cours",
+            detail=api_error(
+                ErrorCode.QUIZ_NO_CURRENT_QUESTION, "Aucune question en cours"
+            ),
         )
     questions_by_id, choices_by_question = load_question_records([question_id], session)
     question = questions_by_id.get(question_id)
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La question actuelle n’est pas disponible",
+            detail=api_error(
+                ErrorCode.QUIZ_QUESTION_UNAVAILABLE,
+                "La question actuelle n’est pas disponible",
+            ),
         )
     choices = choices_by_question.get(question_id, [])
     choices_by_id = {choice.id: choice for choice in choices}
@@ -4427,7 +4495,10 @@ def submit_student_answer(
         if not written_answer or payload.selected_choice_ids is not None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Une réponse rédactionnelle est requise",
+                detail=api_error(
+                    ErrorCode.ANSWER_WRITTEN_REQUIRED,
+                    "Une réponse rédactionnelle est requise",
+                ),
             )
         answer_data = {"written_answer": written_answer}
         expected_answer = next(
@@ -4447,7 +4518,10 @@ def submit_student_answer(
         if payload.selected_choice_ids is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Au moins une proposition doit être sélectionnée",
+                detail=api_error(
+                    ErrorCode.ANSWER_CHOICE_REQUIRED,
+                    "Au moins une proposition doit être sélectionnée",
+                ),
             )
         selected_ids = list(dict.fromkeys(payload.selected_choice_ids or []))
         if payload.written_answer is not None or (
@@ -4457,12 +4531,18 @@ def submit_student_answer(
         ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="La réponse envoyée ne correspond pas au type de la question",
+                detail=api_error(
+                    ErrorCode.ANSWER_MODE_MISMATCH,
+                    "La réponse envoyée ne correspond pas au type de la question",
+                ),
             )
         if any(choice_id not in choices_by_id for choice_id in selected_ids):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Une proposition sélectionnée est invalide",
+                detail=api_error(
+                    ErrorCode.ANSWER_CHOICE_INVALID,
+                    "Une proposition sélectionnée est invalide",
+                ),
             )
         answer_data = {"selected_choice_ids": selected_ids}
         if quiz.mode == "training":
@@ -4490,7 +4570,9 @@ def submit_student_answer(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Aucune question en cours",
+                detail=api_error(
+                    ErrorCode.QUIZ_NO_CURRENT_QUESTION, "Aucune question en cours"
+                ),
             )
 
     # Atomic upsert: concurrent submissions for the same question can never
@@ -4554,7 +4636,10 @@ def require_answer_review_offered(quiz_session: QuizSession, quiz: Quiz) -> None
     if not answer_review_enabled(quiz_session, quiz):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La relecture des réponses n’est pas disponible",
+            detail=api_error(
+                ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
+                "La relecture des réponses n’est pas disponible",
+            ),
         )
 
 
@@ -4571,7 +4656,10 @@ def require_reviewable_participant(
     if quiz_session.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La relecture des réponses n’est pas disponible",
+            detail=api_error(
+                ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
+                "La relecture des réponses n’est pas disponible",
+            ),
         )
     question_ids = session_question_ids(quiz_session, session, participant)
     answered_question_ids = set(
@@ -4585,7 +4673,10 @@ def require_reviewable_participant(
     if not question_ids or not set(question_ids).issubset(answered_question_ids):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Toutes les questions doivent être répondues",
+            detail=api_error(
+                ErrorCode.QUIZ_ANSWERS_INCOMPLETE,
+                "Toutes les questions doivent être répondues",
+            ),
         )
 
 
@@ -4717,7 +4808,10 @@ def navigate_student_quiz(
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Le retour à cette question n’est pas autorisé",
+            detail=api_error(
+                ErrorCode.QUIZ_PREVIOUS_QUESTION_LOCKED,
+                "Le retour à cette question n’est pas autorisé",
+            ),
         )
     participant.current_position = target_position
     session.commit()

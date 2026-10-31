@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.audit import audit_event
 from app.dependencies import DbSession
+from app.errors import ErrorCode, api_error
 from app.models import StudentAccount
 from app.routers.auth import auth_error, enforce_global_auth_limit, validate_origin
 from app.schemas import (
@@ -71,7 +72,9 @@ def current_student(
     if account is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session élève invalide ou expirée",
+            detail=api_error(
+                ErrorCode.STUDENT_SESSION_INVALID, "Session élève invalide ou expirée"
+            ),
             headers={"WWW-Authenticate": "Bearer"},
         )
     return account

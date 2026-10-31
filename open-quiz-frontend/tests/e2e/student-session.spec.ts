@@ -1049,3 +1049,55 @@ test("a submitted written answer replaces the draft kept for its question", asyn
     await page.getByRole("button", { name: "Question 1 on 2" }).click()
     await expect(writtenAnswer).toHaveValue("Photosynthesis feeds the plant.")
 })
+
+test("a refused join explains why, in the student's language", async ({
+    page,
+}) => {
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            status: 403,
+            json: {
+                detail: {
+                    code: "QUIZ_JOIN_REJECTED",
+                    message: "Impossible de rejoindre ce quiz",
+                },
+            },
+        })
+    })
+    await page.goto("/student/dashboard")
+    await page.getByLabel("Quiz code").fill("NOPE")
+    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await expect(
+        page.getByText(
+            "This quiz cannot be joined. Check the code, or ask your teacher whether it has already started."
+        )
+    ).toBeVisible()
+    await expect(page).toHaveURL(/\/student\/dashboard$/)
+
+    // Registered after the English one from beforeEach, so it wins on reload.
+    await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"))
+    await page.reload()
+    await page.getByLabel("Code du quiz").fill("NOPE")
+    await page.getByRole("button", { name: "Rejoindre le quiz" }).click()
+    await expect(
+        page.getByText(
+            "Impossible de rejoindre ce quiz. Vérifiez le code ou demandez à votre enseignant s’il a déjà commencé."
+        )
+    ).toBeVisible()
+})
+
+test("a join error without a code keeps the generic message", async ({
+    page,
+}) => {
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({ status: 500, json: { detail: "Boom" } })
+    })
+    await page.goto("/student/dashboard")
+    await page.getByLabel("Quiz code").fill("ABCD")
+    await page.getByRole("button", { name: "Join the quiz" }).click()
+    await expect(
+        page.getByText(
+            "Unknown code, quiz already started, or unable to connect."
+        )
+    ).toBeVisible()
+})

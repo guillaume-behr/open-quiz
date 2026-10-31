@@ -1,4 +1,5 @@
 import { ApiError } from "@/api/client"
+import { localizedErrorMessage } from "@/lib/errors"
 import { isRtlLanguage } from "@/lib/utils"
 import {
     getStudentQuizSession,
@@ -201,8 +202,8 @@ export function StudentQuiz({
             })
             setParticipantToken(participant_token)
             applySession(state)
-        } catch {
-            setError(t("join-quiz-error"))
+        } catch (caught) {
+            setError(localizedErrorMessage(caught, t, t("join-quiz-error")))
         } finally {
             setIsBusy(false)
         }
@@ -216,10 +217,12 @@ export function StudentQuiz({
         setError(null)
         try {
             await leaveStudentQuiz(session.join_code, participantToken)
-        } catch {
+        } catch (caught) {
             isLeavingQuiz.current = false
             setIsBusy(false)
-            setError(t("student-session-error"))
+            setError(
+                localizedErrorMessage(caught, t, t("student-session-error"))
+            )
             return
         }
         clearStoredQuizSession()
@@ -270,8 +273,10 @@ export function StudentQuiz({
                 questionNumber
             )
             if (liveRevisionRef.current === liveRevision) applySession(updated)
-        } catch {
-            setError(t("student-navigation-error"))
+        } catch (caught) {
+            setError(
+                localizedErrorMessage(caught, t, t("student-navigation-error"))
+            )
         } finally {
             setIsBusy(false)
         }
@@ -290,8 +295,10 @@ export function StudentQuiz({
                 participantToken
             )
             if (liveRevisionRef.current === liveRevision) applySession(updated)
-        } catch {
-            setError(t("student-navigation-error"))
+        } catch (caught) {
+            setError(
+                localizedErrorMessage(caught, t, t("student-navigation-error"))
+            )
         } finally {
             setIsBusy(false)
         }
@@ -310,8 +317,10 @@ export function StudentQuiz({
                 participantToken
             )
             if (liveRevisionRef.current === liveRevision) applySession(updated)
-        } catch {
-            setError(t("student-submit-quiz-error"))
+        } catch (caught) {
+            setError(
+                localizedErrorMessage(caught, t, t("student-submit-quiz-error"))
+            )
         } finally {
             setIsBusy(false)
         }
@@ -345,8 +354,10 @@ export function StudentQuiz({
             // must show what was submitted, not a stale draft.
             answerDraftsRef.current.delete(answeredQuestionId)
             if (liveRevisionRef.current === liveRevision) applySession(updated)
-        } catch {
-            setError(t("student-answer-error"))
+        } catch (caught) {
+            setError(
+                localizedErrorMessage(caught, t, t("student-answer-error"))
+            )
         } finally {
             setIsBusy(false)
         }

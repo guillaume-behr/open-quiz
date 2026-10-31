@@ -370,7 +370,7 @@ def test_answering_requires_a_current_question_and_a_student(environment) -> Non
         json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
     )
     assert beyond.status_code == 409
-    assert beyond.json()["detail"] == "Aucune question en cours"
+    assert beyond.json()["detail"]["code"] == "QUIZ_NO_CURRENT_QUESTION"
 
     with client.app.state.session_factory() as session:
         session.execute(
@@ -406,7 +406,10 @@ def test_an_orphaned_participant_cannot_answer(environment, monkeypatch) -> None
         json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
     )
     assert response.status_code == 409
-    assert response.json()["detail"] == "L’élève n’existe plus"
+    assert response.json()["detail"] == {
+        "code": "QUIZ_STUDENT_REMOVED",
+        "message": "L’élève n’existe plus",
+    }
 
 
 def test_inactive_student_accounts_lose_their_participation(environment) -> None:
