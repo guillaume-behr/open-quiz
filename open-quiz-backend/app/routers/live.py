@@ -32,11 +32,11 @@ from app.models import (
     QuizSession,
     User,
 )
+from app.routers.makeup import list_makeup_sessions
 from app.routers.quizzes import (
     active_session_responses,
     as_utc,
     authenticated_participant,
-    list_makeup_sessions,
     publish_quiz_update,
     session_response,
     student_state_response,

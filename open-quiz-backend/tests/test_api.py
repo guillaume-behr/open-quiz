@@ -7949,7 +7949,7 @@ def test_training_gives_no_feedback_while_an_exam_uses_its_bank(
     # A training started concurrently with the exam escapes the discard; the
     # answer endpoint must still refuse to reveal the correction.
     monkeypatch.setattr(
-        "app.routers.quizzes.discard_active_training_sessions",
+        "app.routers.makeup.discard_active_training_sessions",
         lambda *arguments: None,
     )
     with make_client(settings_for(tmp_path / "training-guard.db")) as client:
