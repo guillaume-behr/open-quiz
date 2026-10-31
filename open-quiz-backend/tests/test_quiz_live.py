@@ -11,7 +11,7 @@ from sqlalchemy import update
 from starlette.websockets import WebSocketDisconnect
 
 from app.models import QuizSession
-from app.routers import quizzes
+from app.routers import live, quizzes
 
 from support import (
     FRONTEND_ORIGIN,
@@ -27,10 +27,10 @@ TEACHER_MAKEUPS = "/api/quizzes/live/teacher/makeup-sessions"
 
 @pytest.fixture
 def environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(quizzes, "LIVE_HEARTBEAT_SECONDS", 0.05)
-    monkeypatch.setattr(quizzes, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.05)
+    monkeypatch.setattr(live, "LIVE_HEARTBEAT_SECONDS", 0.05)
+    monkeypatch.setattr(live, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.05)
     # Every round ends with a keepalive, so token checks happen in a fixed order.
-    monkeypatch.setattr(quizzes.LiveHeartbeat, "is_due", lambda self: True)
+    monkeypatch.setattr(live.LiveHeartbeat, "is_due", lambda self: True)
     with make_client(settings_for(tmp_path / "live")) as client:
         environment = exam_environment(client)
         environment["client"] = client
@@ -103,7 +103,7 @@ def test_teacher_feeds_stream_pings_until_revoked(
     me = client.get("/api/users/me", headers=environment["teacher_headers"]).json()
     # Revoked between the snapshot and the keepalive.
     monkeypatch.setattr(
-        quizzes, "async_live_professor_id", professor_ids([me["id"], me["id"], None])
+        live, "async_live_professor_id", professor_ids([me["id"], me["id"], None])
     )
     with connect(client, path) as socket:
         socket.send_json({"token": environment["teacher_token"]})
@@ -112,20 +112,20 @@ def test_teacher_feeds_stream_pings_until_revoked(
 
     # Revoked before the next snapshot.
     monkeypatch.setattr(
-        quizzes, "async_live_professor_id", professor_ids([me["id"], None])
+        live, "async_live_professor_id", professor_ids([me["id"], None])
     )
     with connect(client, path) as socket:
         socket.send_json({"token": environment["teacher_token"]})
         assert_closed(socket)
 
     # Deactivated while the snapshot is being built.
-    monkeypatch.setattr(quizzes, "async_live_professor_id", professor_ids([me["id"]]))
+    monkeypatch.setattr(live, "async_live_professor_id", professor_ids([me["id"]]))
     monkeypatch.setattr(
-        quizzes,
+        live,
         "live_teacher_active_sessions_snapshot",
         lambda *_: (None, None),
     )
-    monkeypatch.setattr(quizzes, "live_makeup_sessions_snapshot", lambda *_: None)
+    monkeypatch.setattr(live, "live_makeup_sessions_snapshot", lambda *_: None)
     with connect(client, path) as socket:
         socket.send_json({"token": environment["teacher_token"]})
         assert_closed(socket)
@@ -151,14 +151,14 @@ def test_teacher_session_feed_reports_deletion_and_completion(
 
     me = client.get("/api/users/me", headers=environment["teacher_headers"]).json()
     monkeypatch.setattr(
-        quizzes, "async_live_professor_id", professor_ids([me["id"], me["id"], None])
+        live, "async_live_professor_id", professor_ids([me["id"], me["id"], None])
     )
     with connect(client, path) as socket:
         socket.send_json(token)
         socket.receive_json()
         assert_closed(socket)
     monkeypatch.setattr(
-        quizzes, "async_live_professor_id", professor_ids([me["id"], None])
+        live, "async_live_professor_id", professor_ids([me["id"], None])
     )
     with connect(client, path) as socket:
         socket.send_json(token)
@@ -198,7 +198,7 @@ def test_student_feed_follows_its_participation(
 
     checks = [True, False]
     monkeypatch.setattr(
-        quizzes,
+        live,
         "live_participant_is_authenticated",
         lambda *_: checks.pop(0) if len(checks) > 1 else checks[0],
     )
@@ -207,8 +207,8 @@ def test_student_feed_follows_its_participation(
         socket.receive_json()
         assert_closed(socket)
 
-    monkeypatch.setattr(quizzes, "live_participant_is_authenticated", lambda *_: True)
-    monkeypatch.setattr(quizzes, "live_student_session_snapshot", lambda *_: None)
+    monkeypatch.setattr(live, "live_participant_is_authenticated", lambda *_: True)
+    monkeypatch.setattr(live, "live_student_session_snapshot", lambda *_: None)
     with connect(client, path) as socket:
         socket.send_json(token)
         assert_closed(socket)
@@ -235,13 +235,13 @@ def test_student_feed_follows_its_participation(
 def test_live_snapshots_handle_missing_records(environment) -> None:
     client = environment["client"]
     websocket = SimpleNamespace(app=client.app)
-    assert quizzes.live_teacher_active_sessions_snapshot(websocket, 999999) == (
+    assert live.live_teacher_active_sessions_snapshot(websocket, 999999) == (
         None,
         None,
     )
-    assert quizzes.live_makeup_sessions_snapshot(websocket, 999999) is None
-    assert quizzes.live_student_session_snapshot(websocket, "ABCDEF", "bad") is None
-    assert not quizzes.live_participant_is_authenticated(websocket, "ABCDEF", "bad")
+    assert live.live_makeup_sessions_snapshot(websocket, 999999) is None
+    assert live.live_student_session_snapshot(websocket, "ABCDEF", "bad") is None
+    assert not live.live_participant_is_authenticated(websocket, "ABCDEF", "bad")
 
 
 class _ScalarSession:
