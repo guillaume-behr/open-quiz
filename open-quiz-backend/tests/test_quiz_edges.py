@@ -17,7 +17,7 @@ from app.models import (
     QuizSessionStudentQuestion,
     TrainingQuizProfile,
 )
-from app.routers import quizzes
+from app.routers import live, quizzes
 
 from support import (
     FRONTEND_ORIGIN,
@@ -369,9 +369,9 @@ def test_live_feeds_keep_quiet_and_stop_on_disconnect(
     environment, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client = environment["client"]
-    monkeypatch.setattr(quizzes, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.01)
-    monkeypatch.setattr(quizzes, "LIVE_HEARTBEAT_SECONDS", 0.01)
-    monkeypatch.setattr(quizzes.LiveHeartbeat, "is_due", lambda self: True)
+    monkeypatch.setattr(live, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.01)
+    monkeypatch.setattr(live, "LIVE_HEARTBEAT_SECONDS", 0.01)
+    monkeypatch.setattr(live.LiveHeartbeat, "is_due", lambda self: True)
     launched, participant_headers = launch_and_join(client, environment)
     teacher_token = {
         "token": environment["teacher_headers"]["Authorization"].removeprefix("Bearer ")
@@ -398,7 +398,7 @@ def test_live_feeds_keep_quiet_and_stop_on_disconnect(
     async def dropped(*_: object, **__: object) -> None:
         raise WebSocketDisconnect(1006)
 
-    monkeypatch.setattr(quizzes, "wait_for_live_update", dropped)
+    monkeypatch.setattr(live, "wait_for_live_update", dropped)
     for path, credentials in feeds:
         with client.websocket_connect(path, headers={"Origin": FRONTEND_ORIGIN}) as (
             socket
@@ -442,9 +442,9 @@ def test_makeup_feed_waits_for_its_heartbeat(
     environment, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client = environment["client"]
-    monkeypatch.setattr(quizzes, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.01)
+    monkeypatch.setattr(live, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.01)
     due = iter([False, False])
-    monkeypatch.setattr(quizzes.LiveHeartbeat, "is_due", lambda self: next(due, True))
+    monkeypatch.setattr(live.LiveHeartbeat, "is_due", lambda self: next(due, True))
     token = environment["teacher_headers"]["Authorization"].removeprefix("Bearer ")
     with client.websocket_connect(
         "/api/quizzes/live/teacher/makeup-sessions",

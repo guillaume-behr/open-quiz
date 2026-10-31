@@ -59,7 +59,7 @@ from app.models import (
     User,
 )
 from app.rate_limit import LoginRateLimiter
-from app.routers import quizzes as quizzes_router
+from app.routers import live as live_router
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.routers.quizzes import (
     generate_join_code,
@@ -4548,7 +4548,7 @@ def test_live_teacher_session_pushes_student_join(
             "Bearer "
         )
         monkeypatch.setattr(
-            "app.routers.quizzes.LIVE_TEACHER_RECONCILIATION_SECONDS",
+            "app.routers.live.LIVE_TEACHER_RECONCILIATION_SECONDS",
             0.01,
         )
 
@@ -7517,8 +7517,8 @@ def test_idle_live_socket_still_receives_a_keepalive(
     Without it an idle connection puts nothing on the wire, and a proxy that
     drops it leaves the dashboard stale behind a close the client never sees.
     """
-    monkeypatch.setattr(quizzes_router, "LIVE_HEARTBEAT_SECONDS", 0.2)
-    monkeypatch.setattr(quizzes_router, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.1)
+    monkeypatch.setattr(live_router, "LIVE_HEARTBEAT_SECONDS", 0.2)
+    monkeypatch.setattr(live_router, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.1)
     with make_client(settings_for(tmp_path / "live-heartbeat.db")) as client:
         environment = exam_environment(client)
         teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
