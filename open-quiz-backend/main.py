@@ -41,6 +41,7 @@ from app.routers import (
     quizzes,
     student_auth,
     students,
+    training,
     users,
 )
 from app.security import hash_password, verify_password
@@ -430,6 +431,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(grade_levels.router)
     app.include_router(quizzes.router)
     app.include_router(makeup.router)
+    app.include_router(training.router)
     app.include_router(live.router)
     app.include_router(question_banks.router)
     return app
