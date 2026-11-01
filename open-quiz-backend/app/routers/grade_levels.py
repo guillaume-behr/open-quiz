@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.errors import ErrorCode, api_error
 from app.grade_levels import ensure_default_grade_levels, grade_level_order
 from app.models import GradeLevel, QuestionBank, StudentClass
 from app.schemas import GradeLevelCreate, GradeLevelResponse
@@ -86,7 +87,10 @@ def delete_grade_level(
         )
     )
     if grade_level is None:
-        raise HTTPException(status_code=404, detail="Niveau introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(ErrorCode.GRADE_LEVEL_NOT_FOUND, "Niveau introuvable"),
+        )
     is_used = (
         session.scalar(
             select(StudentClass.id).where(
@@ -106,9 +110,12 @@ def delete_grade_level(
     if is_used:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Impossible de supprimer ce niveau car des classes, des élèves "
-                "ou des banques de questions y sont encore associés"
+            detail=api_error(
+                ErrorCode.GRADE_LEVEL_IN_USE,
+                (
+                    "Impossible de supprimer ce niveau car des classes, des élèves "
+                    "ou des banques de questions y sont encore associés"
+                ),
             ),
         )
     session.delete(grade_level)

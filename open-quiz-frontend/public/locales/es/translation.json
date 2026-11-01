@@ -734,5 +734,21 @@
     "error-makeup-join-rejected": "No puedes unirte a esta sesión de recuperación. Comprueba el código o pregunta a tu docente.",
     "error-makeup-selection-closed": "Esta sesión de recuperación ya no acepta elecciones.",
     "error-makeup-selection-invalid": "Este cuestionario no se puede elegir para esta sesión de recuperación.",
-    "error-student-session-expired": "Tu sesión ha caducado. Vuelve a iniciar sesión."
+    "error-student-session-expired": "Tu sesión ha caducado. Vuelve a iniciar sesión.",
+    "error-class-not-found": "No se encuentra esta clase. Es posible que se haya eliminado.",
+    "error-class-name-taken": "Ya existe una clase con este nombre.",
+    "error-class-used-by-waiting-room": "Esta clase tiene una sala de espera abierta. Inicia o cancela el cuestionario antes de eliminarla.",
+    "error-class-used-by-makeup": "Esta clase tiene una sesión de recuperación en curso. Termínala antes de eliminar la clase.",
+    "error-class-has-active-session": "Esta clase está haciendo un cuestionario ahora mismo. Inténtalo de nuevo cuando termine la sesión.",
+    "error-class-assignment-not-found": "Este alumno ya no forma parte de la clase.",
+    "error-class-import-duplicates": "El archivo contiene dos veces la misma clase o el mismo identificador de alumno.",
+    "error-class-import-grade-level-invalid": "El archivo usa un nivel que no existe. Créalo primero o corrige el archivo.",
+    "error-class-import-conflict": "La importación entra en conflicto con clases o alumnos existentes. No se ha importado nada.",
+    "error-student-identifier-taken": "Este identificador de alumno ya está en uso.",
+    "error-student-transfer-during-session": "Este alumno está haciendo un cuestionario y no puede cambiar de clase ahora.",
+    "error-student-account-not-found": "No se encuentra esta cuenta de alumno. Es posible que se haya eliminado.",
+    "error-student-account-in-active-session": "Esta cuenta está participando en un cuestionario. Inténtalo de nuevo cuando termine la sesión.",
+    "error-student-filters-invalid": "Estos filtros de clase no se pueden combinar.",
+    "error-grade-level-not-found": "No se encuentra este nivel. Es posible que se haya eliminado.",
+    "error-grade-level-in-use": "Este nivel todavía lo usan clases, alumnos o bancos de preguntas."
 }

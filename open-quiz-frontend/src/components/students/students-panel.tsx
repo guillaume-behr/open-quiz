@@ -35,6 +35,7 @@ import {
 } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { apiErrorMessage } from "@/lib/errors"
 
 export function StudentsPanel({
     isCreateDialogOpen,
@@ -185,11 +186,15 @@ export function StudentsPanel({
                 setReloadKey((value) => value + 1)
             }
             setFormError(
-                classAssignmentFailed
-                    ? t("student-assignment-error")
-                    : error instanceof ApiError && error.status === 409
-                      ? t("student-account-duplicate")
-                      : t("student-account-save-error")
+                apiErrorMessage(
+                    error,
+                    t,
+                    classAssignmentFailed
+                        ? t("student-assignment-error")
+                        : error instanceof ApiError && error.status === 409
+                          ? t("student-account-duplicate")
+                          : t("student-account-save-error")
+                )
             )
         } finally {
             setIsBusy(false)
@@ -204,8 +209,10 @@ export function StudentsPanel({
             await deleteStudentAccount(deleting.id)
             setDeleting(null)
             setReloadKey((value) => value + 1)
-        } catch {
-            setFormError(t("student-account-delete-error"))
+        } catch (caught) {
+            setFormError(
+                apiErrorMessage(caught, t, t("student-account-delete-error"))
+            )
         } finally {
             setIsBusy(false)
         }

@@ -734,5 +734,21 @@
     "error-makeup-join-rejected": "This make-up session cannot be joined. Check the code, or ask your teacher.",
     "error-makeup-selection-closed": "This make-up session no longer accepts choices.",
     "error-makeup-selection-invalid": "This quiz cannot be chosen for this make-up session.",
-    "error-student-session-expired": "Your session has expired. Sign in again."
+    "error-student-session-expired": "Your session has expired. Sign in again.",
+    "error-class-not-found": "This class cannot be found. It may have been deleted.",
+    "error-class-name-taken": "A class with this name already exists.",
+    "error-class-used-by-waiting-room": "This class has an open waiting room. Start or cancel the quiz before deleting it.",
+    "error-class-used-by-makeup": "This class has a make-up session in progress. End it before deleting the class.",
+    "error-class-has-active-session": "This class is taking a quiz right now. Try again once the session has ended.",
+    "error-class-assignment-not-found": "This student is no longer in the class.",
+    "error-class-import-duplicates": "The file lists the same class or student ID twice.",
+    "error-class-import-grade-level-invalid": "The file uses a grade level that does not exist. Create it first or correct the file.",
+    "error-class-import-conflict": "The import conflicts with existing classes or students. Nothing was imported.",
+    "error-student-identifier-taken": "This student ID is already in use.",
+    "error-student-transfer-during-session": "This student is taking a quiz right now and cannot change class yet.",
+    "error-student-account-not-found": "This student account cannot be found. It may have been deleted.",
+    "error-student-account-in-active-session": "This account is taking part in a quiz right now. Try again once the session has ended.",
+    "error-student-filters-invalid": "These class filters cannot be combined.",
+    "error-grade-level-not-found": "This grade level cannot be found. It may have been deleted.",
+    "error-grade-level-in-use": "This grade level is still used by classes, students or question banks."
 }

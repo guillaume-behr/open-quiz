@@ -734,5 +734,21 @@
     "error-makeup-join-rejected": "Impossible de rejoindre ce rattrapage. Vérifiez le code ou adressez-vous à votre enseignant.",
     "error-makeup-selection-closed": "Ce rattrapage n’accepte plus de choix.",
     "error-makeup-selection-invalid": "Ce quiz ne peut pas être choisi pour ce rattrapage.",
-    "error-student-session-expired": "Votre session a expiré. Reconnectez-vous."
+    "error-student-session-expired": "Votre session a expiré. Reconnectez-vous.",
+    "error-class-not-found": "Cette classe est introuvable. Elle a peut-être été supprimée.",
+    "error-class-name-taken": "Une classe porte déjà ce nom.",
+    "error-class-used-by-waiting-room": "Cette classe a une salle d’attente ouverte. Lancez ou annulez le quiz avant de la supprimer.",
+    "error-class-used-by-makeup": "Cette classe a un rattrapage en cours. Terminez-le avant de la supprimer.",
+    "error-class-has-active-session": "Cette classe passe un quiz en ce moment. Réessayez une fois la session terminée.",
+    "error-class-assignment-not-found": "Cet élève ne fait plus partie de la classe.",
+    "error-class-import-duplicates": "Le fichier contient deux fois la même classe ou le même identifiant d’élève.",
+    "error-class-import-grade-level-invalid": "Le fichier utilise un niveau qui n’existe pas. Créez-le d’abord ou corrigez le fichier.",
+    "error-class-import-conflict": "L’import entre en conflit avec des classes ou des élèves existants. Rien n’a été importé.",
+    "error-student-identifier-taken": "Cet identifiant d’élève est déjà utilisé.",
+    "error-student-transfer-during-session": "Cet élève participe à un quiz en cours : il ne peut pas changer de classe maintenant.",
+    "error-student-account-not-found": "Ce compte élève est introuvable. Il a peut-être été supprimé.",
+    "error-student-account-in-active-session": "Ce compte participe à un quiz en cours. Réessayez une fois la session terminée.",
+    "error-student-filters-invalid": "Ces filtres de classe ne peuvent pas être combinés.",
+    "error-grade-level-not-found": "Ce niveau est introuvable. Il a peut-être été supprimé.",
+    "error-grade-level-in-use": "Ce niveau est encore utilisé par des classes, des élèves ou des banques de questions."
 }

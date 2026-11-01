@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.errors import ErrorCode, api_error
 from app.models import Student, StudentAccount, StudentClass
 from app.schemas import StudentAccountResponse
 
@@ -62,5 +63,10 @@ def owned_student_account(
         )
     )
     if account is None:
-        raise HTTPException(status_code=404, detail="Compte élève introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                ErrorCode.STUDENT_ACCOUNT_NOT_FOUND, "Compte élève introuvable"
+            ),
+        )
     return account

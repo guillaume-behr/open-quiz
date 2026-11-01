@@ -734,5 +734,21 @@
     "error-makeup-join-rejected": "Não é possível entrar nesta sessão de recuperação. Verifique o código ou fale com o seu professor.",
     "error-makeup-selection-closed": "Esta sessão de recuperação já não aceita escolhas.",
     "error-makeup-selection-invalid": "Este quiz não pode ser escolhido para esta sessão de recuperação.",
-    "error-student-session-expired": "A sua sessão expirou. Inicie sessão novamente."
+    "error-student-session-expired": "A sua sessão expirou. Inicie sessão novamente.",
+    "error-class-not-found": "Esta turma não foi encontrada. Talvez tenha sido eliminada.",
+    "error-class-name-taken": "Já existe uma turma com este nome.",
+    "error-class-used-by-waiting-room": "Esta turma tem uma sala de espera aberta. Inicie ou cancele o teste antes de a eliminar.",
+    "error-class-used-by-makeup": "Esta turma tem uma sessão de recuperação em curso. Termine-a antes de eliminar a turma.",
+    "error-class-has-active-session": "Esta turma está a fazer um teste neste momento. Tente novamente quando a sessão terminar.",
+    "error-class-assignment-not-found": "Este aluno já não faz parte da turma.",
+    "error-class-import-duplicates": "O ficheiro contém duas vezes a mesma turma ou o mesmo identificador de aluno.",
+    "error-class-import-grade-level-invalid": "O ficheiro usa um nível que não existe. Crie-o primeiro ou corrija o ficheiro.",
+    "error-class-import-conflict": "A importação entra em conflito com turmas ou alunos existentes. Nada foi importado.",
+    "error-student-identifier-taken": "Este identificador de aluno já está a ser utilizado.",
+    "error-student-transfer-during-session": "Este aluno está a fazer um teste e não pode mudar de turma agora.",
+    "error-student-account-not-found": "Esta conta de aluno não foi encontrada. Talvez tenha sido eliminada.",
+    "error-student-account-in-active-session": "Esta conta está a participar num teste. Tente novamente quando a sessão terminar.",
+    "error-student-filters-invalid": "Estes filtros de turma não podem ser combinados.",
+    "error-grade-level-not-found": "Este nível não foi encontrado. Talvez tenha sido eliminado.",
+    "error-grade-level-in-use": "Este nível ainda é usado por turmas, alunos ou bancos de perguntas."
 }

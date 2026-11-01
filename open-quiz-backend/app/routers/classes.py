@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.errors import ErrorCode, api_error
 from app.grade_levels import (
     ensure_grade_level,
     grade_level_order,
@@ -45,7 +46,9 @@ def commit_unique_class(session: DbSession) -> None:
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Une classe porte déjà ce nom",
+            detail=api_error(
+                ErrorCode.CLASS_NAME_TAKEN, "Une classe porte déjà ce nom"
+            ),
         ) from None
 
 
@@ -78,7 +81,7 @@ def owned_class(
     if student_class is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Classe introuvable",
+            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
         )
     return student_class
 
@@ -312,7 +315,10 @@ def delete_class(
     if class_has_active_exam_session(class_id, session):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cette classe est utilisée par une salle d’attente active",
+            detail=api_error(
+                ErrorCode.CLASS_USED_BY_WAITING_ROOM,
+                "Cette classe est utilisée par une salle d’attente active",
+            ),
         )
     if (
         session.scalar(
@@ -325,7 +331,10 @@ def delete_class(
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cette classe est utilisée par un rattrapage actif",
+            detail=api_error(
+                ErrorCode.CLASS_USED_BY_MAKEUP,
+                "Cette classe est utilisée par un rattrapage actif",
+            ),
         )
     student_ids = list(
         session.scalars(select(Student.id).where(Student.class_id == class_id))
@@ -390,7 +399,10 @@ def assign_student_account(
         if active_class_id is not None:
             raise HTTPException(
                 status_code=409,
-                detail="Un élève ne peut pas être transféré pendant une session active",
+                detail=api_error(
+                    ErrorCode.STUDENT_TRANSFER_DURING_SESSION,
+                    "Un élève ne peut pas être transféré pendant une session active",
+                ),
             )
         delete_unfinished_training_sessions([membership.id], session)
         membership.class_id = class_id
@@ -411,7 +423,10 @@ def assign_student_account(
         session.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Cet identifiant existe déjà dans la classe",
+            detail=api_error(
+                ErrorCode.STUDENT_IDENTIFIER_TAKEN,
+                "Cet identifiant existe déjà dans la classe",
+            ),
         ) from None
     return class_response(student_class, session)
 
@@ -437,9 +452,19 @@ def unassign_student_account(
         )
     )
     if membership is None:
-        raise HTTPException(status_code=404, detail="Affectation introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                ErrorCode.CLASS_ASSIGNMENT_NOT_FOUND, "Affectation introuvable"
+            ),
+        )
     if class_has_active_exam_session(class_id, session):
-        raise HTTPException(status_code=409, detail="La classe a une session active")
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                ErrorCode.CLASS_HAS_ACTIVE_SESSION, "La classe a une session active"
+            ),
+        )
     delete_student_membership(membership.id, session)
     session.commit()
 

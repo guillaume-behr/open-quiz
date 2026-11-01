@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.errors import ErrorCode, api_error
 from app.grade_levels import (
     grade_level_import_context,
 )
@@ -78,7 +79,12 @@ def import_classes(
     if len(class_names) != len(set(class_names)) or len(identifiers) != len(
         set(identifiers)
     ):
-        raise HTTPException(status_code=422, detail="Le fichier contient des doublons")
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                ErrorCode.CLASS_IMPORT_DUPLICATES, "Le fichier contient des doublons"
+            ),
+        )
     existing_levels = set(
         session.scalars(
             select(GradeLevel.name).where(GradeLevel.owner_id == professor.id)
@@ -89,7 +95,11 @@ def import_classes(
     )
     if invalid_levels:
         raise HTTPException(
-            status_code=422, detail=f"Niveau invalide : {', '.join(invalid_levels)}"
+            status_code=422,
+            detail=api_error(
+                ErrorCode.CLASS_IMPORT_GRADE_LEVEL_INVALID,
+                f"Niveau invalide : {', '.join(invalid_levels)}",
+            ),
         )
     if (
         session.scalar(
@@ -102,7 +112,10 @@ def import_classes(
         )
         is not None
     ):
-        raise HTTPException(status_code=409, detail="Une classe existe déjà")
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(ErrorCode.CLASS_NAME_TAKEN, "Une classe existe déjà"),
+        )
     if (
         identifiers
         and session.scalar(
@@ -113,7 +126,11 @@ def import_classes(
         is not None
     ):
         raise HTTPException(
-            status_code=409, detail="Un identifiant élève est déjà utilisé"
+            status_code=409,
+            detail=api_error(
+                ErrorCode.STUDENT_IDENTIFIER_TAKEN,
+                "Un identifiant élève est déjà utilisé",
+            ),
         )
     try:
         for item in payload.classes:
@@ -149,7 +166,10 @@ def import_classes(
     except IntegrityError:
         session.rollback()
         raise HTTPException(
-            status_code=409, detail="Conflit avec les données existantes"
+            status_code=409,
+            detail=api_error(
+                ErrorCode.CLASS_IMPORT_CONFLICT, "Conflit avec les données existantes"
+            ),
         ) from None
     return ClassBatchImportResponse(
         class_count=len(payload.classes), student_count=len(identifiers)
