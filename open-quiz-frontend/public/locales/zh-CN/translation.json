@@ -734,5 +734,21 @@
     "error-makeup-join-rejected": "无法加入此补考。请检查代码，或联系老师。",
     "error-makeup-selection-closed": "此补考已不再接受选择。",
     "error-makeup-selection-invalid": "无法为此补考选择该测验。",
-    "error-student-session-expired": "你的会话已过期，请重新登录。"
+    "error-student-session-expired": "你的会话已过期，请重新登录。",
+    "error-class-not-found": "找不到此班级，它可能已被删除。",
+    "error-class-name-taken": "已存在同名班级。",
+    "error-class-used-by-waiting-room": "此班级有一个开放的等候室。请先开始或取消测验，再删除该班级。",
+    "error-class-used-by-makeup": "此班级有正在进行的补考。请先结束补考，再删除该班级。",
+    "error-class-has-active-session": "此班级正在进行测验。请在本场测验结束后重试。",
+    "error-class-assignment-not-found": "该学生已不在此班级中。",
+    "error-class-import-duplicates": "文件中重复出现了同一班级或同一学生标识符。",
+    "error-class-import-grade-level-invalid": "文件使用了不存在的班级级别。请先创建该级别或修改文件。",
+    "error-class-import-conflict": "导入内容与现有班级或学生冲突，未导入任何内容。",
+    "error-student-identifier-taken": "此学生标识符已被使用。",
+    "error-student-transfer-during-session": "该学生正在参加测验，暂时不能更换班级。",
+    "error-student-account-not-found": "找不到此学生账户，它可能已被删除。",
+    "error-student-account-in-active-session": "此账户正在参加测验。请在本场测验结束后重试。",
+    "error-student-filters-invalid": "这些班级筛选条件不能同时使用。",
+    "error-grade-level-not-found": "找不到此班级级别，它可能已被删除。",
+    "error-grade-level-in-use": "此班级级别仍被班级、学生或题库使用。"
 }

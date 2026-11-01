@@ -37,6 +37,23 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     MAKEUP_SELECTION_CLOSED: "error-makeup-selection-closed",
     MAKEUP_SELECTION_INVALID: "error-makeup-selection-invalid",
     STUDENT_SESSION_INVALID: "error-student-session-expired",
+    CLASS_NOT_FOUND: "error-class-not-found",
+    CLASS_NAME_TAKEN: "error-class-name-taken",
+    CLASS_USED_BY_WAITING_ROOM: "error-class-used-by-waiting-room",
+    CLASS_USED_BY_MAKEUP: "error-class-used-by-makeup",
+    CLASS_HAS_ACTIVE_SESSION: "error-class-has-active-session",
+    CLASS_ASSIGNMENT_NOT_FOUND: "error-class-assignment-not-found",
+    CLASS_IMPORT_DUPLICATES: "error-class-import-duplicates",
+    CLASS_IMPORT_GRADE_LEVEL_INVALID: "error-class-import-grade-level-invalid",
+    CLASS_IMPORT_CONFLICT: "error-class-import-conflict",
+    STUDENT_IDENTIFIER_TAKEN: "error-student-identifier-taken",
+    STUDENT_TRANSFER_DURING_SESSION: "error-student-transfer-during-session",
+    STUDENT_ACCOUNT_NOT_FOUND: "error-student-account-not-found",
+    STUDENT_ACCOUNT_IN_ACTIVE_SESSION:
+        "error-student-account-in-active-session",
+    STUDENT_FILTERS_INVALID: "error-student-filters-invalid",
+    GRADE_LEVEL_NOT_FOUND: "error-grade-level-not-found",
+    GRADE_LEVEL_IN_USE: "error-grade-level-in-use",
 }
 
 export function errorMessage(error: unknown, fallback: string): string {
@@ -56,5 +73,20 @@ export function localizedErrorMessage(
         return errorMessage(error, fallback)
     }
     const translationKey = API_ERROR_TRANSLATION_KEYS[error.code]
+    return translationKey ? translate(translationKey) : fallback
+}
+
+// For screens that only ever show their own translated fallback: a known API
+// code gets its specific message, anything else (network failure, timeout,
+// unknown code) keeps the fallback rather than an untranslated message.
+export function apiErrorMessage(
+    error: unknown,
+    translate: (key: string) => string,
+    fallback: string
+): string {
+    const translationKey =
+        error instanceof ApiError && error.code
+            ? API_ERROR_TRANSLATION_KEYS[error.code]
+            : undefined
     return translationKey ? translate(translationKey) : fallback
 }

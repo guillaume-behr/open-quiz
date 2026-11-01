@@ -41,10 +41,9 @@ if (backendCodes.size === 0) {
 
 const table = await readFile(path.join(frontend, "src/lib/errors.ts"), "utf8")
 const translationKeys = new Map(
-    [...table.matchAll(/^\s+([A-Z0-9_]+): "([a-z0-9-]+)",$/gm)].map((match) => [
-        match[1],
-        match[2],
-    ])
+    [...table.matchAll(/^\s+([A-Z0-9_]+):\s+"([a-z0-9-]+)",$/gm)].map(
+        (match) => [match[1], match[2]]
+    )
 )
 const catalog = JSON.parse(
     await readFile(

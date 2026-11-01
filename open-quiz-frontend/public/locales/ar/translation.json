@@ -794,5 +794,21 @@
     "error-makeup-join-rejected": "لا يمكن الانضمام إلى جلسة الاستدراك هذه. تحقق من الرمز أو تواصل مع معلمك.",
     "error-makeup-selection-closed": "لم تعد جلسة الاستدراك هذه تقبل الاختيارات.",
     "error-makeup-selection-invalid": "لا يمكن اختيار هذا الاختبار لجلسة الاستدراك هذه.",
-    "error-student-session-expired": "انتهت صلاحية جلستك. سجّل الدخول مرة أخرى."
+    "error-student-session-expired": "انتهت صلاحية جلستك. سجّل الدخول مرة أخرى.",
+    "error-class-not-found": "تعذّر العثور على هذا الصف. ربما تم حذفه.",
+    "error-class-name-taken": "يوجد صف بهذا الاسم بالفعل.",
+    "error-class-used-by-waiting-room": "لهذا الصف غرفة انتظار مفتوحة. ابدأ الاختبار أو ألغِه قبل حذف الصف.",
+    "error-class-used-by-makeup": "لهذا الصف جلسة استدراك جارية. أنهِها قبل حذف الصف.",
+    "error-class-has-active-session": "يجري هذا الصف اختبارًا الآن. حاول مرة أخرى بعد انتهاء الجلسة.",
+    "error-class-assignment-not-found": "لم يعد هذا الطالب ضمن الصف.",
+    "error-class-import-duplicates": "يحتوي الملف على الصف نفسه أو معرّف الطالب نفسه مرتين.",
+    "error-class-import-grade-level-invalid": "يستخدم الملف مستوى غير موجود. أنشئه أولًا أو صحّح الملف.",
+    "error-class-import-conflict": "يتعارض الاستيراد مع صفوف أو طلاب موجودين. لم يُستورد أي شيء.",
+    "error-student-identifier-taken": "معرّف الطالب هذا مستخدم بالفعل.",
+    "error-student-transfer-during-session": "يشارك هذا الطالب في اختبار جارٍ ولا يمكنه تغيير الصف الآن.",
+    "error-student-account-not-found": "تعذّر العثور على حساب الطالب هذا. ربما تم حذفه.",
+    "error-student-account-in-active-session": "يشارك هذا الحساب في اختبار جارٍ. حاول مرة أخرى بعد انتهاء الجلسة.",
+    "error-student-filters-invalid": "لا يمكن الجمع بين عوامل تصفية الصفوف هذه.",
+    "error-grade-level-not-found": "تعذّر العثور على هذا المستوى. ربما تم حذفه.",
+    "error-grade-level-in-use": "لا يزال هذا المستوى مستخدمًا في صفوف أو طلاب أو بنوك أسئلة."
 }

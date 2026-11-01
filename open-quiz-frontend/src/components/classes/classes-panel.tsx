@@ -43,6 +43,7 @@ import {
 } from "lucide-react"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { apiErrorMessage } from "@/lib/errors"
 
 export function ClassesPanel({
     gradeLevels,
@@ -152,8 +153,10 @@ export function ClassesPanel({
             setImportPayload(null)
             setReloadKey((value) => value + 1)
             setError(null)
-        } catch {
-            setImportError(t("classes-import-conflict"))
+        } catch (caught) {
+            setImportError(
+                apiErrorMessage(caught, t, t("classes-import-conflict"))
+            )
         } finally {
             setIsBusy(false)
         }
@@ -221,8 +224,8 @@ export function ClassesPanel({
             else await createStudentClass(className.trim(), gradeLevel)
             closeClassForm()
             setReloadKey((value) => value + 1)
-        } catch {
-            setError(t("class-create-error"))
+        } catch (caught) {
+            setError(apiErrorMessage(caught, t, t("class-create-error")))
         } finally {
             setIsBusy(false)
         }
@@ -235,8 +238,8 @@ export function ClassesPanel({
             setGradeLevel(created.name)
             setNewGradeLevel("")
             setIsAddingGradeLevel(false)
-        } catch {
-            setError(t("grade-level-create-error"))
+        } catch (caught) {
+            setError(apiErrorMessage(caught, t, t("grade-level-create-error")))
         }
     }
 
@@ -274,9 +277,9 @@ export function ClassesPanel({
             setAssigning(false)
             setSelectedAccountIds(new Set())
             setReloadKey((value) => value + 1)
-        } catch {
+        } catch (caught) {
             setManaged(updated)
-            setError(t("student-assignment-error"))
+            setError(apiErrorMessage(caught, t, t("student-assignment-error")))
         } finally {
             setIsBusy(false)
         }
@@ -302,8 +305,10 @@ export function ClassesPanel({
             setNewStudentFirstName("")
             setNewStudentLastName("")
             setReloadKey((value) => value + 1)
-        } catch {
-            setError(t("student-account-save-error"))
+        } catch (caught) {
+            setError(
+                apiErrorMessage(caught, t, t("student-account-save-error"))
+            )
         } finally {
             setIsBusy(false)
         }
@@ -373,8 +378,10 @@ export function ClassesPanel({
                 student_count: Math.max(0, managed.student_count - 1),
             })
             setReloadKey((value) => value + 1)
-        } catch {
-            setError(t("student-unassignment-error"))
+        } catch (caught) {
+            setError(
+                apiErrorMessage(caught, t, t("student-unassignment-error"))
+            )
         } finally {
             setIsBusy(false)
         }
@@ -387,8 +394,10 @@ export function ClassesPanel({
             await deleteStudentClass(deleting.id)
             setDeleting(null)
             setReloadKey((value) => value + 1)
-        } catch {
-            setError(t("class-student-delete-error"))
+        } catch (caught) {
+            setError(
+                apiErrorMessage(caught, t, t("class-student-delete-error"))
+            )
         } finally {
             setIsBusy(false)
         }

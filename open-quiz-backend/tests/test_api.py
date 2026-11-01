@@ -5721,6 +5721,7 @@ def test_class_import_creates_accounts_and_rejects_conflicts(tmp_path: Path) -> 
             ),
         )
         assert duplicate_classes.status_code == 422
+        assert duplicate_classes.json()["detail"]["code"] == "CLASS_IMPORT_DUPLICATES"
 
         duplicate_identifiers = client.post(
             "/api/classes/import",
@@ -5739,6 +5740,9 @@ def test_class_import_creates_accounts_and_rejects_conflicts(tmp_path: Path) -> 
             ),
         )
         assert duplicate_identifiers.status_code == 422
+        assert (
+            duplicate_identifiers.json()["detail"]["code"] == "CLASS_IMPORT_DUPLICATES"
+        )
 
         unknown_level = client.post(
             "/api/classes/import",
@@ -5748,7 +5752,10 @@ def test_class_import_creates_accounts_and_rejects_conflicts(tmp_path: Path) -> 
             ),
         )
         assert unknown_level.status_code == 422
-        assert "Niveau inconnu" in unknown_level.json()["detail"]
+        assert (
+            unknown_level.json()["detail"]["code"] == "CLASS_IMPORT_GRADE_LEVEL_INVALID"
+        )
+        assert "Niveau inconnu" in unknown_level.json()["detail"]["message"]
 
         imported = client.post(
             "/api/classes/import",

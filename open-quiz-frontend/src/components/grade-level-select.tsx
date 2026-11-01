@@ -5,6 +5,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { apiErrorMessage } from "@/lib/errors"
 
 type GradeLevelSelectProps = {
     id: string
@@ -42,9 +43,13 @@ export function GradeLevelSelect({
             setLevelToDelete(null)
         } catch (error) {
             setDeleteError(
-                error instanceof ApiError && error.status === 409
-                    ? t("grade-level-in-use-error")
-                    : t("grade-level-delete-error")
+                apiErrorMessage(
+                    error,
+                    t,
+                    error instanceof ApiError && error.status === 409
+                        ? t("grade-level-in-use-error")
+                        : t("grade-level-delete-error")
+                )
             )
             setLevelToDelete(null)
         } finally {

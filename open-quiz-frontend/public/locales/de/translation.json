@@ -734,5 +734,21 @@
     "error-makeup-join-rejected": "Dieser Nachholsitzung kann nicht beigetreten werden. Prüfen Sie den Code oder wenden Sie sich an Ihre Lehrkraft.",
     "error-makeup-selection-closed": "Diese Nachholsitzung nimmt keine Auswahl mehr an.",
     "error-makeup-selection-invalid": "Dieses Quiz kann für diese Nachholsitzung nicht gewählt werden.",
-    "error-student-session-expired": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an."
+    "error-student-session-expired": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an.",
+    "error-class-not-found": "Diese Klasse wurde nicht gefunden. Möglicherweise wurde sie gelöscht.",
+    "error-class-name-taken": "Es gibt bereits eine Klasse mit diesem Namen.",
+    "error-class-used-by-waiting-room": "Diese Klasse hat ein offenes Wartezimmer. Starten oder brechen Sie das Quiz ab, bevor Sie sie löschen.",
+    "error-class-used-by-makeup": "Diese Klasse hat eine laufende Nachholsitzung. Beenden Sie sie, bevor Sie die Klasse löschen.",
+    "error-class-has-active-session": "Diese Klasse bearbeitet gerade ein Quiz. Versuchen Sie es nach dem Ende der Sitzung erneut.",
+    "error-class-assignment-not-found": "Diese Schülerin bzw. dieser Schüler gehört nicht mehr zur Klasse.",
+    "error-class-import-duplicates": "Die Datei enthält dieselbe Klasse oder dieselbe Kennung zweimal.",
+    "error-class-import-grade-level-invalid": "Die Datei verwendet eine Klassenstufe, die es nicht gibt. Legen Sie sie zuerst an oder korrigieren Sie die Datei.",
+    "error-class-import-conflict": "Der Import steht im Konflikt mit vorhandenen Klassen oder Schülern. Es wurde nichts importiert.",
+    "error-student-identifier-taken": "Diese Kennung wird bereits verwendet.",
+    "error-student-transfer-during-session": "Diese Person nimmt gerade an einem Quiz teil und kann die Klasse jetzt nicht wechseln.",
+    "error-student-account-not-found": "Dieses Schülerkonto wurde nicht gefunden. Möglicherweise wurde es gelöscht.",
+    "error-student-account-in-active-session": "Dieses Konto nimmt gerade an einem Quiz teil. Versuchen Sie es nach dem Ende der Sitzung erneut.",
+    "error-student-filters-invalid": "Diese Klassenfilter können nicht kombiniert werden.",
+    "error-grade-level-not-found": "Diese Klassenstufe wurde nicht gefunden. Möglicherweise wurde sie gelöscht.",
+    "error-grade-level-in-use": "Diese Klassenstufe wird noch von Klassen, Schülern oder Fragenbanken verwendet."
 }

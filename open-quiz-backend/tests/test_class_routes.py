@@ -38,14 +38,13 @@ def test_class_routes_reject_conflicts_and_unknown_records(tmp_path: Path) -> No
         account = environment["account"]
         class_url = f"/api/classes/{student_class['id']}"
 
-        assert (
-            client.post(
-                "/api/classes/999999/update",
-                headers=headers,
-                json={"name": "Missing", "grade_level": "5e"},
-            ).status_code
-            == 404
+        missing = client.post(
+            "/api/classes/999999/update",
+            headers=headers,
+            json={"name": "Missing", "grade_level": "5e"},
         )
+        assert missing.status_code == 404
+        assert missing.json()["detail"]["code"] == "CLASS_NOT_FOUND"
 
         filtered = client.get(
             "/api/classes",
@@ -74,10 +73,9 @@ def test_class_routes_reject_conflicts_and_unknown_records(tmp_path: Path) -> No
         assert same_class.status_code == 200
         assert same_class.json()["student_count"] == 1
 
-        assert (
-            client.delete(f"{class_url}/accounts/999999", headers=headers).status_code
-            == 404
-        )
+        unassigned = client.delete(f"{class_url}/accounts/999999", headers=headers)
+        assert unassigned.status_code == 404
+        assert unassigned.json()["detail"]["code"] == "CLASS_ASSIGNMENT_NOT_FOUND"
 
         other_class = client.post(
             "/api/classes", headers=headers, json={"name": "5e B", "grade_level": "5e"}
@@ -88,12 +86,17 @@ def test_class_routes_reject_conflicts_and_unknown_records(tmp_path: Path) -> No
             headers=headers,
         )
         assert transfer.status_code == 409
+        assert transfer.json()["detail"]["code"] == "STUDENT_TRANSFER_DURING_SESSION"
         unassign = client.delete(
             f"{class_url}/accounts/{account['id']}", headers=headers
         )
         assert unassign.status_code == 409
+        assert unassign.json()["detail"]["code"] == "CLASS_HAS_ACTIVE_SESSION"
         busy_account = client.delete(f"/api/students/{account['id']}", headers=headers)
         assert busy_account.status_code == 409
+        assert (
+            busy_account.json()["detail"]["code"] == "STUDENT_ACCOUNT_IN_ACTIVE_SESSION"
+        )
 
 
 def test_a_class_with_an_active_makeup_session_cannot_be_deleted(
@@ -114,7 +117,8 @@ def test_a_class_with_an_active_makeup_session_cannot_be_deleted(
             session.commit()
         refused = client.delete(f"/api/classes/{student_class['id']}", headers=headers)
         assert refused.status_code == 409
-        assert "rattrapage" in refused.json()["detail"]
+        assert refused.json()["detail"]["code"] == "CLASS_USED_BY_MAKEUP"
+        assert "rattrapage" in refused.json()["detail"]["message"]
 
 
 def test_class_writes_lose_concurrent_races_gracefully(tmp_path: Path) -> None:
