@@ -6,7 +6,6 @@ import os
 import stat
 import tomllib
 from pathlib import Path
-from re import search
 from typing import Any
 
 import jwt
@@ -353,32 +352,25 @@ def test_rejects_unsafe_quiz_rate_limit_configuration(
         )
 
 
-def test_the_four_version_fields_agree() -> None:
-    """The published version is written in four files that must not drift.
+def test_the_version_has_one_source_per_package() -> None:
+    """Each package states its version once, and the two must not drift.
 
-    The backend image installs its dependencies with --no-install-project, so
-    the API cannot read its version from package metadata and every file holds
-    a literal. A release that updates only some of them ships an API reporting
-    one version and an interface built as another, and the footer is the one
-    users read: it drifted to 0.2.1 while the other three said 0.3.0.
+    The API reads pyproject.toml and the footer receives package.json's
+    version at build time. A release that bumps only one of them ships an API
+    reporting one version and an interface built as another.
     """
     repository = Path(__file__).resolve().parent.parent.parent
+    frontend_root = repository / "open-quiz-frontend"
     backend = tomllib.loads(
         (repository / "open-quiz-backend" / "pyproject.toml").read_text()
     )["project"]["version"]
-    frontend = json.loads(
-        (repository / "open-quiz-frontend" / "package.json").read_text()
-    )["version"]
-    served = main.app.version
-    layout = (
-        repository / "open-quiz-frontend" / "src" / "layouts" / "main-layout.tsx"
-    ).read_text()
-    displayed = search(r'"app-version", \{ version: "([^"]+)" \}', layout)
-    assert displayed is not None, "the footer no longer states a literal version"
-    assert backend == frontend == served == displayed.group(1), (
-        f"pyproject {backend}, package.json {frontend}, API {served}, "
-        f"footer {displayed.group(1)}"
-    )
+    frontend = json.loads((frontend_root / "package.json").read_text())["version"]
+    assert backend == frontend, f"pyproject {backend}, package.json {frontend}"
+    assert main.app.version == backend
+    layout = (frontend_root / "src" / "layouts" / "main-layout.tsx").read_text()
+    assert '"app-version", { version: __APP_VERSION__ }' in layout
+    vite_config = (frontend_root / "vite.config.ts").read_text()
+    assert "__APP_VERSION__: JSON.stringify(version)" in vite_config
 
 
 def test_secret_files_are_never_readable_by_other_accounts(tmp_path: Path) -> None:

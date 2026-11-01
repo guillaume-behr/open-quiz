@@ -41,10 +41,22 @@ pythonpath = ["."]
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["B", "C4", "E4", "E7", "E9", "F", "I", "PIE", "SIM", "UP"]
+select = [
+    "ARG", "B", "C4", "E4", "E7", "E9", "F", "I", "N", "PERF", "PIE", "PT",
+    "RET", "S", "SIM", "UP",
+]
 ignore = [
     # FastAPI dependency declarations intentionally call parameter helpers.
     "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    # Stubs mirror the signature of what they replace, used or not.
+    "ARG",
+    # pytest asserts; fixtures carry fake credentials; a test runs Alembic
+    # in subprocesses.
+    "S101", "S105", "S106", "S107", "S603",
 ]
 
 [tool.ruff.lint.isort]

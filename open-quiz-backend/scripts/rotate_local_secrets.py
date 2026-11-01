@@ -29,9 +29,11 @@ def rotate() -> None:
         else:
             output.append(line)
 
-    for name in ROTATED_KEYS:
-        if name not in updated:
-            output.append(f"{name}={secure_defaults[name]}")
+    output.extend(
+        f"{name}={secure_defaults[name]}"
+        for name in ROTATED_KEYS
+        if name not in updated
+    )
 
     # ENV_FILE has no suffix (".env" is a bare stem), so with_suffix() would
     # produce ".env.env.<timestamp>.bak". Name the sibling file explicitly.

@@ -15,7 +15,7 @@ from app.models import User
 LARGE_QUESTION_BODY_BYTES = 96 * 1024 * 1024
 
 
-class RequestBodyTooLarge(Exception):
+class RequestBodyTooLargeError(Exception):
     pass
 
 
@@ -158,12 +158,12 @@ class RequestBodyLimitMiddleware:
             if message["type"] == "http.request":
                 received_bytes += len(message.get("body", b""))
                 if received_bytes > limit:
-                    raise RequestBodyTooLarge
+                    raise RequestBodyTooLargeError
             return message
 
         try:
             await self.app(scope, limited_receive, send)
-        except RequestBodyTooLarge:
+        except RequestBodyTooLargeError:
             await self._respond(
                 scope,
                 receive,

@@ -177,7 +177,7 @@ Toute nouvelle chaîne visible doit exister dans les huit catalogues de
 
 Exécutez les contrôles correspondant aux fichiers modifiés. Les mêmes contrôles
 principaux sont exécutés par
-[GitHub Actions](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml),
+[GitHub Actions](https://github.com/guillaume-behr/open-quiz/actions/workflows/ci.yml),
 qui fait autorité pour les contrôles obligatoires. Chaque bloc ci-dessous
 part de la racine du dépôt ; revenez-y avant de passer à un autre composant.
 
@@ -187,7 +187,6 @@ part de la racine du dépôt ; revenez-y avant de passer à un autre composant.
 cd open-quiz-backend
 uv sync --frozen --dev
 uv run --frozen ruff check app tests main.py scripts migrations
-uv run --frozen ruff check --select S app main.py scripts migrations
 uv run --frozen ruff format --check app tests main.py scripts migrations
 uv run --frozen pytest -q --cov --cov-report=term-missing
 uv run --frozen pip-audit

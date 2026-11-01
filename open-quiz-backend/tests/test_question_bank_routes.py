@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from app.images import (
     MAX_IMAGE_BYTES,
     MAX_IMAGE_DIMENSION,
-    InvalidImage,
+    InvalidImageError,
     normalize_image,
 )
 from app.models import (
@@ -508,12 +508,12 @@ def test_normalize_image_rejects_unsupported_or_invalid_data(
     data: bytes, declared_type: str
 ) -> None:
     """Only decodable bytes in an allowed format may ever reach the database."""
-    with pytest.raises(InvalidImage):
+    with pytest.raises(InvalidImageError):
         normalize_image(data, declared_type)
 
 
 def test_normalize_image_rejects_oversized_payloads() -> None:
-    with pytest.raises(InvalidImage):
+    with pytest.raises(InvalidImageError):
         normalize_image(b"\x00" * (MAX_IMAGE_BYTES + 1), "image/png")
 
 
@@ -561,7 +561,7 @@ def test_normalize_image_rejects_images_that_are_too_large_on_screen() -> None:
     Image.new("RGB", (MAX_IMAGE_DIMENSION + 1, 2), (0, 0, 0)).save(buffer, format="PNG")
     assert len(buffer.getvalue()) < MAX_IMAGE_BYTES
 
-    with pytest.raises(InvalidImage):
+    with pytest.raises(InvalidImageError):
         normalize_image(buffer.getvalue(), "image/png")
 
 

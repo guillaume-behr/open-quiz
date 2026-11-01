@@ -11,16 +11,16 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 
-class InvalidImage(ValueError):
+class InvalidImageError(ValueError):
     pass
 
 
 def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
     """Decode and re-encode an image so stored bytes match a safe media type."""
     if declared_type not in ALLOWED_IMAGE_TYPES:
-        raise InvalidImage("Format d’image non pris en charge")
+        raise InvalidImageError("Format d’image non pris en charge")
     if not data or len(data) > MAX_IMAGE_BYTES:
-        raise InvalidImage("L’image est vide ou trop volumineuse")
+        raise InvalidImageError("L’image est vide ou trop volumineuse")
 
     try:
         with warnings.catch_warnings():
@@ -34,7 +34,9 @@ def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
                     or candidate.height > MAX_IMAGE_DIMENSION
                     or candidate.width * candidate.height > MAX_IMAGE_PIXELS
                 ):
-                    raise InvalidImage("Les dimensions de l’image sont trop grandes")
+                    raise InvalidImageError(
+                        "Les dimensions de l’image sont trop grandes"
+                    )
                 normalized = ImageOps.exif_transpose(candidate)
                 output = BytesIO()
                 if declared_type == "image/jpeg":
@@ -62,7 +64,7 @@ def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
                         optimize=True,
                     )
                     content_type = "image/png"
-    except InvalidImage:
+    except InvalidImageError:
         raise
     except (
         Image.DecompressionBombError,
@@ -72,9 +74,11 @@ def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
         SyntaxError,
         ValueError,
     ) as error:
-        raise InvalidImage("Le fichier envoyé n’est pas une image valide") from error
+        raise InvalidImageError(
+            "Le fichier envoyé n’est pas une image valide"
+        ) from error
 
     normalized_data = output.getvalue()
     if not normalized_data or len(normalized_data) > MAX_IMAGE_BYTES:
-        raise InvalidImage("L’image convertie est vide ou trop volumineuse")
+        raise InvalidImageError("L’image convertie est vide ou trop volumineuse")
     return normalized_data, content_type

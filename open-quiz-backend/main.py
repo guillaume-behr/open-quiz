@@ -1,8 +1,10 @@
+import tomllib
 from asyncio import CancelledError, create_task, sleep, to_thread
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from hmac import new as hmac_new
+from pathlib import Path
 from time import time
 
 from fastapi import FastAPI, Request, status
@@ -61,6 +63,13 @@ from app.session_retention import (
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
 MANAGED_ADMIN_KEY = "managed_admin_user_id"
 RETENTION_MAINTENANCE_INTERVAL_SECONDS = 3600
+
+# The image installs dependencies without the project itself, so there is no
+# package metadata to read: pyproject.toml, copied next to this file, is the
+# single source of the backend version.
+VERSION = tomllib.loads((Path(__file__).parent / "pyproject.toml").read_text())[
+    "project"
+]["version"]
 
 
 def synchronize_security_state(
@@ -347,7 +356,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     production = settings.environment == "production"
     app = FastAPI(
         title="Open Quiz API",
-        version="0.4.0",
+        version=VERSION,
         lifespan=lifespan,
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
@@ -430,7 +439,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(InsufficientQuestionsError)
     async def insufficient_questions(
-        request: Request, error: InsufficientQuestionsError
+        _request: Request, error: InsufficientQuestionsError
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

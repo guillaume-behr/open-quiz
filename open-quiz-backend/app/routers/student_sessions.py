@@ -260,8 +260,7 @@ def get_student_quiz_state(
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
-    state = student_state_response(quiz_session, quiz, participant, session)
-    return state
+    return student_state_response(quiz_session, quiz, participant, session)
 
 
 @router.post(
