@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
+from app.errors import ErrorCode, api_error
 from app.grade_levels import ensure_default_grade_levels
 from app.models import (
     AuthenticationChallenge,
@@ -36,7 +37,9 @@ def professor_account(user_id: int, session: DbSession) -> User:
     if user is None or user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Compte enseignant introuvable",
+            detail=api_error(
+                ErrorCode.TEACHER_NOT_FOUND, "Compte enseignant introuvable"
+            ),
         )
     return user
 
@@ -103,7 +106,9 @@ def create_user(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cet identifiant est déjà utilisé",
+            detail=api_error(
+                ErrorCode.USERNAME_TAKEN, "Cet identifiant est déjà utilisé"
+            ),
         ) from None
     session.refresh(user)
     audit_event(
@@ -202,7 +207,10 @@ def delete_user(
     if running is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cet enseignant anime une session d’examen en cours",
+            detail=api_error(
+                ErrorCode.TEACHER_IN_ACTIVE_EXAM,
+                "Cet enseignant anime une session d’examen en cours",
+            ),
         )
     delete_user_records(user.id, session)
     session.commit()

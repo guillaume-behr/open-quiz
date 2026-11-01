@@ -2,7 +2,7 @@ import { createProblemReport } from "@/api/problem-reports"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
-import { errorMessage } from "@/lib/errors"
+import { apiErrorMessage } from "@/lib/errors"
 import { CircleCheck, LoaderCircle, MessageSquareWarning } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -56,7 +56,7 @@ export function ReportProblemPage() {
             form.reset()
             setSent(true)
         } catch (caught) {
-            setError(errorMessage(caught, t("problem-report-error")))
+            setError(apiErrorMessage(caught, t, t("problem-report-error")))
         } finally {
             setIsSending(false)
         }

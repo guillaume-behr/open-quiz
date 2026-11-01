@@ -793,5 +793,14 @@
     "error-makeup-action-not-allowed": "补考场次当前的状态下无法执行此操作。",
     "error-makeup-no-selection": "还没有学生选择测验。请至少等一名学生选择后再开始。",
     "error-training-banks-grade-mismatch": "练习题库必须与班级属于同一级别。",
-    "error-training-question-count-exceeded": "请求的题目数量超过了题库中的题目数。"
+    "error-training-question-count-exceeded": "请求的题目数量超过了题库中的题目数。",
+    "error-session-expired": "您的会话已过期，请重新登录。",
+    "error-problem-report-rate-limited": "提交的反馈过多，请稍后重试。",
+    "error-problem-report-not-found": "找不到此反馈，它可能已被删除。",
+    "error-teacher-not-found": "找不到此教师账户，它可能已被删除。",
+    "error-teacher-in-active-exam": "该教师正在主持考试，请在考试结束后重试。",
+    "error-username-taken": "此用户名已被其他账户使用。",
+    "error-service-unavailable": "服务暂时不可用，请稍后重试。",
+    "error-request-invalid": "发送的请求无效，请刷新页面后重试。",
+    "error-request-too-large": "发送的数据过大，请缩小图片或文件。"
 }

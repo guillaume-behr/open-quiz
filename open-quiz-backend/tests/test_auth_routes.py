@@ -196,6 +196,7 @@ def test_health_reports_an_unavailable_database(tmp_path: Path) -> None:
         client.app.state.session_factory = broken_session
         response = client.get("/api/health")
         assert response.status_code == 503
+        assert response.json()["detail"]["code"] == "DATABASE_UNAVAILABLE"
 
 
 def test_refresh_and_logout_edge_cases(tmp_path: Path) -> None:

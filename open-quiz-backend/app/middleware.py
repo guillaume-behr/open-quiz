@@ -7,6 +7,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.dependencies import authenticated_user_from_token
+from app.errors import ErrorCode, api_error
 from app.models import User
 
 # JSON imports base64-encode up to 64 MiB of decoded images. Reserve enough
@@ -66,13 +67,14 @@ class RequestBodyLimitMiddleware:
         receive: Receive,
         send: Send,
         status_code: int,
-        detail: str,
+        code: ErrorCode,
+        message: str,
         *,
         headers: dict[str, str] | None = None,
     ) -> None:
         response = JSONResponse(
             status_code=status_code,
-            content={"detail": detail},
+            content={"detail": api_error(code, message)},
             headers=headers,
         )
         await response(scope, receive, send)
@@ -91,6 +93,7 @@ class RequestBodyLimitMiddleware:
                     receive,
                     send,
                     401,
+                    ErrorCode.AUTH_TOKEN_INVALID,
                     "Jeton d’authentification invalide ou expiré",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
@@ -101,6 +104,7 @@ class RequestBodyLimitMiddleware:
                     receive,
                     send,
                     403,
+                    ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
                     "Accès enseignant requis",
                 )
                 return
@@ -121,6 +125,7 @@ class RequestBodyLimitMiddleware:
                     receive,
                     send,
                     400,
+                    ErrorCode.REQUEST_CONTENT_LENGTH_INVALID,
                     "Invalid Content-Length header",
                 )
                 return
@@ -130,6 +135,7 @@ class RequestBodyLimitMiddleware:
                     receive,
                     send,
                     400,
+                    ErrorCode.REQUEST_CONTENT_LENGTH_INVALID,
                     "Invalid Content-Length header",
                 )
                 return
@@ -139,6 +145,7 @@ class RequestBodyLimitMiddleware:
                     receive,
                     send,
                     413,
+                    ErrorCode.REQUEST_BODY_TOO_LARGE,
                     "Request body is too large",
                 )
                 return
@@ -162,5 +169,6 @@ class RequestBodyLimitMiddleware:
                 receive,
                 send,
                 413,
+                ErrorCode.REQUEST_BODY_TOO_LARGE,
                 "Request body is too large",
             )

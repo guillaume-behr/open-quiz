@@ -853,5 +853,14 @@
     "error-makeup-action-not-allowed": "لا يمكن تنفيذ هذا الإجراء في الحالة الحالية لجلسة الاستدراك.",
     "error-makeup-no-selection": "لم يختر أي طالب اختبارًا بعد. انتظر اختيارًا واحدًا على الأقل قبل البدء.",
     "error-training-banks-grade-mismatch": "يجب أن تكون بنوك التدريب من مستوى الصف نفسه.",
-    "error-training-question-count-exceeded": "يتجاوز عدد الأسئلة المطلوب ما يحتويه البنك."
+    "error-training-question-count-exceeded": "يتجاوز عدد الأسئلة المطلوب ما يحتويه البنك.",
+    "error-session-expired": "انتهت صلاحية جلستك. سجّل الدخول مرة أخرى.",
+    "error-problem-report-rate-limited": "أُرسل عدد كبير جدًا من البلاغات. حاول مرة أخرى لاحقًا.",
+    "error-problem-report-not-found": "تعذّر العثور على هذا البلاغ. ربما تم حذفه بالفعل.",
+    "error-teacher-not-found": "تعذّر العثور على حساب المعلم هذا. ربما تم حذفه.",
+    "error-teacher-in-active-exam": "يدير هذا المعلم امتحانًا الآن. حاول مرة أخرى بعد انتهائه.",
+    "error-username-taken": "اسم المستخدم هذا مستخدم بالفعل في حساب آخر.",
+    "error-service-unavailable": "الخدمة غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل.",
+    "error-request-invalid": "الطلب المُرسَل غير صالح. أعد تحميل الصفحة ثم حاول مرة أخرى.",
+    "error-request-too-large": "البيانات المُرسَلة كبيرة جدًا. قلّل حجم الصور أو الملف."
 }

@@ -2,7 +2,7 @@ import type { TwoFactorChallenge } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { localizedErrorMessage } from "@/lib/errors"
+import { apiErrorMessage } from "@/lib/errors"
 import { LoaderCircle, ShieldCheck } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { useState, type SyntheticEvent } from "react"
@@ -32,7 +32,7 @@ export function TwoFactorForm({
         try {
             await onVerify(String(form.get("code")))
         } catch (caught) {
-            setError(localizedErrorMessage(caught, t, t("two-factor-error")))
+            setError(apiErrorMessage(caught, t, t("two-factor-error")))
         } finally {
             setIsSubmitting(false)
         }

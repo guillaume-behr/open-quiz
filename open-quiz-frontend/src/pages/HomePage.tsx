@@ -31,7 +31,7 @@ import {
 } from "lucide-react"
 import { lazy, type FormEvent, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { localizedErrorMessage } from "@/lib/errors"
+import { apiErrorMessage } from "@/lib/errors"
 import { useLocation, useNavigate } from "react-router"
 
 type StudentRouteState = {
@@ -182,7 +182,7 @@ export function HomePage({
                 state: { student: result.student, token: result.token },
             })
         } catch (caught) {
-            setError(localizedErrorMessage(caught, t, t("student-login-error")))
+            setError(apiErrorMessage(caught, t, t("student-login-error")))
         } finally {
             setIsBusy(false)
         }
@@ -209,7 +209,7 @@ export function HomePage({
             })
             navigate("/student/exam", { state: { student, token } })
         } catch (caught) {
-            setJoinError(localizedErrorMessage(caught, t, t("join-quiz-error")))
+            setJoinError(apiErrorMessage(caught, t, t("join-quiz-error")))
         } finally {
             setIsJoining(false)
         }
