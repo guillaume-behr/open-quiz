@@ -26,7 +26,6 @@ from app.config import (
     validate_optional_public_url,
 )
 from app.database import postgres_url
-from app.grading import compute_final_scores, decoded_answer_data
 from app.images import InvalidImage, normalize_image
 from app.live_quiz import LiveQuizHub, websocket_origin_allowed
 from app.middleware import RequestBodyLimitMiddleware
@@ -44,6 +43,7 @@ from app.schemas import (
     TrainingQuestionBankSelection,
 )
 from app.security import create_access_token
+from app.services.grading import compute_final_scores, decoded_answer_data
 from app.student_accounts import owned_student_account
 
 from support import (

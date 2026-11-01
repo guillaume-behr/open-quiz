@@ -3,9 +3,9 @@ from datetime import datetime
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.grading import compute_final_scores
 from app.models import Quiz, QuizAnswer, QuizParticipant, QuizSession
 from app.quiz_session_records import delete_quiz_session_records
+from app.services.grading import compute_final_scores
 from app.session_status import ACTIVE_SESSION_STATUSES
 
 

@@ -26,9 +26,6 @@ from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession
 from app.errors import ErrorCode, api_error
-from app.grading import (
-    decoded_answer_data,
-)
 from app.models import (
     Question,
     QuestionChoice,
@@ -68,6 +65,9 @@ from app.schemas import (
     StudentQuizStateResponse,
     StudentQuizViolation,
     TrainingFeedback,
+)
+from app.services.grading import (
+    decoded_answer_data,
 )
 from app.session_status import ACTIVE_SESSION_STATUSES
 

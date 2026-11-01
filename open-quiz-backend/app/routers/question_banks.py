@@ -22,7 +22,6 @@ from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
 from app.grade_levels import ensure_grade_level, grade_level_import_context
-from app.grading import compute_final_scores
 from app.images import (
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
@@ -70,6 +69,7 @@ from app.schemas import (
     QuestionResponse,
     QuestionUpdate,
 )
+from app.services.grading import compute_final_scores
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
 MAX_IMPORT_IMAGE_BYTES = 64 * 1024 * 1024
