@@ -390,16 +390,16 @@ def test_answering_requires_a_current_question_and_a_student(environment) -> Non
 def test_an_orphaned_participant_cannot_answer(environment, monkeypatch) -> None:
     client = environment["client"]
     launched, headers, url = started(client, environment)
-    from app.routers import quizzes
+    from app.routers import student_sessions
 
-    original = quizzes.authenticated_participant
+    original = student_sessions.authenticated_participant
 
     def without_student(*args, **kwargs):
         quiz_session, quiz, participant = original(*args, **kwargs)
         participant.student_id = None
         return quiz_session, quiz, participant
 
-    monkeypatch.setattr(quizzes, "authenticated_participant", without_student)
+    monkeypatch.setattr(student_sessions, "authenticated_participant", without_student)
     response = client.post(
         f"{url}/answer",
         headers=headers,
