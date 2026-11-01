@@ -31,10 +31,12 @@ from app.models import (
 )
 from app.question_responses import question_response
 from app.routers.question_banks import (
+    owned_question_bank,
+)
+from app.routers.questions import (
     MAX_IMPORT_IMAGE_BYTES,
     add_question,
     decode_image_payload,
-    owned_question_bank,
 )
 from app.schemas import (
     QuestionBankResponse,
