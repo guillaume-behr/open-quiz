@@ -277,6 +277,7 @@ def test_grading_rejects_answers_outside_the_participant_draw(environment) -> No
         json={"score": 1},
     )
     assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ANSWER_QUESTION_NOT_IN_SESSION"
 
 
 def test_student_history_skips_questions_it_cannot_load(

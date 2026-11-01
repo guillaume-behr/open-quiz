@@ -745,7 +745,7 @@ def active_participant_for_image(
     if quiz_session.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=missing_detail,
+            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
         )
     return quiz_session, participant
 
@@ -769,7 +769,7 @@ def get_student_question_image(
     if current_question_id(quiz_session, participant, session) != question_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=missing_detail,
+            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
         )
     question = session.get(Question, question_id)
     if (
@@ -779,7 +779,7 @@ def get_student_question_image(
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=missing_detail,
+            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
         )
     return Response(
         content=question.image_data,
@@ -816,7 +816,7 @@ def get_student_choice_image(
     if choice is None or choice.image_data is None or choice.image_content_type is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=missing_detail,
+            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
         )
     return Response(
         content=choice.image_data,

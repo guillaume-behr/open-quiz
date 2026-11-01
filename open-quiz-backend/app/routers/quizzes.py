@@ -192,7 +192,7 @@ def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Qu
     if quiz is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Quiz introuvable",
+            detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
         )
     return quiz
 
@@ -213,7 +213,10 @@ def validate_bank_selection(
     if len(banks) != len(payload.question_bank_ids):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Une ou plusieurs banques de questions sont invalides",
+            detail=api_error(
+                ErrorCode.QUESTION_BANK_SELECTION_INVALID,
+                "Une ou plusieurs banques de questions sont invalides",
+            ),
         )
     difficulty_counts_for_banks(payload, payload.question_bank_ids, session)
     return banks
@@ -344,7 +347,9 @@ def owned_quiz_session(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session de quiz introuvable",
+            detail=api_error(
+                ErrorCode.QUIZ_SESSION_NOT_FOUND, "Session de quiz introuvable"
+            ),
         )
     return row
 
@@ -872,7 +877,10 @@ def generate_join_code(session: DbSession) -> str:
             return code
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Impossible de générer un code de quiz",
+        detail=api_error(
+            ErrorCode.QUIZ_CODE_GENERATION_FAILED,
+            "Impossible de générer un code de quiz",
+        ),
     )
 
 
@@ -1026,7 +1034,10 @@ def delete_quiz_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Seules les sessions terminées ou annulées peuvent être supprimées"
+                api_error(
+                    ErrorCode.QUIZ_SESSION_NOT_DELETABLE,
+                    "Seules les sessions terminées ou annulées peuvent être supprimées",
+                )
             ),
         )
     delete_quiz_session_records([quiz_session.id], session)
@@ -1076,7 +1087,10 @@ def start_quiz_session(
             session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Au moins un élève doit rejoindre le quiz avant son démarrage",
+                detail=api_error(
+                    ErrorCode.QUIZ_SESSION_NO_PARTICIPANTS,
+                    "Au moins un élève doit rejoindre le quiz avant son démarrage",
+                ),
             )
         quiz_session.status = "in_progress"
         quiz_session.started_at = started_at
@@ -1109,7 +1123,10 @@ def delete_quiz(
     if active_session_id is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Un quiz avec une session active ne peut pas être supprimé",
+            detail=api_error(
+                ErrorCode.QUIZ_HAS_ACTIVE_SESSION,
+                "Un quiz avec une session active ne peut pas être supprimé",
+            ),
         )
     if (
         session.scalar(
@@ -1125,8 +1142,11 @@ def delete_quiz(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Impossible de supprimer ce quiz car il possède des résultats "
-                "qui doivent être conservés"
+                api_error(
+                    ErrorCode.QUIZ_HAS_RESULTS,
+                    "Impossible de supprimer ce quiz car il possède des résultats "
+                    "qui doivent être conservés",
+                )
             ),
         )
     if (
@@ -1139,7 +1159,10 @@ def delete_quiz(
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Impossible de supprimer ce quiz car un rattrapage l’utilise",
+            detail=api_error(
+                ErrorCode.QUIZ_USED_BY_MAKEUP,
+                "Impossible de supprimer ce quiz car un rattrapage l’utilise",
+            ),
         )
     session.execute(delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz_id))
     session.execute(
@@ -1181,7 +1204,10 @@ def pause_quiz_session(
     if quiz_session.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Seul un quiz en cours peut être mis en pause",
+            detail=api_error(
+                ErrorCode.QUIZ_SESSION_NOT_RUNNING,
+                "Seul un quiz en cours peut être mis en pause",
+            ),
         )
     quiz_session.status = "paused"
     quiz_session.paused_at = datetime.now(UTC)
@@ -1205,7 +1231,10 @@ def resume_quiz_session(
     if quiz_session.status != "paused" or quiz_session.paused_at is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Seul un quiz en pause peut être repris",
+            detail=api_error(
+                ErrorCode.QUIZ_SESSION_NOT_PAUSED,
+                "Seul un quiz en pause peut être repris",
+            ),
         )
     paused_at = as_utc(quiz_session.paused_at)
     quiz_session.paused_duration_seconds = (
@@ -1234,7 +1263,10 @@ def cancel_quiz_session(
     if quiz_session.status not in ACTIVE_SESSION_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cette session ne peut plus être annulée",
+            detail=api_error(
+                ErrorCode.QUIZ_SESSION_NOT_CANCELLABLE,
+                "Cette session ne peut plus être annulée",
+            ),
         )
     if (
         session.scalar(
@@ -1247,8 +1279,11 @@ def cancel_quiz_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Impossible d’annuler ce quiz car des réponses ont déjà été "
-                "enregistrées. Terminez la session pour conserver les résultats"
+                api_error(
+                    ErrorCode.QUIZ_SESSION_HAS_ANSWERS,
+                    "Impossible d’annuler ce quiz car des réponses ont déjà été "
+                    "enregistrées. Terminez la session pour conserver les résultats",
+                )
             ),
         )
     join_code = quiz_session.join_code
@@ -1273,7 +1308,7 @@ def preview_quiz(
     if quiz.mode != "exam":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Quiz introuvable",
+            detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
         )
     return load_question_responses(list(draw_question_ids(quiz, session)), session)
 
@@ -1292,7 +1327,7 @@ def update_quiz(
     if quiz.mode != "exam":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Quiz introuvable",
+            detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
         )
     active_session_id = session.scalar(
         select(QuizSession.id)
@@ -1305,7 +1340,10 @@ def update_quiz(
     if active_session_id is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Un quiz avec une session active ne peut pas être modifié",
+            detail=api_error(
+                ErrorCode.QUIZ_HAS_ACTIVE_SESSION,
+                "Un quiz avec une session active ne peut pas être modifié",
+            ),
         )
     validate_bank_selection(payload, professor, session)
     quiz.title = payload.title
@@ -1349,7 +1387,10 @@ def launch_quiz(
     if quiz.mode != "exam":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Un entraînement est lancé directement par l’élève",
+            detail=api_error(
+                ErrorCode.QUIZ_TRAINING_NOT_LAUNCHABLE,
+                "Un entraînement est lancé directement par l’élève",
+            ),
         )
     student_class = session.scalar(
         select(StudentClass).where(
@@ -1360,7 +1401,9 @@ def launch_quiz(
     if student_class is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="La classe sélectionnée est invalide",
+            detail=api_error(
+                ErrorCode.QUIZ_CLASS_INVALID, "La classe sélectionnée est invalide"
+            ),
         )
     students = list(
         session.scalars(
@@ -1373,7 +1416,9 @@ def launch_quiz(
     if not students:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La classe doit contenir au moins un élève",
+            detail=api_error(
+                ErrorCode.QUIZ_CLASS_EMPTY, "La classe doit contenir au moins un élève"
+            ),
         )
     discard_active_training_sessions(
         select(Student.id).where(Student.class_id == student_class.id),

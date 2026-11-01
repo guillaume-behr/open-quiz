@@ -14,6 +14,7 @@ from sqlalchemy import delete, select, update
 from app.audit import audit_event
 from app.config import Settings, get_settings
 from app.database import build_session_factory
+from app.errors import ErrorCode, api_error
 from app.live_quiz import LiveQuizHub
 from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
@@ -433,7 +434,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            content={"detail": str(error)},
+            content={
+                "detail": api_error(ErrorCode.QUIZ_QUESTIONS_INSUFFICIENT, str(error))
+            },
         )
 
     app.include_router(health.router)

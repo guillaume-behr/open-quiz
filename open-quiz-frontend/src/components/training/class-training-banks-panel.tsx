@@ -15,6 +15,7 @@ import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { LibraryBig, LoaderCircle, School } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { apiErrorMessage } from "@/lib/errors"
 
 export function ClassTrainingBanksPanel() {
     const { t } = useTranslation()
@@ -120,12 +121,18 @@ export function ClassTrainingBanksPanel() {
                         ])
                     )
                 )
-            } catch {
+            } catch (caught) {
                 if (version !== saveVersion.current) return
                 setSelectedBankIds(
                     confirmedBankIds.current.get(classId) ?? savedBankIds
                 )
-                setError(t("training-settings-save-error"))
+                setError(
+                    apiErrorMessage(
+                        caught,
+                        t,
+                        t("training-settings-save-error")
+                    )
+                )
             } finally {
                 if (version === saveVersion.current) setIsSaving(false)
             }

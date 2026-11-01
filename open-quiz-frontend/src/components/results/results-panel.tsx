@@ -45,6 +45,7 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { apiErrorMessage } from "@/lib/errors"
 
 type ResultsViewMode = "cards" | "schedule"
 
@@ -113,12 +114,12 @@ export function ResultsPanel({
         null
     )
     const [isDeleting, setIsDeleting] = useState(false)
-    const [deleteError, setDeleteError] = useState(false)
+    const [deleteError, setDeleteError] = useState<string | null>(null)
     const [selectedParticipant, setSelectedParticipant] =
         useState<QuizParticipant | null>(null)
     const [answers, setAnswers] = useState<QuizAnswerReview[]>([])
     const [areAnswersLoading, setAreAnswersLoading] = useState(false)
-    const [answersError, setAnswersError] = useState(false)
+    const [answersError, setAnswersError] = useState<string | null>(null)
     const [scoreDrafts, setScoreDrafts] = useState<Record<number, string>>({})
     const [feedbackDrafts, setFeedbackDrafts] = useState<
         Record<number, string>
@@ -127,7 +128,7 @@ export function ResultsPanel({
     const [publishingSessionId, setPublishingSessionId] = useState<
         number | null
     >(null)
-    const [publishError, setPublishError] = useState(false)
+    const [publishError, setPublishError] = useState<string | null>(null)
     const [exportClasses, setExportClasses] = useState<StudentClass[]>([])
     const [areClassesLoading, setAreClassesLoading] = useState(true)
     const [exportQuizzes, setExportQuizzes] = useState<Quiz[]>([])
@@ -135,7 +136,7 @@ export function ResultsPanel({
     const [exportQuizId, setExportQuizId] = useState<number | null>(null)
     const [isExportLoading, setIsExportLoading] = useState(false)
     const [isExporting, setIsExporting] = useState(false)
-    const [exportError, setExportError] = useState(false)
+    const [exportError, setExportError] = useState<string | null>(null)
 
     useEffect(() => {
         try {
@@ -175,7 +176,7 @@ export function ResultsPanel({
                 setExportClassId(classes[0]?.id ?? null)
             })
             .catch(() => {
-                if (isActive) setExportError(true)
+                if (isActive) setExportError(i18n.t("export-results-error"))
             })
             .finally(() => {
                 if (isActive) setAreClassesLoading(false)
@@ -183,7 +184,7 @@ export function ResultsPanel({
         return () => {
             isActive = false
         }
-    }, [])
+    }, [i18n])
 
     useEffect(() => {
         if (!isExportDialogOpen || exportQuizzes.length > 0) return
@@ -191,7 +192,7 @@ export function ResultsPanel({
         Promise.resolve()
             .then(() => {
                 if (!isActive) return Promise.reject(new Error("cancelled"))
-                setExportError(false)
+                setExportError(null)
                 setIsExportLoading(true)
                 return getAllQuizzes()
             })
@@ -200,7 +201,7 @@ export function ResultsPanel({
                 setExportQuizzes(quizzes)
             })
             .catch(() => {
-                if (isActive) setExportError(true)
+                if (isActive) setExportError(i18n.t("export-results-error"))
             })
             .finally(() => {
                 if (isActive) setIsExportLoading(false)
@@ -208,20 +209,22 @@ export function ResultsPanel({
         return () => {
             isActive = false
         }
-    }, [exportQuizzes.length, isExportDialogOpen])
+    }, [exportQuizzes.length, i18n, isExportDialogOpen])
 
     async function handleExport(): Promise<void> {
         if (exportClassId === null) return
         setIsExporting(true)
-        setExportError(false)
+        setExportError(null)
         try {
             saveBlob(
                 await downloadQuizResults(exportClassId, exportQuizId),
                 `resultats-classe-${exportClassId}${exportQuizId === null ? "-tous-les-quiz" : `-quiz-${exportQuizId}`}.csv`
             )
             onExportDialogOpenChange(false)
-        } catch {
-            setExportError(true)
+        } catch (caught) {
+            setExportError(
+                apiErrorMessage(caught, t, t("export-results-error"))
+            )
         } finally {
             setIsExporting(false)
         }
@@ -243,7 +246,7 @@ export function ResultsPanel({
     async function handleDeleteResult() {
         if (!resultToDelete) return
         setIsDeleting(true)
-        setDeleteError(false)
+        setDeleteError(null)
         try {
             await deleteQuizSession(resultToDelete.id)
             setResults((existing) =>
@@ -254,8 +257,8 @@ export function ResultsPanel({
             }
             setResultToDelete(null)
             setReloadKey((current) => current + 1)
-        } catch {
-            setDeleteError(true)
+        } catch (caught) {
+            setDeleteError(apiErrorMessage(caught, t, t("delete-result-error")))
         } finally {
             setIsDeleting(false)
         }
@@ -268,7 +271,7 @@ export function ResultsPanel({
         const requestVersion = ++answersRequestVersion.current
         setSelectedParticipant(participant)
         setAreAnswersLoading(true)
-        setAnswersError(false)
+        setAnswersError(null)
         try {
             const loadedAnswers = await getParticipantAnswers(
                 selectedResult.id,
@@ -292,9 +295,11 @@ export function ResultsPanel({
                     ])
                 )
             )
-        } catch {
+        } catch (caught) {
             if (requestVersion === answersRequestVersion.current) {
-                setAnswersError(true)
+                setAnswersError(
+                    apiErrorMessage(caught, t, t("answers-load-error"))
+                )
             }
         } finally {
             if (requestVersion === answersRequestVersion.current) {
@@ -310,7 +315,7 @@ export function ResultsPanel({
         if (!Number.isFinite(score)) return
         const feedback = feedbackDrafts[answer.id] ?? null
         setGradingAnswerId(answer.id)
-        setAnswersError(false)
+        setAnswersError(null)
         try {
             const graded = await gradeWrittenAnswer(
                 selectedResult.id,
@@ -349,8 +354,8 @@ export function ResultsPanel({
                         : result
                 )
             )
-        } catch {
-            setAnswersError(true)
+        } catch (caught) {
+            setAnswersError(apiErrorMessage(caught, t, t("answers-load-error")))
         } finally {
             setGradingAnswerId(null)
         }
@@ -359,7 +364,7 @@ export function ResultsPanel({
     async function handlePublishGrades(): Promise<void> {
         if (!selectedResult) return
         setPublishingSessionId(selectedResult.id)
-        setPublishError(false)
+        setPublishError(null)
         try {
             const published = await publishQuizGrades(selectedResult.id)
             setSelectedResult(published)
@@ -368,8 +373,10 @@ export function ResultsPanel({
                     result.id === published.id ? published : result
                 )
             )
-        } catch {
-            setPublishError(true)
+        } catch (caught) {
+            setPublishError(
+                apiErrorMessage(caught, t, t("publish-grades-error"))
+            )
         } finally {
             setPublishingSessionId(null)
         }
@@ -602,7 +609,7 @@ export function ResultsPanel({
                                                         "delete-result"
                                                     )}
                                                     onClick={() => {
-                                                        setDeleteError(false)
+                                                        setDeleteError(null)
                                                         setResultToDelete(
                                                             result
                                                         )
@@ -710,7 +717,7 @@ export function ResultsPanel({
                                 className="text-sm text-destructive"
                                 role="alert"
                             >
-                                {t("export-results-error")}
+                                {exportError}
                             </p>
                         )}
                         <div className="flex justify-end gap-2">
@@ -795,7 +802,7 @@ export function ResultsPanel({
                                     className="w-full text-sm text-destructive"
                                     role="alert"
                                 >
-                                    {t("publish-grades-error")}
+                                    {publishError}
                                 </p>
                             )}
                         </div>
@@ -989,7 +996,7 @@ export function ResultsPanel({
                 participant={selectedParticipant}
                 answers={answers}
                 isLoading={areAnswersLoading}
-                hasError={answersError}
+                error={answersError}
                 scoreDrafts={scoreDrafts}
                 feedbackDrafts={feedbackDrafts}
                 gradingAnswerId={gradingAnswerId}
@@ -998,7 +1005,7 @@ export function ResultsPanel({
                 onClose={() => {
                     setSelectedParticipant(null)
                     setAnswers([])
-                    setAnswersError(false)
+                    setAnswersError(null)
                 }}
                 onScoreDraftChange={(answerId, score) =>
                     setScoreDrafts((current) => ({
@@ -1029,7 +1036,7 @@ export function ResultsPanel({
                 <div className="space-y-4">
                     {deleteError && (
                         <p className="text-sm text-destructive" role="alert">
-                            {t("delete-result-error")}
+                            {deleteError}
                         </p>
                     )}
                     <div className="flex justify-end gap-2">
