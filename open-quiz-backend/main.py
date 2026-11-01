@@ -38,6 +38,7 @@ from app.routers import (
     live,
     makeup,
     problem_reports,
+    question_bank_transfer,
     question_banks,
     quizzes,
     results,
@@ -450,6 +451,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(training.router)
     app.include_router(live.router)
     app.include_router(question_banks.router)
+    app.include_router(question_bank_transfer.router)
     return app
 
 

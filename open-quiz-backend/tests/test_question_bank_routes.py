@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.models import MakeupSession, QuizSession, QuizSessionQuestion
-from app.routers import question_banks
+from app.routers import question_bank_transfer, question_banks
 
 from support import (
     VALID_PNG,
@@ -161,7 +161,8 @@ def test_question_volume_limits(environment, monkeypatch: pytest.MonkeyPatch) ->
     ]
     payload = {"payload": json.dumps(question_payload(choices=choices))}
 
-    monkeypatch.setattr(question_banks, "MAX_IMPORT_IMAGE_BYTES", 1)
+    for module in (question_banks, question_bank_transfer):
+        monkeypatch.setattr(module, "MAX_IMPORT_IMAGE_BYTES", 1)
     assert client.post(url, headers=headers, data=payload).status_code == 413
     imported = client.post(
         "/api/question-banks/import",
