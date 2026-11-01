@@ -5,6 +5,7 @@ import os
 from base64 import b64decode
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from hashlib import sha256
 from importlib.util import find_spec
 from pathlib import Path
@@ -17,6 +18,15 @@ from sqlalchemy import Connection, create_engine, event
 
 from app.config import Settings
 from app.database import postgres_url
+from app.models import (
+    Question,
+    QuestionBank,
+    QuestionChoice,
+    Quiz,
+    QuizAnswer,
+    QuizParticipant,
+    QuizSession,
+)
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.security import refresh_request_proof
 from main import create_app
@@ -385,3 +395,71 @@ def create_professor(
     assert created.status_code == 201
     headers, _ = complete_first_login(client, username, password)
     return created.json(), headers
+
+
+def seeded_exam_session(
+    session: Any,
+    owner_id: int,
+    *,
+    join_code: str,
+    status_value: str,
+    created_at: datetime,
+    with_answer: bool,
+) -> int:
+    """Build a session an owner never came back to close."""
+    bank = QuestionBank(
+        owner_id=owner_id,
+        grade_level="6e",
+        chapter=f"Abandoned {join_code}",
+    )
+    session.add(bank)
+    session.flush()
+    question = Question(
+        question_bank_id=bank.id,
+        prompt="2 + 2 ?",
+        difficulty="easy",
+        answer_mode="single",
+        correction_mode="automatic",
+    )
+    session.add(question)
+    session.flush()
+    choice = QuestionChoice(
+        question_id=question.id,
+        label="4",
+        is_correct=True,
+        points=2.0,
+        position=0,
+    )
+    session.add(choice)
+    quiz = Quiz(owner_id=owner_id, title=f"Quiz {join_code}", question_count=1)
+    session.add(quiz)
+    session.flush()
+    quiz_session = QuizSession(
+        quiz_id=quiz.id,
+        class_name="Abandoned class",
+        join_code=join_code,
+        status=status_value,
+        created_at=created_at,
+        started_at=created_at,
+    )
+    session.add(quiz_session)
+    session.flush()
+    participant = QuizParticipant(
+        session_id=quiz_session.id,
+        student_identifier=f"pupil.{join_code.lower()}",
+        student_display_name="Abandoned Pupil",
+        current_position=0,
+    )
+    session.add(participant)
+    session.flush()
+    if with_answer:
+        session.add(
+            QuizAnswer(
+                session_id=quiz_session.id,
+                participant_id=participant.id,
+                question_id=question.id,
+                answer_data=json.dumps({"selected_choice_ids": [choice.id]}),
+            )
+        )
+    session.flush()
+    return quiz_session.id

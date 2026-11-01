@@ -1,5 +1,6 @@
-"""Live quiz WebSocket paths outside the main flows."""
+"""Live quiz WebSockets for teachers and students."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,11 +11,16 @@ from fastapi import status
 from sqlalchemy import update
 from starlette.websockets import WebSocketDisconnect
 
-from app.models import QuizSession
+from app.live_quiz import LiveQuizHub
+from app.models import (
+    QuizSession,
+)
 from app.routers import live, quizzes
+from app.routers import live as live_router
 
 from support import (
     FRONTEND_ORIGIN,
+    assert_student_exam_payload_hides_answers,
     exam_environment,
     launch_and_join,
     make_client,
@@ -267,3 +273,293 @@ def test_quiz_updates_skip_owners_that_no_longer_exist(environment) -> None:
 
     assert published == ["quiz-session:1", "student-session:ABCDEF"]
     assert client is not None
+
+
+def test_live_quiz_websockets_push_session_transitions(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "live-quiz.db")) as client:
+        environment = exam_environment(client)
+        launched, participant_headers = launch_and_join(client, environment)
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+        participant_token = participant_headers["X-Quiz-Token"]
+
+        with client.websocket_connect(
+            f"/api/quizzes/live/teacher/sessions/{launched['id']}",
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as teacher_socket:
+            teacher_socket.send_json({"token": teacher_token})
+            teacher_state = teacher_socket.receive_json()
+            assert teacher_state["type"] == "session"
+            assert teacher_state["data"]["status"] == "waiting"
+            assert teacher_state["data"]["participant_count"] == 1
+
+            with client.websocket_connect(
+                f"/api/quizzes/live/student/sessions/{launched['join_code']}",
+                headers={"Origin": FRONTEND_ORIGIN},
+            ) as student_socket:
+                student_socket.send_json({"token": participant_token})
+                student_state = student_socket.receive_json()
+                assert student_state["type"] == "session"
+                assert student_state["data"]["status"] == "waiting"
+
+                started = client.post(
+                    f"/api/quizzes/sessions/{launched['id']}/start",
+                    headers=environment["teacher_headers"],
+                )
+                assert started.status_code == 200
+
+                assert teacher_socket.receive_json()["data"]["status"] == "in_progress"
+                pushed_student_state = student_socket.receive_json()["data"]
+                assert pushed_student_state["status"] == "in_progress"
+                assert pushed_student_state["question"] is not None
+                assert_student_exam_payload_hides_answers(pushed_student_state)
+
+
+def test_live_teacher_websockets_push_student_progress(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "live-quiz-progress.db")) as client:
+        environment = exam_environment(client)
+        bank_id = environment["question"]["question_bank_id"]
+        second_question = client.post(
+            f"/api/question-banks/{bank_id}/questions",
+            headers=environment["teacher_headers"],
+            data={
+                "payload": json.dumps(
+                    {
+                        "prompt": "Two plus two?",
+                        "points": 2,
+                        "difficulty": "easy",
+                        "answer_mode": "single",
+                        "answer_mode_disclosed": True,
+                        "choices": [
+                            {"label": "Four", "is_correct": True, "points": 2},
+                            {"label": "Five", "is_correct": False, "points": 0},
+                        ],
+                    }
+                )
+            },
+        )
+        assert second_question.status_code == status.HTTP_201_CREATED
+        quiz = environment["quiz"]
+        updated_quiz = client.post(
+            f"/api/quizzes/{quiz['id']}/update",
+            headers=environment["teacher_headers"],
+            json={
+                "title": quiz["title"],
+                "source_language": quiz["source_language"],
+                "question_bank_ids": [bank_id],
+                "duration_seconds": quiz["duration_seconds"],
+                "allow_previous_questions": quiz["allow_previous_questions"],
+                "allow_negative_points": quiz["allow_negative_points"],
+                "same_questions_for_all": quiz["same_questions_for_all"],
+                "easy_question_count": 2,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        )
+        assert updated_quiz.status_code == status.HTTP_200_OK
+        launched, participant_headers = launch_and_join(client, environment)
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+
+        with (
+            client.websocket_connect(
+                "/api/quizzes/live/teacher/sessions",
+                headers={"Origin": FRONTEND_ORIGIN},
+            ) as sessions_socket,
+            client.websocket_connect(
+                f"/api/quizzes/live/teacher/sessions/{launched['id']}",
+                headers={"Origin": FRONTEND_ORIGIN},
+            ) as session_socket,
+        ):
+            sessions_socket.send_json({"token": teacher_token})
+            session_socket.send_json({"token": teacher_token})
+            sessions_socket.receive_json()
+            session_socket.receive_json()
+
+            started = client.post(
+                f"/api/quizzes/sessions/{launched['id']}/start",
+                headers=environment["teacher_headers"],
+            )
+            assert started.status_code == status.HTTP_200_OK
+            sessions_socket.receive_json()
+            session_socket.receive_json()
+
+            student_state_url = f"/api/quizzes/student/sessions/{launched['join_code']}"
+            student_state = client.get(
+                student_state_url,
+                headers=participant_headers,
+            ).json()
+            question = student_state["question"]
+            answer_payload = (
+                {"written_answer": "Student response"}
+                if question["answer_mode"] == "written"
+                else {"selected_choice_ids": [question["choices"][0]["id"]]}
+            )
+            submitted = client.post(
+                f"{student_state_url}/answer",
+                headers=participant_headers,
+                json=answer_payload,
+            )
+            assert submitted.status_code == status.HTTP_200_OK
+
+            session_update = session_socket.receive_json()
+            assert session_update["type"] == "session"
+            assert session_update["data"]["participants"][0]["answered_count"] == 1
+
+            sessions_update = sessions_socket.receive_json()
+            assert sessions_update["type"] == "active_sessions"
+            assert sessions_update["data"][0]["participants"][0]["answered_count"] == 1
+
+
+def test_live_teacher_session_pushes_student_join(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(settings_for(tmp_path / "live-student-join.db")) as client:
+        environment = exam_environment(client)
+        launched = client.post(
+            f"/api/quizzes/{environment['quiz']['id']}/launch",
+            headers=environment["teacher_headers"],
+            json={"class_id": environment["student_class"]["id"]},
+        )
+        assert launched.status_code == status.HTTP_201_CREATED
+        launched_session = launched.json()
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+        monkeypatch.setattr(
+            "app.routers.live.LIVE_TEACHER_RECONCILIATION_SECONDS",
+            0.01,
+        )
+
+        with client.websocket_connect(
+            f"/api/quizzes/live/teacher/sessions/{launched_session['id']}",
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as teacher_socket:
+            teacher_socket.send_json({"token": teacher_token})
+            initial = teacher_socket.receive_json()
+            assert initial["type"] == "session"
+            assert initial["data"]["participants"] == []
+
+            # Simulate a notification handled by another worker. The teacher
+            # socket must still reconcile its snapshot from the shared DB.
+            monkeypatch.setattr(
+                client.app.state.live_quiz_hub,
+                "publish",
+                lambda _topic: None,
+            )
+            joined = client.post(
+                "/api/quizzes/join",
+                headers=environment["student_headers"],
+                json={"join_code": launched_session["join_code"]},
+            )
+            assert joined.status_code == status.HTTP_201_CREATED
+
+            pushed = teacher_socket.receive_json()
+            assert pushed["type"] == "session"
+            assert pushed["data"]["participant_count"] == 1
+            assert [
+                participant["student_identifier"]
+                for participant in pushed["data"]["participants"]
+            ] == [environment["account"]["identifier"]]
+
+
+def test_live_teacher_session_list_pushes_launch_and_removal(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "live-session-list.db")) as client:
+        environment = exam_environment(client)
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+
+        with client.websocket_connect(
+            "/api/quizzes/live/teacher/sessions",
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as socket:
+            socket.send_json({"token": teacher_token})
+            initial = socket.receive_json()
+            assert initial == {"type": "active_sessions", "data": []}
+
+            launched = client.post(
+                f"/api/quizzes/{environment['quiz']['id']}/launch",
+                headers=environment["teacher_headers"],
+                json={"class_id": environment["student_class"]["id"]},
+            )
+            assert launched.status_code == status.HTTP_201_CREATED
+            launched_session = launched.json()
+            pushed = socket.receive_json()
+            assert pushed["type"] == "active_sessions"
+            assert [item["id"] for item in pushed["data"]] == [launched_session["id"]]
+
+            cancelled = client.post(
+                f"/api/quizzes/sessions/{launched_session['id']}/cancel",
+                headers=environment["teacher_headers"],
+            )
+            assert cancelled.status_code == status.HTTP_204_NO_CONTENT
+            assert socket.receive_json() == {
+                "type": "active_sessions",
+                "data": [],
+            }
+
+
+def test_live_quiz_websocket_rejects_untrusted_origin_and_token(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "live-quiz-auth.db")) as client:
+        environment = exam_environment(client)
+        launched, _ = launch_and_join(client, environment)
+        path = f"/api/quizzes/live/teacher/sessions/{launched['id']}"
+
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect(
+                path,
+                headers={"Origin": "https://untrusted.example"},
+            ),
+        ):
+            pass
+
+        with client.websocket_connect(
+            path,
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as socket:
+            socket.send_json({"token": "invalid-token"})
+            with pytest.raises(WebSocketDisconnect) as rejected:
+                socket.receive_json()
+            assert rejected.value.code == status.WS_1008_POLICY_VIOLATION
+
+
+def test_live_socket_authentication_gate_is_bounded() -> None:
+    hub = LiveQuizHub(max_pending_authentications=2)
+
+    assert hub.begin_authentication()
+    assert hub.begin_authentication()
+    assert not hub.begin_authentication()
+
+    hub.end_authentication()
+    assert hub.begin_authentication()
+
+
+def test_idle_live_socket_still_receives_a_keepalive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every live endpoint reconciles on a timer, so a quiet socket must ping.
+
+    Without it an idle connection puts nothing on the wire, and a proxy that
+    drops it leaves the dashboard stale behind a close the client never sees.
+    """
+    monkeypatch.setattr(live_router, "LIVE_HEARTBEAT_SECONDS", 0.2)
+    monkeypatch.setattr(live_router, "LIVE_TEACHER_RECONCILIATION_SECONDS", 0.1)
+    with make_client(settings_for(tmp_path / "live-heartbeat.db")) as client:
+        environment = exam_environment(client)
+        teacher_token = environment["teacher_headers"]["Authorization"].removeprefix(
+            "Bearer "
+        )
+        with client.websocket_connect(
+            "/api/quizzes/live/teacher/sessions",
+            headers={"Origin": FRONTEND_ORIGIN},
+        ) as socket:
+            socket.send_json({"token": teacher_token})
+            assert socket.receive_json() == {"type": "active_sessions", "data": []}
+            # Nothing changes from here on, so only a keepalive can arrive.
+            assert socket.receive_json() == {"type": "ping"}
