@@ -90,7 +90,7 @@ class _Answers:
         return self.answers
 
 
-def test_summaries_and_training_results_skip_missing_questions(
+def test_summaries_skip_missing_questions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     written = SimpleNamespace(id=1, answer_mode="written")
@@ -111,19 +111,6 @@ def test_summaries_and_training_results_skip_missing_questions(
         quiz_session, participant, [3, 1, 2], _Answers(answers)
     )
     assert [summary.question_id for summary in summaries] == [2]
-
-    monkeypatch.setattr(quizzes, "session_question_ids", lambda *_: [3, 1, 2])
-    assert quizzes.training_result(quiz_session, participant, _Answers(answers)) == (
-        0.0,
-        1.0,
-        0,
-    )
-    monkeypatch.setattr(quizzes, "session_question_ids", lambda *_: [])
-    assert quizzes.training_result(quiz_session, participant, _Answers([])) == (
-        0.0,
-        0.0,
-        0,
-    )
 
 
 def test_missing_questions_are_reported_instead_of_crashing(

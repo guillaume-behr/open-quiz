@@ -40,20 +40,16 @@ from app.models import (
 from app.question_responses import load_question_records
 from app.routers.quizzes import (
     VIOLATION_DEDUPLICATION_SECONDS,
-    accessible_question_positions,
     active_exam_bank_ids_for_class,
     answer_review_enabled,
     as_utc,
     authenticated_participant,
-    current_question_id,
     enforce_public_rate_limit,
     expire_quiz_session,
     finish_when_nobody_can_answer,
-    last_answered_question_id,
     participant_token_hash,
     publish_quiz_update,
     reject_quiz_join,
-    session_question_ids,
     student_state_response,
 )
 from app.routers.student_auth import current_student
@@ -68,6 +64,12 @@ from app.schemas import (
 )
 from app.services.grading import (
     decoded_answer_data,
+)
+from app.services.question_assignments import (
+    accessible_question_positions,
+    current_question_id,
+    last_answered_question_id,
+    session_question_ids,
 )
 from app.session_status import ACTIVE_SESSION_STATUSES
 

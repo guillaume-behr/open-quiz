@@ -39,7 +39,6 @@ from app.routers.quizzes import (
     participant_token_hash,
     student_state_response,
     training_profile_quiz,
-    training_result,
 )
 from app.routers.student_auth import current_student
 from app.schemas import (
@@ -48,6 +47,9 @@ from app.schemas import (
     TrainingHistoryItem,
     TrainingQuestionBankItem,
     TrainingQuestionBankSelection,
+)
+from app.services.grading import (
+    training_result,
 )
 from app.services.question_draws import (
     MAX_TRAINING_QUESTIONS,
