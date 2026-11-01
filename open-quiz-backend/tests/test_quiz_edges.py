@@ -17,7 +17,7 @@ from app.models import (
     QuizSessionStudentQuestion,
     TrainingQuizProfile,
 )
-from app.routers import live, quizzes
+from app.routers import live, quizzes, results
 
 from support import (
     FRONTEND_ORIGIN,
@@ -314,7 +314,7 @@ def test_student_history_skips_questions_it_cannot_load(
         f"/api/quizzes/sessions/{launched['id']}/publish-grades",
         headers=environment["teacher_headers"],
     )
-    monkeypatch.setattr(quizzes, "load_question_records", lambda *_: ({}, {}))
+    monkeypatch.setattr(results, "load_question_records", lambda *_: ({}, {}))
     history = client.get(
         "/api/quizzes/student/results", headers=environment["student_headers"]
     ).json()

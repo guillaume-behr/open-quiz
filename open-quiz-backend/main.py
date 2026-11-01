@@ -39,6 +39,7 @@ from app.routers import (
     problem_reports,
     question_banks,
     quizzes,
+    results,
     student_auth,
     students,
     training,
@@ -429,6 +430,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(students.router)
     app.include_router(student_auth.router)
     app.include_router(grade_levels.router)
+    # Before quizzes: /sessions/{session_id} would capture /sessions/results.
+    app.include_router(results.router)
     app.include_router(quizzes.router)
     app.include_router(makeup.router)
     app.include_router(training.router)
