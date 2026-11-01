@@ -76,7 +76,6 @@ def test_helpers_read_legacy_session_settings() -> None:
     assert ends_at.tzinfo is UTC
     assert ends_at > started_at.replace(tzinfo=UTC) + timedelta(seconds=600)
     assert quizzes.answer_review_enabled(legacy, quiz) is False
-    assert quizzes.question_maximum_scores([], session=None) == {}
 
     missing_class = SimpleNamespace(class_id=1, class_name="Archived class")
     session = SimpleNamespace(get=lambda *_: None)

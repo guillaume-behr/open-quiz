@@ -48,7 +48,6 @@ from app.routers.quizzes import (
     load_session_question_assignments,
     owned_quiz_session,
     purge_expired_quiz_results,
-    question_maximum_scores,
     safe_spreadsheet_cell,
     session_question_ids,
     session_question_points,
@@ -64,6 +63,7 @@ from app.schemas import (
 )
 from app.services.grading import (
     decoded_answer_data,
+    question_maximum_scores,
     selected_choice_ids,
 )
 
