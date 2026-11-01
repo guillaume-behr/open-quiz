@@ -32,6 +32,7 @@ from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
 from app.routers import (
     admin,
     auth,
+    class_imports,
     classes,
     grade_levels,
     health,
@@ -40,6 +41,7 @@ from app.routers import (
     problem_reports,
     question_bank_transfer,
     question_banks,
+    questions,
     quizzes,
     results,
     student_auth,
@@ -439,6 +441,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(admin.router)
+    app.include_router(class_imports.router)
     app.include_router(classes.router)
     app.include_router(students.router)
     app.include_router(student_auth.router)
@@ -451,6 +454,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(training.router)
     app.include_router(live.router)
     app.include_router(question_banks.router)
+    app.include_router(questions.router)
     app.include_router(question_bank_transfer.router)
     return app
 

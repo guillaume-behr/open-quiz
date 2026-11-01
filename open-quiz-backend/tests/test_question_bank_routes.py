@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.models import MakeupSession, QuizSession, QuizSessionQuestion
-from app.routers import question_bank_transfer, question_banks
+from app.routers import question_bank_transfer, questions
 
 from support import (
     VALID_PNG,
@@ -137,7 +137,7 @@ def test_question_images_are_validated(
             == status_code
         )
 
-    monkeypatch.setattr(question_banks, "MAX_IMAGE_BYTES", len(VALID_PNG) - 1)
+    monkeypatch.setattr(questions, "MAX_IMAGE_BYTES", len(VALID_PNG) - 1)
     too_large = client.post(
         url,
         headers=headers,
@@ -161,7 +161,7 @@ def test_question_volume_limits(environment, monkeypatch: pytest.MonkeyPatch) ->
     ]
     payload = {"payload": json.dumps(question_payload(choices=choices))}
 
-    for module in (question_banks, question_bank_transfer):
+    for module in (questions, question_bank_transfer):
         monkeypatch.setattr(module, "MAX_IMPORT_IMAGE_BYTES", 1)
     assert client.post(url, headers=headers, data=payload).status_code == 413
     imported = client.post(
@@ -175,7 +175,7 @@ def test_question_volume_limits(environment, monkeypatch: pytest.MonkeyPatch) ->
     )
     assert imported.status_code == 413
 
-    monkeypatch.setattr(question_banks, "MAX_QUESTIONS_PER_BANK", 1)
+    monkeypatch.setattr(questions, "MAX_QUESTIONS_PER_BANK", 1)
     full = client.post(
         url, headers=headers, data={"payload": json.dumps(question_payload())}
     )
@@ -261,7 +261,7 @@ def test_question_updates_cover_every_branch(
     assert kept["id"] in [choice["id"] for choice in updated["choices"]]
     assert removed["id"] not in [choice["id"] for choice in updated["choices"]]
 
-    monkeypatch.setattr(question_banks, "MAX_IMPORT_IMAGE_BYTES", 1)
+    monkeypatch.setattr(questions, "MAX_IMPORT_IMAGE_BYTES", 1)
     too_large = client.post(
         url,
         headers=headers,
