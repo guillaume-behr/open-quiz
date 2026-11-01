@@ -16,14 +16,18 @@ def http_exceptions() -> list[tuple[str, str, ast.Call]]:
     for path in [*sorted((BACKEND / "app").rglob("*.py")), BACKEND / "main.py"]:
         relative = path.relative_to(BACKEND).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        for function in ast.walk(tree):
-            if not isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            for node in ast.walk(function):
-                if isinstance(node, ast.Call) and (
-                    getattr(node.func, "id", None) == "HTTPException"
-                ):
-                    found.append((relative, function.name, node))
+        functions = (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        )
+        found.extend(
+            (relative, function.name, node)
+            for function in functions
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call)
+            and getattr(node.func, "id", None) == "HTTPException"
+        )
     return found
 
 

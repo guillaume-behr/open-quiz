@@ -1,6 +1,6 @@
 <h1><img src=".github/assets/open-quiz-wordmark.svg" alt="Open Quiz" width="230"></h1>
 
-[![CI](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml/badge.svg)](https://github.com/guillaume-behr/open-quiz/actions/workflows/security.yml)
+[![CI](https://github.com/guillaume-behr/open-quiz/actions/workflows/ci.yml/badge.svg)](https://github.com/guillaume-behr/open-quiz/actions/workflows/ci.yml)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
 Plateforme libre et auto-hébergeable permettant de créer des quiz,

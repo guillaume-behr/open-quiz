@@ -1,4 +1,4 @@
-name: Security checks
+name: CI
 
 on:
   workflow_dispatch:
@@ -42,14 +42,13 @@ jobs:
         working-directory: .
         run: |
           deployed=$(sed -n 's/^ *image: *\(postgres:.*\)$/\1/p' docker-compose.yml)
-          tested=$(sed -n 's/^ *image: *\(postgres:.*\)$/\1/p' .github/workflows/security.yml)
+          tested=$(sed -n 's/^ *image: *\(postgres:.*\)$/\1/p' .github/workflows/ci.yml)
           if [ -z "$deployed" ] || [ "$deployed" != "$tested" ]; then
             echo "::error::CI tests $tested but docker-compose.yml deploys $deployed"
             exit 1
           fi
       - run: uv sync --frozen --dev
       - run: uv run --frozen ruff check app tests main.py scripts migrations
-      - run: uv run --frozen ruff check --select S app main.py scripts migrations
       - run: uv run --frozen ruff format --check app tests main.py scripts migrations
       - name: Run backend tests
         env:
@@ -75,7 +74,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
       - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6.0.2
         with:
-          version: 11.15.1
+          package_json_file: open-quiz-frontend/package.json
           run_install: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
         with:
@@ -100,7 +99,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
       - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6.0.2
         with:
-          version: 11.15.1
+          package_json_file: open-quiz-frontend/package.json
           run_install: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
         with:

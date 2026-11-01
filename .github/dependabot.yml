@@ -1,5 +1,5 @@
 # Dependabot proposes dependency updates as pull requests, tested by the
-# Security checks workflow like any other change. Minor and patch updates are
+# CI workflow like any other change. Minor and patch updates are
 # grouped per directory to keep the number of pull requests small; security
 # updates still arrive on their own.
 version: 2
@@ -55,5 +55,5 @@ updates:
       - dependency-name: postgres
         update-types: [version-update:semver-major]
     # The backend job tests the same image and fails until its
-    # services.postgres.image in .github/workflows/security.yml is updated
+    # services.postgres.image in .github/workflows/ci.yml is updated
     # to match this pull request.

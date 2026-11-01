@@ -608,7 +608,8 @@ def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
         )
         assert refreshed.status_code == 200
         second_refresh = client.cookies.get(REFRESH_COOKIE)
-        assert second_refresh and second_refresh != first_refresh
+        assert second_refresh
+        assert second_refresh != first_refresh
         assert refreshed.json()["refresh_proof"] == refresh_request_proof(
             second_refresh,
             JWT_SECRET,

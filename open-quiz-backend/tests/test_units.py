@@ -26,7 +26,7 @@ from app.config import (
     validate_optional_public_url,
 )
 from app.database import postgres_url
-from app.images import InvalidImage, normalize_image
+from app.images import InvalidImageError, normalize_image
 from app.live_quiz import LiveQuizHub, websocket_origin_allowed
 from app.middleware import RequestBodyLimitMiddleware
 from app.question_responses import load_question_records
@@ -372,7 +372,7 @@ def test_normalized_image_must_fit_the_size_limit(
         "save",
         lambda self, output, **_: output.write(b"x" * (len(VALID_PNG) + 1)),
     )
-    with pytest.raises(InvalidImage, match="trop volumineuse"):
+    with pytest.raises(InvalidImageError, match="trop volumineuse"):
         normalize_image(VALID_PNG, "image/png")
 
 
@@ -658,7 +658,8 @@ def test_rotate_local_secrets_replaces_secrets_and_revokes_sessions(
 
     rotated = env_file.read_text(encoding="utf-8").splitlines()
     assert rotated[0] == "# comment"
-    assert rotated[1].startswith("JWT_SECRET=") and rotated[1] != "JWT_SECRET=old"
+    assert rotated[1].startswith("JWT_SECRET=")
+    assert rotated[1] != "JWT_SECRET=old"
     assert rotated[2] == "APP_ENV=test"
     assert rotated[3].startswith("ADMIN_PASSWORD=")
     backups = list(tmp_path.glob(".env.*.bak"))

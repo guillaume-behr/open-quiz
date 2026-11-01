@@ -50,10 +50,14 @@ def connect(client, path: str):
     return client.websocket_connect(path, headers={"Origin": FRONTEND_ORIGIN})
 
 
+def receive_until_closed(socket) -> None:
+    while True:
+        socket.receive_json()
+
+
 def assert_closed(socket, code: int = status.WS_1008_POLICY_VIOLATION) -> None:
     with pytest.raises(WebSocketDisconnect) as closed:
-        while True:
-            socket.receive_json()
+        receive_until_closed(socket)
     assert closed.value.code == code
 
 

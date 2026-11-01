@@ -27,7 +27,7 @@ from app.errors import ErrorCode, api_error
 from app.images import (
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
-    InvalidImage,
+    InvalidImageError,
     normalize_image,
 )
 from app.live_quiz import (
@@ -89,7 +89,7 @@ def normalized_uploaded_image(
         return None, None
     try:
         return normalize_image(image_data, image.content_type)
-    except InvalidImage as error:
+    except InvalidImageError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=api_error(ErrorCode.IMAGE_INVALID, str(error)),
@@ -269,7 +269,7 @@ def decode_image_payload(
         )
     try:
         return normalize_image(image_data, image.content_type)
-    except InvalidImage as error:
+    except InvalidImageError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=api_error(ErrorCode.IMAGE_INVALID, str(error)),

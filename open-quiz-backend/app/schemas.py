@@ -396,8 +396,7 @@ class QuestionChoiceCreate(BaseModel):
     @field_validator("label")
     @classmethod
     def normalize_label(cls, value: str) -> str:
-        normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
-        return normalized
+        return value.replace("\r\n", "\n").replace("\r", "\n").strip()
 
     @field_validator("code_content")
     @classmethod
