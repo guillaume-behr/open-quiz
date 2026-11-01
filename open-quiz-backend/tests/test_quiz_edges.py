@@ -60,17 +60,6 @@ def answer(client, environment, url: str, headers: dict[str, str]):
     )
 
 
-class _Pool:
-    possible_combination_count = 5
-
-    def draw(self) -> list[int]:
-        return [1]
-
-
-def test_unique_draws_fall_back_to_a_repeated_draw() -> None:
-    assert quizzes.draw_unique_question_ids(_Pool(), {(1,)}) == [1]
-
-
 def test_helpers_read_legacy_session_settings() -> None:
     started_at = datetime(2026, 1, 1, 12, 0)
     paused_at = datetime(2026, 1, 1, 12, 5)

@@ -17,7 +17,7 @@ from app.models import (
     Student,
     StudentAccount,
 )
-from app.routers import quizzes
+from app.services import question_draws
 
 from support import (
     VALID_PNG,
@@ -676,7 +676,7 @@ def test_training_feedback_and_results_cover_written_and_empty_banks(
     environment, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Keep the drawn order stable: the written question comes first.
-    monkeypatch.setattr(quizzes.randomizer, "shuffle", lambda items: None)
+    monkeypatch.setattr(question_draws.randomizer, "shuffle", lambda items: None)
     client = environment["client"]
     headers = environment["teacher_headers"]
     student_headers = environment["student_headers"]

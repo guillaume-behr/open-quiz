@@ -33,10 +33,8 @@ from app.models import (
 )
 from app.question_bank_summaries import load_question_bank_summaries
 from app.routers.quizzes import (
-    MAX_TRAINING_QUESTIONS,
     active_exam_bank_ids_for_class,
     discard_previous_training_sessions,
-    draw_training_question_ids,
     generate_join_code,
     participant_token_hash,
     student_state_response,
@@ -50,6 +48,10 @@ from app.schemas import (
     TrainingHistoryItem,
     TrainingQuestionBankItem,
     TrainingQuestionBankSelection,
+)
+from app.services.question_draws import (
+    MAX_TRAINING_QUESTIONS,
+    draw_training_question_ids,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])

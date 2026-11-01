@@ -46,7 +46,6 @@ from app.routers.quizzes import (
     as_utc,
     delete_makeup_session_records,
     discard_active_training_sessions,
-    draw_unique_question_ids,
     enforce_public_rate_limit,
     generate_join_code,
     participant_token_hash,
@@ -54,8 +53,6 @@ from app.routers.quizzes import (
     publish_makeup_update,
     publish_quiz_topics,
     publish_quiz_update,
-    question_draw_pool,
-    quiz_bank_ids,
     quiz_responses,
     session_response,
     student_state_response,
@@ -71,6 +68,11 @@ from app.schemas import (
     QuizJoin,
     QuizResponse,
     StudentQuizJoinResponse,
+)
+from app.services.question_draws import (
+    draw_unique_question_ids,
+    question_draw_pool,
+    quiz_bank_ids,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
