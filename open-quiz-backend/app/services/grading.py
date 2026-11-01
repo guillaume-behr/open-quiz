@@ -2,7 +2,8 @@
 
 selected_choice_score is the single scoring rule for choice questions;
 question_maximum_scores derives each question's reachable maximum from that
-same rule, and compute_final_scores applies it to every answer of a session.
+same rule, compute_final_scores applies it to every answer of a session, and
+training_result totals a training attempt.
 """
 
 import json
@@ -20,6 +21,8 @@ from app.models import (
     QuizSessionQuestion,
     QuizSessionStudentQuestion,
 )
+from app.question_responses import load_question_records
+from app.services.question_assignments import session_question_ids
 
 
 def selected_choice_score(
@@ -206,3 +209,56 @@ def participant_maximum_scores(
             2,
         )
     return result
+
+
+def session_question_points(
+    quiz_session: QuizSession,
+    session: Session,
+    participant: QuizParticipant,
+) -> dict[int, float]:
+    question_ids = session_question_ids(quiz_session, session, participant)
+    return question_maximum_scores(question_ids, session)
+
+
+def training_result(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    session: Session,
+) -> tuple[float, float, int]:
+    question_ids = session_question_ids(quiz_session, session, participant)
+    if not question_ids:
+        return 0.0, 0.0, 0
+    questions, choices_by_question = load_question_records(question_ids, session)
+    answers = {
+        answer.question_id: answer
+        for answer in session.scalars(
+            select(QuizAnswer).where(
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == participant.id,
+            )
+        )
+    }
+    score = 0.0
+    maximum = 0.0
+    pending = 0
+    maximums = question_maximum_scores(question_ids, session)
+    for question_id in question_ids:
+        question = questions.get(question_id)
+        if question is None:
+            continue
+        if question.answer_mode == "written":
+            if question_id in answers:
+                pending += 1
+            continue
+        choices = choices_by_question[question_id]
+        maximum += maximums.get(question_id, 0)
+        answer = answers.get(question_id)
+        if answer is None:
+            continue
+        selected_ids = selected_choice_ids(answer)
+        score += selected_choice_score(
+            choices,
+            selected_ids,
+            allow_negative_points=False,
+        )
+    return round(score, 2), round(maximum, 2), pending

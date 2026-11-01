@@ -42,15 +42,11 @@ from app.models import (
 from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
 from app.question_responses import load_question_records
 from app.routers.quizzes import (
-    assigned_question_ids,
     expire_owned_quiz_sessions,
     finished_session_responses,
-    load_session_question_assignments,
     owned_quiz_session,
     purge_expired_quiz_results,
     safe_spreadsheet_cell,
-    session_question_ids,
-    session_question_points,
     session_response,
 )
 from app.routers.student_auth import current_student
@@ -65,6 +61,12 @@ from app.services.grading import (
     decoded_answer_data,
     question_maximum_scores,
     selected_choice_ids,
+    session_question_points,
+)
+from app.services.question_assignments import (
+    assigned_question_ids,
+    load_session_question_assignments,
+    session_question_ids,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
