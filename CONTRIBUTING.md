@@ -129,6 +129,9 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
 - validez les entrées côté backend, même si le frontend les contrôle déjà ;
 - vérifiez les permissions avec les rôles administrateur, enseignant et élève ;
 - préservez l’atomicité des imports et opérations concurrentes ;
+- placez la logique métier réutilisable dans `open-quiz-backend/app/services/`,
+  sans dépendance à FastAPI : un service lève une exception métier, que
+  `main.py` traduit en réponse HTTP ;
 - accompagnez toute évolution du schéma PostgreSQL d’une migration Alembic
   qui préserve les données des instances en service, et des tests
   correspondants (voir

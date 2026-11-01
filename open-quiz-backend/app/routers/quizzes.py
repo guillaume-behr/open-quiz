@@ -2,7 +2,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from math import ceil, comb
+from math import ceil
 from random import SystemRandom
 from statistics import median
 from string import ascii_uppercase, digits
@@ -79,6 +79,13 @@ from app.schemas import (
     StudentQuizSessionResponse,
     StudentQuizStateResponse,
 )
+from app.services.question_draws import (
+    difficulty_counts_for_banks,
+    draw_question_ids,
+    draw_unique_question_ids,
+    question_draw_pool,
+    quiz_bank_ids,
+)
 from app.session_status import ACTIVE_SESSION_STATUSES
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
@@ -86,7 +93,6 @@ randomizer = SystemRandom()
 JOIN_CODE_ALPHABET = ascii_uppercase + digits
 VIOLATION_DEDUPLICATION_SECONDS = 2
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
-MAX_TRAINING_QUESTIONS = 200
 
 
 def publish_quiz_update(
@@ -186,14 +192,6 @@ def reject_quiz_join(
     raise quiz_join_rejected()
 
 
-def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
-    return {
-        "easy": payload.easy_question_count,
-        "medium": payload.medium_question_count,
-        "hard": payload.hard_question_count,
-    }
-
-
 def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Quiz:
     quiz = session.scalar(
         select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
@@ -204,16 +202,6 @@ def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Qu
             detail="Quiz introuvable",
         )
     return quiz
-
-
-def quiz_bank_ids(quiz_id: int, session: DbSession) -> list[int]:
-    return list(
-        session.scalars(
-            select(QuizQuestionBank.question_bank_id).where(
-                QuizQuestionBank.quiz_id == quiz_id
-            )
-        )
-    )
 
 
 def validate_bank_selection(
@@ -236,114 +224,6 @@ def validate_bank_selection(
         )
     difficulty_counts_for_banks(payload, payload.question_bank_ids, session)
     return banks
-
-
-def available_difficulty_counts(
-    bank_ids: list[int],
-    session: DbSession,
-) -> dict[str, int]:
-    return dict(
-        session.execute(
-            select(Question.difficulty, func.count(Question.id))
-            .where(Question.question_bank_id.in_(bank_ids))
-            .group_by(Question.difficulty)
-        ).all()
-    )
-
-
-def difficulty_counts_for_banks(
-    payload: Quiz | QuizCreate,
-    bank_ids: list[int],
-    session: DbSession,
-) -> dict[str, int]:
-    available = available_difficulty_counts(bank_ids, session)
-    requested = difficulty_counts(payload)
-    unavailable = [
-        difficulty
-        for difficulty, count in requested.items()
-        if count > available.get(difficulty, 0)
-    ]
-    if unavailable:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                "Nombre de questions insuffisant pour une ou plusieurs difficultés "
-                "dans les banques sélectionnées"
-            ),
-        )
-    return requested
-
-
-class QuestionDrawPool:
-    """The candidate questions for one quiz, loaded once per launch.
-
-    Every student in a launch draws from the same pool, so reading it once
-    keeps a launch at a constant number of queries instead of a handful per
-    student per attempt.
-    """
-
-    def __init__(self, requested: dict[str, int], candidates: dict[str, list[int]]):
-        self.requested = requested
-        self.candidates = candidates
-
-    @property
-    def possible_combination_count(self) -> int:
-        total = 1
-        for difficulty, count in self.requested.items():
-            total *= comb(len(self.candidates.get(difficulty, ())), count)
-        return total
-
-    def draw(self) -> list[int]:
-        selected_ids: list[int] = []
-        for difficulty, count in self.requested.items():
-            if count > 0:
-                selected_ids.extend(
-                    randomizer.sample(self.candidates[difficulty], count)
-                )
-        randomizer.shuffle(selected_ids)
-        return selected_ids
-
-
-def question_draw_pool(quiz: Quiz, session: DbSession) -> QuestionDrawPool:
-    bank_ids = quiz_bank_ids(quiz.id, session)
-    requested = difficulty_counts_for_banks(quiz, bank_ids, session)
-    candidates = {
-        difficulty: list(
-            session.scalars(
-                select(Question.id).where(
-                    Question.question_bank_id.in_(bank_ids),
-                    Question.difficulty == difficulty,
-                )
-            )
-        )
-        for difficulty, count in requested.items()
-        if count > 0
-    }
-    return QuestionDrawPool(requested, candidates)
-
-
-def draw_question_ids(quiz: Quiz, session: DbSession) -> list[int]:
-    return question_draw_pool(quiz, session).draw()
-
-
-def draw_unique_question_ids(
-    pool: QuestionDrawPool,
-    used_draws: set[tuple[int, ...]],
-) -> list[int]:
-    # Once every distinct combination is taken, retrying can only fail, so stop
-    # searching and let students share a draw.
-    if used_draws and len(used_draws) >= pool.possible_combination_count:
-        return pool.draw()
-
-    for _ in range(200):
-        question_ids = pool.draw()
-        signature = tuple(sorted(question_ids))
-        if signature not in used_draws:
-            used_draws.add(signature)
-            return question_ids
-    # If the banks contain only one possible combination, every student still
-    # receives an independent draw even though the resulting sets must match.
-    return pool.draw()
 
 
 def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:
@@ -453,14 +333,6 @@ def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
         if quiz is None:
             raise
     return quiz
-
-
-def draw_training_question_ids(bank_id: int, session: DbSession) -> list[int]:
-    question_ids = list(
-        session.scalars(select(Question.id).where(Question.question_bank_id == bank_id))
-    )
-    randomizer.shuffle(question_ids)
-    return question_ids[:MAX_TRAINING_QUESTIONS]
 
 
 def owned_quiz_session(

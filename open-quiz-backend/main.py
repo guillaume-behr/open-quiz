@@ -5,9 +5,10 @@ from hashlib import sha256
 from hmac import new as hmac_new
 from time import time
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import delete, select, update
 
 from app.audit import audit_event
@@ -47,6 +48,7 @@ from app.routers import (
     users,
 )
 from app.security import hash_password, verify_password
+from app.services.question_draws import InsufficientQuestionsError
 from app.session_retention import (
     close_abandoned_sessions,
     expired_training_session_ids,
@@ -421,6 +423,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "max-age=31536000; includeSubDomains"
             )
         return response
+
+    @app.exception_handler(InsufficientQuestionsError)
+    async def insufficient_questions(
+        request: Request, error: InsufficientQuestionsError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(error)},
+        )
 
     app.include_router(health.router)
     app.include_router(problem_reports.router)
