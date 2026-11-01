@@ -62,7 +62,6 @@ from app.routers import live as live_router
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.routers.quizzes import (
     generate_join_code,
-    safe_spreadsheet_cell,
 )
 from app.schemas import (
     LoginRequest,
@@ -86,6 +85,9 @@ from app.services.grading import (
     participant_maximum_scores,
     question_maximum_scores,
     selected_choice_score,
+)
+from app.services.results import (
+    safe_spreadsheet_cell,
 )
 from main import create_app
 from scripts.reset_two_factor import reset
