@@ -26,9 +26,6 @@ from sqlalchemy.dialects.postgresql import insert
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser
 from app.errors import ErrorCode, api_error
-from app.grading import (
-    compute_final_scores,
-)
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -68,6 +65,9 @@ from app.schemas import (
     QuizJoin,
     QuizResponse,
     StudentQuizJoinResponse,
+)
+from app.services.grading import (
+    compute_final_scores,
 )
 from app.services.question_draws import (
     draw_unique_question_ids,

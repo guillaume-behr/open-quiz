@@ -27,10 +27,6 @@ from sqlalchemy import func, select
 from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser
-from app.grading import (
-    decoded_answer_data,
-    selected_choice_ids,
-)
 from app.models import (
     Question,
     QuestionChoice,
@@ -65,6 +61,10 @@ from app.schemas import (
     QuizSessionResponse,
     StudentQuizHistoryAnswer,
     StudentQuizHistoryItem,
+)
+from app.services.grading import (
+    decoded_answer_data,
+    selected_choice_ids,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])

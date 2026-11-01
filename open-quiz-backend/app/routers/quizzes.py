@@ -25,12 +25,6 @@ from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser
 from app.errors import ErrorCode, api_error
-from app.grading import (
-    compute_final_scores,
-    decoded_answer_data,
-    selected_choice_ids,
-    selected_choice_score,
-)
 from app.live_quiz import (
     active_quiz_sessions_topic,
     makeup_sessions_topic,
@@ -78,6 +72,12 @@ from app.schemas import (
     StudentQuizQuestionResponse,
     StudentQuizSessionResponse,
     StudentQuizStateResponse,
+)
+from app.services.grading import (
+    compute_final_scores,
+    decoded_answer_data,
+    selected_choice_ids,
+    selected_choice_score,
 )
 from app.services.question_draws import (
     difficulty_counts_for_banks,

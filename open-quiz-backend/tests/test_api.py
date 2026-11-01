@@ -29,7 +29,6 @@ import main
 from app.class_names import format_class_name
 from app.config import secure_private_file, write_private_file
 from app.database import postgres_url
-from app.grading import selected_choice_score
 from app.images import (
     MAX_IMAGE_BYTES,
     MAX_IMAGE_DIMENSION,
@@ -85,6 +84,7 @@ from app.security import (
     encrypt_student_password,
     refresh_request_proof,
 )
+from app.services.grading import selected_choice_score
 from main import create_app
 from scripts.reset_two_factor import reset
 
