@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser
+from app.errors import ErrorCode, api_error
 from app.models import (
     Question,
     QuestionChoice,
@@ -137,14 +138,20 @@ def export_quiz_results(
         )
     )
     if student_class is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
+        )
 
     if quiz_id is not None:
         quiz = session.scalar(
             select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
         )
         if quiz is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
+            )
     safe_class_id = student_class.id
     safe_quiz = f"-quiz-{quiz_id}" if quiz_id is not None else "-tous-les-quiz"
     filename = f"resultats-classe-{safe_class_id}{safe_quiz}.csv"
@@ -223,7 +230,10 @@ def list_participant_answers(
     if quiz_session.status != "finished":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Les réponses sont disponibles une fois le quiz terminé",
+            detail=api_error(
+                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+                "Les réponses sont disponibles une fois le quiz terminé",
+            ),
         )
     participant = session.scalar(
         select(QuizParticipant).where(
@@ -234,7 +244,9 @@ def list_participant_answers(
     if participant is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Participant introuvable",
+            detail=api_error(
+                ErrorCode.PARTICIPANT_NOT_FOUND, "Participant introuvable"
+            ),
         )
     rows = list(
         session.execute(
@@ -256,7 +268,9 @@ def list_participant_answers(
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Participant introuvable",
+            detail=api_error(
+                ErrorCode.PARTICIPANT_NOT_FOUND, "Participant introuvable"
+            ),
         )
     question_order = {
         question_id: position
@@ -486,7 +500,10 @@ def publish_quiz_grades(
     if quiz_session.status != "finished":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Les notes ne peuvent être publiées qu'une fois le quiz terminé",
+            detail=api_error(
+                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+                "Les notes ne peuvent être publiées qu'une fois le quiz terminé",
+            ),
         )
     pending_count = session.scalar(
         select(func.count(QuizAnswer.id)).where(
@@ -497,7 +514,10 @@ def publish_quiz_grades(
     if pending_count:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Toutes les réponses doivent être corrigées avant publication",
+            detail=api_error(
+                ErrorCode.GRADES_PENDING,
+                "Toutes les réponses doivent être corrigées avant publication",
+            ),
         )
     if quiz_session.grades_published_at is None:
         quiz_session.grades_published_at = datetime.now(UTC)
@@ -526,12 +546,18 @@ def grade_written_answer(
     if quiz_session.status != "finished":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La correction est disponible une fois le quiz terminé",
+            detail=api_error(
+                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+                "La correction est disponible une fois le quiz terminé",
+            ),
         )
     if quiz_session.grades_published_at is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Les notes publiées ne peuvent plus être modifiées",
+            detail=api_error(
+                ErrorCode.GRADES_PUBLISHED,
+                "Les notes publiées ne peuvent plus être modifiées",
+            ),
         )
     row = session.execute(
         select(QuizAnswer, Question)
@@ -544,7 +570,7 @@ def grade_written_answer(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Réponse introuvable",
+            detail=api_error(ErrorCode.ANSWER_NOT_FOUND, "Réponse introuvable"),
         )
     answer, question = row
     participant = session.get(QuizParticipant, answer.participant_id)
@@ -556,13 +582,19 @@ def grade_written_answer(
     if question.id not in question_ids:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La question ne fait pas partie de cette session",
+            detail=api_error(
+                ErrorCode.ANSWER_QUESTION_NOT_IN_SESSION,
+                "La question ne fait pas partie de cette session",
+            ),
         )
     position = question_ids.index(question.id)
     if question.answer_mode != "written":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Seules les réponses rédactionnelles sont corrigées manuellement",
+            detail=api_error(
+                ErrorCode.ANSWER_NOT_WRITTEN,
+                "Seules les réponses rédactionnelles sont corrigées manuellement",
+            ),
         )
     choices = list(
         session.scalars(
@@ -577,7 +609,10 @@ def grade_written_answer(
     if payload.score > max_score:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"La note ne peut pas dépasser {max_score:g}",
+            detail=api_error(
+                ErrorCode.GRADE_ABOVE_MAXIMUM,
+                f"La note ne peut pas dépasser {max_score:g}",
+            ),
         )
     answer.score = payload.score
     answer.is_graded = True

@@ -16,6 +16,7 @@ import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { LoaderCircle, Play } from "lucide-react"
 import { useEffect, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
+import { apiErrorMessage } from "@/lib/errors"
 
 export function MakeupSessionsPanel() {
     const { t } = useTranslation()
@@ -105,8 +106,8 @@ export function MakeupSessionsPanel() {
             )
             setSelectedSession(created)
             resetCreateForm()
-        } catch {
-            setError(t("makeup-create-error"))
+        } catch (caught) {
+            setError(apiErrorMessage(caught, t, t("makeup-create-error")))
         } finally {
             setBusy(false)
         }
@@ -134,11 +135,15 @@ export function MakeupSessionsPanel() {
             }
         } catch (caught) {
             setError(
-                caught instanceof ApiError && caught.status === 409
-                    ? value === "cancel"
-                        ? t("makeup-cancel-with-answers-error")
+                apiErrorMessage(
+                    caught,
+                    t,
+                    caught instanceof ApiError && caught.status === 409
+                        ? value === "cancel"
+                            ? t("makeup-cancel-with-answers-error")
+                            : t("makeup-action-error")
                         : t("makeup-action-error")
-                    : t("makeup-action-error")
+                )
             )
         } finally {
             setBusy(false)

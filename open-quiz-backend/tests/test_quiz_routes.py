@@ -184,20 +184,18 @@ def test_deleting_quizzes_keeps_results_and_makeups(environment) -> None:
             MakeupSessionQuiz(session_id=makeup.id, quiz_id=used_by_makeup["id"])
         )
         session.commit()
-    assert (
-        client.delete(
-            f"/api/quizzes/{used_by_makeup['id']}", headers=headers
-        ).status_code
-        == 409
+    makeup_refusal = client.delete(
+        f"/api/quizzes/{used_by_makeup['id']}", headers=headers
     )
+    assert makeup_refusal.status_code == 409
+    assert makeup_refusal.json()["detail"]["code"] == "QUIZ_USED_BY_MAKEUP"
 
     finished_exam(client, environment)
-    assert (
-        client.delete(
-            f"/api/quizzes/{environment['quiz']['id']}", headers=headers
-        ).status_code
-        == 409
+    results_refusal = client.delete(
+        f"/api/quizzes/{environment['quiz']['id']}", headers=headers
     )
+    assert results_refusal.status_code == 409
+    assert results_refusal.json()["detail"]["code"] == "QUIZ_HAS_RESULTS"
 
 
 def test_training_profiles_are_not_managed_as_exams(environment) -> None:
@@ -244,11 +242,17 @@ def test_session_control_conflicts(environment) -> None:
     restarted = client.post(f"{session_url}/start", headers=headers)
     assert restarted.status_code == 200
     assert restarted.json()["status"] == "in_progress"
-    assert client.post(f"{session_url}/cancel", headers=headers).status_code == 409
+    with_answers = client.post(f"{session_url}/cancel", headers=headers)
+    assert with_answers.status_code == 409
+    assert with_answers.json()["detail"]["code"] == "QUIZ_SESSION_HAS_ANSWERS"
 
     hand_in_quiz(client, launched["join_code"], participant_headers)
-    assert client.post(f"{session_url}/pause", headers=headers).status_code == 409
-    assert client.post(f"{session_url}/cancel", headers=headers).status_code == 409
+    paused = client.post(f"{session_url}/pause", headers=headers)
+    assert paused.status_code == 409
+    assert paused.json()["detail"]["code"] == "QUIZ_SESSION_NOT_RUNNING"
+    cancelled = client.post(f"{session_url}/cancel", headers=headers)
+    assert cancelled.status_code == 409
+    assert cancelled.json()["detail"]["code"] == "QUIZ_SESSION_NOT_CANCELLABLE"
 
 
 def test_starting_requires_a_present_participant_and_survives_races(
@@ -429,6 +433,7 @@ def test_written_answers_cannot_exceed_their_points(environment) -> None:
         json={"score": 3},
     )
     assert too_high.status_code == 422
+    assert too_high.json()["detail"]["code"] == "GRADE_ABOVE_MAXIMUM"
 
 
 def test_cancelled_sessions_without_answers_are_cleaned_up(environment) -> None:

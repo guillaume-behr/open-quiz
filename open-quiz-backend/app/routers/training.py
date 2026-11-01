@@ -77,7 +77,10 @@ def list_class_training_question_banks(
         )
     )
     if student_class is None:
-        raise HTTPException(status_code=404, detail="Classe introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
+        )
     assignments = list(
         session.execute(
             select(
@@ -119,7 +122,10 @@ def update_class_training_question_banks(
         )
     )
     if student_class is None:
-        raise HTTPException(status_code=404, detail="Classe introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
+        )
     bank_ids = payload.question_bank_ids or [
         item.question_bank_id for item in payload.question_banks
     ]
@@ -134,13 +140,19 @@ def update_class_training_question_banks(
     if len(banks) != len(bank_ids):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Une ou plusieurs banques de questions sont invalides",
+            detail=api_error(
+                ErrorCode.QUESTION_BANK_SELECTION_INVALID,
+                "Une ou plusieurs banques de questions sont invalides",
+            ),
         )
     if any(bank.grade_level != student_class.grade_level for bank in banks):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Les banques d’entraînement doivent correspondre au niveau de la classe"
+                api_error(
+                    ErrorCode.TRAINING_BANKS_GRADE_MISMATCH,
+                    "Les banques d’entraînement doivent correspondre au niveau de la classe",
+                )
             ),
         )
     available = dict(
@@ -165,7 +177,10 @@ def update_class_training_question_banks(
     ):
         raise HTTPException(
             status_code=422,
-            detail="Le nombre demandé dépasse les questions disponibles",
+            detail=api_error(
+                ErrorCode.TRAINING_QUESTION_COUNT_EXCEEDED,
+                "Le nombre demandé dépasse les questions disponibles",
+            ),
         )
     session.execute(
         delete(ClassTrainingQuestionBank).where(

@@ -46,6 +46,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react"
 import { LoaderCircle, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { pageContaining } from "@/lib/utils"
+import { apiErrorMessage } from "@/lib/errors"
 
 type QuizzesPanelProps = {
     isCreateDialogOpen: boolean
@@ -629,9 +630,13 @@ export function QuizzesPanel({
                 setPage(pageContaining(allQuizzes, quiz.id, PAGE_SIZE))
             }
             setReloadKey((current) => current + 1)
-        } catch {
+        } catch (caught) {
             setCreateError(
-                t(editingQuiz ? "quiz-update-error" : "quiz-create-error")
+                apiErrorMessage(
+                    caught,
+                    t,
+                    t(editingQuiz ? "quiz-update-error" : "quiz-create-error")
+                )
             )
         } finally {
             setIsCreating(false)
@@ -648,9 +653,11 @@ export function QuizzesPanel({
             const questions = await previewQuiz(quiz.id)
             if (requestVersion === previewRequestVersion.current)
                 setPreviewQuestions(questions)
-        } catch {
+        } catch (caught) {
             if (requestVersion === previewRequestVersion.current)
-                setPreviewError(t("quiz-preview-error"))
+                setPreviewError(
+                    apiErrorMessage(caught, t, t("quiz-preview-error"))
+                )
         } finally {
             if (requestVersion === previewRequestVersion.current)
                 setIsPreviewLoading(false)
@@ -684,8 +691,8 @@ export function QuizzesPanel({
             setSelectedClassId("")
             setActiveSessionError(null)
             setActiveSession(session)
-        } catch {
-            setLaunchError(t("quiz-launch-error"))
+        } catch (caught) {
+            setLaunchError(apiErrorMessage(caught, t, t("quiz-launch-error")))
         } finally {
             setIsLaunching(false)
         }
@@ -703,8 +710,10 @@ export function QuizzesPanel({
                     session.id === started.id ? started : session
                 )
             )
-        } catch {
-            setActiveSessionError(t("quiz-start-error"))
+        } catch (caught) {
+            setActiveSessionError(
+                apiErrorMessage(caught, t, t("quiz-start-error"))
+            )
         } finally {
             setIsStarting(false)
         }
@@ -742,11 +751,15 @@ export function QuizzesPanel({
             setSessionActionToConfirm(null)
         } catch (caught) {
             setActiveSessionError(
-                caught instanceof ApiError && caught.status === 409
-                    ? action === "cancel"
-                        ? t("quiz-cancel-with-answers-error")
+                apiErrorMessage(
+                    caught,
+                    t,
+                    caught instanceof ApiError && caught.status === 409
+                        ? action === "cancel"
+                            ? t("quiz-cancel-with-answers-error")
+                            : t("quiz-session-action-error")
                         : t("quiz-session-action-error")
-                    : t("quiz-session-action-error")
+                )
             )
         } finally {
             setSessionAction(null)
@@ -764,8 +777,10 @@ export function QuizzesPanel({
             )
             setSessionActionToConfirm(null)
             setActiveSession(null)
-        } catch {
-            setActiveSessionError(t("quiz-session-delete-error"))
+        } catch (caught) {
+            setActiveSessionError(
+                apiErrorMessage(caught, t, t("quiz-session-delete-error"))
+            )
         } finally {
             setSessionAction(null)
         }
@@ -780,11 +795,7 @@ export function QuizzesPanel({
             setQuizToDelete(null)
             setReloadKey((k) => k + 1)
         } catch (caught) {
-            setDeleteError(
-                caught instanceof ApiError && caught.status === 409
-                    ? t("quiz-delete-error")
-                    : t("quiz-delete-error")
-            )
+            setDeleteError(apiErrorMessage(caught, t, t("quiz-delete-error")))
         } finally {
             setIsDeleting(false)
         }

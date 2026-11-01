@@ -16,7 +16,7 @@ type ParticipantAnswersDialogProps = {
     participant: QuizParticipant | null
     answers: QuizAnswerReview[]
     isLoading: boolean
-    hasError: boolean
+    error: string | null
     scoreDrafts: Record<number, string>
     feedbackDrafts: Record<number, string>
     gradingAnswerId: number | null
@@ -32,7 +32,7 @@ export function ParticipantAnswersDialog({
     participant,
     answers,
     isLoading,
-    hasError,
+    error,
     scoreDrafts,
     feedbackDrafts,
     gradingAnswerId,
@@ -71,9 +71,9 @@ export function ParticipantAnswersDialog({
                 </div>
             ) : (
                 <div className="space-y-3">
-                    {hasError && (
+                    {error && (
                         <p className="text-sm text-destructive" role="alert">
-                            {t("answers-load-error")}
+                            {error}
                         </p>
                     )}
                     {answers.map((answer) => (

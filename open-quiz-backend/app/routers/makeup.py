@@ -149,7 +149,12 @@ def owned_makeup_session(
         )
     )
     if makeup is None:
-        raise HTTPException(status_code=404, detail="Session de rattrapage introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                ErrorCode.MAKEUP_NOT_FOUND, "Session de rattrapage introuvable"
+            ),
+        )
     return makeup
 
 
@@ -218,7 +223,10 @@ def makeup_quiz_options(
         )
     )
     if student_class is None:
-        raise HTTPException(status_code=404, detail="Classe introuvable")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
+        )
     finished_ids = class_finished_quiz_ids(student_class.id, professor, session)
     quizzes = list(
         session.scalars(
@@ -262,12 +270,20 @@ def create_makeup_session(
         )
     )
     if student_class is None or len(quizzes) != len(quiz_ids):
-        raise HTTPException(status_code=422, detail="Classe ou quiz invalide")
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                ErrorCode.MAKEUP_QUIZZES_INVALID, "Classe ou quiz invalide"
+            ),
+        )
     eligible = class_finished_quiz_ids(student_class.id, professor, session)
     if not quiz_ids.issubset(eligible):
         raise HTTPException(
             status_code=422,
-            detail="Seuls les quiz déjà passés par la classe peuvent être rattrapés",
+            detail=api_error(
+                ErrorCode.MAKEUP_QUIZ_NOT_TAKEN,
+                "Seuls les quiz déjà passés par la classe peuvent être rattrapés",
+            ),
         )
     makeup = MakeupSession(
         owner_id=professor.id,
@@ -310,7 +326,11 @@ def control_makeup_session(
     expected, target = allowed[action]
     if makeup.status != expected:
         raise HTTPException(
-            status_code=409, detail="Action impossible pour cette session"
+            status_code=409,
+            detail=api_error(
+                ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
+                "Action impossible pour cette session",
+            ),
         )
     child_topics = list(
         session.execute(
@@ -333,8 +353,11 @@ def control_makeup_session(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Impossible d’annuler ce rattrapage car des réponses ont déjà "
-                    "été enregistrées"
+                    api_error(
+                        ErrorCode.MAKEUP_HAS_ANSWERS,
+                        "Impossible d’annuler ce rattrapage car des réponses ont déjà "
+                        "été enregistrées",
+                    )
                 ),
             )
         delete_makeup_session_records(makeup.id, session)
@@ -356,7 +379,11 @@ def control_makeup_session(
     if transition.rowcount != 1:
         session.rollback()
         raise HTTPException(
-            status_code=409, detail="Action impossible pour cette session"
+            status_code=409,
+            detail=api_error(
+                ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
+                "Action impossible pour cette session",
+            ),
         )
     makeup.status = target
     children = list(
@@ -368,7 +395,10 @@ def control_makeup_session(
         session.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Au moins un élève doit choisir un quiz avant le démarrage",
+            detail=api_error(
+                ErrorCode.MAKEUP_NO_SELECTION,
+                "Au moins un élève doit choisir un quiz avant le démarrage",
+            ),
         )
     now = datetime.now(UTC)
     for child in children:

@@ -62,8 +62,11 @@ def test_requesting_more_questions_than_the_banks_hold_is_refused(
         )
         assert response.status_code == 422
         assert response.json() == {
-            "detail": (
-                "Nombre de questions insuffisant pour une ou plusieurs difficultés "
-                "dans les banques sélectionnées"
-            )
+            "detail": {
+                "code": "QUIZ_QUESTIONS_INSUFFICIENT",
+                "message": (
+                    "Nombre de questions insuffisant pour une ou plusieurs "
+                    "difficultés dans les banques sélectionnées"
+                ),
+            }
         }
