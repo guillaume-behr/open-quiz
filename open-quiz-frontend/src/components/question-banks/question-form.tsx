@@ -17,6 +17,7 @@ import { QuestionChoicesEditor } from "./question-choices-editor"
 import { QuestionContentFields } from "./question-content-fields"
 import type { EditableChoice } from "./question-form-types"
 import { QuestionSettingsFields } from "./question-settings-fields"
+import { apiErrorMessage } from "@/lib/errors"
 
 type QuestionFormProps = {
     questionBankId: number
@@ -260,9 +261,14 @@ export function QuestionForm({
             onSaved(savedQuestion)
         } catch (caughtError) {
             setError(
-                caughtError instanceof ApiError && caughtError.status === 413
-                    ? t("question-image-too-large")
-                    : t("question-save-error")
+                apiErrorMessage(
+                    caughtError,
+                    t,
+                    caughtError instanceof ApiError &&
+                        caughtError.status === 413
+                        ? t("question-image-too-large")
+                        : t("question-save-error")
+                )
             )
         } finally {
             setIsCreating(false)

@@ -24,6 +24,7 @@ import { QuestionBanksList } from "@/components/question-banks/question-banks-li
 import { QuestionsManager } from "@/components/question-banks/questions-dialog"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { apiErrorMessage } from "@/lib/errors"
 
 function compareQuestionBanks(
     first: QuestionBank,
@@ -182,9 +183,14 @@ export function QuestionBanksPanel({
             onCreateDialogOpenChange(false)
         } catch (caughtError) {
             setCreateError(
-                caughtError instanceof ApiError && caughtError.status === 409
-                    ? t("question-bank-duplicate-error")
-                    : t("question-bank-create-error")
+                apiErrorMessage(
+                    caughtError,
+                    t,
+                    caughtError instanceof ApiError &&
+                        caughtError.status === 409
+                        ? t("question-bank-duplicate-error")
+                        : t("question-bank-create-error")
+                )
             )
         } finally {
             setIsCreating(false)
@@ -200,8 +206,10 @@ export function QuestionBanksPanel({
             setGradeLevel(created.name)
             setNewGradeLevel("")
             setIsAddingGradeLevel(false)
-        } catch {
-            setCreateError(t("grade-level-create-error"))
+        } catch (caughtError) {
+            setCreateError(
+                apiErrorMessage(caughtError, t, t("grade-level-create-error"))
+            )
         }
     }
 
@@ -242,8 +250,10 @@ export function QuestionBanksPanel({
         setIsBatchBusy(true)
         try {
             saveBlob(await downloadQuestionBank(bank.id), exportFilename(bank))
-        } catch {
-            setBatchError(t("json-export-error"))
+        } catch (caughtError) {
+            setBatchError(
+                apiErrorMessage(caughtError, t, t("json-export-error"))
+            )
         } finally {
             setIsBatchBusy(false)
         }
@@ -267,9 +277,14 @@ export function QuestionBanksPanel({
             setReloadKey((current) => current + 1)
         } catch (caughtError) {
             setDeleteBankError(
-                caughtError instanceof ApiError && caughtError.status === 409
-                    ? t("question-bank-in-use-error")
-                    : t("question-bank-delete-error")
+                apiErrorMessage(
+                    caughtError,
+                    t,
+                    caughtError instanceof ApiError &&
+                        caughtError.status === 409
+                        ? t("question-bank-in-use-error")
+                        : t("question-bank-delete-error")
+                )
             )
         } finally {
             setIsDeletingBank(false)
@@ -305,9 +320,14 @@ export function QuestionBanksPanel({
             setIsQuestionsDialogOpen(true)
         } catch (caughtError) {
             setDeleteQuestionError(
-                caughtError instanceof ApiError && caughtError.status === 409
-                    ? t("question-in-use-error")
-                    : t("question-delete-error")
+                apiErrorMessage(
+                    caughtError,
+                    t,
+                    caughtError instanceof ApiError &&
+                        caughtError.status === 409
+                        ? t("question-in-use-error")
+                        : t("question-delete-error")
+                )
             )
         } finally {
             setIsDeletingQuestion(false)
@@ -335,12 +355,17 @@ export function QuestionBanksPanel({
             setReloadKey((current) => current + 1)
         } catch (caughtError) {
             setImportError(
-                caughtError instanceof ApiError && caughtError.status === 409
-                    ? t("json-import-duplicate-error")
-                    : describeJsonImportFailure(
-                          caughtError,
-                          t("json-import-error")
-                      )
+                apiErrorMessage(
+                    caughtError,
+                    t,
+                    caughtError instanceof ApiError &&
+                        caughtError.status === 409
+                        ? t("json-import-duplicate-error")
+                        : describeJsonImportFailure(
+                              caughtError,
+                              t("json-import-error")
+                          )
+                )
             )
         } finally {
             setIsBatchBusy(false)
@@ -420,9 +445,14 @@ export function QuestionBanksPanel({
                         await onDeleteGradeLevel(level)
                     } catch (error) {
                         setCreateError(
-                            error instanceof ApiError && error.status === 409
-                                ? t("grade-level-in-use-error")
-                                : t("grade-level-delete-error")
+                            apiErrorMessage(
+                                error,
+                                t,
+                                error instanceof ApiError &&
+                                    error.status === 409
+                                    ? t("grade-level-in-use-error")
+                                    : t("grade-level-delete-error")
+                            )
                         )
                         throw error
                     }

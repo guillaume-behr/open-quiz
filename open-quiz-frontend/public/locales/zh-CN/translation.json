@@ -750,5 +750,17 @@
     "error-student-account-in-active-session": "此账户正在参加测验。请在本场测验结束后重试。",
     "error-student-filters-invalid": "这些班级筛选条件不能同时使用。",
     "error-grade-level-not-found": "找不到此班级级别，它可能已被删除。",
-    "error-grade-level-in-use": "此班级级别仍被班级、学生或题库使用。"
+    "error-grade-level-in-use": "此班级级别仍被班级、学生或题库使用。",
+    "error-question-bank-not-found": "找不到此题库，它可能已被删除。",
+    "error-question-bank-full": "此题库已达到 500 道题的上限。",
+    "error-question-not-found": "找不到此题目，它可能已被删除。",
+    "error-question-invalid": "题目不完整或格式有误，请检查题干和选项。",
+    "error-choice-invalid": "某个选项已不属于此题目。请刷新页面后重试。",
+    "error-choice-content-required": "每个选项都需要包含文字、图片或代码。",
+    "error-image-type-unsupported": "不支持此图片格式，请使用 PNG、JPEG、WebP 或 GIF 图片。",
+    "error-image-invalid": "无法使用此图片：图片为空、无法读取、文件过大（最大 20 MB）或尺寸过大。",
+    "error-image-encoding-invalid": "文件中的某张图片没有正确进行 base64 编码。",
+    "error-question-images-too-large": "此题目的图片总大小过大，请缩小图片或减少数量。",
+    "error-import-images-too-large": "文件中的图片总大小过大，请将题库拆分为多个文件导入。",
+    "error-image-not-found": "找不到此图片，它可能已从题目中移除。"
 }

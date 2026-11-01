@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.errors import ErrorCode, api_error
 from app.grade_levels import ensure_grade_level
 from app.models import (
     ClassTrainingQuestionBank,
@@ -111,7 +112,10 @@ def create_question_bank(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Une banque existe déjà pour ce niveau et ce titre",
+            detail=api_error(
+                ErrorCode.QUESTION_BANK_NAME_TAKEN,
+                "Une banque existe déjà pour ce niveau et ce titre",
+            ),
         ) from None
     session.refresh(question_bank)
     return question_bank
@@ -146,7 +150,10 @@ def update_question_bank(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Une banque existe déjà pour ce niveau et ce titre",
+            detail=api_error(
+                ErrorCode.QUESTION_BANK_NAME_TAKEN,
+                "Une banque existe déjà pour ce niveau et ce titre",
+            ),
         ) from None
     session.refresh(question_bank)
     row = session.execute(
@@ -178,7 +185,9 @@ def delete_question_bank(
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cette banque est utilisée par un quiz",
+            detail=api_error(
+                ErrorCode.QUESTION_BANK_IN_USE, "Cette banque est utilisée par un quiz"
+            ),
         )
     question_ids = list(
         session.scalars(
@@ -218,7 +227,9 @@ def owned_question_bank(
     if question_bank is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Banque de questions introuvable",
+            detail=api_error(
+                ErrorCode.QUESTION_BANK_NOT_FOUND, "Banque de questions introuvable"
+            ),
         )
     return question_bank
 

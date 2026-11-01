@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from sqlalchemy import delete, func, select, union
 
 from app.dependencies import DbSession, ProfessorUser
+from app.errors import ErrorCode, api_error
 from app.images import (
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
@@ -74,13 +75,15 @@ def normalized_uploaded_image(
     if image.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Format d’image non pris en charge",
+            detail=api_error(
+                ErrorCode.IMAGE_TYPE_UNSUPPORTED, "Format d’image non pris en charge"
+            ),
         )
     image_data = image.file.read(MAX_IMAGE_BYTES + 1)
     if len(image_data) > MAX_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="L’image est trop volumineuse",
+            detail=api_error(ErrorCode.IMAGE_TOO_LARGE, "L’image est trop volumineuse"),
         )
     if not image_data:
         return None, None
@@ -89,7 +92,7 @@ def normalized_uploaded_image(
     except InvalidImage as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(error),
+            detail=api_error(ErrorCode.IMAGE_INVALID, str(error)),
         ) from None
 
 
@@ -109,7 +112,7 @@ def owned_question(
     if question is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Question introuvable",
+            detail=api_error(ErrorCode.QUESTION_NOT_FOUND, "Question introuvable"),
         )
     return question
 
@@ -172,7 +175,10 @@ def add_question(
     ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Une proposition nécessite du texte, une image ou du code",
+            detail=api_error(
+                ErrorCode.CHOICE_CONTENT_REQUIRED,
+                "Une proposition nécessite du texte, une image ou du code",
+            ),
         )
     question = Question(
         question_bank_id=question_bank_id,
@@ -248,19 +254,25 @@ def decode_image_payload(
     except Base64Error, ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Une image importée n’est pas encodée correctement",
+            detail=api_error(
+                ErrorCode.IMAGE_ENCODING_INVALID,
+                "Une image importée n’est pas encodée correctement",
+            ),
         ) from None
     if not image_data or len(image_data) > MAX_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Une image importée est vide ou trop volumineuse",
+            detail=api_error(
+                ErrorCode.IMAGE_INVALID,
+                "Une image importée est vide ou trop volumineuse",
+            ),
         )
     try:
         return normalize_image(image_data, image.content_type)
     except InvalidImage as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(error),
+            detail=api_error(ErrorCode.IMAGE_INVALID, str(error)),
         ) from None
 
 
@@ -286,14 +298,17 @@ def create_question(
     if (question_count or 0) >= MAX_QUESTIONS_PER_BANK:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cette banque a atteint le nombre maximal de questions",
+            detail=api_error(
+                ErrorCode.QUESTION_BANK_FULL,
+                "Cette banque a atteint le nombre maximal de questions",
+            ),
         )
     try:
         question_payload = QuestionCreate.model_validate(json.loads(payload))
     except json.JSONDecodeError, ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Question invalide",
+            detail=api_error(ErrorCode.QUESTION_INVALID, "Question invalide"),
         ) from None
 
     image_data, image_content_type = normalized_uploaded_image(image)
@@ -308,7 +323,10 @@ def create_question(
     ):
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Le volume total des images de la question est trop important",
+            detail=api_error(
+                ErrorCode.QUESTION_IMAGES_TOO_LARGE,
+                "Le volume total des images de la question est trop important",
+            ),
         )
     question, choices, code = add_question(
         question_bank_id,
@@ -393,7 +411,7 @@ def update_question(
     except json.JSONDecodeError, ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Question invalide",
+            detail=api_error(ErrorCode.QUESTION_INVALID, "Question invalide"),
         ) from None
 
     image_data, image_content_type = normalized_uploaded_image(image)
@@ -433,7 +451,9 @@ def update_question(
     if not submitted_choice_ids.issubset(existing_choices_by_id):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Proposition de réponse invalide",
+            detail=api_error(
+                ErrorCode.CHOICE_INVALID, "Proposition de réponse invalide"
+            ),
         )
     replacement_choice_images = []
     for choice in question_payload.choices:
@@ -460,7 +480,10 @@ def update_question(
     ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Une proposition nécessite du texte, une image ou du code",
+            detail=api_error(
+                ErrorCode.CHOICE_CONTENT_REQUIRED,
+                "Une proposition nécessite du texte, une image ou du code",
+            ),
         )
 
     # question.image_data already reflects the replacement or the removal
@@ -475,7 +498,10 @@ def update_question(
     ):
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Le volume total des images de la question est trop important",
+            detail=api_error(
+                ErrorCode.QUESTION_IMAGES_TOO_LARGE,
+                "Le volume total des images de la question est trop important",
+            ),
         )
 
     session.execute(delete(QuestionCode).where(QuestionCode.question_id == question.id))
@@ -541,7 +567,10 @@ def delete_question(
     if question_is_in_launched_quiz(question_id, session):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cette question est utilisée par un quiz déjà lancé",
+            detail=api_error(
+                ErrorCode.QUESTION_IN_LAUNCHED_QUIZ,
+                "Cette question est utilisée par un quiz déjà lancé",
+            ),
         )
     discard_training_sessions_using_questions([question_id], session)
     session.execute(
@@ -574,7 +603,9 @@ def get_question_image(
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image de la question introuvable",
+            detail=api_error(
+                ErrorCode.IMAGE_NOT_FOUND, "Image de la question introuvable"
+            ),
         )
     return Response(
         content=question.image_data,
@@ -601,7 +632,9 @@ def get_choice_image(
     if choice is None or choice.image_data is None or choice.image_content_type is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image de la réponse introuvable",
+            detail=api_error(
+                ErrorCode.IMAGE_NOT_FOUND, "Image de la réponse introuvable"
+            ),
         )
     return Response(
         content=choice.image_data,

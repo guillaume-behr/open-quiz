@@ -54,6 +54,22 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     STUDENT_FILTERS_INVALID: "error-student-filters-invalid",
     GRADE_LEVEL_NOT_FOUND: "error-grade-level-not-found",
     GRADE_LEVEL_IN_USE: "error-grade-level-in-use",
+    QUESTION_BANK_NOT_FOUND: "error-question-bank-not-found",
+    QUESTION_BANK_NAME_TAKEN: "question-bank-duplicate-error",
+    QUESTION_BANK_IN_USE: "question-bank-in-use-error",
+    QUESTION_BANK_FULL: "error-question-bank-full",
+    QUESTION_NOT_FOUND: "error-question-not-found",
+    QUESTION_INVALID: "error-question-invalid",
+    QUESTION_IN_LAUNCHED_QUIZ: "question-in-use-error",
+    CHOICE_INVALID: "error-choice-invalid",
+    CHOICE_CONTENT_REQUIRED: "error-choice-content-required",
+    IMAGE_TYPE_UNSUPPORTED: "error-image-type-unsupported",
+    IMAGE_TOO_LARGE: "question-image-too-large",
+    IMAGE_INVALID: "error-image-invalid",
+    IMAGE_ENCODING_INVALID: "error-image-encoding-invalid",
+    QUESTION_IMAGES_TOO_LARGE: "error-question-images-too-large",
+    IMPORT_IMAGES_TOO_LARGE: "error-import-images-too-large",
+    IMAGE_NOT_FOUND: "error-image-not-found",
 }
 
 export function errorMessage(error: unknown, fallback: string): string {

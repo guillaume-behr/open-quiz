@@ -750,5 +750,17 @@
     "error-student-account-in-active-session": "Ce compte participe à un quiz en cours. Réessayez une fois la session terminée.",
     "error-student-filters-invalid": "Ces filtres de classe ne peuvent pas être combinés.",
     "error-grade-level-not-found": "Ce niveau est introuvable. Il a peut-être été supprimé.",
-    "error-grade-level-in-use": "Ce niveau est encore utilisé par des classes, des élèves ou des banques de questions."
+    "error-grade-level-in-use": "Ce niveau est encore utilisé par des classes, des élèves ou des banques de questions.",
+    "error-question-bank-not-found": "Cette banque de questions est introuvable. Elle a peut-être été supprimée.",
+    "error-question-bank-full": "Cette banque a atteint le nombre maximal de 500 questions.",
+    "error-question-not-found": "Cette question est introuvable. Elle a peut-être été supprimée.",
+    "error-question-invalid": "La question est incomplète ou mal formée. Vérifiez l’énoncé et les propositions.",
+    "error-choice-invalid": "Une proposition ne correspond plus à cette question. Rechargez la page, puis réessayez.",
+    "error-choice-content-required": "Chaque proposition doit contenir du texte, une image ou du code.",
+    "error-image-type-unsupported": "Ce format d’image n’est pas pris en charge. Utilisez une image PNG, JPEG, WebP ou GIF.",
+    "error-image-invalid": "Cette image ne peut pas être utilisée : elle est vide, illisible, trop lourde (20 Mo maximum) ou trop grande.",
+    "error-image-encoding-invalid": "Une image du fichier n’est pas encodée correctement en base64.",
+    "error-question-images-too-large": "Les images de cette question sont trop lourdes au total. Réduisez leur taille ou leur nombre.",
+    "error-import-images-too-large": "Les images du fichier sont trop lourdes au total. Importez la banque en plusieurs fichiers.",
+    "error-image-not-found": "Cette image est introuvable. Elle a peut-être été retirée de la question."
 }
