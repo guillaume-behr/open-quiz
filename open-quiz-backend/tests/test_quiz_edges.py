@@ -104,7 +104,6 @@ def test_summaries_skip_missing_questions(
         "load_question_records",
         lambda *_: ({1: written, 2: choice}, {1: [], 2: []}),
     )
-    monkeypatch.setattr(quizzes, "question_maximum_scores", lambda *_: {2: 1.0})
     quiz_session = SimpleNamespace(id=1)
     participant = SimpleNamespace(id=1)
 
