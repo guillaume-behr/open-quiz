@@ -793,5 +793,14 @@
     "error-makeup-action-not-allowed": "Cette action n’est pas possible dans l’état actuel du rattrapage.",
     "error-makeup-no-selection": "Aucun élève n’a encore choisi de quiz. Attendez qu’au moins un élève choisisse avant de démarrer.",
     "error-training-banks-grade-mismatch": "Les banques d’entraînement doivent être du même niveau que la classe.",
-    "error-training-question-count-exceeded": "Le nombre de questions demandé dépasse celui que contient la banque."
+    "error-training-question-count-exceeded": "Le nombre de questions demandé dépasse celui que contient la banque.",
+    "error-session-expired": "Votre session a expiré. Reconnectez-vous.",
+    "error-problem-report-rate-limited": "Trop de signalements envoyés. Réessayez plus tard.",
+    "error-problem-report-not-found": "Ce signalement est introuvable. Il a peut-être déjà été supprimé.",
+    "error-teacher-not-found": "Ce compte enseignant est introuvable. Il a peut-être été supprimé.",
+    "error-teacher-in-active-exam": "Cet enseignant anime un examen en cours. Réessayez une fois l’examen terminé.",
+    "error-username-taken": "Cet identifiant est déjà utilisé par un autre compte.",
+    "error-service-unavailable": "Le service est momentanément indisponible. Réessayez dans un instant.",
+    "error-request-invalid": "La requête envoyée est invalide. Rechargez la page, puis réessayez.",
+    "error-request-too-large": "Les données envoyées sont trop volumineuses. Réduisez la taille des images ou du fichier."
 }

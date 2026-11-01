@@ -793,5 +793,14 @@
     "error-makeup-action-not-allowed": "Esta ação não é possível no estado atual da recuperação.",
     "error-makeup-no-selection": "Nenhum aluno escolheu ainda um teste. Aguarde pelo menos uma escolha antes de iniciar.",
     "error-training-banks-grade-mismatch": "Os bancos de treino devem ser do mesmo nível que a turma.",
-    "error-training-question-count-exceeded": "O número de perguntas pedido excede o que o banco contém."
+    "error-training-question-count-exceeded": "O número de perguntas pedido excede o que o banco contém.",
+    "error-session-expired": "A sua sessão expirou. Inicie sessão novamente.",
+    "error-problem-report-rate-limited": "Foram enviados demasiados relatórios. Tente novamente mais tarde.",
+    "error-problem-report-not-found": "Este relatório não foi encontrado. Talvez já tenha sido eliminado.",
+    "error-teacher-not-found": "Esta conta de professor não foi encontrada. Talvez tenha sido eliminada.",
+    "error-teacher-in-active-exam": "Este professor está a conduzir um exame neste momento. Tente novamente quando terminar.",
+    "error-username-taken": "Este nome de utilizador já é usado por outra conta.",
+    "error-service-unavailable": "O serviço está temporariamente indisponível. Tente novamente dentro de instantes.",
+    "error-request-invalid": "O pedido enviado é inválido. Recarregue a página e tente novamente.",
+    "error-request-too-large": "Os dados enviados são demasiado grandes. Reduza o tamanho das imagens ou do ficheiro."
 }

@@ -10,7 +10,7 @@ from app.audit import audit_event
 from app.dependencies import DbSession
 from app.errors import ErrorCode, api_error
 from app.models import StudentAccount
-from app.routers.auth import auth_error, enforce_global_auth_limit, validate_origin
+from app.routers.auth import enforce_global_auth_limit, validate_origin
 from app.schemas import (
     StudentAccountResponse,
     StudentLoginRequest,
@@ -103,7 +103,9 @@ def login_student(
     if retry_after:
         raise HTTPException(
             status_code=429,
-            detail=auth_error("AUTH_RATE_LIMITED"),
+            detail=api_error(
+                ErrorCode.AUTH_RATE_LIMITED, "Trop de tentatives de connexion"
+            ),
             headers={"Retry-After": str(retry_after)},
         )
     encoded = account.password_hash if account else DUMMY_PASSWORD_HASH
@@ -114,7 +116,9 @@ def login_student(
         audit_event("student_auth.login_failed")
         raise HTTPException(
             status_code=401,
-            detail=auth_error("AUTH_INVALID_CREDENTIALS"),
+            detail=api_error(
+                ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
+            ),
         )
     limiter.clear_subject(session, subject)
     token = create_student_access_token(

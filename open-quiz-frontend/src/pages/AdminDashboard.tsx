@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Pagination } from "@/components/ui/pagination"
 import { PageLoader } from "@/components/ui/page-loader"
-import { errorMessage } from "@/lib/errors"
+import { apiErrorMessage } from "@/lib/errors"
 import {
     LoaderCircle,
     KeyRound,
@@ -155,7 +155,7 @@ export function AdminDashboard() {
             setSuccess(t("user-created", { username: created.username }))
             formElement.reset()
         } catch (caught) {
-            setError(errorMessage(caught, t("create-user-error")))
+            setError(apiErrorMessage(caught, t, t("create-user-error")))
         } finally {
             setIsCreating(false)
         }
@@ -180,7 +180,7 @@ export function AdminDashboard() {
                 })
             )
         } catch (caught) {
-            setError(errorMessage(caught, t("user-update-error")))
+            setError(apiErrorMessage(caught, t, t("user-update-error")))
         } finally {
             setIsUpdatingUser(false)
         }
@@ -198,7 +198,7 @@ export function AdminDashboard() {
             await loadUsers(usersPage)
             setSuccess(t("user-deleted", { username }))
         } catch (caught) {
-            setError(errorMessage(caught, t("user-delete-error")))
+            setError(apiErrorMessage(caught, t, t("user-delete-error")))
         } finally {
             setIsUpdatingUser(false)
         }
@@ -225,7 +225,7 @@ export function AdminDashboard() {
                 t("user-credentials-reset", { username: updated.username })
             )
         } catch (caught) {
-            setError(errorMessage(caught, t("user-update-error")))
+            setError(apiErrorMessage(caught, t, t("user-update-error")))
         } finally {
             setIsUpdatingUser(false)
         }

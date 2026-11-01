@@ -1,5 +1,5 @@
 import { getStudentQuizSession, submitStudentQuizAnswer } from "@/api/quizzes"
-import { localizedErrorMessage } from "@/lib/errors"
+import { apiErrorMessage } from "@/lib/errors"
 import type {
     StudentAccount,
     StudentQuizQuestion,
@@ -147,9 +147,7 @@ export function TrainingPage() {
             setFeedback(updated.training_feedback)
             setNextSession(updated)
         } catch (caught) {
-            setError(
-                localizedErrorMessage(caught, t, t("training-answer-error"))
-            )
+            setError(apiErrorMessage(caught, t, t("training-answer-error")))
         } finally {
             setIsBusy(false)
         }

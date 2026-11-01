@@ -3,7 +3,7 @@ import type { ProblemReport } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Pagination } from "@/components/ui/pagination"
-import { errorMessage } from "@/lib/errors"
+import { apiErrorMessage } from "@/lib/errors"
 import { Inbox, LoaderCircle, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -44,7 +44,9 @@ export function ProblemReportsPanel({
             setReportToDelete(null)
             onDeleted(deletedId)
         } catch (caught) {
-            setError(errorMessage(caught, t("delete-problem-report-error")))
+            setError(
+                apiErrorMessage(caught, t, t("delete-problem-report-error"))
+            )
         } finally {
             setDeletingId(null)
         }

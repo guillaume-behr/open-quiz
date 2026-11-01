@@ -4142,6 +4142,7 @@ def test_request_size_and_authenticated_cache_controls(tmp_path: Path) -> None:
             json={"username": "root-admin", "password": "x" * 2048},
         )
         assert oversized.status_code == 413
+        assert oversized.json()["detail"]["code"] == "REQUEST_BODY_TOO_LARGE"
         assert oversized.headers["cache-control"] == "no-store"
 
         gated_upload = client.post(
@@ -6843,7 +6844,9 @@ def test_a_student_token_does_not_open_the_teacher_api(tmp_path: Path) -> None:
         environment = exam_environment(client)
         student_headers = environment["student_headers"]
 
-        assert client.get("/api/users/me", headers=student_headers).status_code == 401
+        refused = client.get("/api/users/me", headers=student_headers)
+        assert refused.status_code == 401
+        assert refused.json()["detail"]["code"] == "AUTH_TOKEN_INVALID"
         assert client.get("/api/classes", headers=student_headers).status_code == 401
         assert (
             client.get("/api/admin/users", headers=student_headers).status_code == 401
@@ -7405,6 +7408,7 @@ def test_admin_cannot_delete_a_professor_running_an_exam(tmp_path: Path) -> None
         )
 
         assert refused.status_code == 409
+        assert refused.json()["detail"]["code"] == "TEACHER_IN_ACTIVE_EXAM"
         with client.app.state.session_factory() as session:
             assert session.get(User, teacher_id) is not None
 

@@ -793,5 +793,14 @@
     "error-makeup-action-not-allowed": "Diese Aktion ist im aktuellen Zustand der Nachprüfung nicht möglich.",
     "error-makeup-no-selection": "Noch kein Schüler hat ein Quiz gewählt. Warten Sie auf mindestens eine Auswahl, bevor Sie starten.",
     "error-training-banks-grade-mismatch": "Übungsbanken müssen dieselbe Klassenstufe wie die Klasse haben.",
-    "error-training-question-count-exceeded": "Die gewünschte Anzahl an Fragen übersteigt den Inhalt der Bank."
+    "error-training-question-count-exceeded": "Die gewünschte Anzahl an Fragen übersteigt den Inhalt der Bank.",
+    "error-session-expired": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an.",
+    "error-problem-report-rate-limited": "Zu viele Meldungen gesendet. Versuchen Sie es später erneut.",
+    "error-problem-report-not-found": "Diese Meldung wurde nicht gefunden. Möglicherweise wurde sie bereits gelöscht.",
+    "error-teacher-not-found": "Dieses Lehrkraftkonto wurde nicht gefunden. Möglicherweise wurde es gelöscht.",
+    "error-teacher-in-active-exam": "Diese Lehrkraft leitet gerade eine Prüfung. Versuchen Sie es nach deren Ende erneut.",
+    "error-username-taken": "Dieser Benutzername wird bereits von einem anderen Konto verwendet.",
+    "error-service-unavailable": "Der Dienst ist vorübergehend nicht verfügbar. Versuchen Sie es gleich noch einmal.",
+    "error-request-invalid": "Die gesendete Anfrage ist ungültig. Laden Sie die Seite neu und versuchen Sie es erneut.",
+    "error-request-too-large": "Die gesendeten Daten sind zu groß. Verkleinern Sie die Bilder oder die Datei."
 }

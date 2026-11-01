@@ -1,8 +1,7 @@
 import { ApiError } from "@/api/client"
 
-// Every code the backend returns needs a key here: auth.py's auth_error()
-// codes and the ErrorCode members of app/errors.py. scripts/check-error-codes.mjs
-// fails `pnpm test` when one is missing.
+// Every ErrorCode member of open-quiz-backend/app/errors.py needs a key here:
+// scripts/check-error-codes.mjs fails `pnpm test` when one is missing.
 export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     AUTH_ORIGIN_REJECTED: "auth-origin-rejected",
     AUTH_INVALID_CREDENTIALS: "student-login-error",
@@ -103,31 +102,23 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     MAKEUP_HAS_ANSWERS: "makeup-cancel-with-answers-error",
     TRAINING_BANKS_GRADE_MISMATCH: "error-training-banks-grade-mismatch",
     TRAINING_QUESTION_COUNT_EXCEEDED: "error-training-question-count-exceeded",
+    AUTH_TOKEN_INVALID: "error-session-expired",
+    AUTH_REFRESH_SESSION_INVALID: "error-session-expired",
+    AUTH_REFRESH_PROOF_INVALID: "error-session-expired",
+    PROBLEM_REPORT_RATE_LIMITED: "error-problem-report-rate-limited",
+    PROBLEM_REPORT_NOT_FOUND: "error-problem-report-not-found",
+    TEACHER_NOT_FOUND: "error-teacher-not-found",
+    TEACHER_IN_ACTIVE_EXAM: "error-teacher-in-active-exam",
+    USERNAME_TAKEN: "error-username-taken",
+    DATABASE_UNAVAILABLE: "error-service-unavailable",
+    REQUEST_CONTENT_LENGTH_INVALID: "error-request-invalid",
+    REQUEST_BODY_TOO_LARGE: "error-request-too-large",
 }
 
-export function errorMessage(error: unknown, fallback: string): string {
-    // Server error details without a code are not localized: prefer the
-    // translated fallback for API errors. Deliberately thrown local errors
-    // (already translated) are shown as-is.
-    if (error instanceof ApiError) return fallback
-    return error instanceof Error ? error.message : fallback
-}
-
-export function localizedErrorMessage(
-    error: unknown,
-    translate: (key: string) => string,
-    fallback: string
-): string {
-    if (!(error instanceof ApiError) || !error.code) {
-        return errorMessage(error, fallback)
-    }
-    const translationKey = API_ERROR_TRANSLATION_KEYS[error.code]
-    return translationKey ? translate(translationKey) : fallback
-}
-
-// For screens that only ever show their own translated fallback: a known API
-// code gets its specific message, anything else (network failure, timeout,
-// unknown code) keeps the fallback rather than an untranslated message.
+// The message to show for a failed request: the translation of its API code
+// when the table knows it, otherwise the screen's translated fallback. A
+// network failure or a timeout falls back too: its own message is neither
+// translated nor meant for users.
 export function apiErrorMessage(
     error: unknown,
     translate: (key: string) => string,

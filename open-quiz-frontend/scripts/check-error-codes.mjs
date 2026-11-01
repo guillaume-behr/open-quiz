@@ -1,42 +1,24 @@
-// The backend answers errors with stable codes (auth_error() in
-// open-quiz-backend/app/routers/auth.py, ErrorCode in app/errors.py) and the
-// interface translates them through API_ERROR_TRANSLATION_KEYS in
-// src/lib/errors.ts. A code missing there falls back to a generic message,
-// so every backend code must have a key, every key a translation, and the
-// table no code the backend has stopped sending.
-import { readdir, readFile } from "node:fs/promises"
+// The backend answers errors with stable codes, the ErrorCode members of
+// open-quiz-backend/app/errors.py, and the interface translates them through
+// API_ERROR_TRANSLATION_KEYS in src/lib/errors.ts. A code missing there falls
+// back to a generic message, so every backend code must have a key, every key
+// a translation, and the table no code the backend has stopped sending.
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const frontend = fileURLToPath(new URL("../", import.meta.url))
-const backendApp = path.join(frontend, "../open-quiz-backend/app")
+const errorsModule = path.join(frontend, "../open-quiz-backend/app/errors.py")
 
-async function pythonFiles(directory) {
-    const entries = await readdir(directory, { withFileTypes: true })
-    const files = await Promise.all(
-        entries.map((entry) => {
-            const entryPath = path.join(directory, entry.name)
-            if (entry.isDirectory()) return pythonFiles(entryPath)
-            return entry.name.endsWith(".py") ? [entryPath] : []
-        })
-    )
-    return files.flat()
-}
-
-const backendCodes = new Set()
-for (const file of await pythonFiles(backendApp)) {
-    const source = await readFile(file, "utf8")
-    for (const match of source.matchAll(/auth_error\(\s*"([A-Z0-9_]+)"/g))
-        backendCodes.add(match[1])
-    if (path.basename(file) === "errors.py") {
-        for (const match of source.matchAll(
+const backendCodes = new Set(
+    [
+        ...(await readFile(errorsModule, "utf8")).matchAll(
             /^\s+([A-Z0-9_]+) = "\1"(?:\s+#.*)?$/gm
-        ))
-            backendCodes.add(match[1])
-    }
-}
+        ),
+    ].map((match) => match[1])
+)
 if (backendCodes.size === 0) {
-    throw new Error(`No error codes found under ${backendApp}`)
+    throw new Error(`No error codes found in ${errorsModule}`)
 }
 
 const table = await readFile(path.join(frontend, "src/lib/errors.ts"), "utf8")

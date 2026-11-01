@@ -793,5 +793,14 @@
     "error-makeup-action-not-allowed": "This action is not possible in the retake session's current state.",
     "error-makeup-no-selection": "No student has chosen a quiz yet. Wait for at least one choice before starting.",
     "error-training-banks-grade-mismatch": "Training banks must have the same grade level as the class.",
-    "error-training-question-count-exceeded": "The requested number of questions exceeds what the bank holds."
+    "error-training-question-count-exceeded": "The requested number of questions exceeds what the bank holds.",
+    "error-session-expired": "Your session has expired. Sign in again.",
+    "error-problem-report-rate-limited": "Too many reports sent. Try again later.",
+    "error-problem-report-not-found": "This report cannot be found. It may already have been deleted.",
+    "error-teacher-not-found": "This teacher account cannot be found. It may have been deleted.",
+    "error-teacher-in-active-exam": "This teacher is running an exam right now. Try again once it has ended.",
+    "error-username-taken": "This username is already used by another account.",
+    "error-service-unavailable": "The service is temporarily unavailable. Try again in a moment.",
+    "error-request-invalid": "The request sent is invalid. Reload the page and try again.",
+    "error-request-too-large": "The data sent is too large. Reduce the size of the images or the file."
 }

@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
+from app.errors import ErrorCode, api_error
 from app.models import TwoFactorCredential, User
 from app.security import access_token_version, decode_access_token
 
@@ -62,7 +63,9 @@ def get_current_user(
 ) -> User:
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Jeton d’authentification invalide ou expiré",
+        detail=api_error(
+            ErrorCode.AUTH_TOKEN_INVALID, "Jeton d’authentification invalide ou expiré"
+        ),
         headers={"WWW-Authenticate": "Bearer"},
     )
     if credentials is None:
@@ -81,7 +84,9 @@ def require_admin(user: CurrentUser) -> User:
     if not user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès administrateur requis",
+            detail=api_error(
+                ErrorCode.AUTH_ADMIN_ACCOUNT_REQUIRED, "Accès administrateur requis"
+            ),
         )
     return user
 
@@ -93,7 +98,9 @@ def require_professor(user: CurrentUser) -> User:
     if user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès enseignant requis",
+            detail=api_error(
+                ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED, "Accès enseignant requis"
+            ),
         )
     return user
 
