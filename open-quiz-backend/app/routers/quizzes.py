@@ -1,5 +1,4 @@
 from collections import defaultdict
-from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from math import ceil
@@ -16,7 +15,7 @@ from fastapi import (
     Response,
     status,
 )
-from sqlalchemy import Select, case, delete, func, or_, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from starlette.requests import HTTPConnection
@@ -34,7 +33,6 @@ from app.live_quiz import (
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
-    MakeupSessionSelection,
     Question,
     QuestionBank,
     QuestionCode,
@@ -56,7 +54,6 @@ from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_head
 from app.question_responses import load_question_records, load_question_responses
 from app.quiz_session_records import (
     delete_quiz_session_records,
-    release_join_codes,
 )
 from app.schemas import (
     QuestionResponse,
@@ -73,7 +70,6 @@ from app.schemas import (
     StudentQuizStateResponse,
 )
 from app.services.grading import (
-    compute_final_scores,
     decoded_answer_data,
     participant_maximum_scores,
     question_maximum_scores,
@@ -93,6 +89,14 @@ from app.services.question_draws import (
     draw_unique_question_ids,
     question_draw_pool,
     quiz_bank_ids,
+)
+from app.services.session_lifecycle import (
+    answer_review_enabled,
+    as_utc,
+    discard_active_training_sessions,
+    expire_owned_quiz_sessions,
+    expire_quiz_session,
+    quiz_ends_at,
 )
 from app.session_status import ACTIVE_SESSION_STATUSES
 
@@ -143,11 +147,6 @@ def publish_makeup_update(request: HTTPConnection, owner_id: int) -> None:
 
 def publish_active_quiz_sessions_update(request: HTTPConnection, owner_id: int) -> None:
     request.app.state.live_quiz_hub.publish(active_quiz_sessions_topic(owner_id))
-
-
-def as_utc(value: datetime) -> datetime:
-    """Read a naive timestamp, as legacy rows may hold, as UTC."""
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
 
 
 def safe_spreadsheet_cell(value: str) -> str:
@@ -709,167 +708,6 @@ def student_session_response(
     )
 
 
-def quiz_ends_at(quiz_session: QuizSession, quiz: Quiz) -> datetime | None:
-    started_at = quiz_session.started_at
-    if started_at is None:
-        return None
-    started_at = as_utc(started_at)
-    paused_duration = quiz_session.paused_duration_seconds or 0
-    if quiz_session.status == "paused" and quiz_session.paused_at is not None:
-        paused_at = as_utc(quiz_session.paused_at)
-        paused_duration += ceil(max(0, (datetime.now(UTC) - paused_at).total_seconds()))
-    duration_seconds = quiz_session.duration_seconds
-    if duration_seconds is None:
-        duration_seconds = quiz.duration_seconds
-    return started_at + timedelta(seconds=duration_seconds + paused_duration)
-
-
-def answer_review_enabled(quiz_session: QuizSession, quiz: Quiz) -> bool:
-    """Whether participants must confirm their answers before finishing.
-
-    Only exams offer the final review step, and a running session keeps the
-    option it was launched with even if the quiz is edited afterwards.
-    """
-    if quiz.mode != "exam":
-        return False
-    if quiz_session.allow_answer_review is not None:
-        return quiz_session.allow_answer_review
-    return quiz.allow_answer_review
-
-
-def expire_quiz_session(
-    quiz_session: QuizSession,
-    quiz: Quiz,
-    session: DbSession,
-) -> None:
-    ends_at = quiz_ends_at(quiz_session, quiz)
-    if (
-        quiz_session.status == "in_progress"
-        and ends_at is not None
-        and datetime.now(UTC) >= ends_at
-    ):
-        transition = session.execute(
-            update(QuizSession)
-            .where(
-                QuizSession.id == quiz_session.id,
-                QuizSession.status == "in_progress",
-            )
-            .values(status="finished")
-            .execution_options(synchronize_session=False)
-        )
-        if transition.rowcount != 1:
-            session.rollback()
-            session.refresh(quiz_session)
-            return
-        session.refresh(quiz_session)
-        for participant in session.scalars(
-            select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
-        ):
-            participant.current_position = None
-        if quiz.mode == "exam":
-            compute_final_scores(quiz_session, session)
-        session.commit()
-
-
-def finish_when_nobody_can_answer(
-    quiz_session: QuizSession,
-    quiz: Quiz,
-    session: DbSession,
-) -> None:
-    """End a running session once no present participant can still answer.
-
-    A participant who left keeps their position so that rejoining resumes
-    where they stopped, but they must not hold the session open: the teacher
-    no longer sees them among the participants either. Submitting the last
-    answer and being the last to leave both empty that set, so both paths
-    call this.
-
-    A session where nobody ever answered is left running: there is nothing to
-    grade, and finishing it would deny the rejoin its students still need.
-    """
-    if quiz_session.status != "in_progress":
-        return
-    answered = session.scalar(
-        select(QuizAnswer.id).where(QuizAnswer.session_id == quiz_session.id).limit(1)
-    )
-    if answered is None:
-        return
-    still_working = QuizParticipant.current_position.is_not(None)
-    if answer_review_enabled(quiz_session, quiz):
-        # The last answer no longer ends the session on its own: a participant
-        # reviewing their answers still has to confirm them.
-        still_working = or_(still_working, QuizParticipant.submitted_at.is_(None))
-    unfinished_count = session.scalar(
-        select(func.count(QuizParticipant.id)).where(
-            QuizParticipant.session_id == quiz_session.id,
-            still_working,
-            QuizParticipant.left_at.is_(None),
-        )
-    )
-    if unfinished_count:
-        return
-    transition = session.execute(
-        update(QuizSession)
-        .where(
-            QuizSession.id == quiz_session.id,
-            QuizSession.status == "in_progress",
-        )
-        .values(status="finished")
-        .execution_options(synchronize_session=False)
-    )
-    if transition.rowcount == 1:
-        quiz_session.status = "finished"
-        if quiz.mode == "exam":
-            compute_final_scores(quiz_session, session)
-
-
-def expire_owned_quiz_sessions(
-    professor: ProfessorUser,
-    session: DbSession,
-) -> None:
-    rows = list(
-        session.execute(
-            select(QuizSession, Quiz)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                Quiz.owner_id == professor.id,
-                QuizSession.status == "in_progress",
-            )
-        )
-    )
-    for quiz_session, quiz in rows:
-        expire_quiz_session(quiz_session, quiz, session)
-
-
-def delete_makeup_session_records(
-    makeup_session_id: int,
-    session: DbSession,
-) -> None:
-    child_ids = list(
-        session.scalars(
-            select(QuizSession.id).where(
-                QuizSession.makeup_session_id == makeup_session_id
-            )
-        )
-    )
-    delete_quiz_session_records(child_ids, session)
-    makeup_join_code = session.scalar(
-        select(MakeupSession.join_code).where(MakeupSession.id == makeup_session_id)
-    )
-    session.execute(
-        delete(MakeupSessionSelection).where(
-            MakeupSessionSelection.session_id == makeup_session_id
-        )
-    )
-    session.execute(
-        delete(MakeupSessionQuiz).where(
-            MakeupSessionQuiz.session_id == makeup_session_id
-        )
-    )
-    session.execute(delete(MakeupSession).where(MakeupSession.id == makeup_session_id))
-    release_join_codes([makeup_join_code] if makeup_join_code else [], session)
-
-
 def quiz_session_class_name(quiz_session: QuizSession, session: DbSession) -> str:
     if quiz_session.class_id is None:
         return quiz_session.class_name
@@ -877,33 +715,6 @@ def quiz_session_class_name(quiz_session: QuizSession, session: DbSession) -> st
     if student_class is None:
         return quiz_session.class_name
     return format_class_name(student_class.grade_level, student_class.name)
-
-
-def discard_previous_training_sessions(
-    student: StudentAccount,
-    membership: Student,
-    session: DbSession,
-) -> None:
-    session_ids = list(
-        session.scalars(
-            select(QuizSession.id)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .join(
-                QuizParticipant,
-                QuizParticipant.session_id == QuizSession.id,
-            )
-            .where(
-                Quiz.owner_id == student.owner_id,
-                Quiz.mode == "training",
-                QuizSession.status != "finished",
-                or_(
-                    QuizParticipant.student_id == membership.id,
-                    QuizParticipant.student_identifier == student.identifier,
-                ),
-            )
-        )
-    )
-    delete_quiz_session_records(session_ids, session)
 
 
 def purge_expired_quiz_results(
@@ -1650,50 +1461,6 @@ def cancel_quiz_session(
         "quiz.session_cancelled_and_deleted",
         professor_id=professor.id,
         session_id=session_id,
-    )
-
-
-def discard_active_training_sessions(
-    student_ids: Iterable[int] | Select,
-    bank_ids: Iterable[int],
-    session: DbSession,
-) -> None:
-    """Remove running trainings on an exam's banks before the exam opens.
-
-    Training answers reveal the expected answer, so a training session left
-    open on one of the exam's banks would let its student consult the
-    correction while sitting the exam.
-    """
-    active_training_ids = list(
-        session.scalars(
-            select(QuizSession.id)
-            .join(
-                QuizParticipant,
-                QuizParticipant.session_id == QuizSession.id,
-            )
-            .where(
-                QuizParticipant.student_id.in_(student_ids),
-                QuizSession.training_question_bank_id.in_(bank_ids),
-                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
-            )
-        )
-    )
-    delete_quiz_session_records(active_training_ids, session)
-
-
-def active_exam_bank_ids_for_class(class_id: int, session: DbSession) -> set[int]:
-    return set(
-        session.scalars(
-            select(QuizQuestionBank.question_bank_id)
-            .join(
-                QuizSession,
-                QuizSession.quiz_id == QuizQuestionBank.quiz_id,
-            )
-            .where(
-                QuizSession.class_id == class_id,
-                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
-            )
-        )
     )
 
 

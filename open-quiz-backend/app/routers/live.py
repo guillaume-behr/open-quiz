@@ -35,11 +35,13 @@ from app.models import (
 from app.routers.makeup import list_makeup_sessions
 from app.routers.quizzes import (
     active_session_responses,
-    as_utc,
     authenticated_participant,
     publish_quiz_update,
     session_response,
     student_state_response,
+)
+from app.services.session_lifecycle import (
+    as_utc,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])

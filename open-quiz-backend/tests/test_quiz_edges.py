@@ -18,6 +18,7 @@ from app.models import (
     TrainingQuizProfile,
 )
 from app.routers import live, quizzes, results, student_sessions
+from app.services import session_lifecycle
 
 from support import (
     FRONTEND_ORIGIN,
@@ -72,10 +73,10 @@ def test_helpers_read_legacy_session_settings() -> None:
         duration_seconds=None,
         allow_answer_review=None,
     )
-    ends_at = quizzes.quiz_ends_at(legacy, quiz)
+    ends_at = session_lifecycle.quiz_ends_at(legacy, quiz)
     assert ends_at.tzinfo is UTC
     assert ends_at > started_at.replace(tzinfo=UTC) + timedelta(seconds=600)
-    assert quizzes.answer_review_enabled(legacy, quiz) is False
+    assert session_lifecycle.answer_review_enabled(legacy, quiz) is False
 
     missing_class = SimpleNamespace(class_id=1, class_name="Archived class")
     session = SimpleNamespace(get=lambda *_: None)
