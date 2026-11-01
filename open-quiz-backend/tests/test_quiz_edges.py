@@ -17,7 +17,7 @@ from app.models import (
     QuizSessionStudentQuestion,
     TrainingQuizProfile,
 )
-from app.routers import live, quizzes, results
+from app.routers import live, quizzes, results, student_sessions
 
 from support import (
     FRONTEND_ORIGIN,
@@ -143,7 +143,8 @@ def test_missing_questions_are_reported_instead_of_crashing(
 ) -> None:
     client = environment["client"]
     _, headers, url = start(client, environment)
-    monkeypatch.setattr(quizzes, "load_question_records", lambda *_: ({}, {}))
+    for module in (quizzes, student_sessions):
+        monkeypatch.setattr(module, "load_question_records", lambda *_: ({}, {}))
     assert client.get(url, headers=headers).status_code == 409
     assert answer(client, environment, url, headers).status_code == 409
 
