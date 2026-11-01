@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.errors import ErrorCode, api_error
 from app.grade_levels import ensure_grade_level, grade_level_import_context
 from app.models import (
     Question,
@@ -319,7 +320,10 @@ def import_question_bank(
         if total_image_bytes > MAX_IMPORT_IMAGE_BYTES:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="Le volume total des images importées est trop important",
+                detail=api_error(
+                    ErrorCode.IMPORT_IMAGES_TOO_LARGE,
+                    "Le volume total des images importées est trop important",
+                ),
             )
         decoded_images.append(decoded_image)
         decoded_choice_images.append(choice_images)
@@ -336,7 +340,10 @@ def import_question_bank(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Une banque existe déjà pour ce niveau et ce titre",
+            detail=api_error(
+                ErrorCode.QUESTION_BANK_NAME_TAKEN,
+                "Une banque existe déjà pour ce niveau et ce titre",
+            ),
         ) from None
 
     created = [

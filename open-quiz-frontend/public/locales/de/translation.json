@@ -750,5 +750,17 @@
     "error-student-account-in-active-session": "Dieses Konto nimmt gerade an einem Quiz teil. Versuchen Sie es nach dem Ende der Sitzung erneut.",
     "error-student-filters-invalid": "Diese Klassenfilter können nicht kombiniert werden.",
     "error-grade-level-not-found": "Diese Klassenstufe wurde nicht gefunden. Möglicherweise wurde sie gelöscht.",
-    "error-grade-level-in-use": "Diese Klassenstufe wird noch von Klassen, Schülern oder Fragenbanken verwendet."
+    "error-grade-level-in-use": "Diese Klassenstufe wird noch von Klassen, Schülern oder Fragenbanken verwendet.",
+    "error-question-bank-not-found": "Diese Fragenbank wurde nicht gefunden. Möglicherweise wurde sie gelöscht.",
+    "error-question-bank-full": "Diese Bank hat die Höchstzahl von 500 Fragen erreicht.",
+    "error-question-not-found": "Diese Frage wurde nicht gefunden. Möglicherweise wurde sie gelöscht.",
+    "error-question-invalid": "Die Frage ist unvollständig oder fehlerhaft. Prüfen Sie Fragetext und Antworten.",
+    "error-choice-invalid": "Eine Antwort gehört nicht mehr zu dieser Frage. Laden Sie die Seite neu und versuchen Sie es erneut.",
+    "error-choice-content-required": "Jede Antwort braucht Text, ein Bild oder Code.",
+    "error-image-type-unsupported": "Dieses Bildformat wird nicht unterstützt. Verwenden Sie ein PNG-, JPEG-, WebP- oder GIF-Bild.",
+    "error-image-invalid": "Dieses Bild kann nicht verwendet werden: Es ist leer, unlesbar, zu schwer (höchstens 20 MB) oder zu groß.",
+    "error-image-encoding-invalid": "Ein Bild in der Datei ist nicht korrekt base64-kodiert.",
+    "error-question-images-too-large": "Die Bilder dieser Frage sind insgesamt zu groß. Verkleinern Sie sie oder verwenden Sie weniger.",
+    "error-import-images-too-large": "Die Bilder in der Datei sind insgesamt zu groß. Importieren Sie die Bank in mehreren Dateien.",
+    "error-image-not-found": "Dieses Bild wurde nicht gefunden. Möglicherweise wurde es aus der Frage entfernt."
 }

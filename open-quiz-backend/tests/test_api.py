@@ -3129,9 +3129,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
         )
         assert blocked_delete.status_code == 409
-        assert blocked_delete.json()["detail"] == (
-            "Cette question est utilisée par un quiz déjà lancé"
-        )
+        assert blocked_delete.json()["detail"] == {
+            "code": "QUESTION_IN_LAUNCHED_QUIZ",
+            "message": "Cette question est utilisée par un quiz déjà lancé",
+        }
 
         makeup_created = client.post(
             "/api/quizzes/makeup/sessions",
@@ -7738,9 +7739,10 @@ def test_update_question_in_used_bank_regrades_affected_sessions(
             headers=environment["teacher_headers"],
         )
         assert delete_response.status_code == 409
-        assert delete_response.json()["detail"] == (
-            "Cette question est utilisée par un quiz déjà lancé"
-        )
+        assert delete_response.json()["detail"] == {
+            "code": "QUESTION_IN_LAUNCHED_QUIZ",
+            "message": "Cette question est utilisée par un quiz déjà lancé",
+        }
 
 
 def test_teacher_unlocks_a_student_locked_out_by_failed_logins(

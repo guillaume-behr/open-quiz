@@ -99,6 +99,7 @@ def test_question_images_are_validated(
         files={"image": ("image.svg", b"<svg/>", "image/svg+xml")},
     )
     assert unsupported.status_code == 415
+    assert unsupported.json()["detail"]["code"] == "IMAGE_TYPE_UNSUPPORTED"
 
     empty = client.post(
         url,
@@ -116,6 +117,7 @@ def test_question_images_are_validated(
         files={"image": ("image.png", b"not an image", "image/png")},
     )
     assert corrupted.status_code == 422
+    assert corrupted.json()["detail"]["code"] == "IMAGE_INVALID"
 
     def with_choice_image(data: str) -> dict[str, str]:
         choices = [
@@ -145,10 +147,12 @@ def test_question_images_are_validated(
         files={"image": ("image.png", VALID_PNG, "image/png")},
     )
     assert too_large.status_code == 413
+    assert too_large.json()["detail"]["code"] == "IMAGE_TOO_LARGE"
     oversized_choice = client.post(
         url, headers=headers, data=with_choice_image(b64encode(VALID_PNG).decode())
     )
     assert oversized_choice.status_code == 422
+    assert oversized_choice.json()["detail"]["code"] == "IMAGE_INVALID"
 
 
 def test_question_volume_limits(environment, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -174,12 +178,14 @@ def test_question_volume_limits(environment, monkeypatch: pytest.MonkeyPatch) ->
         },
     )
     assert imported.status_code == 413
+    assert imported.json()["detail"]["code"] == "IMPORT_IMAGES_TOO_LARGE"
 
     monkeypatch.setattr(questions, "MAX_QUESTIONS_PER_BANK", 1)
     full = client.post(
         url, headers=headers, data={"payload": json.dumps(question_payload())}
     )
     assert full.status_code == 409
+    assert full.json()["detail"]["code"] == "QUESTION_BANK_FULL"
 
 
 def test_a_choice_needs_content_even_when_it_names_an_id(environment) -> None:
@@ -199,7 +205,8 @@ def test_a_choice_needs_content_even_when_it_names_an_id(environment) -> None:
         },
     )
     assert response.status_code == 422
-    assert "texte, une image ou du code" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "CHOICE_CONTENT_REQUIRED"
+    assert "texte, une image ou du code" in response.json()["detail"]["message"]
 
 
 def test_question_updates_cover_every_branch(

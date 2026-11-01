@@ -750,5 +750,17 @@
     "error-student-account-in-active-session": "Esta conta está a participar num teste. Tente novamente quando a sessão terminar.",
     "error-student-filters-invalid": "Estes filtros de turma não podem ser combinados.",
     "error-grade-level-not-found": "Este nível não foi encontrado. Talvez tenha sido eliminado.",
-    "error-grade-level-in-use": "Este nível ainda é usado por turmas, alunos ou bancos de perguntas."
+    "error-grade-level-in-use": "Este nível ainda é usado por turmas, alunos ou bancos de perguntas.",
+    "error-question-bank-not-found": "Este banco de perguntas não foi encontrado. Talvez tenha sido eliminado.",
+    "error-question-bank-full": "Este banco atingiu o máximo de 500 perguntas.",
+    "error-question-not-found": "Esta pergunta não foi encontrada. Talvez tenha sido eliminada.",
+    "error-question-invalid": "A pergunta está incompleta ou mal formada. Verifique o enunciado e as opções.",
+    "error-choice-invalid": "Uma opção já não pertence a esta pergunta. Recarregue a página e tente novamente.",
+    "error-choice-content-required": "Cada opção precisa de texto, uma imagem ou código.",
+    "error-image-type-unsupported": "Este formato de imagem não é suportado. Use uma imagem PNG, JPEG, WebP ou GIF.",
+    "error-image-invalid": "Esta imagem não pode ser usada: está vazia, ilegível, é demasiado pesada (máximo de 20 MB) ou demasiado grande.",
+    "error-image-encoding-invalid": "Uma imagem do ficheiro não está codificada corretamente em base64.",
+    "error-question-images-too-large": "As imagens desta pergunta são demasiado pesadas no total. Reduza o tamanho ou o número.",
+    "error-import-images-too-large": "As imagens do ficheiro são demasiado pesadas no total. Importe o banco em vários ficheiros.",
+    "error-image-not-found": "Esta imagem não foi encontrada. Talvez tenha sido removida da pergunta."
 }

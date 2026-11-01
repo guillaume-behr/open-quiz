@@ -750,5 +750,17 @@
     "error-student-account-in-active-session": "This account is taking part in a quiz right now. Try again once the session has ended.",
     "error-student-filters-invalid": "These class filters cannot be combined.",
     "error-grade-level-not-found": "This grade level cannot be found. It may have been deleted.",
-    "error-grade-level-in-use": "This grade level is still used by classes, students or question banks."
+    "error-grade-level-in-use": "This grade level is still used by classes, students or question banks.",
+    "error-question-bank-not-found": "This question bank cannot be found. It may have been deleted.",
+    "error-question-bank-full": "This bank has reached the maximum of 500 questions.",
+    "error-question-not-found": "This question cannot be found. It may have been deleted.",
+    "error-question-invalid": "The question is incomplete or malformed. Check the prompt and the choices.",
+    "error-choice-invalid": "A choice no longer belongs to this question. Reload the page and try again.",
+    "error-choice-content-required": "Each choice needs text, an image or code.",
+    "error-image-type-unsupported": "This image format is not supported. Use a PNG, JPEG, WebP or GIF image.",
+    "error-image-invalid": "This image cannot be used: it is empty, unreadable, too heavy (20 MB maximum) or too large.",
+    "error-image-encoding-invalid": "An image in the file is not correctly base64-encoded.",
+    "error-question-images-too-large": "The images of this question are too heavy in total. Reduce their size or number.",
+    "error-import-images-too-large": "The images in the file are too heavy in total. Import the bank in several files.",
+    "error-image-not-found": "This image cannot be found. It may have been removed from the question."
 }
