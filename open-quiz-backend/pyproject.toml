@@ -18,6 +18,7 @@ dependencies = [
     "pillow>=13.0.0",
     "psycopg[binary]>=3.2.10",
     "pwdlib>=0.3.0",
+    "pydantic-settings>=2.14.2",
     "pyjwt>=2.15.1",
     "pyotp>=2.10.0",
     "python-dotenv>=1.2.2",
