@@ -274,6 +274,25 @@ Les journaux peuvent contenir des informations d’audit. Centralisez-les dans u
 espace à accès restreint et appliquez la durée de conservation validée pour
 votre instance.
 
+### Journal des requêtes
+
+Le backend écrit une ligne JSON par requête sur sa sortie standard, sans
+adresse IP ni identifiant : la route figure sous sa forme paramétrée, jamais
+avec un code de session ou un numéro.
+
+```json
+{
+    "event": "http.request",
+    "method": "GET",
+    "route": "/api/quizzes/sessions/{session_id}",
+    "status": 200,
+    "duration_ms": 12.4
+}
+```
+
+Le journal d’accès d’Uvicorn, qui contiendrait l’adresse des clients, est
+désactivé.
+
 ## 💾 Sauvegarder les données
 
 Une sauvegarde exploitable comprend :

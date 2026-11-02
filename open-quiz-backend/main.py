@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.access_log import AccessLogMiddleware
 from app.audit import audit_event
 from app.config import Settings, get_settings
 from app.database import MAINTENANCE_LOCK_KEY, build_session_factory, postgres_url
@@ -492,6 +493,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "detail": api_error(ErrorCode.QUIZ_QUESTIONS_INSUFFICIENT, str(error))
             },
         )
+
+    app.add_middleware(AccessLogMiddleware)
 
     app.include_router(health.router)
     app.include_router(problem_reports.router)
