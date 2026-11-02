@@ -44,6 +44,8 @@ PostgreSQL and `open-quiz-backend/.env` before any update.
 - A quiz translation is no longer erased by a late reset.
 - Removing unused question images no longer aborts the data-retention run
   when a teacher reuses one of those images at the same moment.
+- Hourly data retention keeps running after a database error instead of
+  stopping until the backend restarts.
 
 ### Security
 
