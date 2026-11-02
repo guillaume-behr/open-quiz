@@ -188,6 +188,7 @@ cd open-quiz-backend
 uv sync --frozen --dev
 uv run --frozen ruff check app tests main.py scripts migrations
 uv run --frozen ruff format --check app tests main.py scripts migrations
+uv run --frozen mypy
 uv run --frozen pytest -q --cov --cov-report=term-missing
 uv run --frozen pip-audit
 ```

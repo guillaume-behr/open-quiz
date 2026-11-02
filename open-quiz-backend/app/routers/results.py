@@ -7,7 +7,7 @@ list their own published results.
 
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import (
     APIRouter,
@@ -603,9 +603,10 @@ def grade_written_answer(
             .order_by(QuestionChoice.position, QuestionChoice.id)
         )
     )
-    max_score = session_question_points(quiz_session, session, participant).get(
-        question.id, 0
-    )
+    # A missing participant has no questions, so the check above refused it.
+    max_score = session_question_points(
+        quiz_session, session, cast(QuizParticipant, participant)
+    ).get(question.id, 0)
     if payload.score > max_score:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

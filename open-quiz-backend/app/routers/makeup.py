@@ -24,6 +24,7 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from app.class_names import format_class_name
+from app.database import affected_rows
 from app.dependencies import DbSession, ProfessorUser
 from app.errors import ErrorCode, api_error
 from app.models import (
@@ -376,7 +377,7 @@ def control_makeup_session(
         .values(status=target)
         .execution_options(synchronize_session=False)
     )
-    if transition.rowcount != 1:
+    if affected_rows(transition) != 1:
         session.rollback()
         raise HTTPException(
             status_code=409,
@@ -579,7 +580,7 @@ def select_makeup_quiz(
         .values(status="waiting")
         .execution_options(synchronize_session=False)
     )
-    if waiting.rowcount != 1:
+    if affected_rows(waiting) != 1:
         session.rollback()
         raise HTTPException(
             status_code=409,

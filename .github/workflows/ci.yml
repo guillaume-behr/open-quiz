@@ -50,6 +50,7 @@ jobs:
       - run: uv sync --frozen --dev
       - run: uv run --frozen ruff check app tests main.py scripts migrations
       - run: uv run --frozen ruff format --check app tests main.py scripts migrations
+      - run: uv run --frozen mypy
       - name: Run backend tests
         env:
           # Disposable values, only used by the ephemeral CI test database.

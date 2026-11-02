@@ -1,10 +1,11 @@
 import os
 from pathlib import Path
+from typing import Any, cast
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine
-from sqlalchemy.engine import URL, Engine, make_url
+from sqlalchemy.engine import URL, CursorResult, Engine, Result, make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 MIGRATIONS_DIRECTORY = Path(__file__).resolve().parent.parent / "migrations"
@@ -64,3 +65,12 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
     )
     migrate_database(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def affected_rows(result: Result[Any]) -> int:
+    """Count the rows an UPDATE or DELETE changed.
+
+    Session.execute() is typed as returning a Result, but a DML statement
+    returns a CursorResult, which is the one that counts rows.
+    """
+    return cast(CursorResult[Any], result).rowcount
