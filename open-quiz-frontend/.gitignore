@@ -24,3 +24,6 @@ test-results
 *.njsproj
 *.sln
 *.sw?
+
+# Copied from node_modules/pyodide by scripts/copy-pyodide.mjs.
+public/pyodide/
