@@ -3,6 +3,8 @@
 [![CI](https://github.com/guillaume-behr/open-quiz/actions/workflows/ci.yml/badge.svg)](https://github.com/guillaume-behr/open-quiz/actions/workflows/ci.yml)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
+**Français** · [English](README.en.md)
+
 Plateforme libre et auto-hébergeable permettant de créer des quiz,
 d’organiser des examens en classe et de proposer des entraînements aux
 élèves.
@@ -164,7 +166,9 @@ sh ./update.sh
 
 Le [guide de déploiement](docs/deployment.md#-mettre-à-jour-open-quiz) décrit le
 déroulement complet de la mise à jour, ainsi que l’option `--no-pull` pour
-reconstruire sans récupérer de nouvelle révision.
+reconstruire sans récupérer de nouvelle révision. Avant chaque mise à jour,
+lisez les **Upgrade actions** de la nouvelle version dans le
+[journal des modifications](CHANGELOG.md).
 
 > [!CAUTION]
 > Sauvegardez PostgreSQL et `open-quiz-backend/.env` avant chaque mise à jour.
@@ -284,6 +288,7 @@ exécuter avant une pull request.
 
 | Ressource                                              | Contenu                                            |
 | ------------------------------------------------------ | -------------------------------------------------- |
+| [Journal des modifications](CHANGELOG.md)              | changements et actions de mise à jour, en anglais  |
 | [Déploiement et exploitation](docs/deployment.md)      | production, sauvegardes, mises à jour et dépannage |
 | [Documentation backend](open-quiz-backend/README.md)   | API, sécurité, stockage et exploitation            |
 | [Documentation frontend](open-quiz-frontend/README.md) | interface, routes, traduction et tests navigateur  |

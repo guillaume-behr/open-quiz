@@ -142,8 +142,10 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
   [Faire évoluer le schéma](open-quiz-backend/README.md#faire-évoluer-le-schéma)) ;
 - documentez les changements d’API, de configuration, de conservation ou de
   sécurité ;
-- signalez tout changement visible ou incompatible dans la description de la
-  pull request, afin qu’il figure dans les notes de la release.
+- ajoutez tout changement visible ou incompatible à la section
+  `[Unreleased]` de [CHANGELOG.md](CHANGELOG.md), en anglais, et décrivez
+  sous **Upgrade actions** ce qu’un administrateur doit faire au-delà de
+  `update.sh`.
 
 ### Interface et accessibilité
 
@@ -172,6 +174,8 @@ Toute nouvelle chaîne visible doit exister dans les huit catalogues de
 - vérifiez les liens relatifs et les ancres ;
 - documentez un fait au seul endroit qui en est responsable, et renvoyez-y
   depuis les autres.
+- `README.md` et `README.en.md` couvrent le même contenu : modifiez les deux
+  dans la même pull request.
 
 ## ✅ Vérifications
 

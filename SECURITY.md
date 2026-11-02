@@ -13,8 +13,8 @@ Open Quiz est encore en préversion et seule la branche par défaut est maintenu
 | Dernier état de `master`       | oui                    |
 | Versions et commits antérieurs | non                    |
 
-Les changements incompatibles et les précautions de mise à jour sont décrits
-dans les notes de chaque release et dans le
+Les changements incompatibles et les actions requises à la mise à jour sont
+décrits dans le [journal des modifications](CHANGELOG.md) et dans le
 [guide de déploiement](docs/deployment.md#-mettre-à-jour-open-quiz).
 
 ## 🚨 Signaler une vulnérabilité
@@ -41,6 +41,16 @@ Les mainteneurs accuseront réception dès que possible, vérifieront le rapport
 partageront l’état d’avancement dans l’advisory et coordonneront la divulgation.
 Si vous n’avez reçu aucun retour après sept jours, relancez dans le même canal
 privé.
+
+## 🇬🇧 Reporting a vulnerability in English
+
+Reports in English are welcome. Use the
+[private GitHub vulnerability form](https://github.com/guillaume-behr/open-quiz/security/advisories/new);
+do not open a public issue or pull request, and include no real student data,
+credentials or secret keys. Only the latest state of `master` receives
+security fixes. Please include the affected component or commit, minimal
+reproduction steps, the impact, and a non-destructive proof of concept. If
+you get no answer within seven days, follow up in the same private channel.
 
 ## 🎯 Périmètre
 
