@@ -11,6 +11,7 @@ from support import (
     assert_student_exam_payload_hides_answers,
     complete_first_login,
     database_connection,
+    expire_due_sessions,
     login_admin,
     make_client,
     settings_for,
@@ -1486,6 +1487,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             )
             connection.commit()
 
+        expire_due_sessions(client)
         expired_session_details = client.get(
             f"/api/quizzes/sessions/{expiring_session['id']}",
             headers=teacher_headers,

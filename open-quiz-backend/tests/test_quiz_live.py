@@ -22,6 +22,7 @@ from support import (
     FRONTEND_ORIGIN,
     assert_student_exam_payload_hides_answers,
     exam_environment,
+    expire_due_sessions,
     launch_and_join,
     make_client,
     settings_for,
@@ -133,7 +134,7 @@ def test_teacher_feeds_stream_pings_until_revoked(
     monkeypatch.setattr(
         live,
         "live_teacher_active_sessions_snapshot",
-        lambda *_: (None, None),
+        lambda *_: None,
     )
     monkeypatch.setattr(live, "live_makeup_sessions_snapshot", lambda *_: None)
     with connect(client, path) as socket:
@@ -188,6 +189,10 @@ def test_teacher_session_feed_reports_deletion_and_completion(
         session.commit()
     with connect(client, path) as socket:
         socket.send_json(token)
+        # Reading the expired session does not finish it: the expiry loop does,
+        # and the feed pushes the change.
+        assert socket.receive_json()["data"]["status"] == "in_progress"
+        expire_due_sessions(client)
         final = socket.receive_json()
         assert final["data"]["status"] == "finished"
         assert_closed(socket, status.WS_1000_NORMAL_CLOSURE)
@@ -237,6 +242,10 @@ def test_student_feed_follows_its_participation(
         session.commit()
     with connect(client, path) as socket:
         socket.send_json(token)
+        # Reading the expired session does not finish it: the expiry loop does,
+        # and the feed pushes the change.
+        assert socket.receive_json()["data"]["status"] == "in_progress"
+        expire_due_sessions(client)
         final = socket.receive_json()
         assert final["data"]["status"] == "finished"
         assert_closed(socket, status.WS_1000_NORMAL_CLOSURE)
@@ -245,10 +254,7 @@ def test_student_feed_follows_its_participation(
 def test_live_snapshots_handle_missing_records(environment) -> None:
     client = environment["client"]
     websocket = SimpleNamespace(app=client.app)
-    assert live.live_teacher_active_sessions_snapshot(websocket, 999999) == (
-        None,
-        None,
-    )
+    assert live.live_teacher_active_sessions_snapshot(websocket, 999999) is None
     assert live.live_makeup_sessions_snapshot(websocket, 999999) is None
     assert live.live_student_session_snapshot(websocket, "ABCDEF", "bad") is None
     assert not live.live_participant_is_authenticated(websocket, "ABCDEF", "bad")
