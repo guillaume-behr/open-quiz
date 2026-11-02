@@ -1,9 +1,13 @@
 import os
-from dataclasses import dataclass
+from dataclasses import Field, dataclass, fields
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from pydantic import Field as PydanticField
+from pydantic import create_model
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / ".env"
@@ -244,65 +248,65 @@ class Settings:
         )
 
 
-def required_environment(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError(f"{name} must be set in {ENV_FILE}")
-    return value
+# Every Settings field reads the environment variable of the same name in
+# upper case, except these.
+ENVIRONMENT_VARIABLES = {"environment": "APP_ENV"}
+# Fields the environment must set: get_settings() refuses to start without
+# them, even where Settings has a default.
+REQUIRED_FIELDS = {
+    "database_url",
+    "jwt_secret",
+    "totp_encryption_key",
+    "student_credential_encryption_key",
+    "admin_username",
+    "admin_password",
+    "environment",
+}
+# Fields Settings requires but the environment may leave out.
+ENVIRONMENT_DEFAULTS = {"frontend_origin": "http://localhost:5173"}
+
+
+class EnvironmentSettings(BaseSettings):
+    # Variable names are matched exactly, as os.getenv() did.
+    model_config = SettingsConfigDict(case_sensitive=True)
+
+
+def environment_variable(field: Field[Any]) -> str:
+    return ENVIRONMENT_VARIABLES.get(field.name, field.name.upper())
+
+
+def environment_model() -> type[BaseSettings]:
+    """A pydantic-settings model mirroring Settings, read from the environment.
+
+    It parses each variable into the field's type, so a malformed value fails
+    with the variable's name and the expected type instead of a bare int()
+    error. Required fields default to an empty string here, so that
+    get_settings() reports them as missing.
+    """
+    definitions: dict[str, Any] = {}
+    for field in fields(Settings):
+        if field.name in REQUIRED_FIELDS:
+            default: Any = ""
+        elif field.name in ENVIRONMENT_DEFAULTS:
+            default = ENVIRONMENT_DEFAULTS[field.name]
+        else:
+            default = field.default
+        definitions[field.name] = (
+            field.type,
+            PydanticField(default, validation_alias=environment_variable(field)),
+        )
+    return create_model(
+        "EnvironmentSettings", __base__=EnvironmentSettings, **definitions
+    )
 
 
 def get_settings() -> Settings:
     secure_private_file(ENV_FILE)
     load_dotenv(ENV_FILE)
-    return Settings(
-        database_url=required_environment("DATABASE_URL"),
-        jwt_secret=required_environment("JWT_SECRET"),
-        totp_encryption_key=required_environment("TOTP_ENCRYPTION_KEY"),
-        student_credential_encryption_key=required_environment(
-            "STUDENT_CREDENTIAL_ENCRYPTION_KEY"
-        ),
-        admin_username=required_environment("ADMIN_USERNAME"),
-        admin_password=required_environment("ADMIN_PASSWORD"),
-        frontend_origin=os.getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
-        access_token_minutes=int(os.getenv("ACCESS_TOKEN_MINUTES", "15")),
-        refresh_token_days=int(os.getenv("REFRESH_TOKEN_DAYS", "7")),
-        student_access_token_hours=int(os.getenv("STUDENT_ACCESS_TOKEN_HOURS", "2")),
-        login_attempts=int(os.getenv("LOGIN_ATTEMPTS", "10")),
-        login_window_seconds=int(os.getenv("LOGIN_WINDOW_SECONDS", "900")),
-        global_login_attempts=int(os.getenv("GLOBAL_LOGIN_ATTEMPTS", "2000")),
-        global_login_window_seconds=int(os.getenv("GLOBAL_LOGIN_WINDOW_SECONDS", "60")),
-        quiz_join_attempts=int(os.getenv("QUIZ_JOIN_ATTEMPTS", "60")),
-        quiz_participant_attempts=int(os.getenv("QUIZ_PARTICIPANT_ATTEMPTS", "900")),
-        quiz_violation_attempts=int(os.getenv("QUIZ_VIOLATION_ATTEMPTS", "60")),
-        quiz_rate_window_seconds=int(os.getenv("QUIZ_RATE_WINDOW_SECONDS", "60")),
-        quiz_result_retention_days=int(os.getenv("QUIZ_RESULT_RETENTION_DAYS", "365")),
-        training_result_retention_days=int(
-            os.getenv("TRAINING_RESULT_RETENTION_DAYS", "365")
-        ),
-        abandoned_session_retention_days=int(
-            os.getenv("ABANDONED_SESSION_RETENTION_DAYS", "7")
-        ),
-        problem_report_attempts=int(os.getenv("PROBLEM_REPORT_ATTEMPTS", "60")),
-        problem_report_window_seconds=int(
-            os.getenv("PROBLEM_REPORT_WINDOW_SECONDS", "900")
-        ),
-        problem_report_retention_days=int(
-            os.getenv("PROBLEM_REPORT_RETENTION_DAYS", "90")
-        ),
-        max_request_body_bytes=int(os.getenv("MAX_REQUEST_BODY_BYTES", "65536")),
-        environment=required_environment("APP_ENV"),
-        legal_host_name=os.getenv("LEGAL_HOST_NAME", ""),
-        legal_host_address=os.getenv("LEGAL_HOST_ADDRESS", ""),
-        legal_host_phone=os.getenv("LEGAL_HOST_PHONE", ""),
-        privacy_controller_name=os.getenv("PRIVACY_CONTROLLER_NAME", ""),
-        privacy_controller_contact=os.getenv("PRIVACY_CONTROLLER_CONTACT", ""),
-        privacy_dpo_contact=os.getenv("PRIVACY_DPO_CONTACT", ""),
-        privacy_legal_basis=os.getenv("PRIVACY_LEGAL_BASIS", ""),
-        privacy_recipients=os.getenv("PRIVACY_RECIPIENTS", ""),
-        privacy_teacher_data_retention=os.getenv("PRIVACY_TEACHER_DATA_RETENTION", ""),
-        privacy_student_data_retention=os.getenv("PRIVACY_STUDENT_DATA_RETENTION", ""),
-        privacy_security_log_retention=os.getenv("PRIVACY_SECURITY_LOG_RETENTION", ""),
-        accessibility_contact=os.getenv("ACCESSIBILITY_CONTACT", ""),
-        accessibility_scheme_url=os.getenv("ACCESSIBILITY_SCHEME_URL", ""),
-        accessibility_action_plan_url=os.getenv("ACCESSIBILITY_ACTION_PLAN_URL", ""),
-    )
+    values = environment_model()().model_dump()
+    for field in fields(Settings):
+        if field.name in REQUIRED_FIELDS and not values[field.name]:
+            raise RuntimeError(
+                f"{environment_variable(field)} must be set in {ENV_FILE}"
+            )
+    return Settings(**values)

@@ -4,7 +4,7 @@ from math import ceil
 from random import SystemRandom
 from statistics import median
 from string import ascii_uppercase, digits
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 from fastapi import (
     APIRouter,
@@ -21,6 +21,7 @@ from starlette.requests import HTTPConnection
 
 from app.audit import audit_event
 from app.class_names import format_class_name
+from app.database import affected_rows
 from app.dependencies import DbSession, ProfessorUser
 from app.errors import ErrorCode, api_error
 from app.live_quiz import (
@@ -175,7 +176,7 @@ def reject_quiz_join(
     request: Request,
     session: DbSession,
     subject: str,
-) -> None:
+) -> NoReturn:
     enforce_public_rate_limit(
         request,
         session,
@@ -1071,7 +1072,7 @@ def start_quiz_session(
             .values(status="in_progress", started_at=started_at)
             .execution_options(synchronize_session=False)
         )
-        if transition.rowcount != 1:
+        if affected_rows(transition) != 1:
             session.rollback()
             session.refresh(quiz_session)
             return session_response(quiz_session, quiz, session)
