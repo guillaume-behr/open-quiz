@@ -16,6 +16,7 @@ dependencies = [
     "cryptography>=50.0.0",
     "fastapi[standard]>=0.139.2",
     "pillow>=13.0.0",
+    "prometheus-client>=0.26.0",
     "psycopg[binary]>=3.2.10",
     "pwdlib>=0.3.0",
     "pyjwt>=2.15.1",
