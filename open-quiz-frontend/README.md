@@ -67,7 +67,7 @@ Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 | `pnpm lint`         | exécute ESLint                                                |
 | `pnpm format`       | applique Prettier aux sources et catalogues                   |
 | `pnpm format:check` | vérifie le formatage                                          |
-| `pnpm test`         | valide les catalogues, étiquettes de classe et codes d’erreur |
+| `pnpm test`         | valide catalogues, étiquettes, codes d’erreur et lance Vitest |
 | `pnpm typecheck`    | vérifie `src/` et la configuration Vite                       |
 | `pnpm test:e2e`     | lance les parcours Playwright dans Chromium                   |
 | `pnpm test:e2e:ui`  | ouvre l’interface Playwright                                  |
@@ -134,6 +134,13 @@ Les règles métier, les autorisations, les tirages et la notation restent côt�
 backend. Le frontend conserve les jetons d’accès privilégiés en mémoire et les
 sessions élève dans `sessionStorage`. Les sessions longues des enseignants et
 administrateurs utilisent un cookie HttpOnly géré par l’API.
+
+## 🧪 Tests unitaires
+
+Les tests unitaires Vitest se placent à côté du module testé, dans un fichier
+`*.test.ts`. `pnpm test` les lance une fois ; `pnpm exec vitest` les relance à
+chaque modification. Ceux qui ont besoin du stockage du navigateur ou du DOM
+déclarent `// @vitest-environment jsdom` en tête de fichier.
 
 ## 🧪 Tests navigateur
 
