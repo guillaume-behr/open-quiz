@@ -1,7 +1,5 @@
 import {
     deleteQuizSession,
-    downloadQuizResults,
-    getAllQuizzes,
     getParticipantAnswers,
     getQuizResults,
     gradeWrittenAnswer,
@@ -9,13 +7,12 @@ import {
 } from "@/api/quizzes"
 import { getAllStudentClasses } from "@/api/classes"
 import type {
-    Quiz,
     QuizAnswerReview,
     QuizParticipant,
     QuizSession,
-    StudentClass,
 } from "@/api/types"
 import { ParticipantAnswersDialog } from "@/components/results/participant-answers-dialog"
+import { ResultsExportDialog } from "@/components/results/results-export-dialog"
 import { ResultsSchedule } from "@/components/results/results-schedule"
 import { resultStart } from "@/components/results/results-utils"
 import { Button } from "@/components/ui/button"
@@ -26,14 +23,13 @@ import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import { formatScore } from "@/lib/grades"
-import { cn, formatClassName, saveBlob } from "@/lib/utils"
+import { cn, formatClassName } from "@/lib/utils"
 import { Tooltip } from "@base-ui/react/tooltip"
 import {
     CalendarDays,
     CalendarRange,
     ChartColumn,
     CheckCircle2,
-    Download,
     Eye,
     FileText,
     LoaderCircle,
@@ -43,9 +39,11 @@ import {
     TriangleAlert,
     UserRound,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+import { useAsyncAction } from "@/hooks/use-async-action"
+import { useResource } from "@/hooks/use-resource"
 
 type ResultsViewMode = "cards" | "schedule"
 
@@ -97,46 +95,60 @@ export function ResultsPanel({
     onExportDialogOpenChange,
 }: ResultsPanelProps) {
     const { t, i18n } = useTranslation()
-    const answersRequestVersion = useRef(0)
-    const [results, setResults] = useState<QuizSession[]>([])
     const [page, setPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [reloadKey, setReloadKey] = useState(0)
     const [quizFilter, setQuizFilter] = useState("")
     const [classFilter, setClassFilter] = useState("")
+    const resultList = useResource(
+        useCallback(
+            () => getQuizResults(page, quizFilter.trim(), classFilter.trim()),
+            [classFilter, page, quizFilter]
+        )
+    )
+    const results = resultList.data?.items ?? []
+    const totalPages = resultList.data?.totalPages ?? 1
+    const lastPage = resultList.data?.totalPages
+    // A deletion can leave the current page past the end of the list.
+    if (lastPage !== undefined && page > lastPage) setPage(lastPage)
+    const classList = useResource(getAllStudentClasses)
+    const classes = classList.data ?? []
     const [viewMode, setViewMode] = useState<ResultsViewMode>(storedResultsView)
     const [selectedResult, setSelectedResult] = useState<QuizSession | null>(
         null
     )
-    const [isLoading, setIsLoading] = useState(true)
-    const [loadError, setLoadError] = useState(false)
     const [resultToDelete, setResultToDelete] = useState<QuizSession | null>(
         null
     )
-    const [isDeleting, setIsDeleting] = useState(false)
-    const [deleteError, setDeleteError] = useState<string | null>(null)
     const [selectedParticipant, setSelectedParticipant] =
         useState<QuizParticipant | null>(null)
-    const [answers, setAnswers] = useState<QuizAnswerReview[]>([])
-    const [areAnswersLoading, setAreAnswersLoading] = useState(false)
-    const [answersError, setAnswersError] = useState<string | null>(null)
+    const selectedResultId = selectedResult?.id
+    const selectedParticipantId = selectedParticipant?.id
+    const answerList = useResource(
+        useCallback(
+            () =>
+                selectedResultId === undefined ||
+                selectedParticipantId === undefined
+                    ? Promise.resolve([])
+                    : getParticipantAnswers(
+                          selectedResultId,
+                          selectedParticipantId
+                      ),
+            [selectedParticipantId, selectedResultId]
+        )
+    )
+    const answers = answerList.isLoading ? [] : (answerList.data ?? [])
+    // Drafts only hold what the teacher typed; other answers show their score.
     const [scoreDrafts, setScoreDrafts] = useState<Record<number, string>>({})
     const [feedbackDrafts, setFeedbackDrafts] = useState<
         Record<number, string>
     >({})
     const [gradingAnswerId, setGradingAnswerId] = useState<number | null>(null)
-    const [publishingSessionId, setPublishingSessionId] = useState<
-        number | null
-    >(null)
-    const [publishError, setPublishError] = useState<string | null>(null)
-    const [exportClasses, setExportClasses] = useState<StudentClass[]>([])
-    const [areClassesLoading, setAreClassesLoading] = useState(true)
-    const [exportQuizzes, setExportQuizzes] = useState<Quiz[]>([])
-    const [exportClassId, setExportClassId] = useState<number | null>(null)
-    const [exportQuizId, setExportQuizId] = useState<number | null>(null)
-    const [isExportLoading, setIsExportLoading] = useState(false)
-    const [isExporting, setIsExporting] = useState(false)
-    const [exportError, setExportError] = useState<string | null>(null)
+    const [gradeError, setGradeError] = useState<string | null>(null)
+    const deleting = useAsyncAction(deleteSelectedResult, (caught) =>
+        apiErrorMessage(caught, t, t("delete-result-error"))
+    )
+    const publishing = useAsyncAction(publishSelectedGrades, (caught) =>
+        apiErrorMessage(caught, t, t("publish-grades-error"))
+    )
 
     useEffect(() => {
         try {
@@ -146,88 +158,11 @@ export function ResultsPanel({
         }
     }, [viewMode])
 
-    useEffect(() => {
-        let isActive = true
-        getQuizResults(page, quizFilter.trim(), classFilter.trim())
-            .then((result) => {
-                if (!isActive) return
-                setResults(result.items)
-                setTotalPages(result.totalPages)
-                setLoadError(false)
-                if (result.page > result.totalPages) setPage(result.totalPages)
-            })
-            .catch(() => {
-                if (isActive) setLoadError(true)
-            })
-            .finally(() => {
-                if (isActive) setIsLoading(false)
-            })
-        return () => {
-            isActive = false
-        }
-    }, [classFilter, page, quizFilter, reloadKey])
-
-    useEffect(() => {
-        let isActive = true
-        getAllStudentClasses()
-            .then((classes) => {
-                if (!isActive) return
-                setExportClasses(classes)
-                setExportClassId(classes[0]?.id ?? null)
-            })
-            .catch(() => {
-                if (isActive) setExportError(i18n.t("export-results-error"))
-            })
-            .finally(() => {
-                if (isActive) setAreClassesLoading(false)
-            })
-        return () => {
-            isActive = false
-        }
-    }, [i18n])
-
-    useEffect(() => {
-        if (!isExportDialogOpen || exportQuizzes.length > 0) return
-        let isActive = true
-        Promise.resolve()
-            .then(() => {
-                if (!isActive) return Promise.reject(new Error("cancelled"))
-                setExportError(null)
-                setIsExportLoading(true)
-                return getAllQuizzes()
-            })
-            .then((quizzes) => {
-                if (!isActive) return
-                setExportQuizzes(quizzes)
-            })
-            .catch(() => {
-                if (isActive) setExportError(i18n.t("export-results-error"))
-            })
-            .finally(() => {
-                if (isActive) setIsExportLoading(false)
-            })
-        return () => {
-            isActive = false
-        }
-    }, [exportQuizzes.length, i18n, isExportDialogOpen])
-
-    async function handleExport(): Promise<void> {
-        if (exportClassId === null) return
-        setIsExporting(true)
-        setExportError(null)
-        try {
-            saveBlob(
-                await downloadQuizResults(exportClassId, exportQuizId),
-                `resultats-classe-${exportClassId}${exportQuizId === null ? "-tous-les-quiz" : `-quiz-${exportQuizId}`}.csv`
-            )
-            onExportDialogOpenChange(false)
-        } catch (caught) {
-            setExportError(
-                apiErrorMessage(caught, t, t("export-results-error"))
-            )
-        } finally {
-            setIsExporting(false)
-        }
+    function updateResults(update: (result: QuizSession) => QuizSession) {
+        resultList.setData(
+            (current) =>
+                current && { ...current, items: current.items.map(update) }
+        )
     }
 
     const dateFormatter = useMemo(
@@ -243,79 +178,39 @@ export function ResultsPanel({
         return dateFormatter.format(resultStart(result))
     }
 
-    async function handleDeleteResult() {
+    async function deleteSelectedResult(): Promise<void> {
         if (!resultToDelete) return
-        setIsDeleting(true)
-        setDeleteError(null)
-        try {
-            await deleteQuizSession(resultToDelete.id)
-            setResults((existing) =>
-                existing.filter((result) => result.id !== resultToDelete.id)
-            )
-            if (selectedResult?.id === resultToDelete.id) {
-                setSelectedResult(null)
-            }
-            setResultToDelete(null)
-            setReloadKey((current) => current + 1)
-        } catch (caught) {
-            setDeleteError(apiErrorMessage(caught, t, t("delete-result-error")))
-        } finally {
-            setIsDeleting(false)
-        }
+        await deleteQuizSession(resultToDelete.id)
+        resultList.setData(
+            (current) =>
+                current && {
+                    ...current,
+                    items: current.items.filter(
+                        (result) => result.id !== resultToDelete.id
+                    ),
+                }
+        )
+        if (selectedResult?.id === resultToDelete.id) setSelectedResult(null)
+        setResultToDelete(null)
+        resultList.reload()
     }
 
-    async function openParticipantAnswers(
-        participant: QuizParticipant
-    ): Promise<void> {
-        if (!selectedResult) return
-        const requestVersion = ++answersRequestVersion.current
+    function openParticipantAnswers(participant: QuizParticipant): void {
+        if (participant.id === selectedParticipantId) answerList.reload()
         setSelectedParticipant(participant)
-        setAreAnswersLoading(true)
-        setAnswersError(null)
-        try {
-            const loadedAnswers = await getParticipantAnswers(
-                selectedResult.id,
-                participant.id
-            )
-            if (requestVersion !== answersRequestVersion.current) return
-            setAnswers(loadedAnswers)
-            setScoreDrafts(
-                Object.fromEntries(
-                    loadedAnswers.map((answer) => [
-                        answer.id,
-                        String(answer.score),
-                    ])
-                )
-            )
-            setFeedbackDrafts(
-                Object.fromEntries(
-                    loadedAnswers.map((answer) => [
-                        answer.id,
-                        answer.feedback ?? "",
-                    ])
-                )
-            )
-        } catch (caught) {
-            if (requestVersion === answersRequestVersion.current) {
-                setAnswersError(
-                    apiErrorMessage(caught, t, t("answers-load-error"))
-                )
-            }
-        } finally {
-            if (requestVersion === answersRequestVersion.current) {
-                setAreAnswersLoading(false)
-            }
-        }
+        setScoreDrafts({})
+        setFeedbackDrafts({})
+        setGradeError(null)
     }
 
     async function handleGrade(answer: QuizAnswerReview): Promise<void> {
         if (!selectedResult || selectedResult.grades_published_at !== null)
             return
-        const score = Number(scoreDrafts[answer.id])
+        const score = Number(scoreDrafts[answer.id] ?? answer.score)
         if (!Number.isFinite(score)) return
-        const feedback = feedbackDrafts[answer.id] ?? null
+        const feedback = feedbackDrafts[answer.id] ?? answer.feedback ?? ""
         setGradingAnswerId(answer.id)
-        setAnswersError(null)
+        setGradeError(null)
         try {
             const graded = await gradeWrittenAnswer(
                 selectedResult.id,
@@ -325,8 +220,8 @@ export function ResultsPanel({
             )
             const scoreDifference = graded.score - answer.score
             const pendingDifference = answer.is_graded ? 0 : -1
-            setAnswers((current) =>
-                current.map((item) => (item.id === graded.id ? graded : item))
+            answerList.setData((current) =>
+                current?.map((item) => (item.id === graded.id ? graded : item))
             )
             const updateSession = (session: QuizSession): QuizSession => ({
                 ...session,
@@ -347,42 +242,26 @@ export function ResultsPanel({
             setSelectedResult((current) =>
                 current ? updateSession(current) : current
             )
-            setResults((current) =>
-                current.map((result) =>
-                    result.id === selectedResult.id
-                        ? updateSession(result)
-                        : result
-                )
+            updateResults((result) =>
+                result.id === selectedResult.id ? updateSession(result) : result
             )
         } catch (caught) {
-            setAnswersError(apiErrorMessage(caught, t, t("answers-load-error")))
+            setGradeError(apiErrorMessage(caught, t, t("answers-load-error")))
         } finally {
             setGradingAnswerId(null)
         }
     }
 
-    async function handlePublishGrades(): Promise<void> {
+    async function publishSelectedGrades(): Promise<void> {
         if (!selectedResult) return
-        setPublishingSessionId(selectedResult.id)
-        setPublishError(null)
-        try {
-            const published = await publishQuizGrades(selectedResult.id)
-            setSelectedResult(published)
-            setResults((current) =>
-                current.map((result) =>
-                    result.id === published.id ? published : result
-                )
-            )
-        } catch (caught) {
-            setPublishError(
-                apiErrorMessage(caught, t, t("publish-grades-error"))
-            )
-        } finally {
-            setPublishingSessionId(null)
-        }
+        const published = await publishQuizGrades(selectedResult.id)
+        setSelectedResult(published)
+        updateResults((result) =>
+            result.id === published.id ? published : result
+        )
     }
 
-    if (isLoading) {
+    if (!resultList.hasSettled) {
         return (
             <div
                 className="flex min-h-64 items-center justify-center"
@@ -397,7 +276,7 @@ export function ResultsPanel({
         )
     }
 
-    if (loadError) {
+    if (resultList.error) {
         return (
             <div
                 className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive"
@@ -436,14 +315,14 @@ export function ResultsPanel({
                                 id="result-class-filter"
                                 className={NATIVE_SELECT_CLASS_NAME}
                                 value={classFilter}
-                                disabled={areClassesLoading}
+                                disabled={classList.isLoading}
                                 onChange={(event) => {
                                     setClassFilter(event.target.value)
                                     setPage(1)
                                 }}
                             >
                                 <option value="">{t("all-classes")}</option>
-                                {exportClasses.map((studentClass) => (
+                                {classes.map((studentClass) => (
                                     <option
                                         key={studentClass.id}
                                         value={studentClass.name}
@@ -609,7 +488,7 @@ export function ResultsPanel({
                                                         "delete-result"
                                                     )}
                                                     onClick={() => {
-                                                        setDeleteError(null)
+                                                        deleting.setError(null)
                                                         setResultToDelete(
                                                             result
                                                         )
@@ -632,119 +511,13 @@ export function ResultsPanel({
                 </div>
             </div>
 
-            <Dialog
+            <ResultsExportDialog
                 open={isExportDialogOpen}
-                onOpenChange={(open) => {
-                    if (!isExporting) onExportDialogOpenChange(open)
-                }}
-                title={t("export-results-csv")}
-                description={t("export-results-help")}
-                size="md"
-            >
-                {isExportLoading || areClassesLoading ? (
-                    <div
-                        className="flex min-h-32 items-center justify-center"
-                        role="status"
-                        aria-label={t("page-loading")}
-                    >
-                        <LoaderCircle
-                            className="size-7 animate-spin text-primary motion-reduce:animate-none"
-                            aria-hidden="true"
-                        />
-                    </div>
-                ) : (
-                    <FieldGroup>
-                        <div className="grid items-start gap-4 sm:grid-cols-2">
-                            <Field>
-                                <FieldLabel htmlFor="export-results-class">
-                                    {t("class-name")}
-                                </FieldLabel>
-                                <select
-                                    id="export-results-class"
-                                    className={NATIVE_SELECT_CLASS_NAME}
-                                    value={exportClassId ?? ""}
-                                    onChange={(event) =>
-                                        setExportClassId(
-                                            Number(event.target.value)
-                                        )
-                                    }
-                                >
-                                    {exportClasses.map((studentClass) => (
-                                        <option
-                                            key={studentClass.id}
-                                            value={studentClass.id}
-                                        >
-                                            {formatClassName(
-                                                studentClass.grade_level,
-                                                studentClass.name
-                                            )}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                            <Field>
-                                <FieldLabel htmlFor="export-results-quiz">
-                                    {t("quiz-title")}
-                                </FieldLabel>
-                                <select
-                                    id="export-results-quiz"
-                                    className={NATIVE_SELECT_CLASS_NAME}
-                                    value={exportQuizId ?? ""}
-                                    onChange={(event) =>
-                                        setExportQuizId(
-                                            event.target.value
-                                                ? Number(event.target.value)
-                                                : null
-                                        )
-                                    }
-                                >
-                                    <option value="">{t("all-quizzes")}</option>
-                                    {exportQuizzes.map((quiz) => (
-                                        <option key={quiz.id} value={quiz.id}>
-                                            {quiz.title}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                        </div>
-                        {exportClasses.length === 0 && !exportError && (
-                            <p className="text-sm text-muted-foreground">
-                                {t("export-results-no-classes")}
-                            </p>
-                        )}
-                        {exportError && (
-                            <p
-                                className="text-sm text-destructive"
-                                role="alert"
-                            >
-                                {exportError}
-                            </p>
-                        )}
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isExporting}
-                                onClick={() => onExportDialogOpenChange(false)}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button
-                                type="button"
-                                disabled={isExporting || exportClassId === null}
-                                onClick={handleExport}
-                            >
-                                {isExporting ? (
-                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                                ) : (
-                                    <Download />
-                                )}
-                                {t("export-csv")}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                )}
-            </Dialog>
+                onOpenChange={onExportDialogOpenChange}
+                classes={classes}
+                areClassesLoading={classList.isLoading}
+                classesFailed={Boolean(classList.error)}
+            />
 
             <Dialog
                 open={selectedResult !== null}
@@ -784,11 +557,11 @@ export function ResultsPanel({
                                             participant.pending_manual_grading_count >
                                             0
                                     ) ||
-                                    publishingSessionId === selectedResult.id
+                                    publishing.isPending
                                 }
-                                onClick={() => void handlePublishGrades()}
+                                onClick={() => void publishing.run()}
                             >
-                                {publishingSessionId === selectedResult.id && (
+                                {publishing.isPending && (
                                     <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 )}
                                 {t(
@@ -797,12 +570,12 @@ export function ResultsPanel({
                                         : "publish-grades"
                                 )}
                             </Button>
-                            {publishError && (
+                            {publishing.error && (
                                 <p
                                     className="w-full text-sm text-destructive"
                                     role="alert"
                                 >
-                                    {publishError}
+                                    {publishing.error}
                                 </p>
                             )}
                         </div>
@@ -967,7 +740,7 @@ export function ResultsPanel({
                                                         size="sm"
                                                         variant="outline"
                                                         onClick={() =>
-                                                            void openParticipantAnswers(
+                                                            openParticipantAnswers(
                                                                 participant
                                                             )
                                                         }
@@ -995,17 +768,35 @@ export function ResultsPanel({
             <ParticipantAnswersDialog
                 participant={selectedParticipant}
                 answers={answers}
-                isLoading={areAnswersLoading}
-                error={answersError}
-                scoreDrafts={scoreDrafts}
-                feedbackDrafts={feedbackDrafts}
+                isLoading={selectedParticipant !== null && answerList.isLoading}
+                error={
+                    gradeError ??
+                    (answerList.error
+                        ? apiErrorMessage(
+                              answerList.error,
+                              t,
+                              t("answers-load-error")
+                          )
+                        : null)
+                }
+                scoreDrafts={Object.fromEntries(
+                    answers.map((answer) => [
+                        answer.id,
+                        scoreDrafts[answer.id] ?? String(answer.score),
+                    ])
+                )}
+                feedbackDrafts={Object.fromEntries(
+                    answers.map((answer) => [
+                        answer.id,
+                        feedbackDrafts[answer.id] ?? answer.feedback ?? "",
+                    ])
+                )}
                 gradingAnswerId={gradingAnswerId}
                 isReadOnly={selectedResult?.grades_published_at != null}
                 locale={i18n.language}
                 onClose={() => {
                     setSelectedParticipant(null)
-                    setAnswers([])
-                    setAnswersError(null)
+                    setGradeError(null)
                 }}
                 onScoreDraftChange={(answerId, score) =>
                     setScoreDrafts((current) => ({
@@ -1025,7 +816,7 @@ export function ResultsPanel({
             <Dialog
                 open={resultToDelete !== null}
                 onOpenChange={(open) => {
-                    if (!open && !isDeleting) setResultToDelete(null)
+                    if (!open && !deleting.isPending) setResultToDelete(null)
                 }}
                 title={t("delete-result")}
                 description={t("delete-result-help", {
@@ -1034,25 +825,25 @@ export function ResultsPanel({
                 size="sm"
             >
                 <div className="space-y-4">
-                    {deleteError && (
+                    {deleting.error && (
                         <p className="text-sm text-destructive" role="alert">
-                            {deleteError}
+                            {deleting.error}
                         </p>
                     )}
                     <div className="flex justify-end gap-2">
                         <Button
                             variant="outline"
                             onClick={() => setResultToDelete(null)}
-                            disabled={isDeleting}
+                            disabled={deleting.isPending}
                         >
                             {t("cancel")}
                         </Button>
                         <Button
                             variant="destructive"
-                            onClick={() => void handleDeleteResult()}
-                            disabled={isDeleting}
+                            onClick={() => void deleting.run()}
+                            disabled={deleting.isPending}
                         >
-                            {isDeleting ? (
+                            {deleting.isPending ? (
                                 <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                             ) : (
                                 <Trash2 />
