@@ -135,6 +135,28 @@ Le déploiement crée trois services :
 Le backend n’est pas publié sur l’hôte. Le frontend écoute uniquement sur
 `127.0.0.1:7800` afin qu’un reverse proxy soit le seul point d’entrée public.
 
+### Plusieurs workers
+
+Le backend démarre un seul processus Uvicorn par défaut. Pour en lancer
+davantage, définissez `OPEN_QUIZ_API_WORKERS` dans un fichier `.env` placé à la
+racine du dépôt, à côté de `docker-compose.yml` (distinct de
+`open-quiz-backend/.env`), puis relancez `sh ./update.sh` :
+
+```shell
+OPEN_QUIZ_API_WORKERS=2
+```
+
+Les mises à jour en direct atteignent les élèves et enseignants connectés à
+n’importe quel worker : chaque publication est relayée aux autres processus par
+PostgreSQL. Mesuré sur 4 cœurs avec PostgreSQL local, ce relais réveille les
+35 WebSockets d’une session tenues par un autre worker en 1,8 ms en médiane
+(2,6 ms au 95ᵉ centile), et 250 WebSockets en 8 ms. Le script
+`python -m scripts.live_relay_benchmark` refait cette mesure sur une instance.
+
+Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes, et 2
+pour le relais. Restez sous `max_connections` (100 par défaut) : au-delà de
+4 workers, augmentez-le ou réduisez leur nombre.
+
 ## 🔒 Publier l’application en HTTPS
 
 Placez un reverse proxy HTTPS devant `127.0.0.1:7800`. Exemple Caddy :
