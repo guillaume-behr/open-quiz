@@ -9,7 +9,7 @@ every free-text cell against spreadsheet formula injection.
 import csv
 import io
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from statistics import median
 
 from sqlalchemy import case, func, select
@@ -52,7 +52,7 @@ def safe_spreadsheet_cell(value: str) -> str:
 
 
 def finished_session_responses(
-    rows: list[tuple[QuizSession, Quiz]],
+    rows: Sequence[tuple[QuizSession, Quiz]],
     session: Session,
 ) -> list[QuizSessionResponse]:
     """Build finished-session responses with a fixed number of queries."""

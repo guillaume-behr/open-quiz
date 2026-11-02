@@ -4,6 +4,7 @@ from urllib.request import Request, urlopen
 
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
+from websockets.typing import Origin
 
 FRONTEND_URL = "http://open-quiz-frontend:8080"
 FRONTEND_ORIGIN = "https://quiz.example.com"
@@ -24,7 +25,7 @@ def check_http_proxy() -> None:
 async def check_websocket_proxy() -> None:
     async with connect(
         "ws://open-quiz-frontend:8080/api/quizzes/live/teacher/sessions",
-        origin=FRONTEND_ORIGIN,
+        origin=Origin(FRONTEND_ORIGIN),
         additional_headers={"X-Forwarded-Proto": "https"},
         open_timeout=5,
         close_timeout=5,

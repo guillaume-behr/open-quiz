@@ -456,14 +456,16 @@ def update_question(
             ),
         )
     replacement_choice_images = []
-    for choice in question_payload.choices:
-        new_image_data, new_image_content_type = decode_image_payload(choice.image)
+    for submitted in question_payload.choices:
+        new_image_data, new_image_content_type = decode_image_payload(submitted.image)
         existing_choice = (
-            existing_choices_by_id.get(choice.id) if choice.id is not None else None
+            existing_choices_by_id.get(submitted.id)
+            if submitted.id is not None
+            else None
         )
         if (
             new_image_data is None
-            and not choice.remove_image
+            and not submitted.remove_image
             and existing_choice is not None
         ):
             new_image_data = existing_choice.image_data

@@ -33,7 +33,9 @@ def student_account_response(
     ).first()
     return student_account_response_from_membership(
         account,
-        tuple(membership) if membership else None,
+        (membership.class_id, membership.name, membership.grade_level)
+        if membership
+        else None,
     )
 
 
