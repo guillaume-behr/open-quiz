@@ -22,9 +22,11 @@ import {
 } from "@/components/question-banks/question-bank-secondary-dialogs"
 import { QuestionBanksList } from "@/components/question-banks/question-banks-list"
 import { QuestionsManager } from "@/components/question-banks/questions-dialog"
-import { type FormEvent, useEffect, useRef, useState } from "react"
+import { type FormEvent, useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+import { useAsyncAction } from "@/hooks/use-async-action"
+import { useResource } from "@/hooks/use-resource"
 
 function compareQuestionBanks(
     first: QuestionBank,
@@ -64,150 +66,151 @@ export function QuestionBanksPanel({
     onDeleteGradeLevel,
 }: QuestionBanksPanelProps) {
     const { t } = useTranslation()
-    const [questionBanks, setQuestionBanks] = useState<QuestionBank[]>([])
     const [page, setPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [reloadKey, setReloadKey] = useState(0)
+    const [titleFilter, setTitleFilter] = useState("")
+    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
+    const bankList = useResource(
+        useCallback(
+            () => getQuestionBanks(page, titleFilter.trim(), gradeLevelFilter),
+            [gradeLevelFilter, page, titleFilter]
+        )
+    )
+    const questionBanks = bankList.data?.items ?? []
+    const totalPages = bankList.data?.totalPages ?? 1
+    const lastPage = bankList.data?.totalPages
+    // A deletion can leave the current page past the end of the list.
+    if (lastPage !== undefined && page > lastPage) setPage(lastPage)
     const [gradeLevel, setGradeLevel] = useState("")
     const [title, setTitle] = useState("")
     const [editingBank, setEditingBank] = useState<QuestionBank | null>(null)
-    const [titleFilter, setTitleFilter] = useState("")
-    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
     const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
     const [newGradeLevel, setNewGradeLevel] = useState("")
-    const [isLoading, setIsLoading] = useState(true)
-    const [isCreating, setIsCreating] = useState(false)
-    const [createError, setCreateError] = useState<string | null>(null)
-    const [loadError, setLoadError] = useState<string | null>(null)
     const [selectedBankId, setSelectedBankId] = useState<number | null>(null)
-    const [questions, setQuestions] = useState<Question[]>([])
-    const [areQuestionsLoading, setAreQuestionsLoading] = useState(false)
-    const [questionsError, setQuestionsError] = useState<string | null>(null)
-    const [isQuestionFormOpen, setIsQuestionFormOpen] = useState(false)
-    const [isQuestionsDialogOpen, setIsQuestionsDialogOpen] = useState(false)
+    const questionList = useResource(
+        useCallback(
+            () =>
+                selectedBankId === null
+                    ? Promise.resolve([])
+                    : getQuestions(selectedBankId),
+            [selectedBankId]
+        )
+    )
+    // Which dialog of the edited bank is in front: the bank with its
+    // questions, the form of one question, or the deletion of one question.
+    const [bankView, setBankView] = useState<
+        "questions" | "question-form" | "delete-question" | null
+    >(null)
     const [editingQuestion, setEditingQuestion] = useState<Question | null>(
+        null
+    )
+    const [questionToDelete, setQuestionToDelete] = useState<Question | null>(
         null
     )
     const [isBatchBusy, setIsBatchBusy] = useState(false)
     const [batchMessage, setBatchMessage] = useState<string | null>(null)
     const [batchError, setBatchError] = useState<string | null>(null)
-    const [importError, setImportError] = useState<string | null>(null)
     const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
     const [importFile, setImportFile] = useState<File | null>(null)
     const [bankToDelete, setBankToDelete] = useState<QuestionBank | null>(null)
-    const [isDeletingBank, setIsDeletingBank] = useState(false)
-    const [deleteBankError, setDeleteBankError] = useState<string | null>(null)
-    const [questionToDelete, setQuestionToDelete] = useState<Question | null>(
-        null
-    )
-    const [isDeletingQuestion, setIsDeletingQuestion] = useState(false)
-    const [deleteQuestionError, setDeleteQuestionError] = useState<
-        string | null
-    >(null)
     const importInputRef = useRef<HTMLInputElement>(null)
 
-    useEffect(() => {
-        let isActive = true
+    const saving = useAsyncAction(saveBank, (caughtError) =>
+        apiErrorMessage(
+            caughtError,
+            t,
+            caughtError instanceof ApiError && caughtError.status === 409
+                ? t("question-bank-duplicate-error")
+                : t("question-bank-create-error")
+        )
+    )
+    const deletingBank = useAsyncAction(deleteSelectedBank, (caughtError) =>
+        apiErrorMessage(
+            caughtError,
+            t,
+            caughtError instanceof ApiError && caughtError.status === 409
+                ? t("question-bank-in-use-error")
+                : t("question-bank-delete-error")
+        )
+    )
+    const deletingQuestion = useAsyncAction(
+        deleteSelectedQuestion,
+        (caughtError) =>
+            apiErrorMessage(
+                caughtError,
+                t,
+                caughtError instanceof ApiError && caughtError.status === 409
+                    ? t("question-in-use-error")
+                    : t("question-delete-error")
+            )
+    )
+    const importing = useAsyncAction(importBank, (caughtError) =>
+        apiErrorMessage(
+            caughtError,
+            t,
+            caughtError instanceof ApiError && caughtError.status === 409
+                ? t("json-import-duplicate-error")
+                : describeJsonImportFailure(caughtError, t("json-import-error"))
+        )
+    )
 
-        getQuestionBanks(page, titleFilter.trim(), gradeLevelFilter)
-            .then((result) => {
-                if (!isActive) return
-                setQuestionBanks(result.items)
-                setTotalPages(result.totalPages)
-                setLoadError(null)
-                if (result.page > result.totalPages) setPage(result.totalPages)
-            })
-            .catch(() => {
-                if (isActive) setLoadError(t("question-banks-load-error"))
-            })
-            .finally(() => {
-                if (isActive) setIsLoading(false)
-            })
+    function updateBanks(update: (banks: QuestionBank[]) => QuestionBank[]) {
+        bankList.setData(
+            (current) => current && { ...current, items: update(current.items) }
+        )
+    }
 
-        return () => {
-            isActive = false
-        }
-    }, [gradeLevelFilter, page, reloadKey, t, titleFilter])
+    function changeQuestionCount(bankId: number, change: number): void {
+        updateBanks((banks) =>
+            banks.map((bank) =>
+                bank.id === bankId
+                    ? {
+                          ...bank,
+                          question_count: Math.max(
+                              0,
+                              bank.question_count + change
+                          ),
+                      }
+                    : bank
+            )
+        )
+    }
 
-    useEffect(() => {
-        if (!isQuestionsDialogOpen || selectedBankId === null) return
-        let isActive = true
-
-        getQuestions(selectedBankId)
-            .then((loadedQuestions) => {
-                if (isActive) setQuestions(loadedQuestions)
-            })
-            .catch(() => {
-                if (isActive) setQuestionsError(t("questions-load-error"))
-            })
-            .finally(() => {
-                if (isActive) setAreQuestionsLoading(false)
-            })
-
-        return () => {
-            isActive = false
-        }
-    }, [isQuestionsDialogOpen, selectedBankId, t])
-
-    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    async function saveBank(event: FormEvent<HTMLFormElement>): Promise<void> {
         event.preventDefault()
-        setCreateError(null)
-        setIsCreating(true)
-
-        try {
-            const saved = editingBank
-                ? await updateQuestionBank(editingBank.id, {
-                      grade_level: gradeLevel.trim(),
-                      chapter: title.trim(),
-                  })
-                : await createQuestionBank({
-                      grade_level: gradeLevel.trim(),
-                      chapter: title.trim(),
-                  })
-            setQuestionBanks((banks) =>
-                (editingBank
-                    ? banks.map((bank) => (bank.id === saved.id ? saved : bank))
-                    : [...banks, saved]
-                ).sort(compareQuestionBanks)
-            )
-            setGradeLevel("")
-            setTitle("")
-            setEditingBank(null)
-            setIsQuestionsDialogOpen(false)
-            setSelectedBankId(null)
-            setTitleFilter("")
-            setGradeLevelFilter("")
-            const allBanks = await getAllQuestionBanks().catch(() => [])
-            setPage(pageContaining(allBanks, saved.id, PAGE_SIZE))
-            setReloadKey((current) => current + 1)
-            onCreateDialogOpenChange(false)
-        } catch (caughtError) {
-            setCreateError(
-                apiErrorMessage(
-                    caughtError,
-                    t,
-                    caughtError instanceof ApiError &&
-                        caughtError.status === 409
-                        ? t("question-bank-duplicate-error")
-                        : t("question-bank-create-error")
-                )
-            )
-        } finally {
-            setIsCreating(false)
-        }
+        const values = { grade_level: gradeLevel.trim(), chapter: title.trim() }
+        const saved = editingBank
+            ? await updateQuestionBank(editingBank.id, values)
+            : await createQuestionBank(values)
+        updateBanks((banks) =>
+            (editingBank
+                ? banks.map((bank) => (bank.id === saved.id ? saved : bank))
+                : [...banks, saved]
+            ).sort(compareQuestionBanks)
+        )
+        setGradeLevel("")
+        setTitle("")
+        setEditingBank(null)
+        setBankView(null)
+        setSelectedBankId(null)
+        setTitleFilter("")
+        setGradeLevelFilter("")
+        const allBanks = await getAllQuestionBanks().catch(() => [])
+        setPage(pageContaining(allBanks, saved.id, PAGE_SIZE))
+        bankList.reload()
+        onCreateDialogOpenChange(false)
     }
 
     async function addGradeLevel(): Promise<void> {
         const normalizedLevel = newGradeLevel.trim()
         if (!normalizedLevel) return
-        setCreateError(null)
+        saving.setError(null)
         try {
             const created = await onCreateGradeLevel(normalizedLevel)
             setGradeLevel(created.name)
             setNewGradeLevel("")
             setIsAddingGradeLevel(false)
         } catch (caughtError) {
-            setCreateError(
+            saving.setError(
                 apiErrorMessage(caughtError, t, t("grade-level-create-error"))
             )
         }
@@ -218,15 +221,13 @@ export function QuestionBanksPanel({
     )
 
     function openBankEditor(bank: QuestionBank): void {
-        setAreQuestionsLoading(true)
-        setQuestionsError(null)
-        setQuestions([])
+        if (bank.id === selectedBankId) questionList.reload()
         setSelectedBankId(bank.id)
         setEditingBank(bank)
         setGradeLevel(bank.grade_level)
         setTitle(bank.chapter)
-        setCreateError(null)
-        setIsQuestionsDialogOpen(true)
+        saving.setError(null)
+        setBankView("questions")
     }
 
     async function handleDownloadExample(): Promise<void> {
@@ -259,88 +260,36 @@ export function QuestionBanksPanel({
         }
     }
 
-    async function handleDeleteBank(): Promise<void> {
+    async function deleteSelectedBank(): Promise<void> {
         if (!bankToDelete) return
-
-        setDeleteBankError(null)
-        setIsDeletingBank(true)
-        try {
-            await deleteQuestionBank(bankToDelete.id)
-            setQuestionBanks((banks) =>
-                banks.filter((bank) => bank.id !== bankToDelete.id)
-            )
-            if (selectedBankId === bankToDelete.id) {
-                setSelectedBankId(null)
-                setIsQuestionsDialogOpen(false)
-            }
-            setBankToDelete(null)
-            setReloadKey((current) => current + 1)
-        } catch (caughtError) {
-            setDeleteBankError(
-                apiErrorMessage(
-                    caughtError,
-                    t,
-                    caughtError instanceof ApiError &&
-                        caughtError.status === 409
-                        ? t("question-bank-in-use-error")
-                        : t("question-bank-delete-error")
-                )
-            )
-        } finally {
-            setIsDeletingBank(false)
+        await deleteQuestionBank(bankToDelete.id)
+        updateBanks((banks) =>
+            banks.filter((bank) => bank.id !== bankToDelete.id)
+        )
+        if (selectedBankId === bankToDelete.id) {
+            setSelectedBankId(null)
+            setBankView(null)
         }
+        setBankToDelete(null)
+        bankList.reload()
     }
 
-    async function handleDeleteQuestion(): Promise<void> {
+    async function deleteSelectedQuestion(): Promise<void> {
         if (!questionToDelete || !selectedBank) return
-
-        setDeleteQuestionError(null)
-        setIsDeletingQuestion(true)
-        try {
-            await deleteQuestion(questionToDelete.id)
-            setQuestions((current) =>
-                current.filter(
-                    (question) => question.id !== questionToDelete.id
-                )
-            )
-            setQuestionBanks((banks) =>
-                banks.map((bank) =>
-                    bank.id === selectedBank.id
-                        ? {
-                              ...bank,
-                              question_count: Math.max(
-                                  0,
-                                  bank.question_count - 1
-                              ),
-                          }
-                        : bank
-                )
-            )
-            setQuestionToDelete(null)
-            setIsQuestionsDialogOpen(true)
-        } catch (caughtError) {
-            setDeleteQuestionError(
-                apiErrorMessage(
-                    caughtError,
-                    t,
-                    caughtError instanceof ApiError &&
-                        caughtError.status === 409
-                        ? t("question-in-use-error")
-                        : t("question-delete-error")
-                )
-            )
-        } finally {
-            setIsDeletingQuestion(false)
-        }
+        await deleteQuestion(questionToDelete.id)
+        questionList.setData((current) =>
+            current?.filter((question) => question.id !== questionToDelete.id)
+        )
+        changeQuestionCount(selectedBank.id, -1)
+        setQuestionToDelete(null)
+        setBankView("questions")
     }
 
-    async function handleImport(file: File): Promise<void> {
-        setImportError(null)
+    async function importBank(file: File): Promise<void> {
         setBatchMessage(null)
-        setIsBatchBusy(true)
         try {
             const imported = await importQuestionBatch(file)
-            setQuestionBanks((banks) =>
+            updateBanks((banks) =>
                 [...banks, imported.question_bank].sort(compareQuestionBanks)
             )
             await onCreateGradeLevel(imported.question_bank.grade_level)
@@ -352,30 +301,15 @@ export function QuestionBanksPanel({
             setIsImportDialogOpen(false)
             setImportFile(null)
             setPage(1)
-            setReloadKey((current) => current + 1)
-        } catch (caughtError) {
-            setImportError(
-                apiErrorMessage(
-                    caughtError,
-                    t,
-                    caughtError instanceof ApiError &&
-                        caughtError.status === 409
-                        ? t("json-import-duplicate-error")
-                        : describeJsonImportFailure(
-                              caughtError,
-                              t("json-import-error")
-                          )
-                )
-            )
+            bankList.reload()
         } finally {
-            setIsBatchBusy(false)
             if (importInputRef.current) importInputRef.current.value = ""
         }
     }
 
     function openImportDialog(): void {
         setBatchError(null)
-        setImportError(null)
+        importing.setError(null)
         setBatchMessage(null)
         setImportFile(null)
         if (importInputRef.current) importInputRef.current.value = ""
@@ -385,7 +319,7 @@ export function QuestionBanksPanel({
     function handleImportSubmit(event: FormEvent<HTMLFormElement>): void {
         event.preventDefault()
         if (!importFile) return
-        void handleImport(importFile)
+        void importing.run(importFile)
     }
 
     return (
@@ -395,9 +329,11 @@ export function QuestionBanksPanel({
                 gradeLevels={gradeLevels}
                 titleFilter={titleFilter}
                 gradeLevelFilter={gradeLevelFilter}
-                isLoading={isLoading}
-                loadError={loadError}
-                isBatchBusy={isBatchBusy}
+                isLoading={!bankList.hasSettled}
+                loadError={
+                    bankList.error ? t("question-banks-load-error") : null
+                }
+                isBatchBusy={isBatchBusy || importing.isPending}
                 batchError={batchError}
                 batchMessage={batchMessage}
                 onTitleFilterChange={(value) => {
@@ -416,7 +352,7 @@ export function QuestionBanksPanel({
                 onDownloadExample={() => void handleDownloadExample()}
                 onExport={(bank) => void handleExport(bank)}
                 onDelete={(bank) => {
-                    setDeleteBankError(null)
+                    deletingBank.setError(null)
                     setBankToDelete(bank)
                 }}
                 onEdit={openBankEditor}
@@ -425,7 +361,7 @@ export function QuestionBanksPanel({
             <QuestionBankFormDialog
                 open={
                     isCreateDialogOpen ||
-                    (editingBank !== null && isQuestionsDialogOpen)
+                    (editingBank !== null && bankView === "questions")
                 }
                 editingBank={editingBank}
                 gradeLevels={gradeLevels}
@@ -433,18 +369,18 @@ export function QuestionBanksPanel({
                 title={title}
                 newGradeLevel={newGradeLevel}
                 isAddingGradeLevel={isAddingGradeLevel}
-                isBusy={isCreating}
-                error={createError}
+                isBusy={saving.isPending}
+                error={saving.error}
                 onGradeLevelChange={setGradeLevel}
                 onTitleChange={setTitle}
                 onNewGradeLevelChange={setNewGradeLevel}
                 onAddingGradeLevelChange={setIsAddingGradeLevel}
                 onDeleteGradeLevel={async (level) => {
-                    setCreateError(null)
+                    saving.setError(null)
                     try {
                         await onDeleteGradeLevel(level)
                     } catch (error) {
-                        setCreateError(
+                        saving.setError(
                             apiErrorMessage(
                                 error,
                                 t,
@@ -461,33 +397,39 @@ export function QuestionBanksPanel({
                 onClose={() => {
                     onCreateDialogOpenChange(false)
                     setEditingBank(null)
-                    setIsQuestionsDialogOpen(false)
+                    setBankView(null)
                     setSelectedBankId(null)
                     setGradeLevel("")
                     setTitle("")
-                    setCreateError(null)
+                    saving.setError(null)
                 }}
-                onSubmit={handleSubmit}
+                onSubmit={(event) => void saving.run(event)}
                 questionManagement={
                     editingBank && selectedBank ? (
                         <QuestionsManager
-                            questions={questions}
-                            isLoading={areQuestionsLoading}
-                            error={questionsError}
+                            questions={
+                                questionList.isLoading
+                                    ? []
+                                    : (questionList.data ?? [])
+                            }
+                            isLoading={questionList.isLoading}
+                            error={
+                                questionList.error
+                                    ? t("questions-load-error")
+                                    : null
+                            }
                             onAdd={() => {
-                                setIsQuestionsDialogOpen(false)
                                 setEditingQuestion(null)
-                                setIsQuestionFormOpen(true)
+                                setBankView("question-form")
                             }}
                             onEdit={(question) => {
                                 setEditingQuestion(question)
-                                setIsQuestionsDialogOpen(false)
-                                setIsQuestionFormOpen(true)
+                                setBankView("question-form")
                             }}
                             onDelete={(question) => {
-                                setDeleteQuestionError(null)
+                                deletingQuestion.setError(null)
                                 setQuestionToDelete(question)
-                                setIsQuestionsDialogOpen(false)
+                                setBankView("delete-question")
                             }}
                         />
                     ) : undefined
@@ -498,12 +440,12 @@ export function QuestionBanksPanel({
                 open={isImportDialogOpen}
                 file={importFile}
                 inputRef={importInputRef}
-                isBusy={isBatchBusy}
-                error={importError}
+                isBusy={isBatchBusy || importing.isPending}
+                error={importing.error}
                 onFileChange={setImportFile}
                 onClose={() => {
                     setIsImportDialogOpen(false)
-                    setImportError(null)
+                    importing.setError(null)
                     setImportFile(null)
                 }}
                 onSubmit={handleImportSubmit}
@@ -513,55 +455,46 @@ export function QuestionBanksPanel({
                 open={bankToDelete !== null}
                 kind="bank"
                 title={bankToDelete?.chapter ?? ""}
-                isBusy={isDeletingBank}
-                error={deleteBankError}
+                isBusy={deletingBank.isPending}
+                error={deletingBank.error}
                 onClose={() => {
                     setBankToDelete(null)
-                    setDeleteBankError(null)
+                    deletingBank.setError(null)
                 }}
-                onConfirm={() => void handleDeleteBank()}
+                onConfirm={() => void deletingBank.run()}
             />
 
             {selectedBank && (
                 <>
                     <DeleteEntityDialog
-                        open={questionToDelete !== null}
+                        open={
+                            bankView === "delete-question" &&
+                            questionToDelete !== null
+                        }
                         kind="question"
                         title={questionToDelete?.prompt ?? ""}
-                        isBusy={isDeletingQuestion}
-                        error={deleteQuestionError}
+                        isBusy={deletingQuestion.isPending}
+                        error={deletingQuestion.error}
                         onClose={() => {
                             setQuestionToDelete(null)
-                            setDeleteQuestionError(null)
-                            setIsQuestionsDialogOpen(true)
+                            deletingQuestion.setError(null)
+                            setBankView("questions")
                         }}
-                        onConfirm={() => void handleDeleteQuestion()}
+                        onConfirm={() => void deletingQuestion.run()}
                     />
 
                     <QuestionFormDialog
                         bank={selectedBank}
                         question={editingQuestion}
-                        open={isQuestionFormOpen}
+                        open={bankView === "question-form"}
                         onClose={() => {
-                            setIsQuestionFormOpen(false)
                             setEditingQuestion(null)
-                            setIsQuestionsDialogOpen(true)
+                            setBankView("questions")
                         }}
                         onSaved={(savedQuestion) => {
-                            if (!editingQuestion) {
-                                setQuestionBanks((banks) =>
-                                    banks.map((bank) =>
-                                        bank.id === selectedBank.id
-                                            ? {
-                                                  ...bank,
-                                                  question_count:
-                                                      bank.question_count + 1,
-                                              }
-                                            : bank
-                                    )
-                                )
-                            }
-                            setQuestions((current) =>
+                            if (!editingQuestion)
+                                changeQuestionCount(selectedBank.id, 1)
+                            questionList.setData((current = []) =>
                                 editingQuestion
                                     ? current.map((question) =>
                                           question.id === savedQuestion.id
@@ -570,9 +503,8 @@ export function QuestionBanksPanel({
                                       )
                                     : [savedQuestion, ...current]
                             )
-                            setIsQuestionFormOpen(false)
                             setEditingQuestion(null)
-                            setIsQuestionsDialogOpen(true)
+                            setBankView("questions")
                         }}
                     />
                 </>
