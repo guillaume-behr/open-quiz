@@ -6,7 +6,6 @@ from sqlalchemy import case, delete, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.metrics import RATE_LIMIT_REJECTIONS
 from app.models import LoginRateLimit
 
 
@@ -56,7 +55,6 @@ def _reserve_window(
     session.commit()
     if attempts <= limit:
         return 0
-    RATE_LIMIT_REJECTIONS.labels(namespace).inc()
     return max(1, window_seconds - (now - window_started_at))
 
 

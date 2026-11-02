@@ -111,7 +111,6 @@ class Settings:
     accessibility_contact: str = ""
     accessibility_scheme_url: str = ""
     accessibility_action_plan_url: str = ""
-    metrics_enabled: bool = False
 
     @property
     def cookie_secure(self) -> bool:

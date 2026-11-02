@@ -8,24 +8,20 @@ from hmac import new as hmac_new
 from pathlib import Path
 from time import time
 
-from fastapi import FastAPI, Request, Response, status
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import JSONResponse
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.access_log import AccessLogMiddleware
 from app.audit import audit_event
 from app.config import Settings, get_settings
-from app.database import build_session_factory
+from app.database import MAINTENANCE_LOCK_KEY, build_session_factory, postgres_url
 from app.errors import ErrorCode, api_error
 from app.live_quiz import LiveQuizHub
-from app.metrics import (
-    DATABASE_CONNECTIONS,
-    RETENTION_DURATION,
-    RequestMetricsMiddleware,
-)
+from app.live_relay import PostgresLiveRelay
 from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
@@ -91,6 +87,8 @@ def synchronize_security_state(
 ) -> None:
     now = int(time())
     with session_factory() as session:
+        # Every worker runs this at startup: one at a time.
+        session.execute(select(func.pg_advisory_xact_lock(MAINTENANCE_LOCK_KEY)))
         fingerprint = hmac_new(
             settings.totp_encryption_key.encode(),
             settings.jwt_secret.encode(),
@@ -218,7 +216,6 @@ def synchronize_security_state(
         session.commit()
 
 
-@RETENTION_DURATION.time()
 def enforce_data_retention(session_factory, settings: Settings) -> None:
     now = int(time())
     quiz_cutoff = datetime.now(UTC) - timedelta(
@@ -239,6 +236,8 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
         settings.problem_report_window_seconds,
     )
     with session_factory() as session:
+        # Every worker runs this at startup: one at a time.
+        session.execute(select(func.pg_advisory_xact_lock(MAINTENANCE_LOCK_KEY)))
         closed_count, discarded_count = close_abandoned_sessions(
             abandoned_cutoff, session
         )
@@ -378,6 +377,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await sleep(RETENTION_MAINTENANCE_INTERVAL_SECONDS)
                 await to_thread(enforce_data_retention, session_factory, settings)
 
+        live_relay.start()
         maintenance_task = create_task(maintain_data_retention())
         expiry_task = create_task(
             expire_sessions_periodically(session_factory, app.state.live_quiz_hub)
@@ -385,6 +385,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
+            live_relay.stop()
             for task in (maintenance_task, expiry_task):
                 task.cancel()
                 with suppress(CancelledError):
@@ -402,6 +403,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.session_factory = session_factory
     app.state.live_quiz_hub = LiveQuizHub()
+    # Carries live notifications to the other Uvicorn workers (WEB_CONCURRENCY).
+    live_relay = PostgresLiveRelay(
+        postgres_url(settings.database_url)
+        .set(drivername="postgresql")
+        .render_as_string(hide_password=False),
+        app.state.live_quiz_hub.publish_local,
+    )
+    app.state.live_quiz_hub.attach_relay(live_relay.send)
     app.state.login_rate_limiter = LoginRateLimiter(
         settings.login_attempts,
         settings.login_window_seconds,
@@ -485,19 +494,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
-    app.add_middleware(RequestMetricsMiddleware)
-
-    if settings.metrics_enabled:
-        engine_pool = session_factory.kw["bind"].pool
-
-        @app.get("/metrics", include_in_schema=False)
-        def metrics() -> Response:
-            for state, connections in (
-                ("open", engine_pool.checkedout() + engine_pool.checkedin()),
-                ("in_use", engine_pool.checkedout()),
-            ):
-                DATABASE_CONNECTIONS.labels(state).set(connections)
-            return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    app.add_middleware(AccessLogMiddleware)
 
     app.include_router(health.router)
     app.include_router(problem_reports.router)

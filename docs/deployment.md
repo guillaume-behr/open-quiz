@@ -135,6 +135,28 @@ Le déploiement crée trois services :
 Le backend n’est pas publié sur l’hôte. Le frontend écoute uniquement sur
 `127.0.0.1:7800` afin qu’un reverse proxy soit le seul point d’entrée public.
 
+### Plusieurs workers
+
+Le backend démarre un seul processus Uvicorn par défaut. Pour en lancer
+davantage, définissez `OPEN_QUIZ_API_WORKERS` dans un fichier `.env` placé à la
+racine du dépôt, à côté de `docker-compose.yml` (distinct de
+`open-quiz-backend/.env`), puis relancez `sh ./update.sh` :
+
+```shell
+OPEN_QUIZ_API_WORKERS=2
+```
+
+Les mises à jour en direct atteignent les élèves et enseignants connectés à
+n’importe quel worker : chaque publication est relayée aux autres processus par
+PostgreSQL. Mesuré sur 4 cœurs avec PostgreSQL local, ce relais réveille les
+35 WebSockets d’une session tenues par un autre worker en 1,8 ms en médiane
+(2,6 ms au 95ᵉ centile), et 250 WebSockets en 8 ms. Le script
+`python -m scripts.live_relay_benchmark` refait cette mesure sur une instance.
+
+Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes, et 2
+pour le relais. Restez sous `max_connections` (100 par défaut) : au-delà de
+4 workers, augmentez-le ou réduisez leur nombre.
+
 ### Changer le sous-réseau interne
 
 Les trois services communiquent sur le réseau interne `open-quiz`, en
@@ -270,48 +292,6 @@ avec un code de session ou un numéro.
 
 Le journal d’accès d’Uvicorn, qui contiendrait l’adresse des clients, est
 désactivé.
-
-### Métriques Prometheus
-
-Définissez `METRICS_ENABLED=true` dans `open-quiz-backend/.env`, puis relancez
-`sh ./update.sh`. Le backend sert alors ses métriques sur
-`http://open-quiz-backend:8000/metrics`. Ce chemin est hors de `/api`, le seul
-que le frontend transmet : il n’est joignable que depuis le réseau interne
-`open-quiz`, auquel le conteneur Prometheus doit être rattaché.
-
-```yaml
-scrape_configs:
-    - job_name: open-quiz
-      static_configs:
-          - targets: ["open-quiz-backend:8000"]
-```
-
-| Métrique                                  | Contenu                                        |
-| ----------------------------------------- | ---------------------------------------------- |
-| `open_quiz_http_requests_total`           | requêtes par méthode, route paramétrée et code |
-| `open_quiz_http_request_duration_seconds` | durée des requêtes par méthode et route        |
-| `open_quiz_websockets_active`             | WebSockets ouvertes par flux temps réel        |
-| `open_quiz_rate_limit_rejections_total`   | refus des limiteurs de débit, par limiteur     |
-| `open_quiz_retention_duration_seconds`    | durée de chaque passage de conservation        |
-| `open_quiz_database_connections`          | connexions du pool, ouvertes et utilisées      |
-
-Aucun libellé ne contient de donnée personnelle : seulement des routes
-paramétrées, des noms fixes et des codes HTTP. Un tableau de bord minimal peut
-suivre :
-
-```promql
-# Élèves et enseignants connectés en direct
-sum by (feed) (open_quiz_websockets_active)
-# Latence au 95ᵉ centile des réponses d’élèves
-histogram_quantile(0.95, sum by (le) (rate(open_quiz_http_request_duration_seconds_bucket{route="/api/quizzes/student/sessions/{join_code}/answer"}[5m])))
-# Erreurs serveur par minute
-sum(rate(open_quiz_http_requests_total{status=~"5.."}[1m])) * 60
-# Refus des limiteurs de débit
-sum by (limiter) (rate(open_quiz_rate_limit_rejections_total[5m]))
-```
-
-Chaque worker Uvicorn tient ses propres compteurs : avec un seul worker, la
-configuration par défaut, la métrique couvre toute l’instance.
 
 ## 💾 Sauvegarder les données
 

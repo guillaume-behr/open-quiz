@@ -191,9 +191,13 @@ action d’élève envoyée après l’échéance, comme une réponse, est refus
 attendre ce passage. Un verrou PostgreSQL garantit qu’un seul processus termine
 les sessions à chaque passage.
 
-Le bus temps réel est conservé en mémoire. Le conteneur utilise donc un seul
-worker Uvicorn. N’activez pas plusieurs workers sans remplacer ce bus par un
-mécanisme partagé et tester le comportement en charge.
+Chaque processus diffuse les changements à ses propres WebSockets, et les
+relaie aux autres workers Uvicorn par `LISTEN/NOTIFY` de PostgreSQL
+(`app/live_relay.py`) : plusieurs workers peuvent donc servir la même instance.
+Une notification émise pendant qu’un worker se reconnecte à la base est perdue
+pour lui ; la réconciliation périodique des flux le remet à jour. Le nombre de
+workers se règle avec `WEB_CONCURRENCY`, voir
+[le guide de déploiement](../docs/deployment.md#plusieurs-workers).
 
 ## 🧩 Modèle fonctionnel
 

@@ -26,7 +26,6 @@ from app.live_quiz import (
     student_session_topic,
     websocket_origin_allowed,
 )
-from app.metrics import tracked_websocket
 from app.models import (
     Quiz,
     QuizSession,
@@ -206,44 +205,40 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
     topic = active_quiz_sessions_topic(professor_id)
     hub = websocket.app.state.live_quiz_hub
     try:
-        with tracked_websocket("teacher_sessions"):
-            async with hub.subscribe(topic) as updates:
-                heartbeat = LiveHeartbeat()
-                last_sessions: list[dict[str, object]] | None = None
-                while True:
+        async with hub.subscribe(topic) as updates:
+            heartbeat = LiveHeartbeat()
+            last_sessions: list[dict[str, object]] | None = None
+            while True:
+                if await async_live_professor_id(websocket, token) != professor_id:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+                sessions = await to_thread(
+                    live_teacher_active_sessions_snapshot,
+                    websocket,
+                    professor_id,
+                )
+                if sessions is None:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+                if sessions != last_sessions:
+                    await websocket.send_json(
+                        {
+                            "type": "active_sessions",
+                            "data": sessions,
+                        }
+                    )
+                    heartbeat.record_send()
+                    last_sessions = sessions
+                await wait_for_live_update(
+                    updates,
+                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
+                )
+                if heartbeat.is_due():
                     if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
-                    sessions = await to_thread(
-                        live_teacher_active_sessions_snapshot,
-                        websocket,
-                        professor_id,
-                    )
-                    if sessions is None:
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                        return
-                    if sessions != last_sessions:
-                        await websocket.send_json(
-                            {
-                                "type": "active_sessions",
-                                "data": sessions,
-                            }
-                        )
-                        heartbeat.record_send()
-                        last_sessions = sessions
-                    await wait_for_live_update(
-                        updates,
-                        reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
-                    )
-                    if heartbeat.is_due():
-                        if (
-                            await async_live_professor_id(websocket, token)
-                            != professor_id
-                        ):
-                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                            return
-                        await websocket.send_json({"type": "ping"})
-                        heartbeat.record_send()
+                    await websocket.send_json({"type": "ping"})
+                    heartbeat.record_send()
     except WebSocketDisconnect, RuntimeError:
         return
 
@@ -264,44 +259,40 @@ async def live_teacher_quiz_session(
     topic = quiz_session_topic(session_id)
     hub = websocket.app.state.live_quiz_hub
     try:
-        with tracked_websocket("teacher_session"):
-            async with hub.subscribe(topic) as updates:
-                heartbeat = LiveHeartbeat()
-                last_state: dict[str, object] | None = None
-                while True:
+        async with hub.subscribe(topic) as updates:
+            heartbeat = LiveHeartbeat()
+            last_state: dict[str, object] | None = None
+            while True:
+                if await async_live_professor_id(websocket, token) != professor_id:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+                state, terminal = await to_thread(
+                    live_teacher_session_snapshot,
+                    websocket,
+                    professor_id,
+                    session_id,
+                )
+                if state is None:
+                    await websocket.send_json({"type": "deleted"})
+                    await websocket.close()
+                    return
+                if state != last_state:
+                    await websocket.send_json({"type": "session", "data": state})
+                    heartbeat.record_send()
+                    last_state = state
+                if terminal:
+                    await websocket.close()
+                    return
+                await wait_for_live_update(
+                    updates,
+                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
+                )
+                if heartbeat.is_due():
                     if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
-                    state, terminal = await to_thread(
-                        live_teacher_session_snapshot,
-                        websocket,
-                        professor_id,
-                        session_id,
-                    )
-                    if state is None:
-                        await websocket.send_json({"type": "deleted"})
-                        await websocket.close()
-                        return
-                    if state != last_state:
-                        await websocket.send_json({"type": "session", "data": state})
-                        heartbeat.record_send()
-                        last_state = state
-                    if terminal:
-                        await websocket.close()
-                        return
-                    await wait_for_live_update(
-                        updates,
-                        reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
-                    )
-                    if heartbeat.is_due():
-                        if (
-                            await async_live_professor_id(websocket, token)
-                            != professor_id
-                        ):
-                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                            return
-                        await websocket.send_json({"type": "ping"})
-                        heartbeat.record_send()
+                    await websocket.send_json({"type": "ping"})
+                    heartbeat.record_send()
     except WebSocketDisconnect, RuntimeError:
         return
 
@@ -327,43 +318,42 @@ async def live_student_quiz_session(
     topic = student_session_topic(normalized_code)
     hub = websocket.app.state.live_quiz_hub
     try:
-        with tracked_websocket("student_session"):
-            async with hub.subscribe(topic) as updates:
-                heartbeat = LiveHeartbeat()
-                last_state: dict[str, object] | None = None
-                while True:
-                    snapshot = await to_thread(
-                        live_student_session_snapshot,
+        async with hub.subscribe(topic) as updates:
+            heartbeat = LiveHeartbeat()
+            last_state: dict[str, object] | None = None
+            while True:
+                snapshot = await to_thread(
+                    live_student_session_snapshot,
+                    websocket,
+                    normalized_code,
+                    token,
+                )
+                if snapshot is None:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+                state, terminal = snapshot
+                if state != last_state:
+                    await websocket.send_json({"type": "session", "data": state})
+                    heartbeat.record_send()
+                    last_state = state
+                if terminal:
+                    await websocket.close()
+                    return
+                await wait_for_live_update(
+                    updates,
+                    reconcile_after=LIVE_HEARTBEAT_SECONDS,
+                )
+                if heartbeat.is_due():
+                    if not await to_thread(
+                        live_participant_is_authenticated,
                         websocket,
                         normalized_code,
                         token,
-                    )
-                    if snapshot is None:
+                    ):
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
-                    state, terminal = snapshot
-                    if state != last_state:
-                        await websocket.send_json({"type": "session", "data": state})
-                        heartbeat.record_send()
-                        last_state = state
-                    if terminal:
-                        await websocket.close()
-                        return
-                    await wait_for_live_update(
-                        updates,
-                        reconcile_after=LIVE_HEARTBEAT_SECONDS,
-                    )
-                    if heartbeat.is_due():
-                        if not await to_thread(
-                            live_participant_is_authenticated,
-                            websocket,
-                            normalized_code,
-                            token,
-                        ):
-                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                            return
-                        await websocket.send_json({"type": "ping"})
-                        heartbeat.record_send()
+                    await websocket.send_json({"type": "ping"})
+                    heartbeat.record_send()
     except WebSocketDisconnect, RuntimeError:
         return
 
@@ -381,43 +371,39 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
     topic = makeup_sessions_topic(professor_id)
     hub = websocket.app.state.live_quiz_hub
     try:
-        with tracked_websocket("teacher_makeups"):
-            async with hub.subscribe(topic) as updates:
-                heartbeat = LiveHeartbeat()
-                last_sessions: list[dict[str, object]] | None = None
-                while True:
+        async with hub.subscribe(topic) as updates:
+            heartbeat = LiveHeartbeat()
+            last_sessions: list[dict[str, object]] | None = None
+            while True:
+                if await async_live_professor_id(websocket, token) != professor_id:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+                sessions = await to_thread(
+                    live_makeup_sessions_snapshot,
+                    websocket,
+                    professor_id,
+                )
+                if sessions is None:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+                if sessions != last_sessions:
+                    await websocket.send_json(
+                        {
+                            "type": "makeup_sessions",
+                            "data": sessions,
+                        }
+                    )
+                    heartbeat.record_send()
+                    last_sessions = sessions
+                await wait_for_live_update(
+                    updates,
+                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
+                )
+                if heartbeat.is_due():
                     if await async_live_professor_id(websocket, token) != professor_id:
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
-                    sessions = await to_thread(
-                        live_makeup_sessions_snapshot,
-                        websocket,
-                        professor_id,
-                    )
-                    if sessions is None:
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                        return
-                    if sessions != last_sessions:
-                        await websocket.send_json(
-                            {
-                                "type": "makeup_sessions",
-                                "data": sessions,
-                            }
-                        )
-                        heartbeat.record_send()
-                        last_sessions = sessions
-                    await wait_for_live_update(
-                        updates,
-                        reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
-                    )
-                    if heartbeat.is_due():
-                        if (
-                            await async_live_professor_id(websocket, token)
-                            != professor_id
-                        ):
-                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                            return
-                        await websocket.send_json({"type": "ping"})
-                        heartbeat.record_send()
+                    await websocket.send_json({"type": "ping"})
+                    heartbeat.record_send()
     except WebSocketDisconnect, RuntimeError:
         return
