@@ -44,14 +44,12 @@ from app.schemas import (
     QuestionBankResponse,
     StudentQuizJoinResponse,
     TrainingHistoryItem,
-    TrainingQuestionBankItem,
     TrainingQuestionBankSelection,
 )
 from app.services.grading import (
     training_result,
 )
 from app.services.question_draws import (
-    MAX_TRAINING_QUESTIONS,
     draw_training_question_ids,
 )
 from app.services.session_lifecycle import (
@@ -127,9 +125,7 @@ def update_class_training_question_banks(
             status_code=404,
             detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
         )
-    bank_ids = payload.question_bank_ids or [
-        item.question_bank_id for item in payload.question_banks
-    ]
+    bank_ids = [item.question_bank_id for item in payload.question_banks]
     banks = list(
         session.scalars(
             select(QuestionBank).where(
@@ -163,16 +159,8 @@ def update_class_training_question_banks(
             .group_by(Question.question_bank_id)
         ).all()
     )
-    configured_items = payload.question_banks or [
-        TrainingQuestionBankItem(
-            question_bank_id=bank_id,
-            question_count=max(
-                1, min(MAX_TRAINING_QUESTIONS, available.get(bank_id, 0))
-            ),
-        )
-        for bank_id in bank_ids
-    ]
-    if payload.question_banks and any(
+    configured_items = payload.question_banks
+    if any(
         item.question_count > available.get(item.question_bank_id, 0)
         for item in configured_items
     ):

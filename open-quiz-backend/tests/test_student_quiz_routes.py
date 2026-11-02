@@ -43,6 +43,7 @@ from support import (
     login_admin,
     make_client,
     settings_for,
+    training_banks,
     wrong_choice_id,
 )
 
@@ -721,13 +722,32 @@ def test_training_feedback_and_results_cover_written_and_empty_banks(
         headers=headers,
         json={"grade_level": "5e", "chapter": "Empty training"},
     ).json()
+    removed = add_question(
+        client,
+        {
+            **environment,
+            "question": {
+                **environment["question"],
+                "question_bank_id": empty_bank["id"],
+            },
+        },
+    )
+    selection = training_banks(written_bank["id"], question_count=2)
+    selection["question_banks"] += training_banks(empty_bank["id"])["question_banks"]
     assert (
         client.put(
             f"/api/quizzes/training/classes/{class_id}/question-banks",
             headers=headers,
-            json={"question_bank_ids": [written_bank["id"], empty_bank["id"]]},
+            json=selection,
         ).status_code
         == 200
+    )
+    # The bank empties once configured: it stays listed, but cannot start.
+    assert (
+        client.delete(
+            f"/api/question-banks/questions/{removed['id']}", headers=headers
+        ).status_code
+        == 204
     )
 
     assert (
@@ -893,13 +913,13 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             },
         )
         assert manual_training.status_code == 422
-        training_banks = client.put(
+        configured = client.put(
             f"/api/quizzes/training/classes/{student_class['id']}/question-banks",
             headers=teacher_headers,
-            json={"question_bank_ids": [bank["id"]]},
+            json=training_banks(bank["id"]),
         )
-        assert training_banks.status_code == 200
-        assert training_banks.json()[0]["id"] == bank["id"]
+        assert configured.status_code == 200
+        assert configured.json()[0]["id"] == bank["id"]
         other_level_bank = client.post(
             "/api/question-banks",
             headers=teacher_headers,
@@ -909,7 +929,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             client.put(
                 f"/api/quizzes/training/classes/{student_class['id']}/question-banks",
                 headers=teacher_headers,
-                json={"question_bank_ids": [other_level_bank["id"]]},
+                json=training_banks(other_level_bank["id"]),
             ).status_code
             == 422
         )
@@ -939,10 +959,30 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             json={"grade_level": "3e", "chapter": "Changing level"},
         ).json()
         assert (
+            client.post(
+                f"/api/question-banks/{mutable_bank['id']}/questions",
+                headers=teacher_headers,
+                data={
+                    "payload": json.dumps(
+                        {
+                            "prompt": "Three plus three?",
+                            "difficulty": "easy",
+                            "answer_mode": "single",
+                            "choices": [
+                                {"label": "Six", "is_correct": True},
+                                {"label": "Seven", "is_correct": False},
+                            ],
+                        }
+                    )
+                },
+            ).status_code
+            == 201
+        )
+        assert (
             client.put(
                 f"/api/quizzes/training/classes/{student_class['id']}/question-banks",
                 headers=teacher_headers,
-                json={"question_bank_ids": [bank["id"], mutable_bank["id"]]},
+                json=training_banks(bank["id"], mutable_bank["id"]),
             ).status_code
             == 200
         )

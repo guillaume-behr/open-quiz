@@ -70,7 +70,6 @@ from app.services.question_assignments import (
 from app.services.session_lifecycle import (
     active_exam_bank_ids_for_class,
     answer_review_enabled,
-    as_utc,
     expire_quiz_session,
     finish_when_nobody_can_answer,
     quiz_session_is_due,
@@ -704,8 +703,6 @@ def report_student_violation(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     now = datetime.now(UTC)
     last_violation_at = participant.last_violation_at
-    if last_violation_at is not None:
-        last_violation_at = as_utc(last_violation_at)
     if (
         participant.last_violation_type == payload.event_type
         and last_violation_at is not None

@@ -81,6 +81,16 @@ STUDENT_EXAM_FORBIDDEN_ANSWER_FIELDS = {
 }
 
 
+def training_banks(*bank_ids: int, question_count: int = 1) -> dict[str, Any]:
+    """The body that sets a class's practice banks."""
+    return {
+        "question_banks": [
+            {"question_bank_id": bank_id, "question_count": question_count}
+            for bank_id in bank_ids
+        ]
+    }
+
+
 def nested_keys(value: Any) -> set[str]:
     if isinstance(value, dict):
         return set(value) | {

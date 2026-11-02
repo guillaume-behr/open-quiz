@@ -29,6 +29,7 @@ from support import (
     make_client,
     seeded_exam_session,
     settings_for,
+    training_banks,
 )
 
 
@@ -268,7 +269,7 @@ def test_discarded_sessions_release_their_join_codes(tmp_path: Path) -> None:
                 f"/api/quizzes/training/classes/"
                 f"{environment['student_class']['id']}/question-banks",
                 headers=environment["teacher_headers"],
-                json={"question_bank_ids": [bank_id]},
+                json=training_banks(bank_id),
             ).status_code
             == 200
         )

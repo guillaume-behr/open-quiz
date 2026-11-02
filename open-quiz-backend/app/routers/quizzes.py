@@ -90,7 +90,6 @@ from app.services.question_draws import (
 )
 from app.services.session_lifecycle import (
     answer_review_enabled,
-    as_utc,
     discard_active_training_sessions,
     expire_quiz_session,
     quiz_ends_at,
@@ -1251,10 +1250,9 @@ def resume_quiz_session(
                 "Seul un quiz en pause peut être repris",
             ),
         )
-    paused_at = as_utc(quiz_session.paused_at)
     quiz_session.paused_duration_seconds = (
         quiz_session.paused_duration_seconds or 0
-    ) + ceil(max(0, (datetime.now(UTC) - paused_at).total_seconds()))
+    ) + ceil(max(0, (datetime.now(UTC) - quiz_session.paused_at).total_seconds()))
     quiz_session.paused_at = None
     quiz_session.status = "in_progress"
     session.commit()

@@ -25,18 +25,13 @@ const identicalTranslationAllowlist = new Set([
     "legal-page-browser-title",
     "pagination",
     "points-short",
-    "points-value_one",
-    "points-value_other",
     "privacy-complaint-after-link",
     "question-count_one",
     "question-count_other",
     "question-number",
     "question-wording",
-    "quiz-management",
-    "quiz-total-points",
     "reported-page",
     "result-participants",
-    "result-score",
     "system",
 ])
 

@@ -38,20 +38,15 @@ from app.services.grading import (
 from app.session_status import ACTIVE_SESSION_STATUSES
 
 
-def as_utc(value: datetime) -> datetime:
-    """Read a naive timestamp, as legacy rows may hold, as UTC."""
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
-
-
 def quiz_ends_at(quiz_session: QuizSession, quiz: Quiz) -> datetime | None:
     started_at = quiz_session.started_at
     if started_at is None:
         return None
-    started_at = as_utc(started_at)
     paused_duration = quiz_session.paused_duration_seconds or 0
     if quiz_session.status == "paused" and quiz_session.paused_at is not None:
-        paused_at = as_utc(quiz_session.paused_at)
-        paused_duration += ceil(max(0, (datetime.now(UTC) - paused_at).total_seconds()))
+        paused_duration += ceil(
+            max(0, (datetime.now(UTC) - quiz_session.paused_at).total_seconds())
+        )
     duration_seconds = quiz_session.duration_seconds
     if duration_seconds is None:
         duration_seconds = quiz.duration_seconds

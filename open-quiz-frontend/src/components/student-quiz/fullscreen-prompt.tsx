@@ -37,7 +37,7 @@ export function FullscreenPrompt({
  * footer, and with it the privacy page, is hidden once the student is in the
  * exam, so this screen is the last place the information can be given.
  */
-export function MonitoringNotice() {
+function MonitoringNotice() {
     const { t } = useTranslation()
 
     return (

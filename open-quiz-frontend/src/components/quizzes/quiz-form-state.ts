@@ -1,13 +1,13 @@
 import type { QuestionBank, Quiz } from "@/api/types"
 
 export const difficultyKeys = ["easy", "medium", "hard"] as const
-export type Difficulty = (typeof difficultyKeys)[number]
-export type DifficultyCounts = Record<Difficulty, number>
+type Difficulty = (typeof difficultyKeys)[number]
+type DifficultyCounts = Record<Difficulty, number>
 
 const NO_QUESTIONS: DifficultyCounts = { easy: 0, medium: 0, hard: 0 }
 
 /** Draft of the quiz being created or edited in QuizFormDialog. */
-export type QuizFormState = {
+type QuizFormState = {
     editingQuiz: Quiz | null
     title: string
     gradeLevel: string
@@ -25,7 +25,7 @@ type EditableField = Exclude<
     "editingQuiz" | "gradeLevel" | "selectedBankIds"
 >
 
-export type QuizFormAction =
+type QuizFormAction =
     | { type: "reset" }
     | { type: "edit"; quiz: Quiz }
     | {
