@@ -13,7 +13,7 @@ services:
         # network. docker-compose.dev.yml publishes it for local development.
         networks:
             open-quiz:
-                ipv4_address: 172.28.0.4
+                ipv4_address: ${OPEN_QUIZ_SUBNET_PREFIX:-172.28.0}.4
         volumes:
             - open-quiz-postgres-data:/var/lib/postgresql/data
         init: true
@@ -55,6 +55,8 @@ services:
         environment:
             APP_ENV: production
             DATABASE_URL: postgresql+psycopg://open_quiz@open-quiz-database:5432/open_quiz
+            # The frontend proxy, whose X-Forwarded-* headers the API trusts.
+            FORWARDED_ALLOW_IPS: ${OPEN_QUIZ_SUBNET_PREFIX:-172.28.0}.2,127.0.0.1
         depends_on:
             open-quiz-database:
                 condition: service_healthy
@@ -62,7 +64,7 @@ services:
             - "8000"
         networks:
             open-quiz:
-                ipv4_address: 172.28.0.3
+                ipv4_address: ${OPEN_QUIZ_SUBNET_PREFIX:-172.28.0}.3
         init: true
         read_only: true
         tmpfs:
@@ -106,7 +108,7 @@ services:
         networks:
             open-quiz-edge: {}
             open-quiz:
-                ipv4_address: 172.28.0.2
+                ipv4_address: ${OPEN_QUIZ_SUBNET_PREFIX:-172.28.0}.2
         init: true
         read_only: true
         tmpfs:
@@ -149,7 +151,10 @@ networks:
         internal: true
         ipam:
             config:
-                - subnet: 172.28.0.0/24
+                # Change OPEN_QUIZ_SUBNET_PREFIX if 172.28.0.0/24 clashes with a
+                # local network: the addresses above and the proxy the API
+                # trusts follow it (docs/deployment.md).
+                - subnet: ${OPEN_QUIZ_SUBNET_PREFIX:-172.28.0}.0/24
 
 volumes:
     open-quiz-postgres-data:
