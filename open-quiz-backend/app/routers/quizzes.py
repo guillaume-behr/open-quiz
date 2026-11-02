@@ -740,7 +740,7 @@ def student_question_response(
         answer_mode_disclosed=question.answer_mode_disclosed,
         response_language=question.response_language,
         allow_code_execution=question.allow_code_execution,
-        has_image=question.image_content_type is not None,
+        has_image=question.image_sha256 is not None,
         code_language=code.language if code else None,
         code_content=code.content if code else None,
         choices=[
@@ -748,7 +748,7 @@ def student_question_response(
                 id=choice.id,
                 label=choice.label,
                 position=position,
-                has_image=choice.image_content_type is not None,
+                has_image=choice.image_sha256 is not None,
                 code_language=choice.code_language,
                 code_content=choice.code_content,
             )
