@@ -107,6 +107,7 @@ class Settings:
     accessibility_contact: str = ""
     accessibility_scheme_url: str = ""
     accessibility_action_plan_url: str = ""
+    metrics_enabled: bool = False
 
     @property
     def cookie_secure(self) -> bool:
@@ -251,6 +252,13 @@ def required_environment(name: str) -> str:
     return value
 
 
+def boolean_environment(name: str) -> bool:
+    value = os.getenv(name, "false").strip().lower()
+    if value not in {"true", "false"}:
+        raise ValueError(f"{name} must be true or false")
+    return value == "true"
+
+
 def get_settings() -> Settings:
     secure_private_file(ENV_FILE)
     load_dotenv(ENV_FILE)
@@ -305,4 +313,5 @@ def get_settings() -> Settings:
         accessibility_contact=os.getenv("ACCESSIBILITY_CONTACT", ""),
         accessibility_scheme_url=os.getenv("ACCESSIBILITY_SCHEME_URL", ""),
         accessibility_action_plan_url=os.getenv("ACCESSIBILITY_ACTION_PLAN_URL", ""),
+        metrics_enabled=boolean_environment("METRICS_ENABLED"),
     )

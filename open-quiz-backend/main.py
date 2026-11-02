@@ -7,10 +7,11 @@ from hmac import new as hmac_new
 from pathlib import Path
 from time import time
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import delete, select, update
 
 from app.audit import audit_event
@@ -18,6 +19,11 @@ from app.config import Settings, get_settings
 from app.database import build_session_factory
 from app.errors import ErrorCode, api_error
 from app.live_quiz import LiveQuizHub
+from app.metrics import (
+    DATABASE_CONNECTIONS,
+    RETENTION_DURATION,
+    RequestMetricsMiddleware,
+)
 from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
@@ -205,6 +211,7 @@ def synchronize_security_state(
         session.commit()
 
 
+@RETENTION_DURATION.time()
 def enforce_data_retention(session_factory, settings: Settings) -> None:
     now = int(time())
     quiz_cutoff = datetime.now(UTC) - timedelta(
@@ -447,6 +454,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "detail": api_error(ErrorCode.QUIZ_QUESTIONS_INSUFFICIENT, str(error))
             },
         )
+
+    app.add_middleware(RequestMetricsMiddleware)
+
+    if settings.metrics_enabled:
+        engine_pool = session_factory.kw["bind"].pool
+
+        @app.get("/metrics", include_in_schema=False)
+        def metrics() -> Response:
+            for state, connections in (
+                ("open", engine_pool.checkedout() + engine_pool.checkedin()),
+                ("in_use", engine_pool.checkedout()),
+            ):
+                DATABASE_CONNECTIONS.labels(state).set(connections)
+            return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     app.include_router(health.router)
     app.include_router(problem_reports.router)

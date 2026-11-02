@@ -225,6 +225,67 @@ Les journaux peuvent contenir des informations d’audit. Centralisez-les dans u
 espace à accès restreint et appliquez la durée de conservation validée pour
 votre instance.
 
+### Journal des requêtes
+
+Le backend écrit une ligne JSON par requête sur sa sortie standard, sans
+adresse IP ni identifiant : la route figure sous sa forme paramétrée, jamais
+avec un code de session ou un numéro.
+
+```json
+{
+    "event": "http.request",
+    "method": "GET",
+    "route": "/api/quizzes/sessions/{session_id}",
+    "status": 200,
+    "duration_ms": 12.4
+}
+```
+
+Le journal d’accès d’Uvicorn, qui contiendrait l’adresse des clients, est
+désactivé.
+
+### Métriques Prometheus
+
+Définissez `METRICS_ENABLED=true` dans `open-quiz-backend/.env`, puis relancez
+`sh ./update.sh`. Le backend sert alors ses métriques sur
+`http://open-quiz-backend:8000/metrics`. Ce chemin est hors de `/api`, le seul
+que le frontend transmet : il n’est joignable que depuis le réseau interne
+`open-quiz`, auquel le conteneur Prometheus doit être rattaché.
+
+```yaml
+scrape_configs:
+    - job_name: open-quiz
+      static_configs:
+          - targets: ["open-quiz-backend:8000"]
+```
+
+| Métrique                                  | Contenu                                        |
+| ----------------------------------------- | ---------------------------------------------- |
+| `open_quiz_http_requests_total`           | requêtes par méthode, route paramétrée et code |
+| `open_quiz_http_request_duration_seconds` | durée des requêtes par méthode et route        |
+| `open_quiz_websockets_active`             | WebSockets ouvertes par flux temps réel        |
+| `open_quiz_rate_limit_rejections_total`   | refus des limiteurs de débit, par limiteur     |
+| `open_quiz_retention_duration_seconds`    | durée de chaque passage de conservation        |
+| `open_quiz_database_connections`          | connexions du pool, ouvertes et utilisées      |
+
+Aucun libellé ne contient de donnée personnelle : seulement des routes
+paramétrées, des noms fixes et des codes HTTP. Un tableau de bord minimal peut
+suivre :
+
+```promql
+# Élèves et enseignants connectés en direct
+sum by (feed) (open_quiz_websockets_active)
+# Latence au 95ᵉ centile des réponses d’élèves
+histogram_quantile(0.95, sum by (le) (rate(open_quiz_http_request_duration_seconds_bucket{route="/api/quizzes/student/sessions/{join_code}/answer"}[5m])))
+# Erreurs serveur par minute
+sum(rate(open_quiz_http_requests_total{status=~"5.."}[1m])) * 60
+# Refus des limiteurs de débit
+sum by (limiter) (rate(open_quiz_rate_limit_rejections_total[5m]))
+```
+
+Chaque worker Uvicorn tient ses propres compteurs : avec un seul worker, la
+configuration par défaut, la métrique couvre toute l’instance.
+
 ## 💾 Sauvegarder les données
 
 Une sauvegarde exploitable comprend :
