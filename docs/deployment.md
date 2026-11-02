@@ -392,6 +392,11 @@ désactivé ou parti ne laisse donc plus de données sans terme.
 modification et import de questions : elles disposent d’une limite de 96 Mio
 pour transporter les images encodées.
 
+Les images des questions et des choix sont rangées dans la table
+`stored_images`, une seule fois par contenu identique : dupliquer une banque ne
+recopie pas ses images, et lister des questions n’en lit aucune. La maintenance
+horaire supprime les images qu’aucune question n’utilise plus.
+
 ## 🛡️ Configurer les mentions RGPD et légales
 
 Les pages publiques `/legal-notice`, `/privacy`, `/accessibility` et

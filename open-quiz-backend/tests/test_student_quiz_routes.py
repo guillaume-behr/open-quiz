@@ -27,6 +27,7 @@ from app.schemas import (
     StudentQuizAnswer,
 )
 from app.services import question_draws
+from app.stored_images import store_image
 
 from support import (
     VALID_PNG,
@@ -506,7 +507,7 @@ def test_student_images_require_a_running_session_and_an_image(environment) -> N
         session.execute(
             update(Question)
             .where(Question.id == question_id)
-            .values(image_data=VALID_PNG, image_content_type="image/png")
+            .values(image_sha256=store_image(session, VALID_PNG, "image/png"))
         )
         session.execute(
             update(QuizSession)

@@ -61,6 +61,7 @@ from app.schemas import (
     QuestionUpdate,
 )
 from app.services.grading import compute_final_scores
+from app.stored_images import store_image, stored_image_sizes
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
 MAX_IMPORT_IMAGE_BYTES = 64 * 1024 * 1024
@@ -189,8 +190,7 @@ def add_question(
         response_language=payload.response_language,
         allow_code_execution=payload.allow_code_execution,
         correction_mode="automatic",
-        image_data=image_data,
-        image_content_type=image_content_type,
+        image_sha256=store_image(session, image_data, image_content_type),
     )
     session.add(question)
     session.flush()
@@ -200,8 +200,9 @@ def add_question(
             label=choice.label,
             is_correct=choice.is_correct,
             points=choice_points(choice, payload.choices),
-            image_data=choice_image_data,
-            image_content_type=choice_image_content_type,
+            image_sha256=store_image(
+                session, choice_image_data, choice_image_content_type
+            ),
             code_language=choice.code_language,
             code_content=choice.code_content,
             position=position,
@@ -424,11 +425,9 @@ def update_question(
     question.allow_code_execution = question_payload.allow_code_execution
     question.correction_mode = "automatic"
     if image_data and image_content_type:
-        question.image_data = image_data
-        question.image_content_type = image_content_type
+        question.image_sha256 = store_image(session, image_data, image_content_type)
     elif question_payload.remove_image:
-        question.image_data = None
-        question.image_content_type = None
+        question.image_sha256 = None
 
     existing_choices = list(
         session.scalars(
@@ -455,24 +454,31 @@ def update_question(
                 ErrorCode.CHOICE_INVALID, "Proposition de réponse invalide"
             ),
         )
-    replacement_choice_images = []
+    # Each choice keeps its image (by key), replaces it (with new bytes) or
+    # loses it.
+    replacement_choice_images: list[tuple[bytes | None, str | None, str | None]] = []
     for choice in question_payload.choices:
         new_image_data, new_image_content_type = decode_image_payload(choice.image)
         existing_choice = (
             existing_choices_by_id.get(choice.id) if choice.id is not None else None
         )
-        if (
-            new_image_data is None
+        kept_image = (
+            existing_choice.image_sha256
+            if new_image_data is None
             and not choice.remove_image
             and existing_choice is not None
-        ):
-            new_image_data = existing_choice.image_data
-            new_image_content_type = existing_choice.image_content_type
-        replacement_choice_images.append((new_image_data, new_image_content_type))
+            else None
+        )
+        replacement_choice_images.append(
+            (new_image_data, new_image_content_type, kept_image)
+        )
 
     if any(
-        not choice.label and choice_image_data is None and choice.code_content is None
-        for choice, (choice_image_data, _) in zip(
+        not choice.label
+        and choice_image_data is None
+        and kept_image is None
+        and choice.code_content is None
+        for choice, (choice_image_data, _, kept_image) in zip(
             question_payload.choices,
             replacement_choice_images,
             strict=True,
@@ -486,13 +492,24 @@ def update_question(
             ),
         )
 
-    # question.image_data already reflects the replacement or the removal
+    # question.image_sha256 already reflects the replacement or the removal
     # applied above, so it is the image this question will actually keep.
+    kept_sizes = stored_image_sizes(
+        session,
+        [
+            digest
+            for digest in [
+                question.image_sha256,
+                *(kept for _, _, kept in replacement_choice_images),
+            ]
+            if digest is not None
+        ],
+    )
     if (
-        len(question.image_data or b"")
+        kept_sizes.get(question.image_sha256 or "", 0)
         + sum(
-            len(choice_image_data or b"")
-            for choice_image_data, _ in replacement_choice_images
+            len(choice_image_data or b"") + kept_sizes.get(kept_image or "", 0)
+            for choice_image_data, _, kept_image in replacement_choice_images
         )
         > MAX_IMPORT_IMAGE_BYTES
     ):
@@ -508,7 +525,7 @@ def update_question(
     choices = []
     for position, (
         choice_payload,
-        (choice_image_data, choice_image_content_type),
+        (choice_image_data, choice_image_content_type, kept_image),
     ) in enumerate(
         zip(
             question_payload.choices,
@@ -524,8 +541,11 @@ def update_question(
         choice.label = choice_payload.label
         choice.is_correct = choice_payload.is_correct
         choice.points = choice_points(choice_payload, question_payload.choices)
-        choice.image_data = choice_image_data
-        choice.image_content_type = choice_image_content_type
+        choice.image_sha256 = (
+            store_image(session, choice_image_data, choice_image_content_type)
+            if choice_image_data is not None
+            else kept_image
+        )
         choice.code_language = choice_payload.code_language
         choice.code_content = choice_payload.code_content
         choice.position = position
@@ -596,11 +616,7 @@ def get_question_image(
             QuestionBank.owner_id == professor.id,
         )
     )
-    if (
-        question is None
-        or question.image_data is None
-        or question.image_content_type is None
-    ):
+    if question is None or question.image is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_error(
@@ -608,8 +624,8 @@ def get_question_image(
             ),
         )
     return Response(
-        content=question.image_data,
-        media_type=question.image_content_type,
+        content=question.image.data,
+        media_type=question.image.content_type,
     )
 
 
@@ -629,7 +645,7 @@ def get_choice_image(
             QuestionBank.owner_id == professor.id,
         )
     )
-    if choice is None or choice.image_data is None or choice.image_content_type is None:
+    if choice is None or choice.image is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_error(
@@ -637,6 +653,6 @@ def get_choice_image(
             ),
         )
     return Response(
-        content=choice.image_data,
-        media_type=choice.image_content_type,
+        content=choice.image.data,
+        media_type=choice.image.content_type,
     )

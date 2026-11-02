@@ -3,6 +3,7 @@
 import subprocess
 import sys
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 from alembic.autogenerate import compare_metadata
@@ -12,9 +13,18 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session as DbSession
 
 from app.database import Base, migration_config, postgres_url
-from app.models import Quiz, QuizParticipant, QuizSession, User
+from app.models import (
+    Question,
+    QuestionBank,
+    QuestionChoice,
+    Quiz,
+    QuizParticipant,
+    QuizSession,
+    User,
+)
 
 from support import (
+    VALID_PNG,
     database_connection,
     database_url_for,
     make_client,
@@ -55,7 +65,8 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
     Those releases created tables with create_all() and added late columns at
     startup, so an older instance can lack tables, columns and indexes. The
     baseline fills them in, keeps every row, and the paste alerts those
-    releases recorded are cleared once.
+    releases recorded are cleared once. Their images, stored in each question
+    and choice row, move once per distinct content to stored_images.
     """
     database = tmp_path / "pre-migrations"
     database_url = database_url_for(database)
@@ -79,7 +90,19 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
                 hard_question_count=0,
             )
             session.add(quiz)
+            bank = QuestionBank(owner_id=teacher.id, grade_level="5e", chapter="Legacy")
+            session.add(bank)
             session.flush()
+            question = Question(
+                question_bank_id=bank.id,
+                prompt="Legacy question",
+                difficulty="easy",
+                answer_mode="single",
+                correction_mode="automatic",
+            )
+            session.add(question)
+            session.flush()
+            session.add(QuestionChoice(question_id=question.id, label="", position=0))
             quiz_session = QuizSession(
                 quiz_id=quiz.id,
                 class_name="Legacy class",
@@ -110,6 +133,19 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
                 "DROP INDEX ix_login_rate_limits_window_started_at"
             )
             connection.exec_driver_sql("DROP TABLE makeup_session_selections")
+            # 0.4.0 kept images in the rows; one is used twice here.
+            for table in ("questions", "question_choices"):
+                connection.exec_driver_sql(f"ALTER TABLE {table} DROP image_sha256")
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD image_data bytea, "
+                    "ADD image_content_type varchar(80)"
+                )
+                connection.exec_driver_sql(
+                    f"UPDATE {table} SET image_data = %s, "  # noqa: S608
+                    "image_content_type = 'image/png'",
+                    (VALID_PNG,),
+                )
+            connection.exec_driver_sql("DROP TABLE stored_images")
     finally:
         engine.dispose()
 
@@ -125,6 +161,14 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
             "SELECT violation_count, last_violation_type, last_violation_at"
             " FROM quiz_participants"
         ).fetchall() == [(0, None, None)]
+        stored = connection.execute(
+            "SELECT sha256, content_type, data FROM stored_images"
+        ).fetchall()
+        assert stored == [(sha256(VALID_PNG).hexdigest(), "image/png", VALID_PNG)]
+        assert connection.execute(
+            "SELECT image_sha256 FROM questions UNION ALL "
+            "SELECT image_sha256 FROM question_choices"
+        ).fetchall() == [(stored[0][0],), (stored[0][0],)]
 
 
 def test_concurrent_startups_migrate_the_database_once(tmp_path: Path) -> None:

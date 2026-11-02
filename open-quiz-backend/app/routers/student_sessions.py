@@ -771,18 +771,14 @@ def get_student_question_image(
             detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
         )
     question = session.get(Question, question_id)
-    if (
-        question is None
-        or question.image_data is None
-        or question.image_content_type is None
-    ):
+    if question is None or question.image is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
         )
     return Response(
-        content=question.image_data,
-        media_type=question.image_content_type,
+        content=question.image.data,
+        media_type=question.image.content_type,
     )
 
 
@@ -812,12 +808,12 @@ def get_student_choice_image(
             Question.answer_mode != "written",
         )
     )
-    if choice is None or choice.image_data is None or choice.image_content_type is None:
+    if choice is None or choice.image is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
         )
     return Response(
-        content=choice.image_data,
-        media_type=choice.image_content_type,
+        content=choice.image.data,
+        media_type=choice.image.content_type,
     )

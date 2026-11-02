@@ -59,6 +59,7 @@ from app.session_retention import (
     close_abandoned_sessions,
     expired_training_session_ids,
 )
+from app.stored_images import delete_unreferenced_images
 
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
 MANAGED_ADMIN_KEY = "managed_admin_user_id"
@@ -269,6 +270,8 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
                 LoginRateLimit.window_started_at <= limiter_cutoff
             )
         )
+        # Images of deleted or edited questions and choices.
+        delete_unreferenced_images(session)
         session.commit()
 
     if any(
