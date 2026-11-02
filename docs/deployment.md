@@ -457,9 +457,10 @@ La suppression des données expirées est appliquée au démarrage, puis toutes 
 heures. Adaptez ces valeurs à la politique validée pour votre instance avant de
 collecter des données réelles.
 
-Une session n’est clôturée par son enseignant que lorsqu’il ouvre son tableau
-de bord. Passé `ABANDONED_SESSION_RETENTION_DAYS`, la maintenance s’en charge à
-sa place : un examen qui a recueilli des réponses est noté puis conservé au
+Une session en cours se termine d’elle-même à l’échéance de son minuteur, mais
+une salle d’attente jamais lancée ou une session laissée en pause reste active
+jusqu’à ce que son enseignant la clôture. Passé
+`ABANDONED_SESSION_RETENTION_DAYS`, la maintenance s’en charge à sa place : un examen qui a recueilli des réponses est noté puis conservé au
 titre de `QUIZ_RESULT_RETENTION_DAYS`, tandis qu’une salle d’attente sans
 réponse et les entraînements interrompus sont supprimés. Un enseignant
 désactivé ou parti ne laisse donc plus de données sans terme.
@@ -471,7 +472,8 @@ pour transporter les images encodées.
 Les images des questions et des choix sont rangées dans la table
 `stored_images`, une seule fois par contenu identique : importer deux fois une banque ne
 recopie pas ses images, et lister des questions n’en lit aucune. La maintenance
-horaire supprime les images qu’aucune question n’utilise plus.
+horaire supprime les images qu’aucune question n’utilise plus. Une passe de
+maintenance qui échoue est journalisée et reprise à l’heure suivante.
 
 ## 🛡️ Configurer les mentions RGPD et légales
 

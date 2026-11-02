@@ -164,7 +164,9 @@ update, read the **Upgrade actions** of the new version in the
 [changelog](CHANGELOG.md).
 
 > [!CAUTION]
-> Back up PostgreSQL and `open-quiz-backend/.env` before each update. The
+> `update.sh` backs up the database to `backups/` before rebuilding the
+> containers; keep your own copy of `open-quiz-backend/.env`, without which a
+> restored backup cannot be fully used. The
 > [deployment guide](docs/deployment.md#-sauvegarder-les-données) describes
 > backup, restore and secret rotation.
 

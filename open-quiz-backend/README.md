@@ -14,7 +14,7 @@ Consultez aussi le [README principal](../README.md), le
 - FastAPI et Uvicorn ;
 - SQLAlchemy avec PostgreSQL et Psycopg, Alembic pour les migrations ;
 - Argon2, JWT, TOTP et Fernet pour les mécanismes d’authentification ;
-- pytest, Ruff et pip-audit pour la qualité et la sécurité.
+- pytest, Ruff, mypy et pip-audit pour la qualité et la sécurité.
 
 ## 💻 Développement local
 
@@ -283,6 +283,10 @@ l’arrivée des migrations, est reprise automatiquement : la révision de
 référence `0001` complète les tables, colonnes et index manquants sans toucher
 aux données existantes. Les anciennes bases SQLite ne sont pas reprises.
 
+Les images des questions et des choix sont stockées une seule fois par contenu
+identique dans la table `stored_images`, indexée par leur empreinte SHA-256 ;
+les questions et les choix n’en conservent que l’empreinte.
+
 ### Faire évoluer le schéma
 
 Toute modification de `app/models.py` s’accompagne d’une migration dans
@@ -291,7 +295,7 @@ développement à jour, générez-la puis relisez-la :
 
 ```shell
 uv run alembic upgrade head
-uv run alembic revision --autogenerate --rev-id 0003 -m "describe the change"
+uv run alembic revision --autogenerate --rev-id 0004 -m "describe the change"
 ```
 
 La commande lit `DATABASE_URL` dans l’environnement ou dans `.env`. Numérotez
@@ -305,12 +309,17 @@ indiquent l’état d’une base.
 La purge s’exécute au démarrage puis toutes les heures. Elle couvre les
 résultats d’examens et les entraînements terminés au-delà de leur durée, les
 signalements expirés, les sessions de rafraîchissement et défis
-d’authentification périmés, et les compteurs de limitation obsolètes.
+d’authentification périmés, les compteurs de limitation obsolètes et les
+images qu’aucune question n’utilise plus. Une passe qui échoue, par exemple
+pendant un redémarrage de la base, est journalisée et reprise à l’heure
+suivante.
 
 La même passe solde les sessions qu’un enseignant n’a jamais clôturées. Une
-session ne quitte son statut actif que lorsque son propriétaire ouvre son
-tableau de bord : un compte désactivé ou parti figerait sinon indéfiniment les
-noms, les copies et les alertes de surveillance. Passé
+session en cours se termine d’elle-même à l’échéance de son minuteur, mais une
+salle d’attente jamais lancée ou une session laissée en pause reste active
+jusqu’à ce que son enseignant la clôture : un compte désactivé ou parti
+figerait sinon indéfiniment les noms, les copies et les alertes de
+surveillance. Passé
 `ABANDONED_SESSION_RETENTION_DAYS`, un examen qui a recueilli des réponses est
 noté puis conservé au titre de `QUIZ_RESULT_RETENTION_DAYS`, tandis qu’une
 salle d’attente restée sans réponse et les entraînements interrompus sont

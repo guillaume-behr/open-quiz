@@ -171,8 +171,10 @@ lisez les **Upgrade actions** de la nouvelle version dans le
 [journal des modifications](CHANGELOG.md).
 
 > [!CAUTION]
-> Sauvegardez PostgreSQL et `open-quiz-backend/.env` avant chaque mise à jour.
-> Les procédures de sauvegarde, de restauration et de rotation des secrets sont
+> `update.sh` sauvegarde la base dans `backups/` avant de reconstruire les
+> conteneurs ; conservez vous-même une copie de `open-quiz-backend/.env`, sans
+> laquelle une sauvegarde restaurée n’est pas pleinement utilisable. Les
+> procédures de sauvegarde, de restauration et de rotation des secrets sont
 > décrites dans le
 > [guide de déploiement](docs/deployment.md#-sauvegarder-les-données).
 
