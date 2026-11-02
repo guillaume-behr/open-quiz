@@ -36,6 +36,7 @@ from support import (
     correct_choice_id,
     database_connection,
     exam_environment,
+    expire_due_sessions,
     hand_in_quiz,
     launch_and_join,
     login_admin,
@@ -538,6 +539,7 @@ def test_teacher_views_tolerate_departed_and_legacy_participants(environment) ->
             )
         )
         session.commit()
+    expire_due_sessions(client)
     finished = client.get(
         f"/api/quizzes/sessions/{launched['id']}", headers=teacher_headers
     ).json()
@@ -754,6 +756,7 @@ def test_training_feedback_and_results_cover_written_and_empty_banks(
             .values(started_at=datetime.now(UTC) - timedelta(days=1))
         )
         session.commit()
+    expire_due_sessions(client)
     finished = client.get(url, headers=token_headers).json()
     assert finished["status"] == "finished"
     assert finished["potential_score"] == 0

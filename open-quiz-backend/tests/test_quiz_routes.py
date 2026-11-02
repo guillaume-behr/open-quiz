@@ -11,6 +11,7 @@ import pytest
 from fastapi import HTTPException, status
 from sqlalchemy import event, select, update
 
+import main
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -1005,7 +1006,7 @@ def test_quiz_can_assign_the_same_draw_to_every_student(tmp_path: Path) -> None:
         assert personalized_count == 0
 
 
-def test_concurrent_session_reads_finalize_an_expired_quiz_once(
+def test_an_expired_quiz_is_finished_by_the_expiry_loop_once(
     tmp_path: Path,
 ) -> None:
     with make_client(settings_for(tmp_path / "concurrent-expiry.db")) as client:
@@ -1022,34 +1023,38 @@ def test_concurrent_session_reads_finalize_an_expired_quiz_once(
             quiz_session.started_at = datetime.now(UTC) - timedelta(hours=1)
             session.commit()
 
-        barrier = Barrier(2)
-
-        def teacher_state() -> tuple[int, str]:
-            barrier.wait()
-            response = client.get(
+        def states() -> list[tuple[int, str]]:
+            teacher = client.get(
                 f"/api/quizzes/sessions/{launched['id']}",
                 headers=environment["teacher_headers"],
             )
-            return response.status_code, response.json()["status"]
-
-        def student_state() -> tuple[int, str]:
-            barrier.wait()
-            response = client.get(
+            student = client.get(
                 f"/api/quizzes/student/sessions/{launched['join_code']}",
                 headers=participant_headers,
             )
-            return response.status_code, response.json()["status"]
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = [
-                future.result()
-                for future in (
-                    pool.submit(teacher_state),
-                    pool.submit(student_state),
-                )
+            return [
+                (teacher.status_code, teacher.json()["status"]),
+                (student.status_code, student.json()["status"]),
             ]
 
-        assert results == [(status.HTTP_200_OK, "finished")] * 2
+        # Reads have no side effect: the deadline has passed, but only the
+        # expiry loop finishes the session.
+        assert states() == [(status.HTTP_200_OK, "in_progress")] * 2
+
+        barrier = Barrier(2)
+
+        def tick() -> int:
+            barrier.wait()
+            return main.expire_due_sessions(
+                client.app.state.session_factory, client.app.state.live_quiz_hub
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(tick), pool.submit(tick)]
+            finished = [future.result() for future in futures]
+
+        assert sorted(finished) == [0, 1]
+        assert states() == [(status.HTTP_200_OK, "finished")] * 2
 
 
 def test_single_choice_maximum_uses_the_best_selectable_option(tmp_path: Path) -> None:
