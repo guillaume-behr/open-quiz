@@ -125,7 +125,7 @@ src/
 
 public/
 ├── locales/      catalogues i18next
-└── pyodide/      runtime Python servi localement
+└── pyodide/      runtime Python, copié depuis node_modules (non versionné)
 
 tests/e2e/        parcours Playwright
 ```
@@ -193,9 +193,12 @@ le contenu original reste affiché.
 
 ## 🐍 Exécution Python
 
-Les courts extraits Python s’exécutent avec les ressources Pyodide fournies
-dans `public/pyodide`. Le runtime est chargé dans un Web Worker, puis les API
-réseau et la création de Workers supplémentaires sont désactivées.
+Les courts extraits Python s’exécutent avec Pyodide, servi localement depuis
+`/pyodide/`. `pnpm dev` et `pnpm build` y copient les fichiers du paquet
+`pyodide` déclaré dans `package.json` (`scripts/copy-pyodide.mjs`) : ils ne
+sont pas versionnés, et une montée de version du paquet met à jour les fichiers
+servis. Le runtime est chargé dans un Web Worker, puis les API réseau et la
+création de Workers supplémentaires sont désactivées.
 
 Les limites actuelles sont :
 

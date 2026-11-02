@@ -457,15 +457,17 @@ def update_question(
     # Each choice keeps its image (by key), replaces it (with new bytes) or
     # loses it.
     replacement_choice_images: list[tuple[bytes | None, str | None, str | None]] = []
-    for choice in question_payload.choices:
-        new_image_data, new_image_content_type = decode_image_payload(choice.image)
+    for submitted in question_payload.choices:
+        new_image_data, new_image_content_type = decode_image_payload(submitted.image)
         existing_choice = (
-            existing_choices_by_id.get(choice.id) if choice.id is not None else None
+            existing_choices_by_id.get(submitted.id)
+            if submitted.id is not None
+            else None
         )
         kept_image = (
             existing_choice.image_sha256
             if new_image_data is None
-            and not choice.remove_image
+            and not submitted.remove_image
             and existing_choice is not None
             else None
         )

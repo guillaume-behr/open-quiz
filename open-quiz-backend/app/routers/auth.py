@@ -9,6 +9,7 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.audit import audit_event
+from app.database import affected_rows
 from app.dependencies import DbSession
 from app.errors import ErrorCode, api_error
 from app.models import (
@@ -535,7 +536,7 @@ def verify_two_factor(
         .values(confirmed=True, last_counter=matched_counter)
         .execution_options(synchronize_session=False)
     )
-    if counter_result.rowcount != 1:
+    if affected_rows(counter_result) != 1:
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -552,7 +553,7 @@ def verify_two_factor(
         .values(used_at=now)
         .execution_options(synchronize_session=False)
     )
-    if challenge_result.rowcount != 1:
+    if affected_rows(challenge_result) != 1:
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -634,7 +635,7 @@ def refresh(
         )
         .values(revoked_at=now)
     )
-    if result.rowcount != 1:
+    if affected_rows(result) != 1:
         session.rollback()
         family_revoked = revoke_refresh_family(session, stored_session.id, now)
         audit_event(

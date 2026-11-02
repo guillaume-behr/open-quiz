@@ -7,12 +7,12 @@ concurrent insertion of the same image is simply skipped.
 
 from collections.abc import Iterable
 from hashlib import sha256
-from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, func, select, union
+from sqlalchemy import delete, func, select, union
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.database import affected_rows
 from app.models import Question, QuestionChoice, StoredImage
 
 
@@ -53,10 +53,8 @@ def delete_unreferenced_images(session: Session) -> int:
             QuestionChoice.image_sha256.is_not(None)
         ),
     )
-    result = cast(
-        CursorResult[Any],
+    return affected_rows(
         session.execute(
             delete(StoredImage).where(StoredImage.sha256.not_in(referenced))
-        ),
+        )
     )
-    return result.rowcount
