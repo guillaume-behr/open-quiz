@@ -10,7 +10,7 @@ services:
     open-quiz-database:
         networks:
             open-quiz:
-                ipv4_address: 172.28.0.4
+                ipv4_address: ${OPEN_QUIZ_SUBNET_PREFIX:-172.28.0}.4
             open-quiz-database-edge: {}
         ports:
             - "127.0.0.1:5432:5432"
