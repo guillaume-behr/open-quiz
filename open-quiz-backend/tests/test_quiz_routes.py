@@ -53,6 +53,7 @@ from support import (
     login_admin,
     make_client,
     settings_for,
+    training_banks,
 )
 
 
@@ -497,15 +498,12 @@ def test_training_configuration_validates_its_input(environment) -> None:
         client.put(
             "/api/quizzes/training/classes/999999/question-banks",
             headers=headers,
-            json={"question_bank_ids": [bank_id]},
+            json=training_banks(bank_id),
         ).status_code
         == 404
     )
     assert (
-        client.put(
-            url, headers=headers, json={"question_bank_ids": [999999]}
-        ).status_code
-        == 422
+        client.put(url, headers=headers, json=training_banks(999999)).status_code == 422
     )
     assert (
         client.put(
@@ -532,7 +530,7 @@ def test_training_profile_creation_tolerates_a_concurrent_creator(
         client.put(
             f"/api/quizzes/training/classes/{class_id}/question-banks",
             headers=headers,
-            json={"question_bank_ids": [bank_id]},
+            json=training_banks(bank_id),
         ).status_code
         == 200
     )

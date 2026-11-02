@@ -491,15 +491,6 @@ def written_question(**overrides: Any) -> dict[str, Any]:
             },
             "une fois",
         ),
-        (
-            TrainingQuestionBankSelection,
-            {
-                "question_banks": [{"question_bank_id": 1, "question_count": 1}],
-                "question_bank_ids": [2],
-            },
-            "un seul format",
-        ),
-        (TrainingQuestionBankSelection, {"question_bank_ids": [0]}, "invalides"),
         (QuestionChoiceCreate, {"label": "A", "code_language": "python"}, "ensemble"),
         (QuestionCreate, valid_question(prompt="  "), "vide"),
         (
@@ -599,9 +590,8 @@ def test_questions_accept_a_python_code_execution_answer() -> None:
         ).password
         is None
     )
-    assert TrainingQuestionBankSelection.model_validate(
-        {"question_bank_ids": [1, 2]}
-    ).question_bank_ids == [1, 2]
+    with pytest.raises(ValidationError):
+        TrainingQuestionBankSelection.model_validate({"question_bank_ids": [1, 2]})
 
 
 def test_reset_two_factor_script_entry_point(

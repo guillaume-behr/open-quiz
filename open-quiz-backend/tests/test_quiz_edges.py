@@ -29,6 +29,7 @@ from support import (
     launch_and_join,
     make_client,
     settings_for,
+    training_banks,
 )
 
 
@@ -62,8 +63,8 @@ def answer(client, environment, url: str, headers: dict[str, str]):
 
 
 def test_helpers_read_legacy_session_settings() -> None:
-    started_at = datetime(2026, 1, 1, 12, 0)
-    paused_at = datetime(2026, 1, 1, 12, 5)
+    started_at = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+    paused_at = datetime(2026, 1, 1, 12, 5, tzinfo=UTC)
     quiz = SimpleNamespace(duration_seconds=600, mode="exam", allow_answer_review=False)
     legacy = SimpleNamespace(
         started_at=started_at,
@@ -75,7 +76,7 @@ def test_helpers_read_legacy_session_settings() -> None:
     )
     ends_at = session_lifecycle.quiz_ends_at(legacy, quiz)
     assert ends_at.tzinfo is UTC
-    assert ends_at > started_at.replace(tzinfo=UTC) + timedelta(seconds=600)
+    assert ends_at > started_at + timedelta(seconds=600)
     assert session_lifecycle.answer_review_enabled(legacy, quiz) is False
 
     missing_class = SimpleNamespace(class_id=1, class_name="Archived class")
@@ -307,7 +308,7 @@ def test_training_profile_conflicts_are_not_hidden(environment) -> None:
     client.put(
         f"/api/quizzes/training/classes/{class_id}/question-banks",
         headers=headers,
-        json={"question_bank_ids": [bank_id]},
+        json=training_banks(bank_id),
     )
 
     def claim_profile(connection) -> None:

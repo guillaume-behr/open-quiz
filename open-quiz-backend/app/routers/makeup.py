@@ -73,7 +73,6 @@ from app.services.question_draws import (
     quiz_bank_ids,
 )
 from app.services.session_lifecycle import (
-    as_utc,
     delete_makeup_session_records,
     discard_active_training_sessions,
 )
@@ -420,9 +419,8 @@ def control_makeup_session(
         elif action == "resume":
             if child.status != "paused" or child.paused_at is None:
                 continue
-            paused_at = as_utc(child.paused_at)
             child.paused_duration_seconds = (child.paused_duration_seconds or 0) + ceil(
-                max(0, (now - paused_at).total_seconds())
+                max(0, (now - child.paused_at).total_seconds())
             )
             child.paused_at = None
             child.status = "in_progress"

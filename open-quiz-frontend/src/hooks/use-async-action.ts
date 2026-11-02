@@ -1,6 +1,6 @@
 import { useState } from "react"
 
-export type AsyncAction<Args extends unknown[]> = {
+type AsyncAction<Args extends unknown[]> = {
     run: (...args: Args) => Promise<void>
     isPending: boolean
     error: string | null

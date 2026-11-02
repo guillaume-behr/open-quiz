@@ -795,7 +795,9 @@ def start_makeup_with_open_training(
             f"/api/quizzes/training/classes/{environment['student_class']['id']}"
             "/question-banks",
             headers=environment["teacher_headers"],
-            json={"question_bank_ids": [bank_id]},
+            json={
+                "question_banks": [{"question_bank_id": bank_id, "question_count": 1}]
+            },
         ).status_code
         == 200
     )

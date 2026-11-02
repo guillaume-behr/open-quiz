@@ -334,10 +334,13 @@ class TrainingQuestionBankItem(BaseModel):
 
 
 class TrainingQuestionBankSelection(BaseModel):
+    # The former question_bank_ids format must fail rather than read as an
+    # empty selection, which would clear the class's training banks.
+    model_config = ConfigDict(extra="forbid")
+
     question_banks: list[TrainingQuestionBankItem] = Field(
         default_factory=list, max_length=100
     )
-    question_bank_ids: list[int] = Field(default_factory=list, max_length=100)
 
     @field_validator("question_banks")
     @classmethod
@@ -350,17 +353,6 @@ class TrainingQuestionBankSelection(BaseModel):
                 "Chaque banque de questions ne peut être sélectionnée qu’une fois"
             )
         return value
-
-    @model_validator(mode="after")
-    def validate_legacy_or_current(self) -> TrainingQuestionBankSelection:
-        if self.question_banks and self.question_bank_ids:
-            raise ValueError("Utilisez un seul format de sélection")
-        ids = self.question_bank_ids or [
-            item.question_bank_id for item in self.question_banks
-        ]
-        if any(item < 1 for item in ids) or len(ids) != len(set(ids)):
-            raise ValueError("Les banques de questions sélectionnées sont invalides")
-        return self
 
 
 CodeLanguage = Literal[

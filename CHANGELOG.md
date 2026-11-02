@@ -56,6 +56,14 @@ PostgreSQL by hand).
 - Pyodide is copied from its npm package at build time instead of being
   committed.
 
+### Removed
+
+- The former `question_bank_ids` format for a class's practice banks: the
+  interface sends `question_banks` with a question count for each bank, and
+  the old format is now rejected instead of read as an empty selection.
+- Unused interface translations and code paths kept for timestamps without a
+  time zone, which PostgreSQL never returns for these columns.
+
 ### Fixed
 
 - Saving a student account clears its sign-in lockout, so a teacher can undo
