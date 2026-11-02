@@ -184,6 +184,13 @@ enseignants et aux élèves. L’origine WebSocket est validée, le premier mess
 authentifie la connexion et le serveur vérifie régulièrement que le jeton reste
 valide.
 
+Une session se termine à l’échéance de son minuteur même si personne ne l’a
+ouverte : toutes les deux secondes, l’API termine les sessions arrivées à
+échéance et diffuse le changement. Lire une session ne la modifie jamais. Une
+action d’élève envoyée après l’échéance, comme une réponse, est refusée sans
+attendre ce passage. Un verrou PostgreSQL garantit qu’un seul processus termine
+les sessions à chaque passage.
+
 Chaque processus diffuse les changements à ses propres WebSockets, et les
 relaie aux autres workers Uvicorn par `LISTEN/NOTIFY` de PostgreSQL
 (`app/live_relay.py`) : plusieurs workers peuvent donc servir la même instance.

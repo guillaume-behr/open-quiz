@@ -64,9 +64,6 @@ from app.services.question_assignments import (
     session_question_ids,
 )
 from app.services.results import finished_session_responses, stream_results_csv
-from app.services.session_lifecycle import (
-    expire_owned_quiz_sessions,
-)
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
@@ -82,7 +79,6 @@ def list_quiz_results(
     quiz_search: Annotated[str, Query(max_length=160)] = "",
     class_search: Annotated[str, Query(max_length=120)] = "",
 ) -> list[QuizSessionResponse]:
-    expire_owned_quiz_sessions(professor, session)
     purge_expired_quiz_results(professor, request, session)
     filters = [
         Quiz.owner_id == professor.id,

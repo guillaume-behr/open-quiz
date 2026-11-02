@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import path from "path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig } from "vitest/config"
 
 // package.json is the single source of the interface version shown in the
 // footer; the build replaces __APP_VERSION__ with it.
@@ -31,6 +31,10 @@ export default defineConfig({
                 ws: true,
             },
         },
+    },
+    test: {
+        // Unit tests only: the Playwright specs under tests/e2e run apart.
+        include: ["src/**/*.test.ts"],
     },
     resolve: {
         alias: {
