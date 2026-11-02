@@ -18,7 +18,13 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
-from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.pagination import (
+    DEFAULT_PAGE_SIZE,
+    LIKE_ESCAPE_CHARACTER,
+    MAX_PAGE_SIZE,
+    contains_pattern,
+    set_pagination_headers,
+)
 from app.routers.student_auth import student_password_rate_subject
 from app.schemas import (
     StudentAccountCreate,
@@ -124,10 +130,10 @@ def list_student_accounts(
         )
     filters = [StudentAccount.owner_id == professor.id]
     if search:
-        term = f"%{search}%"
+        term = contains_pattern(search)
         filters.append(
-            StudentAccount.display_name.ilike(term)
-            | StudentAccount.identifier.ilike(term)
+            StudentAccount.display_name.ilike(term, escape=LIKE_ESCAPE_CHARACTER)
+            | StudentAccount.identifier.ilike(term, escape=LIKE_ESCAPE_CHARACTER)
         )
     if class_id is not None:
         student_class = session.scalar(

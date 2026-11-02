@@ -29,6 +29,7 @@ from app.database import postgres_url
 from app.images import InvalidImageError, normalize_image
 from app.live_quiz import LiveQuizHub, websocket_origin_allowed
 from app.middleware import RequestBodyLimitMiddleware
+from app.pagination import contains_pattern
 from app.question_responses import load_question_records
 from app.schemas import (
     GradeLevelCreate,
@@ -750,3 +751,9 @@ def test_container_network_smoke_checks(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(smoke, "check_websocket_proxy", websocket_check)
     smoke.main()
     assert calls == ["http", "websocket"]
+
+
+def test_search_patterns_match_their_text_literally() -> None:
+    assert contains_pattern("5e A") == "%5e A%"
+    assert contains_pattern("50%_off") == r"%50\%\_off%"
+    assert contains_pattern("a\\b") == r"%a\\b%"

@@ -1229,6 +1229,18 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             params={"quiz_search": edited_quiz.json()["title"]},
         )
         assert renamed_search.json() == []
+        for wildcard_search in (
+            {"quiz_search": "%"},
+            {"quiz_search": "_"},
+            {"class_search": "%"},
+        ):
+            wildcard_result = client.get(
+                "/api/quizzes/sessions/results",
+                headers=teacher_headers,
+                params=wildcard_search,
+            )
+            assert wildcard_result.status_code == 200
+            assert wildcard_result.json() == []
         historical_student_state = client.get(
             student_state_url,
             headers=student_headers,

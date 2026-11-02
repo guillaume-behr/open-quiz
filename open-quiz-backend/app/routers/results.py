@@ -37,7 +37,13 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
-from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.pagination import (
+    DEFAULT_PAGE_SIZE,
+    LIKE_ESCAPE_CHARACTER,
+    MAX_PAGE_SIZE,
+    contains_pattern,
+    set_pagination_headers,
+)
 from app.question_responses import load_question_records
 from app.routers.quizzes import (
     owned_quiz_session,
@@ -87,10 +93,16 @@ def list_quiz_results(
     ]
     if quiz_search:
         filters.append(
-            func.coalesce(QuizSession.quiz_title, Quiz.title).ilike(f"%{quiz_search}%")
+            func.coalesce(QuizSession.quiz_title, Quiz.title).ilike(
+                contains_pattern(quiz_search), escape=LIKE_ESCAPE_CHARACTER
+            )
         )
     if class_search:
-        filters.append(QuizSession.class_name.ilike(f"%{class_search}%"))
+        filters.append(
+            QuizSession.class_name.ilike(
+                contains_pattern(class_search), escape=LIKE_ESCAPE_CHARACTER
+            )
+        )
     total = (
         session.scalar(
             select(func.count())

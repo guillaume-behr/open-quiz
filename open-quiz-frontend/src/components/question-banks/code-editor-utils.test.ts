@@ -61,4 +61,16 @@ describe("indentCode", () => {
         indentCode(event, value, onChange)
         expect(onChange).toHaveBeenCalledWith("a\n\tb\n\tc")
     })
+
+    it("leaves the line after a selection of whole lines untouched", () => {
+        const value = "a\nb\nc"
+        // "a\nb\n" selected, as dragging or shift+down over two lines does.
+        const { event, textarea } = keydown("Tab", value, 0, 4)
+        const onChange = vi.fn((next: string) => {
+            textarea.value = next
+        })
+        indentCode(event, value, onChange)
+        expect(onChange).toHaveBeenCalledWith("\ta\n\tb\nc")
+        expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([1, 6])
+    })
 })

@@ -66,6 +66,14 @@ def test_class_routes_reject_conflicts_and_unknown_records(tmp_path: Path) -> No
             params={"search": "5e", "grade_level": "5e"},
         )
         assert [item["id"] for item in filtered.json()] == [student_class["id"]]
+        for search, url in (
+            ("5e_A", "/api/classes"),
+            ("Edge_quiz", "/api/quizzes"),
+            ("Edge%cases", "/api/question-banks"),
+        ):
+            literal = client.get(url, headers=headers, params={"search": search})
+            assert literal.status_code == 200
+            assert literal.json() == []
         assert (
             client.get(
                 "/api/classes", headers=headers, params={"grade_level": "CM2"}
@@ -229,6 +237,13 @@ def test_student_account_routes_cover_every_branch(tmp_path: Path) -> None:
             "/api/students", headers=headers, params={"search": "duboi.3"}
         )
         assert [item["id"] for item in searched.json()] == [third["id"]]
+        # Search text is literal: "_" and "%" are not LIKE wildcards.
+        for literal in ("marie_helene", "marie%dubois", "\\"):
+            wildcard = client.get(
+                "/api/students", headers=headers, params={"search": literal}
+            )
+            assert wildcard.status_code == 200
+            assert wildcard.json() == []
         assert (
             client.get(
                 "/api/students", headers=headers, params={"class_id": 999999}

@@ -26,7 +26,13 @@ from app.models import (
     QuizSessionStudentQuestion,
     StudentClass,
 )
-from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.pagination import (
+    DEFAULT_PAGE_SIZE,
+    LIKE_ESCAPE_CHARACTER,
+    MAX_PAGE_SIZE,
+    contains_pattern,
+    set_pagination_headers,
+)
 from app.question_bank_summaries import (
     question_bank_summary_query,
     question_bank_summary_response,
@@ -54,7 +60,11 @@ def list_question_banks(
     """Return one filtered page of question banks owned by the professor."""
     filters = [QuestionBank.owner_id == professor.id]
     if search:
-        filters.append(QuestionBank.chapter.ilike(f"%{search}%"))
+        filters.append(
+            QuestionBank.chapter.ilike(
+                contains_pattern(search), escape=LIKE_ESCAPE_CHARACTER
+            )
+        )
     if grade_level:
         filters.append(QuestionBank.grade_level == grade_level)
     total = (
