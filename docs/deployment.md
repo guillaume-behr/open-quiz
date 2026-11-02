@@ -237,44 +237,50 @@ Une sauvegarde exploitable comprend :
 stockées dans la base. Sans le fichier `.env` correspondant, une restauration
 de la base reste incomplète.
 
-### Sauvegarde PostgreSQL en fonctionnement
-
-`pg_dump` produit une sauvegarde cohérente sans arrêter l’application. Créez
-directement une archive au format personnalisé hors du conteneur :
+### Sauvegarder avec `backup.sh`
 
 ```shell
-mkdir -p backups
-docker compose exec -T open-quiz-database \
-    pg_dump --username=open_quiz --dbname=open_quiz --format=custom \
-    > backups/open-quiz.dump
+sh ./backup.sh
 ```
 
-Déplacez ensuite la sauvegarde vers un stockage distinct, chiffré et protégé.
-Vérifiez-la avec `pg_restore --list backups/open-quiz.dump` et testez
-régulièrement une restauration dans une instance isolée.
+Le script écrit une sauvegarde `pg_dump` au format personnalisé, cohérente sans
+arrêter l’application, dans `backups/open-quiz-AAAA-MM-JJTHHMMSSZ.dump`. Il la
+relit avec `pg_restore --list` avant de la conserver. Le dossier `backups/` est
+ignoré par Git, lisible par son seul propriétaire, et chaque fichier est en
+`0600` : une sauvegarde contient les données personnelles des élèves.
 
-### Tester une restauration
-
-Sur une instance de test arrêtée et après avoir conservé sa base actuelle :
-
-> [!WARNING]
-> N’ajoutez jamais `--volumes` à `docker compose down` pendant une
-> restauration : cette option supprime le volume de données.
+`--keep N` supprime ensuite toutes les sauvegardes sauf les N plus récentes, et
+`--directory` choisit un autre dossier. Pour une sauvegarde quotidienne qui en
+garde quatorze, ajoutez une ligne à la crontab de l’utilisateur du déploiement :
 
 ```shell
-docker compose down
-docker compose up --detach --wait open-quiz-database
-docker compose exec -T open-quiz-database \
-    pg_restore --username=open_quiz --dbname=open_quiz \
-    --clean --if-exists --no-owner < backups/open-quiz.dump
-docker compose up --detach --wait
-docker compose ps
+30 2 * * * cd /srv/open-quiz && sh ./backup.sh --keep 14 >>backups/backup.log 2>&1
 ```
+
+`update.sh` sauvegarde aussi la base avant chaque mise à jour, sauf avec
+`--no-backup` ou lorsque la base ne tourne pas encore.
+
+Copiez ensuite les sauvegardes, avec `open-quiz-backend/.env`, vers un stockage
+distinct, chiffré et protégé, et testez régulièrement une restauration dans une
+instance isolée.
+
+### Restaurer avec `restore.sh`
+
+```shell
+sh ./restore.sh backups/open-quiz-2026-10-29T180000Z.dump
+```
+
+Le script vérifie que le fichier est une sauvegarde lisible, puis demande de
+taper `restore`. `--yes` permet de s’en passer dans un script. Il
+sauvegarde d’abord les données actuelles dans `backups/`, arrête l’API et
+l’interface, puis restaure la sauvegarde en une seule transaction : en cas
+d’échec, la base reste dans son état précédent. Il redémarre enfin les
+conteneurs.
 
 Utilisez le fichier `.env` correspondant à la sauvegarde, puis vérifiez
 `/api/health`, les connexions et un échantillon de résultats. Une restauration
 en production suit le même principe uniquement après validation complète sur
-l’instance isolée.
+une instance isolée.
 
 > [!CAUTION]
 > Une restauration remplace les données actuelles. Arrêtez les écritures,
@@ -286,7 +292,7 @@ l’instance isolée.
 Avant une mise à jour :
 
 1. lisez les notes de la release visée ;
-2. sauvegardez la base et le fichier `.env` ;
+2. sauvegardez le fichier `.env` ; `update.sh` sauvegarde la base ;
 3. vérifiez que le dépôt ne contient aucune modification locale à préserver.
 
 ```shell
@@ -296,9 +302,11 @@ sh ./update.sh
 Le script vérifie d’abord que Docker est accessible, que
 `open-quiz-backend/.env` existe et que le dépôt ne contient aucune modification
 locale, puis effectue un `git pull --ff-only`. Il affiche la révision avant et
-après la mise à jour et rappelle de sauvegarder PostgreSQL lorsqu’elle change.
-Il valide ensuite la configuration Compose, reconstruit les conteneurs, attend
-leur état sain et affiche leur statut ainsi que l’origine publique configurée.
+après la mise à jour. Il valide ensuite la configuration Compose, sauvegarde la
+base dans `backups/` (désactivable avec `--no-backup`), reconstruit les
+conteneurs, attend leur état sain et affiche leur statut ainsi que l’origine
+publique configurée. En cas de problème, `sh ./restore.sh` suivi du fichier
+indiqué revient à l’état d’avant la mise à jour.
 
 Pour reconstruire et redémarrer sans récupérer de révision, par exemple après
 avoir modifié `.env` :
