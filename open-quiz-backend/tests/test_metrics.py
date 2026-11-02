@@ -4,9 +4,11 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
+import app.config
 from app import metrics
-from app.config import boolean_environment
+from app.config import get_settings
 from app.metrics import route_template
 
 from support import (
@@ -147,11 +149,18 @@ def test_a_scope_without_a_route_is_labelled_unmatched() -> None:
     assert route_template({}) == "unmatched"
 
 
-def test_metrics_enabled_must_be_a_boolean(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("METRICS_ENABLED", "TRUE")
-    assert boolean_environment("METRICS_ENABLED") is True
-    monkeypatch.delenv("METRICS_ENABLED")
-    assert boolean_environment("METRICS_ENABLED") is False
-    monkeypatch.setenv("METRICS_ENABLED", "yes")
-    with pytest.raises(ValueError, match="METRICS_ENABLED must be true or false"):
-        boolean_environment("METRICS_ENABLED")
+def test_metrics_enabled_must_be_a_boolean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app.config, "ENV_FILE", tmp_path / ".env")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://user:a-long-enough-password@localhost/db",
+    )
+    monkeypatch.setenv("APP_ENV", "test")
+    assert get_settings().metrics_enabled is False
+    monkeypatch.setenv("METRICS_ENABLED", "true")
+    assert get_settings().metrics_enabled is True
+    monkeypatch.setenv("METRICS_ENABLED", "maybe")
+    with pytest.raises(ValidationError, match=r"METRICS_ENABLED\n.*valid boolean"):
+        get_settings()

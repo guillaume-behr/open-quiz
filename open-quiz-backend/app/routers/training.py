@@ -8,6 +8,7 @@ trained on.
 
 from datetime import UTC, datetime
 from secrets import token_urlsafe
+from typing import cast
 
 from fastapi import (
     APIRouter,
@@ -274,7 +275,8 @@ def list_student_training_history(
         TrainingHistoryItem(
             session_id=quiz_session.id,
             question_bank_id=question_bank_id,
-            started_at=quiz_session.started_at,
+            # The query keeps only sessions that have started.
+            started_at=cast(datetime, quiz_session.started_at),
             score=score,
             maximum_score=maximum,
             pending_manual_review_count=pending,

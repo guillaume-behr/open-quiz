@@ -24,6 +24,7 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
+from app.database import affected_rows
 from app.dependencies import DbSession
 from app.errors import ErrorCode, api_error
 from app.models import (
@@ -150,7 +151,7 @@ def join_quiz(
             .values(status=QuizSession.status)
             .execution_options(synchronize_session=False)
         )
-        if active_session.rowcount != 1:
+        if affected_rows(active_session) != 1:
             session.rollback()
             reject_quiz_join(request, session, join_subject)
         reconnected = session.execute(
@@ -167,7 +168,7 @@ def join_quiz(
             )
             .execution_options(synchronize_session=False)
         )
-        if reconnected.rowcount != 1:
+        if affected_rows(reconnected) != 1:
             session.rollback()
             reject_quiz_join(request, session, join_subject)
         session.commit()
@@ -188,7 +189,7 @@ def join_quiz(
         .values(status="waiting")
         .execution_options(synchronize_session=False)
     )
-    if waiting.rowcount != 1:
+    if affected_rows(waiting) != 1:
         session.rollback()
         reject_quiz_join(request, session, join_subject)
     participant_token = token_urlsafe(32)
@@ -352,7 +353,7 @@ def submit_student_answer(
                     "Une réponse rédactionnelle est requise",
                 ),
             )
-        answer_data = {"written_answer": written_answer}
+        answer_data: dict[str, object] = {"written_answer": written_answer}
         expected_answer = next(
             (choice.label for choice in choices if choice.is_correct),
             "",
