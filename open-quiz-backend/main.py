@@ -365,6 +365,19 @@ async def expire_sessions_periodically(session_factory, hub: LiveQuizHub) -> Non
             logger.exception("Session expiry failed")
 
 
+async def maintain_data_retention_periodically(
+    session_factory, settings: Settings
+) -> None:
+    while True:
+        await sleep(RETENTION_MAINTENANCE_INTERVAL_SECONDS)
+        try:
+            await to_thread(enforce_data_retention, session_factory, settings)
+        except SQLAlchemyError:
+            # A failed run must not end the loop, or retention would stop
+            # silently until the next restart: the next run retries.
+            logger.exception("Data retention maintenance failed")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     session_factory = build_session_factory(settings.database_url)
@@ -375,13 +388,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         warn_missing_public_information(settings)
         enforce_data_retention(session_factory, settings)
 
-        async def maintain_data_retention() -> None:
-            while True:
-                await sleep(RETENTION_MAINTENANCE_INTERVAL_SECONDS)
-                await to_thread(enforce_data_retention, session_factory, settings)
-
         live_relay.start()
-        maintenance_task = create_task(maintain_data_retention())
+        maintenance_task = create_task(
+            maintain_data_retention_periodically(session_factory, settings)
+        )
         expiry_task = create_task(
             expire_sessions_periodically(session_factory, app.state.live_quiz_hub)
         )

@@ -10,6 +10,7 @@ from hashlib import sha256
 
 from sqlalchemy import delete, func, select, union
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import affected_rows
@@ -46,15 +47,25 @@ def stored_image_sizes(session: Session, digests: Iterable[str]) -> dict[str, in
 
 
 def delete_unreferenced_images(session: Session) -> int:
-    """Delete the images no question or choice uses any more."""
+    """Delete the images no question or choice uses any more.
+
+    A teacher may save a question that reuses an unreferenced image while
+    this runs: the foreign key then rejects the deletion. That attempt is
+    rolled back to a savepoint, leaving the rest of the caller's transaction
+    intact, and the next run collects what is still unused.
+    """
     referenced = union(
         select(Question.image_sha256).where(Question.image_sha256.is_not(None)),
         select(QuestionChoice.image_sha256).where(
             QuestionChoice.image_sha256.is_not(None)
         ),
     )
-    return affected_rows(
-        session.execute(
-            delete(StoredImage).where(StoredImage.sha256.not_in(referenced))
-        )
-    )
+    try:
+        with session.begin_nested():
+            return affected_rows(
+                session.execute(
+                    delete(StoredImage).where(StoredImage.sha256.not_in(referenced))
+                )
+            )
+    except IntegrityError:
+        return 0

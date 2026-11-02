@@ -104,3 +104,27 @@ def test_an_answer_after_the_deadline_finishes_the_session_first(
             headers=environment["teacher_headers"],
         )
         assert state.json()["status"] == "finished"
+
+
+def test_retention_maintenance_retries_after_a_database_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runs: list[str] = []
+
+    async def short_sleep(_: float) -> None:
+        if len(runs) == 2:
+            raise asyncio.CancelledError
+
+    def enforce(*_: object) -> None:
+        runs.append("run")
+        if len(runs) == 1:
+            raise OperationalError("SELECT 1", {}, Exception("database is down"))
+
+    logged: list[str] = []
+    monkeypatch.setattr(main, "sleep", short_sleep)
+    monkeypatch.setattr(main, "enforce_data_retention", enforce)
+    monkeypatch.setattr(main.logger, "exception", logged.append)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(main.maintain_data_retention_periodically(None, None))
+    assert runs == ["run", "run"]
+    assert logged == ["Data retention maintenance failed"]

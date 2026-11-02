@@ -2,11 +2,14 @@
 
 import json
 from pathlib import Path
+from threading import Thread
+from time import sleep
 
-from sqlalchemy import event, func, select
+from sqlalchemy import event, func, select, update
 
 import main
-from app.models import StoredImage
+from app.models import Question, StoredImage
+from app.stored_images import delete_unreferenced_images
 
 from support import VALID_PNG, exam_environment, make_client, settings_for
 
@@ -102,3 +105,43 @@ def test_listing_a_bank_transfers_no_image(tmp_path: Path) -> None:
         assert not [
             statement for statement in statements if "stored_images" in statement
         ]
+
+
+def test_purging_skips_an_image_a_concurrent_save_reuses(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "stored-images-race")) as client:
+        environment = exam_environment(client)
+        headers = environment["teacher_headers"]
+        created = client.post(
+            f"/api/question-banks/{environment['question']['question_bank_id']}/questions",
+            headers=headers,
+            data={"payload": question_payload("Illustrated")},
+            files={"image": ("image.png", VALID_PNG, "image/png")},
+        ).json()
+        session_factory = client.app.state.session_factory
+        with session_factory() as session:
+            question = session.get(Question, created["id"])
+            digest = question.image_sha256
+            question.image_sha256 = None
+            session.commit()
+
+        # A save reuses the now unreferenced image and holds its row lock
+        # while the purge runs.
+        with session_factory() as saving, session_factory() as purging:
+            saving.execute(
+                update(Question)
+                .where(Question.id == created["id"])
+                .values(image_sha256=digest)
+            )
+            purged: list[int] = []
+            purge = Thread(
+                target=lambda: purged.append(delete_unreferenced_images(purging))
+            )
+            purge.start()
+            sleep(0.3)
+            saving.commit()
+            purge.join(timeout=10)
+            assert purged == [0]
+            # The rest of the purging transaction is still usable.
+            purging.execute(select(1))
+            purging.commit()
+        assert stored_image_count(client) == 1
