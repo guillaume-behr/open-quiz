@@ -72,6 +72,7 @@ from app.services.session_lifecycle import (
     as_utc,
     expire_quiz_session,
     finish_when_nobody_can_answer,
+    quiz_session_is_due,
 )
 from app.session_status import ACTIVE_SESSION_STATUSES
 
@@ -740,8 +741,9 @@ def active_participant_for_image(
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
-    expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status != "in_progress":
+    # A read: a session past its deadline is refused like a finished one,
+    # and left for the expiry loop to finish.
+    if quiz_session.status != "in_progress" or quiz_session_is_due(quiz_session, quiz):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),

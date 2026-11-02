@@ -1,3 +1,4 @@
+import logging
 import tomllib
 from asyncio import CancelledError, create_task, sleep, to_thread
 from contextlib import asynccontextmanager, suppress
@@ -12,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.audit import audit_event
 from app.config import Settings, get_settings
@@ -53,16 +55,21 @@ from app.routers import (
     training,
     users,
 )
+from app.routers.quizzes import publish_session_change
 from app.security import hash_password, verify_password
 from app.services.question_draws import InsufficientQuestionsError
+from app.services.session_lifecycle import expire_due_quiz_sessions
 from app.session_retention import (
     close_abandoned_sessions,
     expired_training_session_ids,
 )
 
+logger = logging.getLogger("open_quiz")
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
 MANAGED_ADMIN_KEY = "managed_admin_user_id"
 RETENTION_MAINTENANCE_INTERVAL_SECONDS = 3600
+# How late a session may end after its deadline when nobody has it open.
+SESSION_EXPIRY_INTERVAL_SECONDS = 2
 
 # The image installs dependencies without the project itself, so there is no
 # package metadata to read: pyproject.toml, copied next to this file, is the
@@ -330,6 +337,25 @@ def warn_missing_public_information(settings: Settings) -> list[str]:
     return missing
 
 
+def expire_due_sessions(session_factory, hub: LiveQuizHub) -> int:
+    """Finish the sessions whose time is up and notify their live views."""
+    with session_factory() as session:
+        finished = expire_due_quiz_sessions(session)
+        for quiz_session in finished:
+            publish_session_change(hub, quiz_session, session)
+    return len(finished)
+
+
+async def expire_sessions_periodically(session_factory, hub: LiveQuizHub) -> None:
+    while True:
+        await sleep(SESSION_EXPIRY_INTERVAL_SECONDS)
+        try:
+            await to_thread(expire_due_sessions, session_factory, hub)
+        except SQLAlchemyError:
+            # The database may be briefly unavailable: the next tick retries.
+            logger.exception("Session expiry failed")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     session_factory = build_session_factory(settings.database_url)
@@ -346,12 +372,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await to_thread(enforce_data_retention, session_factory, settings)
 
         maintenance_task = create_task(maintain_data_retention())
+        expiry_task = create_task(
+            expire_sessions_periodically(session_factory, app.state.live_quiz_hub)
+        )
         try:
             yield
         finally:
-            maintenance_task.cancel()
-            with suppress(CancelledError):
-                await maintenance_task
+            for task in (maintenance_task, expiry_task):
+                task.cancel()
+                with suppress(CancelledError):
+                    await task
 
     production = settings.environment == "production"
     app = FastAPI(

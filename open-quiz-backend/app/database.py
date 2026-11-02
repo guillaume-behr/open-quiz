@@ -11,6 +11,8 @@ MIGRATIONS_DIRECTORY = Path(__file__).resolve().parent.parent / "migrations"
 # Arbitrary application-wide key for pg_advisory_xact_lock: "openquiz" read as
 # a big-endian 64-bit integer.
 MIGRATION_LOCK_KEY = 0x6F70656E7175697A
+# Taken by the session expiry loop, so that one worker runs it at a time.
+EXPIRY_LOCK_KEY = MIGRATION_LOCK_KEY + 1
 
 
 class Base(DeclarativeBase):

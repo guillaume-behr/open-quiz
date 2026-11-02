@@ -24,6 +24,7 @@ from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser
 from app.errors import ErrorCode, api_error
 from app.live_quiz import (
+    LiveQuizHub,
     active_quiz_sessions_topic,
     makeup_sessions_topic,
     quiz_session_topic,
@@ -90,7 +91,6 @@ from app.services.session_lifecycle import (
     answer_review_enabled,
     as_utc,
     discard_active_training_sessions,
-    expire_owned_quiz_sessions,
     expire_quiz_session,
     quiz_ends_at,
 )
@@ -110,8 +110,26 @@ def publish_quiz_update(
     active_sessions_changed: bool = True,
     makeup_sessions_changed: bool = True,
 ) -> None:
-    hub = request.app.state.live_quiz_hub
-    publish_quiz_topics(request, quiz_session.id, quiz_session.join_code)
+    publish_session_change(
+        request.app.state.live_quiz_hub,
+        quiz_session,
+        session,
+        active_sessions_changed=active_sessions_changed,
+        makeup_sessions_changed=makeup_sessions_changed,
+    )
+
+
+def publish_session_change(
+    hub: LiveQuizHub,
+    quiz_session: QuizSession,
+    session: DbSession,
+    *,
+    active_sessions_changed: bool = True,
+    makeup_sessions_changed: bool = True,
+) -> None:
+    """Notify every live view a change of this session concerns."""
+    hub.publish(quiz_session_topic(quiz_session.id))
+    hub.publish(student_session_topic(quiz_session.join_code))
     if active_sessions_changed:
         owner_id = session.scalar(
             select(Quiz.owner_id).where(Quiz.id == quiz_session.quiz_id)
@@ -359,7 +377,6 @@ def session_response(
     quiz: Quiz,
     session: DbSession,
 ) -> QuizSessionResponse:
-    expire_quiz_session(quiz_session, quiz, session)
     participant_query = select(QuizParticipant).where(
         QuizParticipant.session_id == quiz_session.id
     )
@@ -763,7 +780,6 @@ def student_state_response(
     participant: QuizParticipant,
     session: DbSession,
 ) -> StudentQuizStateResponse:
-    expire_quiz_session(quiz_session, quiz, session)
     question_ids = session_question_ids(quiz_session, session, participant)
     question_id = current_question_id(quiz_session, participant, session)
     answered_question_ids = set(
@@ -967,7 +983,6 @@ def active_session_responses(
     professor: User,
     session: DbSession,
 ) -> list[QuizSessionResponse]:
-    expire_owned_quiz_sessions(professor, session)
     obsolete_cancelled_ids = list(
         session.scalars(
             select(QuizSession.id)
@@ -1016,7 +1031,6 @@ def get_quiz_session(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
-    expire_quiz_session(quiz_session, quiz, session)
     return session_response(quiz_session, quiz, session)
 
 
