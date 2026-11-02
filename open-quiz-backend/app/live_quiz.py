@@ -1,6 +1,6 @@
 from asyncio import AbstractEventLoop, Queue, get_running_loop
 from collections import defaultdict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from threading import Lock
@@ -16,13 +16,21 @@ class _Subscriber:
 
 
 class LiveQuizHub:
-    """Thread-safe in-process fan-out for live quiz state changes."""
+    """Thread-safe in-process fan-out for live quiz state changes.
+
+    A relay (app/live_relay.py) carries each publication to the other worker
+    processes, which deliver it to their own sockets with publish_local().
+    """
 
     def __init__(self, max_pending_authentications: int = 64) -> None:
         self._lock = Lock()
         self._subscribers: dict[str, set[_Subscriber]] = defaultdict(set)
         self._pending_authentications = 0
         self._max_pending_authentications = max_pending_authentications
+        self._relay: Callable[[str], None] | None = None
+
+    def attach_relay(self, relay: Callable[[str], None]) -> None:
+        self._relay = relay
 
     def begin_authentication(self) -> bool:
         with self._lock:
@@ -51,6 +59,11 @@ class LiveQuizHub:
                         self._subscribers.pop(topic, None)
 
     def publish(self, topic: str) -> None:
+        self.publish_local(topic)
+        if self._relay is not None:
+            self._relay(topic)
+
+    def publish_local(self, topic: str) -> None:
         with self._lock:
             subscribers = tuple(self._subscribers.get(topic, ()))
         for subscriber in subscribers:

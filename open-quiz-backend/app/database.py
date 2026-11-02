@@ -14,6 +14,8 @@ MIGRATIONS_DIRECTORY = Path(__file__).resolve().parent.parent / "migrations"
 MIGRATION_LOCK_KEY = 0x6F70656E7175697A
 # Taken by the session expiry loop, so that one worker runs it at a time.
 EXPIRY_LOCK_KEY = MIGRATION_LOCK_KEY + 1
+# Serializes startup and retention maintenance when several workers run them.
+MAINTENANCE_LOCK_KEY = MIGRATION_LOCK_KEY + 2
 
 
 class Base(DeclarativeBase):
