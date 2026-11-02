@@ -202,6 +202,18 @@ def test_settings_are_read_from_the_environment(
         get_settings()
 
 
+def test_a_malformed_environment_value_names_its_variable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app.config, "ENV_FILE", tmp_path / ".env")
+    monkeypatch.setenv("DATABASE_URL", SETTINGS_VALUES["database_url"])
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("LOGIN_ATTEMPTS", "dix")
+
+    with pytest.raises(ValidationError, match=r"LOGIN_ATTEMPTS\n.*valid integer"):
+        get_settings()
+
+
 @pytest.mark.parametrize(
     ("url", "password", "message"),
     [
