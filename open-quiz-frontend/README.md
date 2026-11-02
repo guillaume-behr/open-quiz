@@ -119,6 +119,7 @@ Toute route inconnue affiche la page 404.
 src/
 ├── api/          client HTTP, types et rotation des sessions
 ├── components/   composants d’interface et fonctionnalités métier
+├── hooks/        chargement de données et actions asynchrones partagés
 ├── layouts/      structure commune des pages
 ├── lib/          traduction, mises à jour temps réel et utilitaires
 └── pages/        points d’entrée chargés à la demande

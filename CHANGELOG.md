@@ -6,16 +6,22 @@ Notable changes to Open Quiz are listed here. The format follows
 break compatibility).
 
 Each version starts with **Upgrade actions**: what an administrator must do
-beyond `sh ./update.sh`. “None” means the update script is enough. Back up
-PostgreSQL and `open-quiz-backend/.env` before any update.
+beyond `sh ./update.sh`. “None” means the update script is enough. Keep a
+copy of `open-quiz-backend/.env` before any update; from the next release on,
+`update.sh` backs up the database itself (earlier versions: back up
+PostgreSQL by hand).
 
 ## [Unreleased]
 
 ### Upgrade actions
 
-- None. At its first start, the backend adopts the existing database into
-  Alembic migrations by itself, then applies the pending ones. Keep the backup
-  taken before the update until the instance has restarted cleanly.
+- At its first start, the backend adopts the existing database into Alembic
+  migrations by itself, then applies the pending ones, including the move of
+  question images into `stored_images`. Keep the backup taken before the
+  update until the instance has restarted cleanly.
+- Student sessions now last 2 hours by default instead of 12. Set
+  `STUDENT_ACCESS_TOKEN_HOURS` (2 to 12) in `open-quiz-backend/.env` to keep
+  longer sessions.
 
 ### Added
 
@@ -24,13 +30,31 @@ PostgreSQL and `open-quiz-backend/.env` before any update.
 - Every API error carries a stable `code`, and the interface translates errors
   from that code into all eight languages.
 - Playwright browser tests run on every pull request, and backend tests
-  enforce 100% coverage.
+  enforce 100% coverage. mypy checks the backend types and Vitest runs the
+  frontend unit tests.
+- `backup.sh` and `restore.sh` back up and restore the database, and
+  `update.sh` takes a backup before rebuilding (`--no-backup` skips it).
+- Several API workers can serve one instance (`OPEN_QUIZ_API_WORKERS`): live
+  updates reach every worker through PostgreSQL `LISTEN/NOTIFY`.
+- Running sessions end when their timer runs out, even when nobody has them
+  open.
+- The API logs every request as one JSON line, with the route template and no
+  IP address or identifier.
+- `README.en.md`, an English README, and this changelog.
 
 ### Changed
 
 - The API is split into one router per domain, with the session lifecycle,
   grading, question draws and result summaries moved to `app/services`.
 - Docker base images are pinned, and Dependabot proposes their updates.
+- Question images are stored once per distinct content in `stored_images`,
+  and listing questions no longer reads them.
+- The Compose subnet follows `OPEN_QUIZ_SUBNET_PREFIX`, and the proxy
+  addresses the API trusts follow it.
+- A malformed setting fails at startup with the variable's name and the
+  expected type.
+- Pyodide is copied from its npm package at build time instead of being
+  committed.
 
 ### Fixed
 
