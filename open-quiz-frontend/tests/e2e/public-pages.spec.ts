@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url"
 // Read the shipped version instead of restating it: the footer literal
 // had already drifted two releases behind the rest of the project.
 const { version } = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8")
+    readFileSync(
+        fileURLToPath(new URL("../../package.json", import.meta.url)),
+        "utf8"
+    )
 ) as { version: string }
 
 test.beforeEach(async ({ page }) => {
@@ -35,7 +38,10 @@ test.beforeEach(async ({ page }) => {
                     training_result_retention_days: 365,
                     problem_report_retention_days: 90,
                 },
-                cookies: { authentication_max_age_days: 30 },
+                cookies: {
+                    authentication_max_age_days: 30,
+                    two_factor_trust_enabled: true,
+                },
                 accessibility: {
                     contact: "accessibility@example.test",
                     scheme_url: "https://example.test/scheme",
@@ -121,7 +127,10 @@ test("unsafe configured external URLs are not rendered as links", async ({
                     training_result_retention_days: 365,
                     problem_report_retention_days: 90,
                 },
-                cookies: { authentication_max_age_days: 30 },
+                cookies: {
+                    authentication_max_age_days: 30,
+                    two_factor_trust_enabled: true,
+                },
                 accessibility: {
                     contact: "accessibility@example.test",
                     scheme_url: "javascript:alert(document.cookie)",
@@ -220,10 +229,19 @@ test("cookie settings clear local quiz and preference data", async ({
             new URL(request.url()).pathname === "/api/student-auth/logout" &&
             request.headers().authorization === "Bearer student-token"
     )
+    const teacherLogout = page.waitForRequest(
+        (request) =>
+            new URL(request.url()).pathname === "/api/auth/logout" &&
+            request.postDataJSON()?.forget_browser === true
+    )
     await page.goto("/cookie-settings")
+    await expect(
+        page.getByRole("cell", { name: "open_quiz_two_factor_trust" })
+    ).toBeVisible()
     await page.getByRole("button", { name: "Clear and sign out" }).click()
 
     await studentLogout
+    await teacherLogout
 
     await expect(page.getByRole("status")).toHaveText(
         "Local data and the sign-in session have been cleared."

@@ -5,6 +5,9 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/scripts/common.sh"
 
+ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env"
+DATABASE_ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env.database"
+
 backup_file=''
 confirmed=false
 
@@ -49,6 +52,9 @@ open_quiz_banner 'Restoring your database'
 cd "$SCRIPT_DIR"
 require_commands docker
 setup_compose
+[ -f "$ENV_FILE" ] || fail "missing open-quiz-backend/.env"
+ensure_database_environment_file "$ENV_FILE" "$DATABASE_ENV_FILE"
+use_application_database_role "$ENV_FILE"
 database_is_running || fail "the open-quiz-database container is not running"
 
 step 'Checking the backup'
@@ -78,6 +84,11 @@ if ! compose exec -T open-quiz-database \
     compose up --detach --wait --wait-timeout 120
     fail "the restore failed and was rolled back; the previous data is unchanged"
 fi
+
+# pg_restore --no-owner leaves every restored object to the superuser: give
+# them back to the API's role before it starts.
+step "Configuring the API's PostgreSQL role"
+configure_database_roles "$ENV_FILE"
 
 step 'Starting the containers'
 compose up --detach --wait --wait-timeout 120

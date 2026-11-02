@@ -113,7 +113,13 @@ validate_environment_file() {
     ! grep -q '=replace-with-' "$environment_file" \
         || fail "$environment_file still contains example credentials"
 
-    for variable in DATABASE_URL POSTGRES_PASSWORD JWT_SECRET \
+    # Production connects as the API's own role (DATABASE_PASSWORD); the
+    # development database is reached as the PostgreSQL superuser.
+    case "$expected_app_env" in
+        production) database_password_variable=DATABASE_PASSWORD ;;
+        *) database_password_variable=POSTGRES_PASSWORD ;;
+    esac
+    for variable in DATABASE_URL "$database_password_variable" JWT_SECRET \
         TOTP_ENCRYPTION_KEY STUDENT_CREDENTIAL_ENCRYPTION_KEY \
         ADMIN_USERNAME ADMIN_PASSWORD FRONTEND_ORIGIN APP_ENV; do
         grep -Eq "^$variable=.+" "$environment_file" \
@@ -158,4 +164,78 @@ create_backup() {
 database_is_running() {
     compose ps --status running --services 2>/dev/null \
         | grep -qx open-quiz-database
+}
+
+# The role the API connects as. scripts/database-roles.sql creates it.
+DATABASE_APP_ROLE=open_quiz_app
+
+# Print the value an environment file gives to a variable (empty when unset).
+environment_value() {
+    sed -n "s/^$2=//p" "$1" | tail -n 1
+}
+
+# The database container reads its superuser password from its own file, so
+# that it never receives the application's secrets. Create that file from
+# open-quiz-backend/.env on deployments that predate it.
+ensure_database_environment_file() {
+    environment_file=$1
+    database_environment_file=$2
+    if [ -f "$database_environment_file" ]; then
+        chmod 600 "$database_environment_file"
+        return 0
+    fi
+    superuser_password=$(environment_value "$environment_file" POSTGRES_PASSWORD)
+    [ -n "$superuser_password" ] \
+        || fail "$database_environment_file is missing, and $environment_file has no POSTGRES_PASSWORD to create it from"
+    database_temporary_file=$(umask 077 && mktemp "$database_environment_file.tmp.XXXXXX")
+    {
+        printf '# Read by the PostgreSQL container only: the superuser password.\n'
+        printf '# The API connects with its own role (DATABASE_PASSWORD in .env).\n'
+        printf 'POSTGRES_PASSWORD=%s\n' "$superuser_password"
+    } >"$database_temporary_file"
+    chmod 600 "$database_temporary_file"
+    mv "$database_temporary_file" "$database_environment_file"
+    note "Created $database_environment_file with the PostgreSQL superuser password."
+}
+
+# Move a production .env from the superuser to the API's own role: give it a
+# DATABASE_PASSWORD, point DATABASE_URL at the role and drop the superuser
+# password, which now lives in the database container's file only. Run
+# ensure_database_environment_file first, which copies that password over.
+use_application_database_role() {
+    environment_file=$1
+    grep -Eq '^DATABASE_PASSWORD=.+' "$environment_file" && return 0
+    step "Moving the API to its own PostgreSQL role ($DATABASE_APP_ROLE)"
+    application_temporary_file=$(umask 077 && mktemp "$environment_file.tmp.XXXXXX")
+    sed \
+        -e '/^POSTGRES_PASSWORD=/d' \
+        -e "s|^DATABASE_URL=\\(postgresql[^:]*://\\)open_quiz@|DATABASE_URL=\\1$DATABASE_APP_ROLE@|" \
+        "$environment_file" >"$application_temporary_file"
+    if [ -n "$(tail -c 1 "$application_temporary_file")" ]; then
+        printf '\n' >>"$application_temporary_file"
+    fi
+    printf 'DATABASE_PASSWORD=%s\n' "$(random_hex 32)" >>"$application_temporary_file"
+    chmod 600 "$application_temporary_file"
+    mv "$application_temporary_file" "$environment_file"
+    grep -Eq "^DATABASE_URL=postgresql[^:]*://$DATABASE_APP_ROLE@" "$environment_file" \
+        || note "DATABASE_URL in $environment_file does not name the $DATABASE_APP_ROLE role; update it by hand."
+}
+
+# Create or update the API's role and give it the database and its objects,
+# as the superuser over the container's local socket. Needs the database
+# container running and $SCRIPT_DIR set to the repository root.
+configure_database_roles() {
+    environment_file=$1
+    application_password=$(environment_value "$environment_file" DATABASE_PASSWORD)
+    [ -n "$application_password" ] \
+        || fail "$environment_file does not define DATABASE_PASSWORD"
+    # The password is spliced into a psql command: keep it to safe characters.
+    printf '%s\n' "$application_password" | grep -Eq '^[A-Za-z0-9._~-]{16,}$' \
+        || fail "DATABASE_PASSWORD must be at least 16 letters, digits or . _ ~ - characters"
+    {
+        printf '%s\n' "\\set app_password '$application_password'"
+        cat "$SCRIPT_DIR/scripts/database-roles.sql"
+    } | compose exec -T open-quiz-database psql --quiet --no-psqlrc \
+        --set=ON_ERROR_STOP=1 --username=open_quiz --dbname=open_quiz >/dev/null \
+        || fail "could not configure the $DATABASE_APP_ROLE PostgreSQL role"
 }

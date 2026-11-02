@@ -1,9 +1,11 @@
 from base64 import urlsafe_b64encode
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
+from datetime import time as day_start
 from hashlib import sha256
 from hmac import compare_digest
 from hmac import new as hmac_new
 from secrets import token_urlsafe
+from zoneinfo import ZoneInfo
 
 import jwt
 import pyotp
@@ -14,6 +16,10 @@ password_hash = PasswordHash.recommended()
 DUMMY_PASSWORD_HASH = password_hash.hash(token_urlsafe(32))
 ACCESS_TOKEN_REQUIRED_CLAIMS = ["sub", "type", "ver", "iat", "exp"]
 TWO_FACTOR_TOKEN_REQUIRED_CLAIMS = ["sub", "type", "jti", "iat", "exp"]
+TWO_FACTOR_TRUST_TOKEN_TYPE = "two_factor_trust"  # noqa: S105 - a JWT type.
+# A browser trusted after a two-factor login skips the code until the end of
+# the user's day, and never for longer than this.
+TWO_FACTOR_TRUST_MAXIMUM = timedelta(hours=24)
 
 
 def hash_password(password: str) -> str:
@@ -146,6 +152,84 @@ def decode_two_factor_token(token: str, secret: str) -> tuple[int, str, str]:
     if not isinstance(token_id, str) or not token_id:
         raise jwt.InvalidTokenError("Missing token identifier")
     return int(payload["sub"]), purpose, sha256(token_id.encode()).hexdigest()
+
+
+def two_factor_trust_version(
+    encoded_password: str,
+    encrypted_totp_secret: str,
+    secret: str,
+    generation: int = 0,
+) -> str:
+    """Bind a trusted browser to the password and the enrolled authenticator.
+
+    Changing the password, resetting two-factor authentication (a new
+    enrollment stores a new secret) or bumping the access token generation
+    (disabling the account) stops every trusted browser from skipping the code.
+    """
+    return hmac_new(
+        secret.encode(),
+        f"two-factor-trust:{generation}:{encoded_password}:{encrypted_totp_secret}".encode(),
+        sha256,
+    ).hexdigest()
+
+
+def resolve_timezone(name: str | None) -> tzinfo:
+    """The browser's time zone, or UTC when it is missing or unknown."""
+    if not name:
+        return UTC
+    try:
+        return ZoneInfo(name)
+    except KeyError, ValueError, OSError:
+        # ZoneInfoNotFoundError is a KeyError; malformed keys raise ValueError
+        # and a directory such as "America" an OSError.
+        return UTC
+
+
+def end_of_trusted_day(now: datetime, timezone_name: str | None) -> datetime:
+    """Next local midnight in the browser's time zone, capped at 24 hours."""
+    # Aware arithmetic follows the wall clock of its own zone: in UTC, 24 hours
+    # stay 24 hours even across a daylight saving change.
+    now = now.astimezone(UTC)
+    zone = resolve_timezone(timezone_name)
+    local_date = now.astimezone(zone).date()
+    next_midnight = datetime.combine(
+        local_date + timedelta(days=1), day_start.min, tzinfo=zone
+    )
+    return min(next_midnight.astimezone(UTC), now + TWO_FACTOR_TRUST_MAXIMUM)
+
+
+def create_two_factor_trust_token(
+    user_id: int,
+    secret: str,
+    version: str,
+    expires_at: datetime,
+) -> str:
+    return jwt.encode(
+        {
+            "sub": str(user_id),
+            "type": TWO_FACTOR_TRUST_TOKEN_TYPE,
+            "ver": version,
+            "iat": datetime.now(UTC),
+            "exp": expires_at,
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+
+def decode_two_factor_trust_token(token: str, secret: str) -> tuple[int, str]:
+    payload = jwt.decode(
+        token,
+        secret,
+        algorithms=["HS256"],
+        options={"require": ACCESS_TOKEN_REQUIRED_CLAIMS},
+    )
+    if payload.get("type") != TWO_FACTOR_TRUST_TOKEN_TYPE:
+        raise jwt.InvalidTokenError("Unexpected token type")
+    version = payload.get("ver")
+    if not isinstance(version, str) or not version:
+        raise jwt.InvalidTokenError("Missing token version")
+    return int(payload["sub"]), version
 
 
 def generate_totp_secret() -> str:

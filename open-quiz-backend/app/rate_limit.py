@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.models import LoginRateLimit
 
+# The second, longer window on two-factor codes (see main.create_app).
+TWO_FACTOR_DAILY_WINDOW_SECONDS = 86400
+TWO_FACTOR_DAILY_NAMESPACE = "two-factor-daily"
+
 
 def _reserve_window(
     session: Session,
@@ -73,10 +77,14 @@ class LoginRateLimiter:
         account_limit: int,
         window_seconds: int,
         secret: str,
+        namespace: str = "account",
     ) -> None:
         self.account_limit = account_limit
         self.window_seconds = window_seconds
         self.secret = secret.encode()
+        # Each window needs its own namespace: a reservation purges the expired
+        # rows of its namespace, which would erase a longer window's buckets.
+        self.namespace = namespace
 
     def reserve(
         self,
@@ -91,7 +99,7 @@ class LoginRateLimiter:
         retry_after = _reserve_window(
             session,
             limiter_key=self._account_key(subject),
-            namespace="account",
+            namespace=self.namespace,
             limit=self.account_limit,
             window_seconds=self.window_seconds,
         )
@@ -135,7 +143,7 @@ class LoginRateLimiter:
         digest = hmac_new(self.secret, subject.encode(), sha256).hexdigest()[
             : LoginRateLimiter.BUCKET_HEX_CHARACTERS
         ]
-        return f"account:{digest}"
+        return f"{self.namespace}:{digest}"
 
 
 class FixedWindowRateLimiter:

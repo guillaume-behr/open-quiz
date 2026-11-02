@@ -223,7 +223,7 @@ def test_a_malformed_environment_value_names_its_variable(
             None,
             "Psycopg driver",
         ),
-        ("postgresql://user@localhost/db", None, "POSTGRES_PASSWORD must be set"),
+        ("postgresql://user@localhost/db", None, "DATABASE_PASSWORD must be set"),
         ("postgresql://user:short@localhost/db", None, "at least 16 characters"),
         (
             "postgresql://user:replace-with-a-database-password@localhost/db",
@@ -238,6 +238,7 @@ def test_database_urls_must_use_a_strong_postgres_password(
     message: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("DATABASE_PASSWORD", raising=False)
     monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
     with pytest.raises(ValueError, match=message):
         postgres_url(url)
@@ -246,10 +247,20 @@ def test_database_urls_must_use_a_strong_postgres_password(
 def test_database_url_reads_a_missing_password_from_the_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("DATABASE_PASSWORD", raising=False)
     monkeypatch.setenv("POSTGRES_PASSWORD", "a-long-enough-password")
     url = postgres_url("postgresql://user@localhost/db")
     assert url.drivername == "postgresql+psycopg"
     assert url.password == "a-long-enough-password"
+
+
+def test_the_application_role_password_takes_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_PASSWORD", "the-application-role-password")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "the-superuser-password-unused")
+    url = postgres_url("postgresql://open_quiz_app@localhost/db")
+    assert url.password == "the-application-role-password"
 
 
 def test_audit_logger_keeps_an_existing_handler() -> None:

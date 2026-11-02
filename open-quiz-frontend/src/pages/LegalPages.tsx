@@ -509,9 +509,10 @@ export function CookiesPage() {
     const [cleared, setCleared] = useState(false)
     const statusId = useId()
     const maxAge = information?.cookies.authentication_max_age_days
+    const twoFactorTrust = information?.cookies.two_factor_trust_enabled
 
     async function clearLocalData() {
-        await logout().catch(() => undefined)
+        await logout({ forgetBrowser: true }).catch(() => undefined)
         const studentToken = readStudentToken()
         if (studentToken) await logoutStudent(studentToken)
         try {
@@ -584,6 +585,22 @@ export function CookiesPage() {
                                     {t("cookies-auth-protection")}
                                 </td>
                             </tr>
+                            {twoFactorTrust ? (
+                                <tr className="border-b align-top">
+                                    <td className="p-3 font-mono text-sm">
+                                        open_quiz_two_factor_trust
+                                    </td>
+                                    <td className="p-3">
+                                        {t("cookies-two-factor-purpose")}
+                                    </td>
+                                    <td className="p-3">
+                                        {t("cookies-two-factor-duration")}
+                                    </td>
+                                    <td className="p-3">
+                                        {t("cookies-two-factor-protection")}
+                                    </td>
+                                </tr>
+                            ) : null}
                         </tbody>
                     </table>
                 </div>

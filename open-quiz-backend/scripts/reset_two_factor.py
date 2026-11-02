@@ -12,6 +12,12 @@ from app.models import (
     TwoFactorCredential,
     User,
 )
+from app.rate_limit import (
+    TWO_FACTOR_DAILY_NAMESPACE,
+    TWO_FACTOR_DAILY_WINDOW_SECONDS,
+    LoginRateLimiter,
+)
+from app.routers.auth import two_factor_rate_subject
 
 
 def reset(username: str, settings: Settings | None = None) -> bool:
@@ -39,6 +45,18 @@ def reset(username: str, settings: Settings | None = None) -> bool:
             delete(TwoFactorCredential).where(TwoFactorCredential.user_id == user.id)
         )
         session.commit()
+        # A new enrollment is confirmed with a code: buckets an attacker filled
+        # must not keep the rightful owner from enrolling again.
+        subject = two_factor_rate_subject(user.id)
+        LoginRateLimiter(
+            settings.login_attempts, settings.login_window_seconds, settings.jwt_secret
+        ).clear_subject(session, subject)
+        LoginRateLimiter(
+            settings.two_factor_daily_attempts,
+            TWO_FACTOR_DAILY_WINDOW_SECONDS,
+            settings.jwt_secret,
+            namespace=TWO_FACTOR_DAILY_NAMESPACE,
+        ).clear_subject(session, subject)
         audit_event("security.two_factor_reset_by_script", user_id=user.id)
         return True
 

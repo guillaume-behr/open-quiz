@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Literal
 
@@ -54,9 +55,35 @@ class LoginResponse(BaseModel):
     provisioning_uri: str | None = None
 
 
+class LoginSessionResponse(TokenResponse):
+    """A login that needs no code: this browser passed two-factor today."""
+
+    status: Literal["authenticated"] = "authenticated"
+
+
+class LogoutRequest(BaseModel):
+    # Also forget that this browser passed two-factor authentication today, as
+    # "clear data from this device" asks. A plain sign-out keeps it.
+    forget_browser: bool = False
+
+
+# An IANA name such as "Europe/Paris" or "America/Argentina/Buenos_Aires".
+TIMEZONE_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_+-]*(?:/[A-Za-z0-9_+-]+)*$")
+
+
 class TwoFactorVerifyRequest(BaseModel):
     challenge_token: str = Field(min_length=1, max_length=2048)
     code: str = Field(pattern=r"^\d{6}$")
+    # The browser's time zone, which decides when "today" ends for the trusted
+    # browser. Anything unusable falls back to UTC rather than failing a login.
+    timezone: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def usable_timezone(cls, value: str | None) -> str | None:
+        if value is None or len(value) > 64 or not TIMEZONE_NAME_PATTERN.match(value):
+            return None
+        return value
 
     @field_validator("code")
     @classmethod

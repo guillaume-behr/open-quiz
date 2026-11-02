@@ -35,7 +35,12 @@ from app.models import (
     User,
 )
 from app.quiz_session_records import delete_quiz_session_records
-from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
+from app.rate_limit import (
+    TWO_FACTOR_DAILY_NAMESPACE,
+    TWO_FACTOR_DAILY_WINDOW_SECONDS,
+    FixedWindowRateLimiter,
+    LoginRateLimiter,
+)
 from app.routers import (
     admin,
     auth,
@@ -233,6 +238,7 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
     )
     limiter_cutoff = now - max(
         settings.login_window_seconds,
+        TWO_FACTOR_DAILY_WINDOW_SECONDS,
         settings.quiz_rate_window_seconds,
         settings.problem_report_window_seconds,
     )
@@ -428,6 +434,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.login_attempts,
         settings.login_window_seconds,
         settings.jwt_secret,
+    )
+    # Caps how many codes one account may try per day, so that someone who
+    # holds the password cannot keep guessing at the short window's pace.
+    app.state.two_factor_daily_rate_limiter = LoginRateLimiter(
+        settings.two_factor_daily_attempts,
+        TWO_FACTOR_DAILY_WINDOW_SECONDS,
+        settings.jwt_secret,
+        namespace=TWO_FACTOR_DAILY_NAMESPACE,
     )
     app.state.auth_global_rate_limiter = FixedWindowRateLimiter(
         settings.global_login_attempts,

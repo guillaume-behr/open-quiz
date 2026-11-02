@@ -31,10 +31,13 @@ def postgres_url(database_url: str) -> URL:
     elif url.drivername != "postgresql+psycopg":
         raise ValueError("DATABASE_URL must use the Psycopg driver")
     if url.password is None:
-        password = os.getenv("POSTGRES_PASSWORD")
+        # DATABASE_PASSWORD belongs to the application's own role. Development
+        # and test databases connect as the PostgreSQL superuser, whose
+        # POSTGRES_PASSWORD stands in for it.
+        password = os.getenv("DATABASE_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
         if not password:
             raise ValueError(
-                "POSTGRES_PASSWORD must be set when DATABASE_URL has no password"
+                "DATABASE_PASSWORD must be set when DATABASE_URL has no password"
             )
         url = url.set(password=password)
     if len(url.password or "") < 16 or (url.password or "").startswith("replace-with-"):

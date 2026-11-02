@@ -3,8 +3,16 @@ services:
         # Keep in step with the backend job in .github/workflows/ci.yml,
         # which checks that both name the same image.
         image: postgres:17.11-alpine3.24@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+        # The superuser password only, never the application's secrets: a
+        # compromised database must not hand over JWT_SECRET or the student
+        # credential key. update.sh creates this file and gives the API its
+        # own unprivileged role (scripts/database-roles.sql). Optional so that
+        # a deployment updated by an older update.sh keeps running until the
+        # next update.sh migrates it: an initialized database needs no password
+        # to start.
         env_file:
-            - ./open-quiz-backend/.env
+            - path: ./open-quiz-backend/.env.database
+              required: false
         environment:
             POSTGRES_DB: open_quiz
             POSTGRES_USER: open_quiz
@@ -56,7 +64,8 @@ services:
             APP_ENV: production
             # API worker processes; live updates reach every worker's sockets.
             WEB_CONCURRENCY: ${OPEN_QUIZ_API_WORKERS:-1}
-            DATABASE_URL: postgresql+psycopg://open_quiz@open-quiz-database:5432/open_quiz
+            # DATABASE_URL and DATABASE_PASSWORD come from .env: the API's own
+            # role, open_quiz_app, which is not a PostgreSQL superuser.
             # The frontend proxy, whose X-Forwarded-* headers the API trusts.
             FORWARDED_ALLOW_IPS: ${OPEN_QUIZ_SUBNET_PREFIX:-172.28.0}.2,127.0.0.1
         depends_on:

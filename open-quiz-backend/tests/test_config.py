@@ -108,6 +108,7 @@ def test_public_information_describes_instance_settings(tmp_path: Path) -> None:
     assert response.json()["privacy"]["quiz_result_retention_days"] == 120
     assert response.json()["privacy"]["training_result_retention_days"] == 45
     assert response.json()["cookies"]["authentication_max_age_days"] == 9
+    assert response.json()["cookies"]["two_factor_trust_enabled"] is True
     assert response.json()["accessibility"]["contact"] == "Accessibility contact"
     assert response.headers["cache-control"] == "no-store"
 
@@ -332,6 +333,8 @@ def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> No
     ("setting_name", "value", "expected_message"),
     [
         ("global_login_attempts", 49, "GLOBAL_LOGIN_ATTEMPTS"),
+        ("two_factor_daily_attempts", 4, "TWO_FACTOR_DAILY_ATTEMPTS"),
+        ("two_factor_daily_attempts", 501, "TWO_FACTOR_DAILY_ATTEMPTS"),
         ("global_login_window_seconds", 9, "GLOBAL_LOGIN_WINDOW_SECONDS"),
         ("quiz_join_attempts", 4, "QUIZ_JOIN_ATTEMPTS"),
         ("quiz_participant_attempts", 29, "QUIZ_PARTICIPANT_ATTEMPTS"),

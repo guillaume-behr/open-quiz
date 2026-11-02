@@ -116,12 +116,22 @@ export function AdminDashboard() {
     }, [t])
 
     async function handleLogin(username: string, password: string) {
-        setChallenge(await login(username, password, "admin"))
+        const result = await login(username, password, "admin")
+        if (result.status === "authenticated") {
+            await completeSignIn(result.user)
+            return
+        }
+        setChallenge(result)
     }
 
     async function handleTwoFactor(code: string) {
         if (!challenge) return
-        const user = await verifyTwoFactor(challenge.challenge_token, code)
+        await completeSignIn(
+            await verifyTwoFactor(challenge.challenge_token, code)
+        )
+    }
+
+    async function completeSignIn(user: User) {
         await requireAdmin(user, t("admin-only"))
         setCurrentUser(user)
         const [loadedUsers, loadedReports] = await Promise.all([

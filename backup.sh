@@ -67,4 +67,4 @@ if [ -n "$keep" ]; then
         done
 fi
 
-note 'Copy it, with open-quiz-backend/.env, to separate protected storage.'
+note 'Copy it, with open-quiz-backend/.env and .env.database, to separate protected storage.'

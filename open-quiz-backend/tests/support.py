@@ -28,7 +28,11 @@ from app.models import (
     QuizParticipant,
     QuizSession,
 )
-from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
+from app.routers.auth import (
+    REFRESH_COOKIE,
+    REFRESH_PROOF_HEADER,
+    TWO_FACTOR_TRUST_COOKIE,
+)
 from app.security import refresh_request_proof
 from main import create_app
 
@@ -198,6 +202,11 @@ def complete_first_login(
         {"Authorization": f"Bearer {verified.json()['access_token']}"},
         secret,
     )
+
+
+def forget_trusted_browser(client: TestClient) -> None:
+    """Act as another browser: drop the cookie that skips the code today."""
+    client.cookies.delete(TWO_FACTOR_TRUST_COOKIE)
 
 
 def login_admin(client: TestClient) -> dict[str, str]:

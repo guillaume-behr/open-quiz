@@ -59,6 +59,7 @@ from support import (
     create_professor,
     database_connection,
     exam_environment,
+    forget_trusted_browser,
     launch_and_join,
     login_admin,
     make_client,
@@ -658,6 +659,7 @@ def test_refresh_rotates_cookie_and_logout_revokes_it(tmp_path: Path) -> None:
             == 401
         )
 
+        forget_trusted_browser(client)
         challenge = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -714,6 +716,7 @@ def test_later_login_requires_two_factor_code(tmp_path: Path) -> None:
             == 204
         )
 
+        forget_trusted_browser(client)
         login_response = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -1086,6 +1089,7 @@ def test_correct_password_does_not_reset_two_factor_throttling(
             ).status_code
             == 204
         )
+        forget_trusted_browser(client)
         challenge = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},
@@ -1128,6 +1132,7 @@ def test_two_factor_code_and_challenge_are_consumed_atomically(
             ).status_code
             == 204
         )
+        forget_trusted_browser(client)
         challenge = client.post(
             "/api/auth/login",
             json={"username": "root-admin", "password": ADMIN_PASSWORD},

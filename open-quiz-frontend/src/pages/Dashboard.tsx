@@ -185,12 +185,22 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     }, [t])
 
     async function handleLogin(username: string, password: string) {
-        setChallenge(await login(username, password, "professor"))
+        const result = await login(username, password, "professor")
+        if (result.status === "authenticated") {
+            await completeSignIn(result.user)
+            return
+        }
+        setChallenge(result)
     }
 
     async function handleTwoFactor(code: string) {
         if (!challenge) return
-        const user = await verifyTwoFactor(challenge.challenge_token, code)
+        await completeSignIn(
+            await verifyTwoFactor(challenge.challenge_token, code)
+        )
+    }
+
+    async function completeSignIn(user: User) {
         setChallenge(null)
         if (user.is_admin) {
             navigate("/admin/dashboard", { replace: true })

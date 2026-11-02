@@ -83,6 +83,8 @@ class Settings:
     student_access_token_hours: int = 2
     login_attempts: int = 10
     login_window_seconds: int = 900
+    two_factor_daily_attempts: int = 30
+    two_factor_browser_trust: bool = True
     global_login_attempts: int = 2000
     global_login_window_seconds: int = 60
     quiz_join_attempts: int = 60
@@ -182,6 +184,8 @@ class Settings:
             raise ValueError("LOGIN_ATTEMPTS must be between 3 and 50")
         if self.login_window_seconds < 60:
             raise ValueError("LOGIN_WINDOW_SECONDS must be at least 60")
+        if not 5 <= self.two_factor_daily_attempts <= 500:
+            raise ValueError("TWO_FACTOR_DAILY_ATTEMPTS must be between 5 and 500")
         if not 50 <= self.global_login_attempts <= 100000:
             raise ValueError("GLOBAL_LOGIN_ATTEMPTS must be between 50 and 100000")
         if not 10 <= self.global_login_window_seconds <= 3600:
