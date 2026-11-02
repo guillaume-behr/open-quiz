@@ -11,6 +11,8 @@ MIGRATIONS_DIRECTORY = Path(__file__).resolve().parent.parent / "migrations"
 # Arbitrary application-wide key for pg_advisory_xact_lock: "openquiz" read as
 # a big-endian 64-bit integer.
 MIGRATION_LOCK_KEY = 0x6F70656E7175697A
+# Serializes startup and retention maintenance when several workers run them.
+MAINTENANCE_LOCK_KEY = MIGRATION_LOCK_KEY + 2
 
 
 class Base(DeclarativeBase):

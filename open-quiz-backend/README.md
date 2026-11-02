@@ -184,9 +184,13 @@ enseignants et aux élèves. L’origine WebSocket est validée, le premier mess
 authentifie la connexion et le serveur vérifie régulièrement que le jeton reste
 valide.
 
-Le bus temps réel est conservé en mémoire. Le conteneur utilise donc un seul
-worker Uvicorn. N’activez pas plusieurs workers sans remplacer ce bus par un
-mécanisme partagé et tester le comportement en charge.
+Chaque processus diffuse les changements à ses propres WebSockets, et les
+relaie aux autres workers Uvicorn par `LISTEN/NOTIFY` de PostgreSQL
+(`app/live_relay.py`) : plusieurs workers peuvent donc servir la même instance.
+Une notification émise pendant qu’un worker se reconnecte à la base est perdue
+pour lui ; la réconciliation périodique des flux le remet à jour. Le nombre de
+workers se règle avec `WEB_CONCURRENCY`, voir
+[le guide de déploiement](../docs/deployment.md#plusieurs-workers).
 
 ## 🧩 Modèle fonctionnel
 

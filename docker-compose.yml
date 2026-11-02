@@ -54,6 +54,8 @@ services:
             - ./open-quiz-backend/.env
         environment:
             APP_ENV: production
+            # API worker processes; live updates reach every worker's sockets.
+            WEB_CONCURRENCY: ${OPEN_QUIZ_API_WORKERS:-1}
             DATABASE_URL: postgresql+psycopg://open_quiz@open-quiz-database:5432/open_quiz
         depends_on:
             open-quiz-database:
