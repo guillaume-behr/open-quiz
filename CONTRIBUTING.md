@@ -116,8 +116,9 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
   (`image:version@sha256:…`), jamais `latest` : Dependabot propose ensuite les
   mises à jour. L’image PostgreSQL de `docker-compose.yml` et celle de la CI
   doivent rester identiques, ce que la CI vérifie ;
-- ne modifiez pas `public/pyodide` sans documenter la provenance et la procédure
-  de mise à jour ;
+- ne versionnez pas `public/pyodide` : `pnpm dev` et `pnpm build` y copient
+  le paquet `pyodide` de `package.json`, que l’on met à jour comme toute
+  dépendance ;
 - ne mélangez jamais données réelles et jeux de test ;
 - utilisez des messages de commit compréhensibles. Conventional Commits est
   accepté sans être obligatoire.
