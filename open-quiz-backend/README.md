@@ -75,7 +75,8 @@ sur les systèmes POSIX.
 | Variable                            | Requise | Défaut                       | Contraintes principales                  |
 | ----------------------------------- | ------- | ---------------------------- | ---------------------------------------- |
 | `DATABASE_URL`                      | oui     | —                            | URL PostgreSQL SQLAlchemy                |
-| `POSTGRES_PASSWORD`                 | oui     | —                            | mot de passe PostgreSQL                  |
+| `DATABASE_PASSWORD`                 | prod.   | —                            | mot de passe du rôle `open_quiz_app`     |
+| `POSTGRES_PASSWORD`                 | dév.    | —                            | superutilisateur, à défaut du précédent  |
 | `JWT_SECRET`                        | oui     | —                            | au moins 32 caractères                   |
 | `TOTP_ENCRYPTION_KEY`               | oui     | —                            | distincte de `JWT_SECRET`, 32 caractères |
 | `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | oui     | —                            | distincte des deux autres, 32 caractères |
@@ -83,6 +84,12 @@ sur les systèmes POSIX.
 | `ADMIN_PASSWORD`                    | oui     | —                            | 16 à 256 caractères                      |
 | `FRONTEND_ORIGIN`                   | non     | `http://localhost:5173`      | origine exacte sans chemin ni `/` final  |
 | `APP_ENV`                           | oui     | `development` dans l’exemple | `development`, `test` ou `production`    |
+
+Quand `DATABASE_URL` ne contient pas de mot de passe, l’API utilise
+`DATABASE_PASSWORD`, sinon `POSTGRES_PASSWORD`. En production, elle se connecte
+avec le rôle non privilégié `open_quiz_app` ; en développement, avec le
+superutilisateur, dont `install-dev.sh` recopie le mot de passe dans
+`open-quiz-backend/.env.database`, lu par le conteneur PostgreSQL.
 
 En production, `FRONTEND_ORIGIN` doit utiliser HTTPS. Le compte administrateur
 est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` et

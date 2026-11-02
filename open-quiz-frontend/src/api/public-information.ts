@@ -21,6 +21,7 @@ export type PublicInformation = {
     }
     cookies: {
         authentication_max_age_days: number
+        two_factor_trust_enabled: boolean
     }
     accessibility: {
         contact: string

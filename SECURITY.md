@@ -104,6 +104,13 @@ Les sessions privilégiées exigent une preuve de renouvellement conservée dans
 la fenêtre principale et inaccessible au Worker Python. Les autorisations et la
 notation restent appliquées par le backend.
 
+Un navigateur qui a validé la double authentification n’en redemande pas le
+code avant minuit, heure de l’appareil, et 24 heures au plus : le mot de passe
+reste exigé. Ce cookie HttpOnly n’ouvre aucune session seul ; le voler sans le
+mot de passe ne donne rien. Sur un poste partagé, une simple déconnexion le
+conserve : effacez les données de l’appareil depuis `/cookie-settings`, ou
+désactivez la fonction avec `TWO_FACTOR_BROWSER_TRUST=false`.
+
 Les mots de passe élèves sont volontairement réversibles : l’enseignant doit
 pouvoir réimprimer une carte d’identifiants sans réinitialiser le compte. Ils
 sont donc stockés deux fois, sous forme de condensat Argon2 pour la

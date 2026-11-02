@@ -6,6 +6,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/scripts/common.sh"
 
 ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env"
+DATABASE_ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env.database"
 pull=true
 backup=true
 
@@ -44,6 +45,12 @@ setup_compose
 [ -f "$ENV_FILE" ] \
     || fail "missing open-quiz-backend/.env; run 'sh ./install.sh' to create it"
 
+# Deployments from before the API had its own PostgreSQL role: split the
+# superuser password into the database's file, then switch the API's role.
+# The running containers keep their settings until they are recreated below.
+ensure_database_environment_file "$ENV_FILE" "$DATABASE_ENV_FILE"
+use_application_database_role "$ENV_FILE"
+
 if [ "$pull" = true ]; then
     require_commands git
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
@@ -81,6 +88,12 @@ elif database_is_running; then
 else
     step 'Skipping the database backup: the database is not running yet'
 fi
+
+step 'Starting the database'
+compose up --detach --wait --wait-timeout 120 open-quiz-database
+
+step "Configuring the API's PostgreSQL role"
+configure_database_roles "$ENV_FILE"
 
 step 'Building and starting the containers'
 compose up --detach --build --remove-orphans --wait --wait-timeout 120

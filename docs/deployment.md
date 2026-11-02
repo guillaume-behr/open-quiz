@@ -44,15 +44,17 @@ Le script demande le nom de domaine public, par exemple `quiz.example.com`.
 Saisissez-le sans `https://`, chemin ni `/` final. Il effectue ensuite toutes
 les opérations nécessaires au premier démarrage :
 
-1. il génère localement des valeurs aléatoires distinctes pour PostgreSQL, JWT,
-   TOTP et le chiffrement des identifiants élèves ;
+1. il génère localement des valeurs aléatoires distinctes pour PostgreSQL (le
+   superutilisateur et le rôle de l’API), JWT, TOTP et le chiffrement des
+   identifiants élèves ;
 2. il génère le mot de passe du compte administrateur ;
 3. il définit l’origine du frontend en HTTPS et reprend tous les autres réglages
    de production depuis le fichier d’exemple ;
-4. il crée `open-quiz-backend/.env` avec des permissions réservées au
-   propriétaire ;
-5. il lance `update.sh --no-pull`, qui construit les images, démarre les
-   services et attend leur état sain. Le clone est déjà à jour, donc aucune
+4. il crée `open-quiz-backend/.env` et `open-quiz-backend/.env.database` avec
+   des permissions réservées au propriétaire ;
+5. il lance `update.sh --no-pull`, qui démarre la base, crée le rôle
+   PostgreSQL de l’API, construit les images, démarre les services et attend
+   leur état sain. Le clone est déjà à jour, donc aucune
    révision n’est récupérée à cette étape.
 
 Pour une installation automatisée, le domaine peut être fourni en argument
@@ -73,25 +75,39 @@ reverse proxy de l’hôte. Configurez ces éléments séparément dans la secti
 
 ### Secrets obligatoires
 
-Tous les secrets vivent dans `open-quiz-backend/.env`, que Git ignore.
-`install.sh` les génère au premier démarrage : vous n’avez rien à écrire
-vous-même.
+Les secrets vivent dans deux fichiers que Git ignore, générés par `install.sh`
+au premier démarrage : vous n’avez rien à écrire vous-même.
 
-| Variable                            | Rôle                                               | Exigence                                   |
-| ----------------------------------- | -------------------------------------------------- | ------------------------------------------ |
-| `POSTGRES_PASSWORD`                 | mot de passe du rôle PostgreSQL                    | valeur aléatoire robuste                   |
-| `DATABASE_URL`                      | accès à la base depuis l’API                       | URL PostgreSQL SQLAlchemy                  |
-| `JWT_SECRET`                        | signature des jetons de session                    | 32 caractères aléatoires au moins          |
-| `TOTP_ENCRYPTION_KEY`               | chiffrement des secrets de double authentification | 32 caractères, distincts du secret JWT     |
-| `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | chiffrement des mots de passe élèves relisibles    | 32 caractères, distincts des deux autres   |
-| `ADMIN_PASSWORD`                    | mot de passe du compte administrateur              | 16 à 256 caractères, différent des secrets |
+- `open-quiz-backend/.env` est lu par l’API seule ;
+- `open-quiz-backend/.env.database` est lu par le conteneur PostgreSQL seul et
+  ne contient que `POSTGRES_PASSWORD`, le mot de passe du superutilisateur
+  `open_quiz`.
+
+L’API ne se connecte pas en superutilisateur, mais avec son propre rôle,
+`open_quiz_app`, propriétaire de la base et de ses tables, sans aucun privilège
+d’administration de PostgreSQL. `update.sh` crée ce rôle et l’ajuste à chaque
+passage ([`scripts/database-roles.sql`](../scripts/database-roles.sql)). Ainsi,
+une injection SQL ne permettrait ni de lire les fichiers du serveur ni
+d’exécuter un programme, et une base compromise ne livre ni `JWT_SECRET` ni la
+clé des identifiants élèves. Le superutilisateur ne sert qu’aux sauvegardes,
+aux restaurations et à ce script, par le socket local du conteneur.
+
+| Variable                              | Rôle                                               | Exigence                                              |
+| ------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
+| `DATABASE_URL`                        | accès à la base depuis l’API                       | URL PostgreSQL SQLAlchemy, rôle `open_quiz_app`       |
+| `DATABASE_PASSWORD`                   | mot de passe du rôle `open_quiz_app`               | 16 caractères au moins : lettres, chiffres, `. _ ~ -` |
+| `POSTGRES_PASSWORD` (`.env.database`) | mot de passe du superutilisateur PostgreSQL        | valeur aléatoire robuste                              |
+| `JWT_SECRET`                          | signature des jetons de session                    | 32 caractères aléatoires au moins                     |
+| `TOTP_ENCRYPTION_KEY`                 | chiffrement des secrets de double authentification | 32 caractères, distincts du secret JWT                |
+| `STUDENT_CREDENTIAL_ENCRYPTION_KEY`   | chiffrement des mots de passe élèves relisibles    | 32 caractères, distincts des deux autres              |
+| `ADMIN_PASSWORD`                      | mot de passe du compte administrateur              | 16 à 256 caractères, différent des secrets            |
 
 Les trois clés doivent être distinctes les unes des autres : l’API refuse de
 démarrer si deux d’entre elles coïncident, ou si l’une a gardé sa valeur
 d’exemple.
 
 > [!CAUTION]
-> Conservez `.env` dans une sauvegarde chiffrée. Ne placez jamais ses valeurs
+> Conservez `.env` et `.env.database` dans une sauvegarde chiffrée. Ne placez jamais ses valeurs
 > dans Git, dans une issue, ni dans les journaux d’exploitation.
 
 ### Réglages non secrets
@@ -298,7 +314,8 @@ désactivé.
 Une sauvegarde exploitable comprend :
 
 1. une sauvegarde logique cohérente de la base PostgreSQL ;
-2. une copie protégée de `open-quiz-backend/.env` ;
+2. une copie protégée de `open-quiz-backend/.env` et de
+   `open-quiz-backend/.env.database` ;
 3. la version ou le commit Open Quiz correspondant.
 
 `TOTP_ENCRYPTION_KEY` et `STUDENT_CREDENTIAL_ENCRYPTION_KEY` ne sont pas
@@ -342,8 +359,8 @@ Le script vérifie que le fichier est une sauvegarde lisible, puis demande de
 taper `restore`. `--yes` permet de s’en passer dans un script. Il
 sauvegarde d’abord les données actuelles dans `backups/`, arrête l’API et
 l’interface, puis restaure la sauvegarde en une seule transaction : en cas
-d’échec, la base reste dans son état précédent. Il redémarre enfin les
-conteneurs.
+d’échec, la base reste dans son état précédent. Il rend ensuite au rôle
+`open_quiz_app` les objets restaurés, puis redémarre les conteneurs.
 
 Utilisez le fichier `.env` correspondant à la sauvegarde, puis vérifiez
 `/api/health`, les connexions et un échantillon de résultats. Une restauration
@@ -371,8 +388,8 @@ Le script vérifie d’abord que Docker est accessible, que
 `open-quiz-backend/.env` existe et que le dépôt ne contient aucune modification
 locale, puis effectue un `git pull --ff-only`. Il affiche la révision avant et
 après la mise à jour. Il valide ensuite la configuration Compose, sauvegarde la
-base dans `backups/` (désactivable avec `--no-backup`), reconstruit les
-conteneurs, attend leur état sain et affiche leur statut ainsi que l’origine
+base dans `backups/` (désactivable avec `--no-backup`), démarre la base, crée
+ou ajuste le rôle `open_quiz_app`, reconstruit les conteneurs, attend leur état sain et affiche leur statut ainsi que l’origine
 publique configurée. En cas de problème, `sh ./restore.sh` suivi du fichier
 indiqué revient à l’état d’avant la mise à jour.
 
@@ -439,6 +456,8 @@ Les valeurs ci-dessous sont fournies dans les fichiers `.env` d’exemple.
 | `STUDENT_ACCESS_TOKEN_HOURS`       | durée des sessions élève (2 à 12)                       | `2`                                             |
 | `LOGIN_ATTEMPTS`                   | tentatives par compte et par fenêtre                    | `10`                                            |
 | `LOGIN_WINDOW_SECONDS`             | fenêtre des tentatives par compte                       | `900`                                           |
+| `TWO_FACTOR_DAILY_ATTEMPTS`        | codes de double authentification par compte et par jour | `30`                                            |
+| `TWO_FACTOR_BROWSER_TRUST`         | dispense du code un navigateur validé le jour même      | `true`                                          |
 | `GLOBAL_LOGIN_ATTEMPTS`            | tentatives de connexion pour toute l’instance           | `2000`                                          |
 | `GLOBAL_LOGIN_WINDOW_SECONDS`      | fenêtre du quota global                                 | `60`                                            |
 | `QUIZ_JOIN_ATTEMPTS`               | tentatives pour rejoindre une session                   | `60`                                            |
@@ -452,6 +471,21 @@ Les valeurs ci-dessous sont fournies dans les fichiers `.env` d’exemple.
 | `PROBLEM_REPORT_WINDOW_SECONDS`    | fenêtre du quota de signalements                        | `900`                                           |
 | `PROBLEM_REPORT_RETENTION_DAYS`    | conservation des signalements                           | `90`                                            |
 | `MAX_REQUEST_BODY_BYTES`           | taille des requêtes applicatives ordinaires             | `65536`                                         |
+
+Les codes de double authentification sont limités deux fois : par
+`LOGIN_ATTEMPTS` sur `LOGIN_WINDOW_SECONDS`, et par
+`TWO_FACTOR_DAILY_ATTEMPTS` sur 24 heures. Une connexion réussie ne remet pas
+ce second compteur à zéro ; **Récupérer l’accès** et la commande de secours le
+font.
+
+Après une double authentification réussie, le navigateur reçoit le cookie
+`open_quiz_two_factor_trust`. Jusqu’à minuit, heure de l’appareil, et 24 heures
+au plus, le mot de passe suffit pour se reconnecter depuis ce navigateur. Un
+changement de mot de passe, une nouvelle inscription TOTP, la désactivation du
+compte ou une rotation de `JWT_SECRET` y mettent fin, tout comme le bouton de
+`/cookie-settings`. Une simple déconnexion le conserve : sur un poste partagé,
+effacez les données de l’appareil ou passez `TWO_FACTOR_BROWSER_TRUST` à
+`false`.
 
 La suppression des données expirées est appliquée au démarrage, puis toutes les
 heures. Adaptez ces valeurs à la politique validée pour votre instance avant de

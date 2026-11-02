@@ -7,6 +7,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 ENV_TEMPLATE="$SCRIPT_DIR/open-quiz-backend/.env.example"
 ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env"
+DATABASE_ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env.database"
 COMPOSE_BASE="$SCRIPT_DIR/docker-compose.yml"
 COMPOSE_DEV="$SCRIPT_DIR/docker-compose.dev.yml"
 
@@ -106,6 +107,17 @@ else
     highlight "PostgreSQL open_quiz / $postgres_password (database: open_quiz)"
     note 'Save these development credentials; they will not be displayed again.'
 fi
+
+# The database container reads its superuser password from its own file. In
+# development the API connects as that superuser, so both files must agree; a
+# freshly generated .env brings a fresh password with it.
+if [ "$environment_created" = true ]; then
+    rm -f "$DATABASE_ENV_FILE"
+fi
+ensure_database_environment_file "$ENV_FILE" "$DATABASE_ENV_FILE"
+[ "$(environment_value "$DATABASE_ENV_FILE" POSTGRES_PASSWORD)" = \
+    "$(environment_value "$ENV_FILE" POSTGRES_PASSWORD)" ] \
+    || fail "POSTGRES_PASSWORD differs between open-quiz-backend/.env and open-quiz-backend/.env.database; make them match"
 
 cd "$SCRIPT_DIR"
 step 'Starting PostgreSQL'

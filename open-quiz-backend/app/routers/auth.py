@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from hmac import compare_digest
 from time import time
 from urllib.parse import urlparse
@@ -22,6 +23,8 @@ from app.models import (
 from app.schemas import (
     LoginRequest,
     LoginResponse,
+    LoginSessionResponse,
+    LogoutRequest,
     TokenResponse,
     TwoFactorVerifyRequest,
 )
@@ -31,13 +34,17 @@ from app.security import (
     create_access_token,
     create_refresh_token,
     create_two_factor_token,
+    create_two_factor_trust_token,
     decode_two_factor_token,
+    decode_two_factor_trust_token,
     decrypt_totp_secret,
     encrypt_totp_secret,
+    end_of_trusted_day,
     generate_totp_secret,
     hash_refresh_token,
     provisioning_uri,
     refresh_request_proof,
+    two_factor_trust_version,
     verify_password,
     verify_totp_code,
 )
@@ -45,6 +52,10 @@ from app.security import (
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 REFRESH_COOKIE = "open_quiz_refresh"
 REFRESH_PROOF_HEADER = "X-Refresh-Proof"
+# Remembers, until the end of the day, that this browser completed a
+# two-factor login. Only the login endpoint ever needs to read it.
+TWO_FACTOR_TRUST_COOKIE = "open_quiz_two_factor_trust"
+TWO_FACTOR_TRUST_COOKIE_PATH = "/api/auth/login"
 
 
 def validate_origin(request: Request) -> None:
@@ -103,6 +114,70 @@ def clear_refresh_cookie(response: Response, request: Request) -> None:
         path="/api/auth",
         secure=settings.cookie_secure,
         samesite="strict",
+    )
+
+
+def current_two_factor_trust_version(
+    user: User,
+    two_factor: TwoFactorCredential,
+    request: Request,
+) -> str:
+    return two_factor_trust_version(
+        user.password_hash,
+        two_factor.encrypted_secret,
+        request.app.state.settings.jwt_secret,
+        user.access_token_generation,
+    )
+
+
+def set_two_factor_trust_cookie(
+    response: Response,
+    request: Request,
+    user: User,
+    two_factor: TwoFactorCredential,
+    timezone_name: str | None,
+) -> None:
+    """Let this browser skip the code for the rest of the user's day."""
+    settings = request.app.state.settings
+    if not settings.two_factor_browser_trust:
+        return
+    now = datetime.now(UTC)
+    expires_at = end_of_trusted_day(now, timezone_name)
+    response.set_cookie(
+        key=TWO_FACTOR_TRUST_COOKIE,
+        value=create_two_factor_trust_token(
+            user.id,
+            settings.jwt_secret,
+            current_two_factor_trust_version(user, two_factor, request),
+            expires_at,
+        ),
+        max_age=max(1, int((expires_at - now).total_seconds())),
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="strict",
+        path=TWO_FACTOR_TRUST_COOKIE_PATH,
+    )
+
+
+def browser_is_trusted(
+    request: Request,
+    user: User,
+    two_factor: TwoFactorCredential,
+) -> bool:
+    """Whether this browser completed two-factor login for this user today.
+
+    The cookie alone opens nothing: the caller has just checked the password.
+    """
+    settings = request.app.state.settings
+    token = request.cookies.get(TWO_FACTOR_TRUST_COOKIE)
+    if not settings.two_factor_browser_trust or not token or not two_factor.confirmed:
+        return False
+    try:
+        user_id, version = decode_two_factor_trust_token(token, settings.jwt_secret)
+    except jwt.PyJWTError, ValueError, KeyError:
+        return False
+    return user_id == user.id and compare_digest(
+        version, current_two_factor_trust_version(user, two_factor, request)
     )
 
 
@@ -301,13 +376,14 @@ def revoke_refresh_family(
     return True
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse | LoginSessionResponse)
 def login(
     payload: LoginRequest,
     request: Request,
+    response: Response,
     session: DbSession,
-) -> LoginResponse:
-    """Verify a password and begin 2FA setup or verification."""
+) -> LoginResponse | LoginSessionResponse:
+    """Verify a password, then begin 2FA or, on a trusted browser, sign in."""
     validate_origin(request)
     user = session.scalar(select(User).where(User.username == payload.username))
     # Resolving the account before the budget check is what lets a real
@@ -397,6 +473,11 @@ def login(
             secret=secret,
             provisioning_uri=provisioning_uri(secret, user.username),
         )
+
+    if browser_is_trusted(request, user, two_factor):
+        audit_event("auth.two_factor_trusted_browser", user_id=user.id)
+        tokens = issue_session(user, request, response, session)
+        return LoginSessionResponse(**tokens.model_dump())
 
     audit_event("auth.two_factor_challenge_started", user_id=user.id)
     challenge_token = issue_two_factor_challenge(
@@ -495,6 +576,21 @@ def verify_two_factor(
             ),
             headers={"Retry-After": str(retry_after)},
         )
+    # The short window alone still lets someone who holds the password try
+    # about a thousand codes a day; this caps the guesses per day. Success does
+    # not reset it, so a legitimate login cannot refill an attacker's budget.
+    daily_retry_after = request.app.state.two_factor_daily_rate_limiter.reserve(
+        session, rate_subject
+    )
+    if daily_retry_after:
+        audit_event("auth.two_factor_daily_limit_reached", user_id=user.id)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=api_error(
+                ErrorCode.AUTH_2FA_RATE_LIMITED, "Trop de codes de vérification essayés"
+            ),
+            headers={"Retry-After": str(daily_retry_after)},
+        )
 
     try:
         secret = decrypt_totp_secret(
@@ -564,7 +660,9 @@ def verify_two_factor(
         )
     limiter.clear_subject(session, rate_subject)
     audit_event("auth.two_factor_succeeded", user_id=user.id)
-    return issue_session(user, request, response, session)
+    tokens = issue_session(user, request, response, session)
+    set_two_factor_trust_cookie(response, request, user, two_factor, payload.timezone)
+    return tokens
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -691,6 +789,7 @@ def logout(
     request: Request,
     response: Response,
     session: DbSession,
+    payload: LogoutRequest | None = None,
 ) -> None:
     """Revoke the current refresh session and clear its cookie."""
     validate_origin(request)
@@ -714,4 +813,12 @@ def logout(
         )
         session.commit()
     clear_refresh_cookie(response, request)
+    if payload is not None and payload.forget_browser:
+        settings = request.app.state.settings
+        response.delete_cookie(
+            TWO_FACTOR_TRUST_COOKIE,
+            path=TWO_FACTOR_TRUST_COOKIE_PATH,
+            secure=settings.cookie_secure,
+            samesite="strict",
+        )
     audit_event("auth.logout")

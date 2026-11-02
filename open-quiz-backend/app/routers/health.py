@@ -46,6 +46,7 @@ def public_information(request: Request) -> dict[str, object]:
         },
         "cookies": {
             "authentication_max_age_days": settings.refresh_token_days,
+            "two_factor_trust_enabled": settings.two_factor_browser_trust,
         },
         "accessibility": {
             "contact": settings.accessibility_contact,

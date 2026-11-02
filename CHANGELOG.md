@@ -19,12 +19,27 @@ PostgreSQL by hand).
   migrations by itself, then applies the pending ones, including the move of
   question images into `stored_images`. Keep the backup taken before the
   update until the instance has restarted cleanly.
+- The API now connects to PostgreSQL with its own unprivileged role,
+  `open_quiz_app`, and the database container no longer receives the
+  application's secrets. `update.sh` migrates the deployment by itself: it moves
+  `POSTGRES_PASSWORD` into the new `open-quiz-backend/.env.database`, adds
+  `DATABASE_PASSWORD` to `.env`, points `DATABASE_URL` at the new role, creates
+  the role and hands it the database. The `update.sh` that fetches this
+  version still runs the previous script, which leaves the instance running as
+  before: **run `sh ./update.sh` a second time** to apply the migration. Back up
+  `.env.database` alongside `.env` from now on. Docker Compose 2.24 or later is
+  required.
 - Student sessions now last 2 hours by default instead of 12. Set
   `STUDENT_ACCESS_TOKEN_HOURS` (2 to 12) in `open-quiz-backend/.env` to keep
   longer sessions.
 
 ### Added
 
+- A browser that completed two-factor authentication skips the code until
+  midnight, device time (24 hours at most): the password alone signs in again.
+  A password change, a new TOTP enrollment, a disabled account or the
+  "clear data from this device" button end it; `TWO_FACTOR_BROWSER_TRUST=false`
+  turns it off.
 - The database schema is managed by Alembic migrations, applied at startup
   under a lock so that a single backend migrates.
 - Every API error carries a stable `code`, and the interface translates errors
@@ -83,6 +98,15 @@ PostgreSQL by hand).
 
 - Dependencies upgraded past reported advisories: minimatch, dnspython,
   filelock, msgpack, urllib3 and i18next-http-backend.
+- The API's PostgreSQL role is no longer a superuser and the database
+  container holds only its own password: a SQL injection could no longer read
+  server files or run programs, and a compromised database no longer exposes
+  `JWT_SECRET` or the student credential key.
+- Two-factor codes are capped per account and per day
+  (`TWO_FACTOR_DAILY_ATTEMPTS`, 30 by default) on top of the 15-minute window,
+  which still allowed about a thousand guesses a day to someone holding the
+  password. A successful login does not reset the daily cap; an administrator's
+  credential reset and `scripts.reset_two_factor` do.
 
 ## [0.4.0] — 2026-09-29
 

@@ -7,11 +7,12 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 ENV_TEMPLATE="$SCRIPT_DIR/open-quiz-backend/.env.production.example"
 ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env"
+DATABASE_ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env.database"
 
 usage() {
     printf 'Usage: sh ./install.sh [--domain NAME] [--help]\n\n'
     printf 'Set up a production deployment: generate every secret, write\n'
-    printf 'open-quiz-backend/.env and start the containers.\n\n'
+    printf 'open-quiz-backend/.env and .env.database and start the containers.\n\n'
     printf '  --domain NAME  Public domain, without https:// or a trailing slash.\n'
     printf '                 Prompted for when omitted.\n'
     printf '  --help, -h     Show this message.\n'
@@ -64,6 +65,7 @@ setup_compose
 
 step 'Generating secrets'
 postgres_password=$(random_hex 32)
+database_password=$(random_hex 32)
 jwt_secret=$(random_hex 48)
 totp_key=$(random_hex 48)
 student_key=$(random_hex 48)
@@ -74,7 +76,7 @@ temporary_file=$(mktemp "$SCRIPT_DIR/open-quiz-backend/.env.tmp.XXXXXX")
 trap 'rm -f "$temporary_file"' EXIT HUP INT TERM
 
 sed \
-    -e "s|^POSTGRES_PASSWORD=.*$|POSTGRES_PASSWORD=$postgres_password|" \
+    -e "s|^DATABASE_PASSWORD=.*$|DATABASE_PASSWORD=$database_password|" \
     -e "s|^JWT_SECRET=.*$|JWT_SECRET=$jwt_secret|" \
     -e "s|^TOTP_ENCRYPTION_KEY=.*$|TOTP_ENCRYPTION_KEY=$totp_key|" \
     -e "s|^STUDENT_CREDENTIAL_ENCRYPTION_KEY=.*$|STUDENT_CREDENTIAL_ENCRYPTION_KEY=$student_key|" \
@@ -87,12 +89,28 @@ validate_environment_file "$temporary_file" production
 
 admin_username=$(sed -n 's/^ADMIN_USERNAME=//p' "$temporary_file" | head -n 1)
 
+# The PostgreSQL superuser password goes to the database container's own
+# file. A leftover one is kept: it may match an existing database volume.
+if [ -f "$DATABASE_ENV_FILE" ]; then
+    note "Keeping the existing $DATABASE_ENV_FILE"
+else
+    database_temporary_file=$(mktemp "$SCRIPT_DIR/open-quiz-backend/.env.database.tmp.XXXXXX")
+    trap 'rm -f "$temporary_file" "$database_temporary_file"' EXIT HUP INT TERM
+    {
+        printf '# Read by the PostgreSQL container only: the superuser password.\n'
+        printf '# The API connects with its own role (DATABASE_PASSWORD in .env).\n'
+        printf 'POSTGRES_PASSWORD=%s\n' "$postgres_password"
+    } > "$database_temporary_file"
+    chmod 600 "$database_temporary_file"
+    mv "$database_temporary_file" "$DATABASE_ENV_FILE"
+fi
+
 mv "$temporary_file" "$ENV_FILE"
 trap - EXIT HUP INT TERM
 chmod 600 "$ENV_FILE"
 
 printf '\n'
-step 'Configuration written to open-quiz-backend/.env'
+step 'Configuration written to open-quiz-backend/.env and .env.database'
 highlight "Administrator username: $admin_username"
 highlight "Administrator password: $admin_password"
 note 'Save this password now. It is not stored anywhere else and will not be shown again.'
