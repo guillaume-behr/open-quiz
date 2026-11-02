@@ -123,3 +123,39 @@ validate_environment_file() {
     grep -q "^APP_ENV=$expected_app_env\$" "$environment_file" \
         || fail "$environment_file must set APP_ENV=$expected_app_env"
 }
+
+# Dump the running database to a new file in $1, readable by its owner only,
+# and print the file's path. The dump holds students' personal data.
+create_backup() {
+    backup_directory=$1
+    (umask 077 && mkdir -p "$backup_directory")
+    chmod 700 "$backup_directory"
+    backup_stem="$backup_directory/open-quiz-$(date -u +%Y-%m-%dT%H%M%SZ)"
+    backup_file="$backup_stem.dump"
+    # Two backups within one second (a restore's safety copy, say) must not
+    # overwrite each other.
+    suffix=1
+    while [ -e "$backup_file" ]; do
+        suffix=$((suffix + 1))
+        backup_file="$backup_stem-$suffix.dump"
+    done
+    partial_file="$backup_file.partial"
+    if ! (umask 077 && compose exec -T open-quiz-database \
+        pg_dump --username=open_quiz --dbname=open_quiz --format=custom \
+        >"$partial_file"); then
+        rm -f "$partial_file"
+        fail "pg_dump failed; no backup was written"
+    fi
+    if ! compose exec -T open-quiz-database pg_restore --list \
+        <"$partial_file" >/dev/null; then
+        rm -f "$partial_file"
+        fail "the new backup cannot be read back; it was discarded"
+    fi
+    mv "$partial_file" "$backup_file"
+    printf '%s\n' "$backup_file"
+}
+
+database_is_running() {
+    compose ps --status running --services 2>/dev/null \
+        | grep -qx open-quiz-database
+}

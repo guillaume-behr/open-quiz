@@ -7,18 +7,22 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env"
 pull=true
+backup=true
 
 usage() {
-    printf 'Usage: sh ./update.sh [--no-pull] [--help]\n\n'
+    printf 'Usage: sh ./update.sh [--no-pull] [--no-backup] [--help]\n\n'
     printf 'Update an Open Quiz deployment: fetch the latest revision, rebuild\n'
-    printf 'the containers and wait until they report healthy.\n\n'
-    printf '  --no-pull   Rebuild and restart without fetching a new revision.\n'
-    printf '  --help, -h  Show this message.\n'
+    printf 'the containers and wait until they report healthy. The database is\n'
+    printf 'backed up to backups/ first.\n\n'
+    printf '  --no-pull    Rebuild and restart without fetching a new revision.\n'
+    printf '  --no-backup  Skip the database backup.\n'
+    printf '  --help, -h   Show this message.\n'
 }
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --no-pull) pull=false ;;
+        --no-backup) backup=false ;;
         --help | -h)
             usage
             exit 0
@@ -60,9 +64,6 @@ if [ "$pull" = true ]; then
         note "Already up to date ($current_version)."
     else
         note "$previous_version -> $current_version"
-        printf '%sBack up PostgreSQL before applying a version change.%s\n' \
-            "$OPEN_QUIZ_BOLD" "$OPEN_QUIZ_RESET"
-        note 'See docs/deployment.md for the pg_dump procedure.'
     fi
 else
     step 'Skipping the revision fetch (--no-pull)'
@@ -70,6 +71,16 @@ fi
 
 step 'Validating the Compose configuration'
 compose config --quiet
+
+if [ "$backup" = false ]; then
+    step 'Skipping the database backup (--no-backup)'
+elif database_is_running; then
+    step 'Backing up the database'
+    backup_file=$(create_backup "$SCRIPT_DIR/backups")
+    note "Saved to $backup_file; restore it with: sh ./restore.sh $backup_file"
+else
+    step 'Skipping the database backup: the database is not running yet'
+fi
 
 step 'Building and starting the containers'
 compose up --detach --build --remove-orphans --wait --wait-timeout 120
