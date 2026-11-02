@@ -23,7 +23,13 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
-from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.pagination import (
+    DEFAULT_PAGE_SIZE,
+    LIKE_ESCAPE_CHARACTER,
+    MAX_PAGE_SIZE,
+    contains_pattern,
+    set_pagination_headers,
+)
 from app.schemas import (
     StudentClassCreate,
     StudentClassResponse,
@@ -182,7 +188,11 @@ def list_classes(
 ) -> list[StudentClassResponse]:
     filters = [StudentClass.owner_id == professor.id]
     if search:
-        filters.append(StudentClass.name.ilike(f"%{search}%"))
+        filters.append(
+            StudentClass.name.ilike(
+                contains_pattern(search), escape=LIKE_ESCAPE_CHARACTER
+            )
+        )
     if grade_level:
         filters.append(StudentClass.grade_level == grade_level)
     total = (

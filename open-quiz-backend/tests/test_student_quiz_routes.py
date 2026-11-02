@@ -655,6 +655,106 @@ def test_a_participant_who_left_before_the_start_is_hidden(environment) -> None:
     assert hidden.status_code == 404
 
 
+def add_classmate(client, environment: dict[str, Any]) -> dict[str, str]:
+    """Add a second student to the class, before a launch draws questions."""
+    teacher_headers = environment["teacher_headers"]
+    classmate = client.post(
+        "/api/students",
+        headers=teacher_headers,
+        json={"first_name": "Late", "last_name": "Comer"},
+    ).json()
+    client.post(
+        f"/api/classes/{environment['student_class']['id']}/accounts/{classmate['id']}",
+        headers=teacher_headers,
+    )
+    return {
+        "Authorization": "Bearer "
+        + client.post(
+            "/api/student-auth/login",
+            json={
+                "identifier": classmate["identifier"],
+                "password": classmate["generated_password"],
+            },
+        ).json()["access_token"]
+    }
+
+
+def join(client, account_headers: dict[str, str], join_code: str) -> dict:
+    joined = client.post(
+        "/api/quizzes/join", headers=account_headers, json={"join_code": join_code}
+    )
+    assert joined.status_code == 201
+    return joined.json()
+
+
+def participant_headers_of(joined: dict) -> dict[str, str]:
+    return {"X-Quiz-Token": joined["participant_token"]}
+
+
+def test_a_participant_who_left_the_waiting_room_can_rejoin_after_the_start(
+    environment,
+) -> None:
+    """Rejoining after the start places the student on the first question.
+
+    The start only positions the participants who are present, so without
+    this the returning student had no question and read as finished.
+    """
+    client = environment["client"]
+    environment = two_question_quiz(client, environment)
+    account_headers = add_classmate(client, environment)
+    launched, headers = launch_and_join(client, environment)
+    code = launched["join_code"]
+    url = f"/api/quizzes/student/sessions/{code}"
+    leaver_headers = participant_headers_of(join(client, account_headers, code))
+    assert client.post(f"{url}/leave", headers=leaver_headers).status_code == 204
+    started = client.post(
+        f"/api/quizzes/sessions/{launched['id']}/start",
+        headers=environment["teacher_headers"],
+    )
+    assert started.status_code == 200
+
+    rejoined = join(client, account_headers, code)
+    assert rejoined["question_number"] == 1
+    assert rejoined["question"] is not None
+    rejoined_headers = participant_headers_of(rejoined)
+
+    # The returning student keeps the session open until they are done too.
+    for _ in range(2):
+        assert answer_current(client, url, headers).status_code == 200
+    hand_in_quiz(client, code, headers)
+    assert client.get(url, headers=rejoined_headers).json()["status"] == "in_progress"
+    for _ in range(2):
+        assert answer_current(client, url, rejoined_headers).status_code == 200
+    assert hand_in_quiz(client, code, rejoined_headers)["status"] == "finished"
+
+
+def test_a_participant_reviewing_their_answers_rejoins_the_review(
+    environment,
+) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment)
+    account_headers = add_classmate(client, environment)
+    launched, headers = launch_and_join(client, environment)
+    code = launched["join_code"]
+    url = f"/api/quizzes/student/sessions/{code}"
+    classmate_headers = participant_headers_of(join(client, account_headers, code))
+    client.post(
+        f"/api/quizzes/sessions/{launched['id']}/start",
+        headers=environment["teacher_headers"],
+    )
+    for _ in range(2):
+        assert answer_current(client, url, classmate_headers).status_code == 200
+    assert client.post(f"{url}/leave", headers=classmate_headers).status_code == 204
+
+    # Answering everything already moved them past the questions: rejoining
+    # must bring them back to the review, not restart the paper.
+    rejoined = join(client, account_headers, code)
+    assert rejoined["question_number"] is None
+    assert rejoined["awaiting_final_submission"] is True
+    assert rejoined["answered_count"] == 2
+    assert client.get(url, headers=headers).json()["question_number"] == 1
+
+
 def test_students_without_a_class_have_no_history_or_training(environment) -> None:
     client = environment["client"]
     loner = client.post(

@@ -81,6 +81,12 @@ PostgreSQL by hand).
 
 ### Fixed
 
+- A student who leaves the waiting room and rejoins after the quiz started
+  now gets the first question, instead of a page with no question that
+  counted them as finished.
+- Search boxes match `%` and `_` literally instead of as wildcards.
+- Pressing Tab on a selection of whole lines in the code editor no longer
+  indents the line after the selection.
 - Saving a student account clears its sign-in lockout, so a teacher can undo
   a lockout caused by a classmate guessing the identifier.
 - Selecting a make-up quiz discards the student’s running practice sessions

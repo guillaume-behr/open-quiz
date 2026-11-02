@@ -14,9 +14,15 @@ export function indentCode(
     const lineStart = value.lastIndexOf("\n", start - 1) + 1
 
     if (start !== end) {
-        const selectedCode = value.slice(lineStart, end)
+        // A selection of whole lines usually ends just after a line break;
+        // the line that follows it is not selected and must stay as it is.
+        const blockEnd =
+            end - 1 >= lineStart && value[end - 1] === "\n" ? end - 1 : end
+        const selectedCode = value.slice(lineStart, blockEnd)
         const indentedCode = selectedCode.replace(/^/gm, "\t")
-        onChange(value.slice(0, lineStart) + indentedCode + value.slice(end))
+        onChange(
+            value.slice(0, lineStart) + indentedCode + value.slice(blockEnd)
+        )
         requestAnimationFrame(() => {
             textarea.setSelectionRange(
                 start + 1,

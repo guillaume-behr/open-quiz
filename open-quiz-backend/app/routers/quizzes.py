@@ -51,7 +51,13 @@ from app.models import (
     TrainingQuizProfile,
     User,
 )
-from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.pagination import (
+    DEFAULT_PAGE_SIZE,
+    LIKE_ESCAPE_CHARACTER,
+    MAX_PAGE_SIZE,
+    contains_pattern,
+    set_pagination_headers,
+)
 from app.question_responses import load_question_records, load_question_responses
 from app.quiz_session_records import (
     delete_quiz_session_records,
@@ -913,7 +919,9 @@ def list_quizzes(
 ) -> list[QuizResponse]:
     filters = [Quiz.owner_id == professor.id, Quiz.mode == mode]
     if search:
-        filters.append(Quiz.title.ilike(f"%{search}%"))
+        filters.append(
+            Quiz.title.ilike(contains_pattern(search), escape=LIKE_ESCAPE_CHARACTER)
+        )
     if grade_level:
         filters.append(
             Quiz.id.in_(

@@ -154,6 +154,26 @@ def join_quiz(
         if affected_rows(active_session) != 1:
             session.rollback()
             reject_quiz_join(request, session, join_subject)
+        # Starting a session places only present participants on their first
+        # question. Someone who left the waiting room and comes back after the
+        # start has no position, which reads as "finished" everywhere: they
+        # would see no question and could never answer.
+        resume_position = existing.current_position
+        if (
+            resume_position is None
+            and quiz_session.status != "waiting"
+            and existing.submitted_at is None
+            and session.scalar(
+                select(QuizAnswer.id)
+                .where(
+                    QuizAnswer.session_id == quiz_session.id,
+                    QuizAnswer.participant_id == existing.id,
+                )
+                .limit(1)
+            )
+            is None
+        ):
+            resume_position = 0
         reconnected = session.execute(
             update(QuizParticipant)
             .where(
@@ -163,6 +183,7 @@ def join_quiz(
             .values(
                 access_token_hash=participant_token_hash(participant_token),
                 left_at=None,
+                current_position=resume_position,
                 student_identifier=student.identifier,
                 student_display_name=student.display_name,
             )
