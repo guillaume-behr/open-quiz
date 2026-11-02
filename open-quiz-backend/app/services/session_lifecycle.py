@@ -13,8 +13,9 @@ from math import ceil
 
 from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
-from app.database import EXPIRY_LOCK_KEY
+from app.database import EXPIRY_LOCK_KEY, affected_rows
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -99,7 +100,7 @@ def finish_expired_session(
         .values(status="finished")
         .execution_options(synchronize_session=False)
     )
-    if transition.rowcount != 1:
+    if affected_rows(transition) != 1:
         return False
     session.refresh(quiz_session)
     for participant in session.scalars(
@@ -178,7 +179,7 @@ def finish_when_nobody_can_answer(
     )
     if answered is None:
         return
-    still_working = QuizParticipant.current_position.is_not(None)
+    still_working: ColumnElement[bool] = QuizParticipant.current_position.is_not(None)
     if answer_review_enabled(quiz_session, quiz):
         # The last answer no longer ends the session on its own: a participant
         # reviewing their answers still has to confirm them.
@@ -201,7 +202,7 @@ def finish_when_nobody_can_answer(
         .values(status="finished")
         .execution_options(synchronize_session=False)
     )
-    if transition.rowcount == 1:
+    if affected_rows(transition) == 1:
         quiz_session.status = "finished"
         if quiz.mode == "exam":
             compute_final_scores(quiz_session, session)

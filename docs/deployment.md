@@ -135,6 +135,33 @@ Le déploiement crée trois services :
 Le backend n’est pas publié sur l’hôte. Le frontend écoute uniquement sur
 `127.0.0.1:7800` afin qu’un reverse proxy soit le seul point d’entrée public.
 
+### Changer le sous-réseau interne
+
+Les trois services communiquent sur le réseau interne `open-quiz`, en
+`172.28.0.0/24` par défaut. Le backend ne fait confiance aux en-têtes
+`X-Forwarded-*` que s’ils viennent de l’adresse du frontend sur ce réseau :
+c’est ce qui lui permet de reconnaître une requête arrivée en HTTPS.
+
+Si ce sous-réseau entre en conflit avec un réseau de l’établissement,
+définissez `OPEN_QUIZ_SUBNET_PREFIX` dans un fichier `.env` placé à la racine
+du dépôt, à côté de `docker-compose.yml` (distinct de `open-quiz-backend/.env`) :
+
+```shell
+OPEN_QUIZ_SUBNET_PREFIX=10.42.0
+```
+
+Le sous-réseau devient `10.42.0.0/24`. Les adresses des services et le proxy
+de confiance du backend suivent automatiquement. Docker ne modifie pas le
+sous-réseau d’un réseau existant : arrêtez d’abord les services, puis relancez
+la mise à jour.
+
+```shell
+docker compose down
+sh ./update.sh
+```
+
+`docker compose down` conserve le volume de la base de données.
+
 ## 🔒 Publier l’application en HTTPS
 
 Placez un reverse proxy HTTPS devant `127.0.0.1:7800`. Exemple Caddy :
@@ -521,6 +548,7 @@ personnelle.
 | L’API refuse de démarrer             | recherchez une valeur `replace-with-`, vérifiez la longueur et l’unicité des secrets, `APP_ENV` et `FRONTEND_ORIGIN` |
 | Une migration échoue au démarrage    | lisez l’erreur Alembic dans les journaux du backend : la base est restée dans son état précédent                     |
 | Boucle de redirection HTTP/HTTPS     | vérifiez `FRONTEND_ORIGIN` et les en-têtes de protocole transmis par les proxies                                     |
+| Conflit avec le réseau local         | changez `OPEN_QUIZ_SUBNET_PREFIX`, voir « Changer le sous-réseau interne » plus haut                                 |
 | Le navigateur bloque les appels API  | faites correspondre l’origine visible, `FRONTEND_ORIGIN`, `VITE_API_URL`, CORS et CSP                                |
 | Un conteneur reste `unhealthy`       | consultez `docker compose ps` puis les journaux des trois services                                                   |
 | Le frontend ne trouve pas le backend | vérifiez le réseau Compose et laissez `VITE_API_URL` vide pour le déploiement fourni                                 |
