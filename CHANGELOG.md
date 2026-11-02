@@ -42,6 +42,8 @@ PostgreSQL and `open-quiz-backend/.env` before any update.
 - Make-up sessions accept students who were absent from the original exam,
   and quizzes are regraded when their question bank changes.
 - A quiz translation is no longer erased by a late reset.
+- Removing unused question images no longer aborts the data-retention run
+  when a teacher reuses one of those images at the same moment.
 
 ### Security
 
