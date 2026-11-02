@@ -11,7 +11,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -141,6 +141,22 @@ class ClassTrainingQuestionBank(Base):
     )
 
 
+class StoredImage(Base):
+    """An image of a question or a choice, stored once per distinct content.
+
+    Questions and choices reference it by the SHA-256 of its bytes, so that
+    listing them never loads an image, and an image used several times is
+    stored once. Images no question or choice references any more are purged
+    with the other expired data.
+    """
+
+    __tablename__ = "stored_images"
+
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(80))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+
 class Question(Base):
     __tablename__ = "questions"
 
@@ -157,8 +173,10 @@ class Question(Base):
         Boolean, default=False, server_default="0"
     )
     correction_mode: Mapped[str] = mapped_column(String(20))
-    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    image_content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    image_sha256: Mapped[str | None] = mapped_column(
+        ForeignKey("stored_images.sha256"), nullable=True, index=True
+    )
+    image: Mapped[StoredImage | None] = relationship()
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
@@ -189,8 +207,10 @@ class QuestionChoice(Base):
     label: Mapped[str] = mapped_column(Text)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False)
     points: Mapped[float] = mapped_column(Float, default=0.0)
-    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    image_content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    image_sha256: Mapped[str | None] = mapped_column(
+        ForeignKey("stored_images.sha256"), nullable=True, index=True
+    )
+    image: Mapped[StoredImage | None] = relationship()
     code_language: Mapped[str | None] = mapped_column(String(30), nullable=True)
     code_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     position: Mapped[int] = mapped_column(Integer)

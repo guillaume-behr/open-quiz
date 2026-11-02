@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, defer
+from sqlalchemy.orm import Session
 
 from app.models import Question, QuestionChoice, QuestionCode
 from app.schemas import QuestionResponse
@@ -10,21 +10,18 @@ from app.schemas import QuestionResponse
 def load_question_records(
     question_ids: list[int] | set[int], session: Session
 ) -> tuple[dict[int, Question], dict[int, list[QuestionChoice]]]:
-    """Load question metadata and choices without fetching image blobs."""
+    """Load question metadata and choices; images stay in stored_images."""
     if not question_ids:
         return {}, {}
     questions_by_id = {
         question.id: question
         for question in session.scalars(
-            select(Question)
-            .options(defer(Question.image_data))
-            .where(Question.id.in_(question_ids))
+            select(Question).where(Question.id.in_(question_ids))
         )
     }
     choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
     for choice in session.scalars(
         select(QuestionChoice)
-        .options(defer(QuestionChoice.image_data))
         .where(QuestionChoice.question_id.in_(question_ids))
         .order_by(
             QuestionChoice.question_id,
@@ -50,7 +47,7 @@ def question_response(
         answer_mode_disclosed=question.answer_mode_disclosed,
         response_language=question.response_language,
         allow_code_execution=question.allow_code_execution,
-        has_image=question.image_content_type is not None,
+        has_image=question.image_sha256 is not None,
         code_language=code.language if code else None,
         code_content=code.content if code else None,
         choices=[
@@ -60,7 +57,7 @@ def question_response(
                 "is_correct": choice.is_correct,
                 "points": choice.points,
                 "position": choice.position,
-                "has_image": choice.image_content_type is not None,
+                "has_image": choice.image_sha256 is not None,
                 "code_language": choice.code_language,
                 "code_content": choice.code_content,
             }

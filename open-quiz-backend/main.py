@@ -65,6 +65,7 @@ from app.session_retention import (
     close_abandoned_sessions,
     expired_training_session_ids,
 )
+from app.stored_images import delete_unreferenced_images
 
 logger = logging.getLogger("open_quiz")
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
@@ -282,6 +283,8 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
                 LoginRateLimit.window_started_at <= limiter_cutoff
             )
         )
+        # Images of deleted or edited questions and choices.
+        delete_unreferenced_images(session)
         session.commit()
 
     if any(

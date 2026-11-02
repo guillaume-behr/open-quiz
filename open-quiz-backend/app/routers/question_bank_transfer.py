@@ -245,13 +245,12 @@ def export_questions(
                             "points": choice.points,
                             "image": (
                                 {
-                                    "content_type": choice.image_content_type,
+                                    "content_type": choice.image.content_type,
                                     "data_base64": b64encode(
-                                        choice.image_data
+                                        choice.image.data
                                     ).decode(),
                                 }
-                                if choice.image_data is not None
-                                and choice.image_content_type is not None
+                                if choice.image is not None
                                 else None
                             ),
                             "code_language": choice.code_language,
@@ -263,11 +262,10 @@ def export_questions(
                     "code_content": code.content if code else None,
                     "image": (
                         {
-                            "content_type": question.image_content_type,
-                            "data_base64": b64encode(question.image_data).decode(),
+                            "content_type": question.image.content_type,
+                            "data_base64": b64encode(question.image.data).decode(),
                         }
-                        if question.image_data is not None
-                        and question.image_content_type is not None
+                        if question.image is not None
                         else None
                     ),
                 }
