@@ -393,7 +393,7 @@ modification et import de questions : elles disposent d’une limite de 96 Mio
 pour transporter les images encodées.
 
 Les images des questions et des choix sont rangées dans la table
-`stored_images`, une seule fois par contenu identique : dupliquer une banque ne
+`stored_images`, une seule fois par contenu identique : importer deux fois une banque ne
 recopie pas ses images, et lister des questions n’en lit aucune. La maintenance
 horaire supprime les images qu’aucune question n’utilise plus.
 
