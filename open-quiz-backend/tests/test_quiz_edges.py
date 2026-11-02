@@ -407,11 +407,18 @@ def test_an_expiry_already_applied_elsewhere_is_reloaded(environment) -> None:
             ),
         ),
     ) as fired:
-        state = client.get(
-            f"/api/quizzes/sessions/{launched['id']}",
+        # Pausing writes, so it finishes the expired session first; the
+        # concurrent expiry wins, and the request reloads it instead.
+        paused = client.post(
+            f"/api/quizzes/sessions/{launched['id']}/pause",
             headers=environment["teacher_headers"],
         )
     assert fired
+    assert paused.status_code == 409
+    state = client.get(
+        f"/api/quizzes/sessions/{launched['id']}",
+        headers=environment["teacher_headers"],
+    )
     assert state.json()["status"] == "finished"
 
 

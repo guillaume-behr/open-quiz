@@ -19,9 +19,14 @@ for name, value in TEST_ENVIRONMENT.items():
 import pytest  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 
+import main  # noqa: E402
 from app.database import postgres_url  # noqa: E402
 
 from support import PREPARED_TEST_SCHEMAS, TEST_DATABASE_URL  # noqa: E402
+
+# Tests finish expired sessions explicitly with main.expire_due_sessions(): a
+# background tick firing in the middle of a test would make it racy.
+main.SESSION_EXPIRY_INTERVAL_SECONDS = 3600
 
 
 @pytest.fixture(scope="session", autouse=True)

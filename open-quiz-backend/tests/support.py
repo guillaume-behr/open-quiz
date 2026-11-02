@@ -16,6 +16,7 @@ import pyotp
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection, create_engine, event
 
+import main
 from app.config import Settings
 from app.database import postgres_url
 from app.models import (
@@ -463,3 +464,10 @@ def seeded_exam_session(
         )
     session.flush()
     return quiz_session.id
+
+
+def expire_due_sessions(client: TestClient) -> int:
+    """Run one tick of the expiry loop, which tests drive explicitly."""
+    return main.expire_due_sessions(
+        client.app.state.session_factory, client.app.state.live_quiz_hub
+    )

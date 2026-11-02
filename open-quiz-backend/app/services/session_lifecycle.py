@@ -14,6 +14,7 @@ from math import ceil
 from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
+from app.database import EXPIRY_LOCK_KEY
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -25,7 +26,6 @@ from app.models import (
     QuizSession,
     Student,
     StudentAccount,
-    User,
 )
 from app.quiz_session_records import (
     delete_quiz_session_records,
@@ -70,38 +70,89 @@ def answer_review_enabled(quiz_session: QuizSession, quiz: Quiz) -> bool:
     return quiz.allow_answer_review
 
 
+def quiz_session_is_due(quiz_session: QuizSession, quiz: Quiz) -> bool:
+    """Whether a running session has used up its time."""
+    ends_at = quiz_ends_at(quiz_session, quiz)
+    return (
+        quiz_session.status == "in_progress"
+        and ends_at is not None
+        and datetime.now(UTC) >= ends_at
+    )
+
+
+def finish_expired_session(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    session: Session,
+) -> bool:
+    """Finish a due session in the current transaction, without committing.
+
+    Returns False when a concurrent transaction already moved the session out
+    of in_progress, in which case nothing was changed.
+    """
+    transition = session.execute(
+        update(QuizSession)
+        .where(
+            QuizSession.id == quiz_session.id,
+            QuizSession.status == "in_progress",
+        )
+        .values(status="finished")
+        .execution_options(synchronize_session=False)
+    )
+    if transition.rowcount != 1:
+        return False
+    session.refresh(quiz_session)
+    for participant in session.scalars(
+        select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
+    ):
+        participant.current_position = None
+    if quiz.mode == "exam":
+        compute_final_scores(quiz_session, session)
+    return True
+
+
 def expire_quiz_session(
     quiz_session: QuizSession,
     quiz: Quiz,
     session: Session,
 ) -> None:
-    ends_at = quiz_ends_at(quiz_session, quiz)
-    if (
-        quiz_session.status == "in_progress"
-        and ends_at is not None
-        and datetime.now(UTC) >= ends_at
-    ):
-        transition = session.execute(
-            update(QuizSession)
-            .where(
-                QuizSession.id == quiz_session.id,
-                QuizSession.status == "in_progress",
-            )
-            .values(status="finished")
-            .execution_options(synchronize_session=False)
-        )
-        if transition.rowcount != 1:
-            session.rollback()
-            session.refresh(quiz_session)
-            return
-        session.refresh(quiz_session)
-        for participant in session.scalars(
-            select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
-        ):
-            participant.current_position = None
-        if quiz.mode == "exam":
-            compute_final_scores(quiz_session, session)
+    """Finish a due session before a request changes it.
+
+    Requests that write to a session call this first, so that an answer or a
+    navigation sent after the deadline is refused even before the expiry loop
+    has run. Reads leave expiry to expire_due_quiz_sessions().
+    """
+    if not quiz_session_is_due(quiz_session, quiz):
+        return
+    if finish_expired_session(quiz_session, quiz, session):
         session.commit()
+    else:
+        session.rollback()
+        session.refresh(quiz_session)
+
+
+def expire_due_quiz_sessions(session: Session) -> list[QuizSession]:
+    """Finish every running session whose time is up, in one transaction.
+
+    The application runs this every few seconds, so a session ends on time
+    even when nobody has it open. The advisory lock lets a single worker do
+    it per tick: the others find it taken and skip. Returns the sessions it
+    finished, for the caller to publish.
+    """
+    if not session.scalar(select(func.pg_try_advisory_xact_lock(EXPIRY_LOCK_KEY))):
+        return []
+    finished = [
+        quiz_session
+        for quiz_session, quiz in session.execute(
+            select(QuizSession, Quiz)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(QuizSession.status == "in_progress")
+        ).all()
+        if quiz_session_is_due(quiz_session, quiz)
+        and finish_expired_session(quiz_session, quiz, session)
+    ]
+    session.commit()
+    return finished
 
 
 def finish_when_nobody_can_answer(
@@ -154,24 +205,6 @@ def finish_when_nobody_can_answer(
         quiz_session.status = "finished"
         if quiz.mode == "exam":
             compute_final_scores(quiz_session, session)
-
-
-def expire_owned_quiz_sessions(
-    professor: User,
-    session: Session,
-) -> None:
-    rows = list(
-        session.execute(
-            select(QuizSession, Quiz)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                Quiz.owner_id == professor.id,
-                QuizSession.status == "in_progress",
-            )
-        )
-    )
-    for quiz_session, quiz in rows:
-        expire_quiz_session(quiz_session, quiz, session)
 
 
 def delete_makeup_session_records(

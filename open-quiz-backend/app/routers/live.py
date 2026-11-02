@@ -7,7 +7,6 @@ periodic reconciliation, and a heartbeat while idle.
 
 from asyncio import Queue, to_thread, wait_for
 from contextlib import suppress
-from datetime import UTC, datetime
 from time import monotonic
 
 from fastapi import (
@@ -36,12 +35,8 @@ from app.routers.makeup import list_makeup_sessions
 from app.routers.quizzes import (
     active_session_responses,
     authenticated_participant,
-    publish_quiz_update,
     session_response,
     student_state_response,
-)
-from app.services.session_lifecycle import (
-    as_utc,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
@@ -109,44 +104,37 @@ class LiveHeartbeat:
 
 async def wait_for_live_update(
     queue: Queue[None],
-    ends_at: datetime | None,
     *,
     reconcile_after: float,
 ) -> None:
-    """Wait for a published update, the next reconciliation, or the deadline."""
-    timeout = min(LIVE_HEARTBEAT_SECONDS, reconcile_after)
-    if ends_at is not None:
-        remaining = max(0, (as_utc(ends_at) - datetime.now(UTC)).total_seconds())
-        timeout = min(timeout, remaining)
+    """Wait for a published update or the next reconciliation.
+
+    A session's deadline needs no wake-up of its own: the expiry loop finishes
+    the session and publishes the change.
+    """
     with suppress(TimeoutError):
-        await wait_for(queue.get(), timeout=timeout)
+        await wait_for(
+            queue.get(), timeout=min(LIVE_HEARTBEAT_SECONDS, reconcile_after)
+        )
 
 
 def live_teacher_active_sessions_snapshot(
     websocket: WebSocket,
     professor_id: int,
-) -> tuple[list[dict[str, object]] | None, datetime | None]:
+) -> list[dict[str, object]] | None:
     with websocket.app.state.session_factory() as session:
         professor = session.get(User, professor_id)
         if professor is None or not professor.is_active:
-            return None, None
+            return None
         sessions = active_session_responses(professor, session)
-    next_ends_at = min(
-        (
-            item.ends_at
-            for item in sessions
-            if item.status == "in_progress" and item.ends_at is not None
-        ),
-        default=None,
-    )
-    return [item.model_dump(mode="json") for item in sessions], next_ends_at
+    return [item.model_dump(mode="json") for item in sessions]
 
 
 def live_teacher_session_snapshot(
     websocket: WebSocket,
     professor_id: int,
     session_id: int,
-) -> tuple[dict[str, object] | None, datetime | None, bool]:
+) -> tuple[dict[str, object] | None, bool]:
     with websocket.app.state.session_factory() as session:
         row = session.execute(
             select(QuizSession, Quiz)
@@ -157,17 +145,10 @@ def live_teacher_session_snapshot(
             )
         ).first()
         if row is None:
-            return None, None, False
+            return None, False
         quiz_session, quiz = row
-        previous_status = quiz_session.status
         state = session_response(quiz_session, quiz, session)
-        if quiz_session.status != previous_status:
-            publish_quiz_update(websocket, quiz_session, session)
-    return (
-        state.model_dump(mode="json"),
-        state.ends_at if state.status == "in_progress" else None,
-        state.status in {"finished", "cancelled"},
-    )
+    return state.model_dump(mode="json"), state.status in {"finished", "cancelled"}
 
 
 def live_participant_is_authenticated(
@@ -187,7 +168,7 @@ def live_student_session_snapshot(
     websocket: WebSocket,
     join_code: str,
     token: str,
-) -> tuple[dict[str, object], datetime | None, bool] | None:
+) -> tuple[dict[str, object], bool] | None:
     with websocket.app.state.session_factory() as session:
         try:
             quiz_session, quiz, participant = authenticated_participant(
@@ -195,15 +176,8 @@ def live_student_session_snapshot(
             )
         except HTTPException:
             return None
-        previous_status = quiz_session.status
         state = student_state_response(quiz_session, quiz, participant, session)
-        if quiz_session.status != previous_status:
-            publish_quiz_update(websocket, quiz_session, session)
-    return (
-        state.model_dump(mode="json"),
-        state.ends_at if state.status == "in_progress" else None,
-        state.status in {"finished", "cancelled"},
-    )
+    return state.model_dump(mode="json"), state.status in {"finished", "cancelled"}
 
 
 def live_makeup_sessions_snapshot(
@@ -233,13 +207,12 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
     try:
         async with hub.subscribe(topic) as updates:
             heartbeat = LiveHeartbeat()
-            next_ends_at: datetime | None = None
             last_sessions: list[dict[str, object]] | None = None
             while True:
                 if await async_live_professor_id(websocket, token) != professor_id:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                sessions, next_ends_at = await to_thread(
+                sessions = await to_thread(
                     live_teacher_active_sessions_snapshot,
                     websocket,
                     professor_id,
@@ -258,7 +231,6 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
                     last_sessions = sessions
                 await wait_for_live_update(
                     updates,
-                    next_ends_at,
                     reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
                 )
                 if heartbeat.is_due():
@@ -289,13 +261,12 @@ async def live_teacher_quiz_session(
     try:
         async with hub.subscribe(topic) as updates:
             heartbeat = LiveHeartbeat()
-            ends_at: datetime | None = None
             last_state: dict[str, object] | None = None
             while True:
                 if await async_live_professor_id(websocket, token) != professor_id:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                state, ends_at, terminal = await to_thread(
+                state, terminal = await to_thread(
                     live_teacher_session_snapshot,
                     websocket,
                     professor_id,
@@ -314,7 +285,6 @@ async def live_teacher_quiz_session(
                     return
                 await wait_for_live_update(
                     updates,
-                    ends_at,
                     reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
                 )
                 if heartbeat.is_due():
@@ -350,7 +320,6 @@ async def live_student_quiz_session(
     try:
         async with hub.subscribe(topic) as updates:
             heartbeat = LiveHeartbeat()
-            ends_at: datetime | None = None
             last_state: dict[str, object] | None = None
             while True:
                 snapshot = await to_thread(
@@ -362,7 +331,7 @@ async def live_student_quiz_session(
                 if snapshot is None:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                state, ends_at, terminal = snapshot
+                state, terminal = snapshot
                 if state != last_state:
                     await websocket.send_json({"type": "session", "data": state})
                     heartbeat.record_send()
@@ -372,7 +341,6 @@ async def live_student_quiz_session(
                     return
                 await wait_for_live_update(
                     updates,
-                    ends_at,
                     reconcile_after=LIVE_HEARTBEAT_SECONDS,
                 )
                 if heartbeat.is_due():
@@ -429,7 +397,6 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
                     last_sessions = sessions
                 await wait_for_live_update(
                     updates,
-                    None,
                     reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
                 )
                 if heartbeat.is_due():
