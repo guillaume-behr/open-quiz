@@ -20,3 +20,6 @@
 Thumbs.db
 .idea/
 .vscode/
+
+# Database dumps: personal data, never committed.
+/backups/
