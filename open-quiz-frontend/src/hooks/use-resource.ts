@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
-type Resource<T> = {
+export type Resource<T> = {
     /** Last successfully loaded value, kept while a newer load runs. */
     data: T | undefined
     /** Error of the current load, cleared by the next success. */
