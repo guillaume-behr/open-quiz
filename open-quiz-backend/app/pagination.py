@@ -2,6 +2,10 @@ from fastapi import Response
 
 DEFAULT_PAGE_SIZE = 8
 MAX_PAGE_SIZE = 100
+# Bound the page number so the OFFSET of (page - 1) * page_size always fits a
+# PostgreSQL bigint: an unbounded page overflowed it and failed with a 500.
+# A million pages of the largest size is far past any real list.
+MAX_PAGE = 1_000_000
 
 
 def set_pagination_headers(

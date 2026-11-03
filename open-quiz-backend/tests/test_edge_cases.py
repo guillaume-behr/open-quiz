@@ -15,7 +15,6 @@ import pyotp
 import pytest
 from cryptography.fernet import InvalidToken
 from sqlalchemy import select
-from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import rate_limit, security
@@ -27,7 +26,7 @@ from app.models import (
     QuestionChoice,
     User,
 )
-from app.pagination import MAX_PAGE_SIZE, contains_pattern
+from app.pagination import MAX_PAGE, MAX_PAGE_SIZE, contains_pattern
 from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
 from app.security import (
     TWO_FACTOR_TRUST_MAXIMUM,
@@ -53,7 +52,13 @@ from app.services.grading import (
     selected_choice_score,
 )
 
-from support import JWT_SECRET, login_admin, make_client, settings_for
+from support import (
+    JWT_SECRET,
+    create_professor,
+    login_admin,
+    make_client,
+    settings_for,
+)
 
 OTHER_SECRET = "another-secret-that-is-long-enough-too"
 
@@ -148,19 +153,36 @@ def test_selected_choice_ids_tolerate_odd_payloads(
     assert selected_choice_ids(stored_answer(answer_data)) == expected
 
 
-@pytest.mark.xfail(
-    raises=TypeError,
-    strict=True,
-    reason=(
-        "Known gap: a stored list holding a list or an object is unhashable, so "
-        "set() raises instead of treating the legacy row as empty."
-    ),
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        # Unhashable entries used to make set() raise a TypeError.
+        ("[[1]]", set()),
+        ('[{"id": 1}]', set()),
+        ('[1, [2], {"id": 3}, 4]', {1, 4}),
+        # Booleans compare equal to ids 0 and 1, and strings never match an id.
+        ("[true, false]", set()),
+        ('["1", 1.5, null]', set()),
+    ],
 )
-@pytest.mark.parametrize("entries", ["[[1]]", '[{"id": 1}]'])
-def test_selected_choice_ids_tolerate_unhashable_entries(entries: str) -> None:
-    assert selected_choice_ids(
-        stored_answer(f'{{"selected_choice_ids": {entries}}}')
-    ) == (set())
+def test_selected_choice_ids_keep_only_integer_ids(
+    entries: str, expected: set[int]
+) -> None:
+    assert (
+        selected_choice_ids(stored_answer(f'{{"selected_choice_ids": {entries}}}'))
+        == expected
+    )
+
+
+def test_a_corrupted_selection_scores_zero_instead_of_crashing() -> None:
+    choices = [choice(1, correct=True, points=1)]
+    answer = stored_answer('{"selected_choice_ids": [[1], true]}')
+    assert (
+        selected_choice_score(
+            choices, selected_choice_ids(answer), allow_negative_points=False
+        )
+        == 0
+    )
 
 
 # --- Question maximums (database) --------------------------------------------
@@ -605,18 +627,42 @@ def test_pages_past_the_end_are_empty_but_keep_the_total(tmp_path: Path) -> None
         assert beyond.headers["X-Total-Count"] == total
 
 
-@pytest.mark.xfail(
-    raises=DataError,
-    strict=True,
-    reason=(
-        "Known gap: page has no upper bound, so (page - 1) * page_size overflows "
-        "PostgreSQL bigint and the request fails with a 500 instead of a 422. "
-        "Every paginated list route shares this pattern."
-    ),
-)
-@pytest.mark.parametrize("page", [2**62, 10**30])
-def test_an_overflowing_page_is_refused(tmp_path: Path, page: int) -> None:
+ADMIN_LISTS = ["/api/admin/users", "/api/problem-reports"]
+PROFESSOR_LISTS = [
+    "/api/classes",
+    "/api/question-banks",
+    "/api/quizzes",
+    "/api/quizzes/sessions/results",
+    "/api/students",
+]
+
+
+@pytest.mark.parametrize("page", [MAX_PAGE + 1, 2**62, 10**30])
+def test_an_overflowing_page_is_refused_on_every_list(
+    tmp_path: Path, page: int
+) -> None:
+    """An unbounded page overflowed the bigint OFFSET and failed with a 500."""
     with make_client(settings_for(tmp_path / "test.db")) as client:
-        headers = login_admin(client)
-        response = client.get(f"/api/admin/users?page={page}", headers=headers)
-        assert response.status_code == 422
+        admin_headers = login_admin(client)
+        _, professor_headers = create_professor(client, admin_headers)
+        for path, headers in [
+            *((path, admin_headers) for path in ADMIN_LISTS),
+            *((path, professor_headers) for path in PROFESSOR_LISTS),
+        ]:
+            response = client.get(f"{path}?page={page}", headers=headers)
+            assert response.status_code == 422, path
+
+
+def test_the_last_allowed_page_is_served_empty(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "test.db")) as client:
+        admin_headers = login_admin(client)
+        _, professor_headers = create_professor(client, admin_headers)
+        for path, headers in [
+            *((path, admin_headers) for path in ADMIN_LISTS),
+            *((path, professor_headers) for path in PROFESSOR_LISTS),
+        ]:
+            response = client.get(
+                f"{path}?page={MAX_PAGE}&page_size={MAX_PAGE_SIZE}", headers=headers
+            )
+            assert response.status_code == 200, path
+            assert response.json() == [], path

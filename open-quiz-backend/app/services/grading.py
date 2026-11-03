@@ -69,8 +69,19 @@ def decoded_answer_data(answer: QuizAnswer) -> dict:
 
 
 def selected_choice_ids(answer: QuizAnswer) -> set[int]:
+    """Choice ids of a stored answer, ignoring any entry that is not an id.
+
+    A legacy or corrupted row may hold nested lists or objects, which are
+    unhashable, or booleans, which would compare equal to ids 0 and 1.
+    """
     selected = decoded_answer_data(answer).get("selected_choice_ids")
-    return set(selected) if isinstance(selected, list) else set()
+    if not isinstance(selected, list):
+        return set()
+    return {
+        choice_id
+        for choice_id in selected
+        if isinstance(choice_id, int) and not isinstance(choice_id, bool)
+    }
 
 
 def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
