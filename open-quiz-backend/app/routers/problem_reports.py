@@ -1,18 +1,14 @@
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import delete, func, select
 
 from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import ProblemReport
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
-    set_pagination_headers,
+    Paging,
 )
 from app.schemas import ProblemReportCreate, ProblemReportResponse
 
@@ -43,12 +39,10 @@ def create_problem_report(
         "problem-report:instance"
     )
     if retry_after:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.PROBLEM_REPORT_RATE_LIMITED,
-                "Trop de signalements envoyés. Réessayez plus tard.",
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.PROBLEM_REPORT_RATE_LIMITED,
+            "Trop de signalements envoyés. Réessayez plus tard.",
             headers={"Retry-After": str(retry_after)},
         )
     purge_expired_reports(request, session)
@@ -68,20 +62,18 @@ def list_problem_reports(
     request: Request,
     _: AdminUser,
     session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    paging: Paging,
 ) -> list[ProblemReport]:
     purge_expired_reports(request, session)
     session.commit()
     total = session.scalar(select(func.count()).select_from(ProblemReport)) or 0
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     return list(
         session.scalars(
             select(ProblemReport)
             .order_by(ProblemReport.created_at.desc(), ProblemReport.id.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(paging.offset)
+            .limit(paging.page_size)
         )
     )
 
@@ -94,11 +86,10 @@ def delete_problem_report(
 ) -> Response:
     report = session.get(ProblemReport, report_id)
     if report is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.PROBLEM_REPORT_NOT_FOUND, "Signalement introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.PROBLEM_REPORT_NOT_FOUND,
+            "Signalement introuvable",
         )
     session.delete(report)
     session.commit()

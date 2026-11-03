@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
+from app.enums import SessionStatus
 from app.models import (
     MakeupSessionSelection,
     QuizParticipant,
@@ -29,7 +30,7 @@ def delete_unfinished_training_sessions(
             .where(
                 QuizParticipant.student_id.in_(membership_ids),
                 QuizSession.training_question_bank_id.is_not(None),
-                QuizSession.status != "finished",
+                QuizSession.status != SessionStatus.FINISHED,
             )
         )
     )

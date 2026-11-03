@@ -22,11 +22,19 @@ from fastapi import (
 )
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 
 from app.class_names import format_class_name
 from app.database import affected_rows
-from app.dependencies import DbSession, ProfessorUser
-from app.errors import ErrorCode, api_error
+from app.dependencies import DbSession, ProfessorUser, current_student
+from app.enums import QuizMode, SessionStatus
+from app.errors import ApiError, ErrorCode
+from app.live_updates import (
+    publish_active_quiz_sessions_update,
+    publish_makeup_update,
+    publish_quiz_topics,
+    publish_quiz_update,
+)
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -40,21 +48,12 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
-from app.routers.quizzes import (
+from app.participants import (
     enforce_public_rate_limit,
     generate_join_code,
     participant_token_hash,
-    publish_active_quiz_sessions_update,
-    publish_makeup_update,
-    publish_quiz_topics,
-    publish_quiz_update,
-    quiz_responses,
-    session_response,
-    student_state_response,
 )
-from app.routers.student_auth import current_student
 from app.schemas import (
-    MakeupParticipantResponse,
     MakeupQuizOption,
     MakeupQuizSelection,
     MakeupSessionCreate,
@@ -76,67 +75,15 @@ from app.services.session_lifecycle import (
     delete_makeup_session_records,
     discard_active_training_sessions,
 )
+from app.session_responses import (
+    makeup_session_response,
+    makeup_session_responses,
+    quiz_responses,
+    student_state_response,
+)
+from app.student_accounts import owned_class
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
-
-
-def makeup_session_response(
-    makeup: MakeupSession, session: DbSession
-) -> MakeupSessionResponse:
-    quizzes = list(
-        session.scalars(
-            select(Quiz)
-            .join(MakeupSessionQuiz, MakeupSessionQuiz.quiz_id == Quiz.id)
-            .where(MakeupSessionQuiz.session_id == makeup.id)
-            .order_by(Quiz.title, Quiz.id)
-        )
-    )
-    child_sessions = list(
-        session.scalars(
-            select(QuizSession)
-            .where(QuizSession.makeup_session_id == makeup.id)
-            .order_by(QuizSession.id)
-        )
-    )
-    quizzes_by_id = {quiz.id: quiz for quiz in quizzes}
-    child_responses = [
-        session_response(child, quizzes_by_id[child.quiz_id], session)
-        for child in child_sessions
-        if child.quiz_id in quizzes_by_id
-    ]
-    participants = [
-        MakeupParticipantResponse(
-            **participant.model_dump(),
-            quiz_title=child.quiz_title,
-            total_questions=child.total_questions,
-        )
-        for child in child_responses
-        for participant in child.participants
-    ]
-    return MakeupSessionResponse(
-        id=makeup.id,
-        class_id=makeup.class_id,
-        class_name=(
-            format_class_name(student_class.grade_level, student_class.name)
-            if makeup.class_id is not None
-            and (student_class := session.get(StudentClass, makeup.class_id))
-            is not None
-            else makeup.class_name
-        ),
-        join_code=makeup.join_code,
-        status=makeup.status,
-        quizzes=[
-            MakeupQuizOption(
-                id=quiz.id,
-                title=quiz.title,
-                duration_seconds=quiz.duration_seconds,
-            )
-            for quiz in quizzes
-        ],
-        participant_count=len(participants),
-        participants=participants,
-        created_at=makeup.created_at,
-    )
 
 
 def owned_makeup_session(
@@ -149,11 +96,8 @@ def owned_makeup_session(
         )
     )
     if makeup is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(
-                ErrorCode.MAKEUP_NOT_FOUND, "Session de rattrapage introuvable"
-            ),
+        raise ApiError(
+            404, ErrorCode.MAKEUP_NOT_FOUND, "Session de rattrapage introuvable"
         )
     return makeup
 
@@ -162,34 +106,7 @@ def owned_makeup_session(
 def list_makeup_sessions(
     professor: ProfessorUser, session: DbSession
 ) -> list[MakeupSessionResponse]:
-    obsolete_cancelled_ids = list(
-        session.scalars(
-            select(MakeupSession.id).where(
-                MakeupSession.owner_id == professor.id,
-                MakeupSession.status == "cancelled",
-                ~MakeupSession.id.in_(
-                    select(QuizSession.makeup_session_id)
-                    .join(QuizAnswer, QuizAnswer.session_id == QuizSession.id)
-                    .where(QuizSession.makeup_session_id.is_not(None))
-                ),
-            )
-        )
-    )
-    for makeup_session_id in obsolete_cancelled_ids:
-        delete_makeup_session_records(makeup_session_id, session)
-    if obsolete_cancelled_ids:
-        session.commit()
-    makeups = list(
-        session.scalars(
-            select(MakeupSession)
-            .where(
-                MakeupSession.owner_id == professor.id,
-                MakeupSession.status != "cancelled",
-            )
-            .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
-        )
-    )
-    return [makeup_session_response(item, session) for item in makeups]
+    return makeup_session_responses(professor, session)
 
 
 def class_finished_quiz_ids(
@@ -203,7 +120,7 @@ def class_finished_quiz_ids(
             .where(
                 Quiz.owner_id == professor.id,
                 QuizSession.class_id == student_class_id,
-                QuizSession.status == "finished",
+                QuizSession.status == SessionStatus.FINISHED,
             )
         )
     )
@@ -216,24 +133,14 @@ def makeup_quiz_options(
     session: DbSession,
 ) -> list[QuizResponse]:
     """Quizzes a class may make up: only those the class has already taken."""
-    student_class = session.scalar(
-        select(StudentClass).where(
-            StudentClass.id == class_id,
-            StudentClass.owner_id == professor.id,
-        )
-    )
-    if student_class is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-        )
+    student_class = owned_class(class_id, professor, session)
     finished_ids = class_finished_quiz_ids(student_class.id, professor, session)
     quizzes = list(
         session.scalars(
             select(Quiz)
             .where(
                 Quiz.owner_id == professor.id,
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
                 Quiz.id.in_(finished_ids),
             )
             .order_by(Quiz.title, Quiz.id)
@@ -265,32 +172,25 @@ def create_makeup_session(
             select(Quiz).where(
                 Quiz.id.in_(quiz_ids),
                 Quiz.owner_id == professor.id,
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
             )
         )
     )
     if student_class is None or len(quizzes) != len(quiz_ids):
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                ErrorCode.MAKEUP_QUIZZES_INVALID, "Classe ou quiz invalide"
-            ),
-        )
+        raise ApiError(422, ErrorCode.MAKEUP_QUIZZES_INVALID, "Classe ou quiz invalide")
     eligible = class_finished_quiz_ids(student_class.id, professor, session)
     if not quiz_ids.issubset(eligible):
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                ErrorCode.MAKEUP_QUIZ_NOT_TAKEN,
-                "Seuls les quiz déjà passés par la classe peuvent être rattrapés",
-            ),
+        raise ApiError(
+            422,
+            ErrorCode.MAKEUP_QUIZ_NOT_TAKEN,
+            "Seuls les quiz déjà passés par la classe peuvent être rattrapés",
         )
     makeup = MakeupSession(
         owner_id=professor.id,
         class_id=student_class.id,
         class_name=format_class_name(student_class.grade_level, student_class.name),
         join_code=generate_join_code(session),
-        status="waiting",
+        status=SessionStatus.WAITING,
     )
     session.add(makeup)
     session.flush()
@@ -300,6 +200,76 @@ def create_makeup_session(
     session.commit()
     publish_makeup_update(request, professor.id)
     return makeup_session_response(makeup, session)
+
+
+def cancel_makeup_session(
+    makeup: MakeupSession,
+    child_topics: list[tuple[int, str]],
+    request: Request,
+    professor_id: int,
+    session: Session,
+) -> Response:
+    """Delete a makeup session nobody has answered in yet."""
+    has_answers = (
+        session.scalar(
+            select(QuizAnswer.id)
+            .join(QuizSession, QuizSession.id == QuizAnswer.session_id)
+            .where(QuizSession.makeup_session_id == makeup.id)
+            .limit(1)
+        )
+        is not None
+    )
+    if has_answers:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.MAKEUP_HAS_ANSWERS,
+            "Impossible d’annuler ce rattrapage car des réponses ont déjà "
+            "été enregistrées",
+        )
+    delete_makeup_session_records(makeup.id, session)
+    session.commit()
+    for child_id, join_code in child_topics:
+        publish_quiz_topics(request, child_id, join_code)
+    publish_makeup_update(request, professor_id)
+    publish_active_quiz_sessions_update(request, professor_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def apply_makeup_action(
+    child: QuizSession, action: str, now: datetime, session: Session
+) -> None:
+    """Carry a makeup action over to one student's quiz session."""
+    if action == "start":
+        if child.status != SessionStatus.WAITING:
+            return
+        child.status = SessionStatus.IN_PROGRESS
+        child.started_at = now
+        for participant in session.scalars(
+            select(QuizParticipant).where(QuizParticipant.session_id == child.id)
+        ):
+            participant.current_position = 0
+    elif action == "pause":
+        if child.status != SessionStatus.IN_PROGRESS:
+            return
+        child.status = SessionStatus.PAUSED
+        child.paused_at = now
+    elif action == "resume":
+        if child.status != SessionStatus.PAUSED or child.paused_at is None:
+            return
+        child.paused_duration_seconds = (child.paused_duration_seconds or 0) + ceil(
+            max(0, (now - child.paused_at).total_seconds())
+        )
+        child.paused_at = None
+        child.status = SessionStatus.IN_PROGRESS
+    else:  # finish
+        if child.status not in {SessionStatus.IN_PROGRESS, SessionStatus.PAUSED}:
+            return
+        child.status = SessionStatus.FINISHED
+        compute_final_scores(child, session)
+        for participant in session.scalars(
+            select(QuizParticipant).where(QuizParticipant.session_id == child.id)
+        ):
+            participant.current_position = None
 
 
 @router.post(
@@ -315,58 +285,33 @@ def control_makeup_session(
 ) -> MakeupSessionResponse | Response:
     makeup = owned_makeup_session(session_id, professor, session)
     allowed = {
-        "start": ("waiting", "in_progress"),
-        "pause": ("in_progress", "paused"),
-        "resume": ("paused", "in_progress"),
-        "finish": ("in_progress", "finished"),
-        "cancel": ("waiting", "cancelled"),
+        "start": (SessionStatus.WAITING, SessionStatus.IN_PROGRESS),
+        "pause": (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
+        "resume": (SessionStatus.PAUSED, SessionStatus.IN_PROGRESS),
+        "finish": (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED),
+        "cancel": (SessionStatus.WAITING, SessionStatus.CANCELLED),
     }
     if action not in allowed:
         raise HTTPException(status_code=404)
     expected, target = allowed[action]
     if makeup.status != expected:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
-                "Action impossible pour cette session",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
+            "Action impossible pour cette session",
         )
-    child_topics = list(
-        session.execute(
+    child_topics: list[tuple[int, str]] = [
+        (child_id, join_code)
+        for child_id, join_code in session.execute(
             select(QuizSession.id, QuizSession.join_code).where(
                 QuizSession.makeup_session_id == makeup.id
             )
         )
-    )
+    ]
     if action == "cancel":
-        has_answers = (
-            session.scalar(
-                select(QuizAnswer.id)
-                .join(QuizSession, QuizSession.id == QuizAnswer.session_id)
-                .where(QuizSession.makeup_session_id == makeup.id)
-                .limit(1)
-            )
-            is not None
+        return cancel_makeup_session(
+            makeup, child_topics, request, professor.id, session
         )
-        if has_answers:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    api_error(
-                        ErrorCode.MAKEUP_HAS_ANSWERS,
-                        "Impossible d’annuler ce rattrapage car des réponses ont déjà "
-                        "été enregistrées",
-                    )
-                ),
-            )
-        delete_makeup_session_records(makeup.id, session)
-        session.commit()
-        for child_id, join_code in child_topics:
-            publish_quiz_topics(request, child_id, join_code)
-        publish_makeup_update(request, professor.id)
-        publish_active_quiz_sessions_update(request, professor.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
     transition = session.execute(
         update(MakeupSession)
         .where(
@@ -378,12 +323,10 @@ def control_makeup_session(
     )
     if affected_rows(transition) != 1:
         session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
-                "Action impossible pour cette session",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
+            "Action impossible pour cette session",
         )
     makeup.status = target
     children = list(
@@ -393,46 +336,14 @@ def control_makeup_session(
     )
     if action == "start" and not children:
         session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_NO_SELECTION,
-                "Au moins un élève doit choisir un quiz avant le démarrage",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_NO_SELECTION,
+            "Au moins un élève doit choisir un quiz avant le démarrage",
         )
     now = datetime.now(UTC)
     for child in children:
-        if action == "start":
-            if child.status != "waiting":
-                continue
-            child.status = "in_progress"
-            child.started_at = now
-            for participant in session.scalars(
-                select(QuizParticipant).where(QuizParticipant.session_id == child.id)
-            ):
-                participant.current_position = 0
-        elif action == "pause":
-            if child.status != "in_progress":
-                continue
-            child.status = "paused"
-            child.paused_at = now
-        elif action == "resume":
-            if child.status != "paused" or child.paused_at is None:
-                continue
-            child.paused_duration_seconds = (child.paused_duration_seconds or 0) + ceil(
-                max(0, (now - child.paused_at).total_seconds())
-            )
-            child.paused_at = None
-            child.status = "in_progress"
-        else:  # finish
-            if child.status not in {"in_progress", "paused"}:
-                continue
-            child.status = "finished"
-            compute_final_scores(child, session)
-            for participant in session.scalars(
-                select(QuizParticipant).where(QuizParticipant.session_id == child.id)
-            ):
-                participant.current_position = None
+        apply_makeup_action(child, action, now, session)
     session.commit()
     for child in children:
         publish_quiz_update(request, child, session)
@@ -453,7 +364,7 @@ def join_makeup_session(
     makeup = session.scalar(
         select(MakeupSession).where(
             MakeupSession.join_code == payload.join_code,
-            MakeupSession.status == "waiting",
+            MakeupSession.status == SessionStatus.WAITING,
         )
     )
     if makeup is None:
@@ -463,11 +374,8 @@ def join_makeup_session(
             "quiz_join_rate_limiter",
             f"makeup-join:account:{account.id}",
         )
-        raise HTTPException(
-            status_code=403,
-            detail=api_error(
-                ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
-            ),
+        raise ApiError(
+            403, ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
         )
     membership = session.scalar(
         select(Student).where(
@@ -476,11 +384,8 @@ def join_makeup_session(
         )
     )
     if membership is None:
-        raise HTTPException(
-            status_code=403,
-            detail=api_error(
-                ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
-            ),
+        raise ApiError(
+            403, ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
         )
     eligible = list(
         session.scalars(
@@ -495,7 +400,7 @@ def join_makeup_session(
     return MakeupSessionJoinResponse(
         join_code=makeup.join_code,
         class_name=makeup.class_name,
-        status="waiting",
+        status=SessionStatus.WAITING,
         quizzes=[
             MakeupQuizOption(
                 id=quiz.id,
@@ -507,22 +412,18 @@ def join_makeup_session(
     )
 
 
-@router.post(
-    "/makeup/{join_code}/select",
-    response_model=StudentQuizJoinResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def select_makeup_quiz(
+def chosen_makeup_quiz(
     join_code: str,
     payload: MakeupQuizSelection,
+    account: StudentAccount,
     request: Request,
-    account: Annotated[StudentAccount, Depends(current_student)],
-    session: DbSession,
-) -> StudentQuizJoinResponse:
+    session: Session,
+) -> tuple[MakeupSession, Student, Quiz]:
+    """The open makeup session, the student's place in it and the quiz chosen."""
     makeup = session.scalar(
         select(MakeupSession).where(
             MakeupSession.join_code == join_code.strip().upper(),
-            MakeupSession.status == "waiting",
+            MakeupSession.status == SessionStatus.WAITING,
         )
     )
     if makeup is None:
@@ -531,12 +432,10 @@ def select_makeup_quiz(
             "quiz_join_rate_limiter",
             f"makeup-join:account:{account.id}",
         )
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_SELECTION_CLOSED,
-                "Ce rattrapage n’accepte plus de choix",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_SELECTION_CLOSED,
+            "Ce rattrapage n’accepte plus de choix",
         )
     membership = session.scalar(
         select(Student).where(
@@ -561,29 +460,31 @@ def select_makeup_quiz(
         )
     )
     if membership is None or quiz is None or existing is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
-            ),
+        raise ApiError(
+            409, ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
         )
+    return makeup, membership, quiz
+
+
+def claim_makeup_selection(
+    makeup: MakeupSession, membership: Student, session: Session
+) -> None:
+    """Record the student's one choice, refusing a second or a late one."""
     waiting = session.execute(
         update(MakeupSession)
         .where(
             MakeupSession.id == makeup.id,
-            MakeupSession.status == "waiting",
+            MakeupSession.status == SessionStatus.WAITING,
         )
-        .values(status="waiting")
+        .values(status=SessionStatus.WAITING)
         .execution_options(synchronize_session=False)
     )
     if affected_rows(waiting) != 1:
         session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_SELECTION_CLOSED,
-                "Ce rattrapage n’accepte plus de choix",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_SELECTION_CLOSED,
+            "Ce rattrapage n’accepte plus de choix",
         )
     claimed_student_id = session.scalar(
         insert(MakeupSessionSelection)
@@ -597,15 +498,15 @@ def select_makeup_quiz(
         .returning(MakeupSessionSelection.student_id)
     )
     if claimed_student_id is None:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
-            ),
+        raise ApiError(
+            409, ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
         )
-    discard_active_training_sessions(
-        [membership.id], quiz_bank_ids(quiz.id, session), session
-    )
+
+
+def makeup_child_session(
+    makeup: MakeupSession, quiz: Quiz, session: Session
+) -> QuizSession:
+    """The student's own session of the quiz they chose."""
     child = QuizSession(
         quiz_id=quiz.id,
         quiz_title=quiz.title,
@@ -618,11 +519,22 @@ def select_makeup_quiz(
         class_id=makeup.class_id,
         class_name=makeup.class_name,
         join_code=generate_join_code(session),
-        status="waiting",
+        status=SessionStatus.WAITING,
         makeup_session_id=makeup.id,
     )
     session.add(child)
     session.flush()
+    return child
+
+
+def draw_makeup_questions(
+    child: QuizSession,
+    makeup: MakeupSession,
+    quiz: Quiz,
+    membership: Student,
+    session: Session,
+) -> None:
+    """Draw questions no other student of this makeup got for the same quiz."""
     existing_draw_rows = list(
         session.execute(
             select(
@@ -658,6 +570,29 @@ def select_makeup_quiz(
         )
         for position, question_id in enumerate(question_ids)
     )
+
+
+@router.post(
+    "/makeup/{join_code}/select",
+    response_model=StudentQuizJoinResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def select_makeup_quiz(
+    join_code: str,
+    payload: MakeupQuizSelection,
+    request: Request,
+    account: Annotated[StudentAccount, Depends(current_student)],
+    session: DbSession,
+) -> StudentQuizJoinResponse:
+    makeup, membership, quiz = chosen_makeup_quiz(
+        join_code, payload, account, request, session
+    )
+    claim_makeup_selection(makeup, membership, session)
+    discard_active_training_sessions(
+        [membership.id], quiz_bank_ids(quiz.id, session), session
+    )
+    child = makeup_child_session(makeup, quiz, session)
+    draw_makeup_questions(child, makeup, quiz, membership, session)
     token = token_urlsafe(32)
     participant = QuizParticipant(
         session_id=child.id,

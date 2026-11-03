@@ -29,9 +29,7 @@ from app.models import (
     TrainingQuizProfile,
     User,
 )
-from app.routers.quizzes import (
-    generate_join_code,
-)
+from app.participants import generate_join_code
 from app.services.grading import (
     participant_maximum_scores,
     question_maximum_scores,
@@ -1172,7 +1170,7 @@ def test_join_code_reservations_prevent_reuse(
 ) -> None:
     app_settings = settings_for(tmp_path / "join-code-reservations.db")
     app = create_app(app_settings)
-    monkeypatch.setattr("app.routers.quizzes.randomizer.choice", lambda _: "A")
+    monkeypatch.setattr("app.participants.randomizer.choice", lambda _: "A")
 
     with app.state.session_factory() as session:
         assert generate_join_code(session) == "AAAAAA"

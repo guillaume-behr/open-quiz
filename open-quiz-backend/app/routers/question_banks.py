@@ -2,16 +2,14 @@ from typing import Annotated
 
 from fastapi import (
     APIRouter,
-    HTTPException,
     Query,
-    Response,
     status,
 )
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.grade_levels import ensure_grade_level
 from app.models import (
     ClassTrainingQuestionBank,
@@ -19,27 +17,23 @@ from app.models import (
     QuestionBank,
     QuestionChoice,
     QuestionCode,
-    Quiz,
     QuizQuestionBank,
-    QuizSession,
-    QuizSessionQuestion,
-    QuizSessionStudentQuestion,
     StudentClass,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
+    Paging,
     contains_pattern,
     focused_page,
-    set_pagination_headers,
 )
 from app.question_bank_summaries import (
     question_bank_summary_query,
     question_bank_summary_response,
 )
-from app.quiz_session_records import delete_quiz_session_records
+from app.question_records import (
+    discard_training_sessions_using_questions,
+    owned_question_bank,
+)
 from app.schemas import (
     QuestionBankCreate,
     QuestionBankResponse,
@@ -53,9 +47,7 @@ router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
 def list_question_banks(
     professor: ProfessorUser,
     session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    paging: Paging,
     search: Annotated[str, Query(max_length=160)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
     focus: Annotated[int | None, Query(ge=1)] = None,
@@ -75,22 +67,22 @@ def list_question_banks(
         filters.append(QuestionBank.grade_level == grade_level)
     order = (QuestionBank.grade_level, QuestionBank.chapter, QuestionBank.id)
     if focus is not None:
-        page = (
-            focused_page(session, QuestionBank, filters, order, focus, page_size)
-            or page
+        paging.page = (
+            focused_page(session, QuestionBank, filters, order, focus, paging.page_size)
+            or paging.page
         )
     total = (
         session.scalar(select(func.count()).select_from(QuestionBank).where(*filters))
         or 0
     )
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     rows = session.execute(
         question_bank_summary_query()
         .where(*filters)
         .group_by(QuestionBank.id)
         .order_by(*order)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset(paging.offset)
+        .limit(paging.page_size)
     )
     return [
         question_bank_summary_response(
@@ -132,12 +124,10 @@ def create_question_bank(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NAME_TAKEN,
-                "Une banque existe déjà pour ce niveau et ce titre",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_NAME_TAKEN,
+            "Une banque existe déjà pour ce niveau et ce titre",
         ) from None
     session.refresh(question_bank)
     return question_bank
@@ -174,12 +164,10 @@ def update_question_bank(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NAME_TAKEN,
-                "Une banque existe déjà pour ce niveau et ce titre",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_NAME_TAKEN,
+            "Une banque existe déjà pour ce niveau et ce titre",
         ) from None
     session.refresh(question_bank)
     row = session.execute(
@@ -209,11 +197,10 @@ def delete_question_bank(
         )
         is not None
     ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_IN_USE, "Cette banque est utilisée par un quiz"
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_IN_USE,
+            "Cette banque est utilisée par un quiz",
         )
     question_ids = list(
         session.scalars(
@@ -237,52 +224,3 @@ def delete_question_bank(
     )
     session.execute(delete(QuestionBank).where(QuestionBank.id == question_bank_id))
     session.commit()
-
-
-def owned_question_bank(
-    question_bank_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> QuestionBank:
-    question_bank = session.scalar(
-        select(QuestionBank).where(
-            QuestionBank.id == question_bank_id,
-            QuestionBank.owner_id == professor.id,
-        )
-    )
-    if question_bank is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NOT_FOUND, "Banque de questions introuvable"
-            ),
-        )
-    return question_bank
-
-
-def discard_training_sessions_using_questions(
-    question_ids: list[int],
-    session: DbSession,
-) -> None:
-    """Drop every training attempt that drew any of these questions."""
-    if not question_ids:
-        return
-    common_session_ids = select(QuizSessionQuestion.session_id).where(
-        QuizSessionQuestion.question_id.in_(question_ids)
-    )
-    personalized_session_ids = select(QuizSessionStudentQuestion.session_id).where(
-        QuizSessionStudentQuestion.question_id.in_(question_ids)
-    )
-    training_session_ids = list(
-        session.scalars(
-            select(QuizSession.id)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                Quiz.mode == "training",
-                QuizSession.id.in_(common_session_ids.union(personalized_session_ids)),
-            )
-        )
-    )
-    if not training_session_ids:
-        return
-    delete_quiz_session_records(training_session_ids, session)

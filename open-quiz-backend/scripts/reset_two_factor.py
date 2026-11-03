@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from sqlalchemy import delete, select
 
 from app.audit import audit_event
+from app.auth_guards import two_factor_rate_subject
 from app.config import Settings, get_settings
 from app.database import build_session_factory
 from app.models import (
@@ -17,7 +18,6 @@ from app.rate_limit import (
     TWO_FACTOR_DAILY_WINDOW_SECONDS,
     LoginRateLimiter,
 )
-from app.routers.auth import two_factor_rate_subject
 
 
 def reset(username: str, settings: Settings | None = None) -> bool:

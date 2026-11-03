@@ -1,13 +1,20 @@
 from secrets import choice
 from string import digits
 
-from fastapi import HTTPException
+from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.errors import ErrorCode, api_error
-from app.models import Student, StudentAccount, StudentClass
-from app.schemas import StudentAccountResponse
+from app.dependencies import DbSession, ProfessorUser
+from app.errors import ApiError, ErrorCode
+from app.models import (
+    Student,
+    StudentAccount,
+    StudentClass,
+)
+from app.schemas import (
+    StudentAccountResponse,
+)
 
 READABLE_CONSONANTS = "BCDFGHJKMNPRSTVWXYZ"
 READABLE_VOWELS = "AEU"
@@ -65,10 +72,25 @@ def owned_student_account(
         )
     )
     if account is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(
-                ErrorCode.STUDENT_ACCOUNT_NOT_FOUND, "Compte élève introuvable"
-            ),
+        raise ApiError(
+            404, ErrorCode.STUDENT_ACCOUNT_NOT_FOUND, "Compte élève introuvable"
         )
     return account
+
+
+def owned_class(
+    class_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> StudentClass:
+    student_class = session.scalar(
+        select(StudentClass).where(
+            StudentClass.id == class_id,
+            StudentClass.owner_id == professor.id,
+        )
+    )
+    if student_class is None:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"
+        )
+    return student_class

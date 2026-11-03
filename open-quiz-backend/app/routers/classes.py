@@ -1,12 +1,14 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.dependencies import DbSession, ProfessorUser
-from app.errors import ErrorCode, api_error
+from app.enums import QuizMode, SessionStatus
+from app.errors import ApiError, ErrorCode
 from app.grade_levels import (
     ensure_grade_level,
     grade_level_order,
@@ -24,12 +26,9 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
+    Paging,
     contains_pattern,
-    set_pagination_headers,
 )
 from app.schemas import (
     StudentClassCreate,
@@ -37,7 +36,10 @@ from app.schemas import (
     StudentResponse,
 )
 from app.session_status import ACTIVE_SESSION_STATUSES
-from app.student_accounts import owned_student_account
+from app.student_accounts import (
+    owned_class,
+    owned_student_account,
+)
 from app.student_memberships import (
     delete_student_membership,
     delete_unfinished_training_sessions,
@@ -51,11 +53,10 @@ def commit_unique_class(session: DbSession) -> None:
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.CLASS_NAME_TAKEN, "Une classe porte déjà ce nom"
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.CLASS_NAME_TAKEN,
+            "Une classe porte déjà ce nom",
         ) from None
 
 
@@ -66,31 +67,12 @@ def class_has_active_exam_session(class_id: int, session: DbSession) -> bool:
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSession.class_id == class_id,
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
                 QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
         )
         is not None
     )
-
-
-def owned_class(
-    class_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> StudentClass:
-    student_class = session.scalar(
-        select(StudentClass).where(
-            StudentClass.id == class_id,
-            StudentClass.owner_id == professor.id,
-        )
-    )
-    if student_class is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-        )
-    return student_class
 
 
 def class_response(
@@ -112,8 +94,8 @@ def class_response(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSession.class_id == student_class.id,
-            QuizSession.status == "finished",
-            Quiz.mode == "exam",
+            QuizSession.status == SessionStatus.FINISHED,
+            Quiz.mode == QuizMode.EXAM,
         )
     )
     latest_quiz = session.execute(
@@ -126,8 +108,8 @@ def class_response(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSession.class_id == student_class.id,
-            QuizSession.status == "finished",
-            Quiz.mode == "exam",
+            QuizSession.status == SessionStatus.FINISHED,
+            Quiz.mode == QuizMode.EXAM,
         )
         .order_by(
             QuizSession.started_at.desc(),
@@ -177,48 +159,8 @@ def class_response_from_details(
     )
 
 
-@router.get("", response_model=list[StudentClassResponse])
-def list_classes(
-    professor: ProfessorUser,
-    session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
-    search: Annotated[str, Query(max_length=120)] = "",
-    grade_level: Annotated[str, Query(max_length=80)] = "",
-) -> list[StudentClassResponse]:
-    filters = [StudentClass.owner_id == professor.id]
-    if search:
-        filters.append(
-            StudentClass.name.ilike(
-                contains_pattern(search), escape=LIKE_ESCAPE_CHARACTER
-            )
-        )
-    if grade_level:
-        filters.append(StudentClass.grade_level == grade_level)
-    total = (
-        session.scalar(select(func.count()).select_from(StudentClass).where(*filters))
-        or 0
-    )
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
-    classes = list(
-        session.scalars(
-            select(StudentClass)
-            .where(*filters)
-            .order_by(
-                grade_level_order(StudentClass.grade_level),
-                StudentClass.grade_level,
-                StudentClass.name,
-                StudentClass.id,
-            )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
-    )
-    if not classes:
-        return []
-
-    class_ids = [student_class.id for student_class in classes]
+def class_students(class_ids: list[int], session: Session) -> dict[int, list[Student]]:
+    """The students with an account in each class, in alphabetical order."""
     students_by_class: dict[int, list[Student]] = {
         class_id: [] for class_id in class_ids
     }
@@ -231,21 +173,30 @@ def list_classes(
         .order_by(Student.display_name, Student.identifier, Student.id)
     ):
         students_by_class[student.class_id].append(student)
+    return students_by_class
 
-    completed_counts = {
+
+def completed_exam_counts(class_ids: list[int], session: Session) -> dict[int, int]:
+    return {
         class_id: count
         for class_id, count in session.execute(
             select(QuizSession.class_id, func.count(QuizSession.id))
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSession.class_id.in_(class_ids),
-                QuizSession.status == "finished",
-                Quiz.mode == "exam",
+                QuizSession.status == SessionStatus.FINISHED,
+                Quiz.mode == QuizMode.EXAM,
             )
             .group_by(QuizSession.class_id)
         )
         if class_id is not None
     }
+
+
+def latest_exams(
+    class_ids: list[int], session: Session
+) -> dict[int, tuple[str, datetime]]:
+    """Title and date of each class's most recent finished exam."""
     latest_ranked = (
         select(
             QuizSession.class_id.label("class_id"),
@@ -267,12 +218,12 @@ def list_classes(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSession.class_id.in_(class_ids),
-            QuizSession.status == "finished",
-            Quiz.mode == "exam",
+            QuizSession.status == SessionStatus.FINISHED,
+            Quiz.mode == QuizMode.EXAM,
         )
         .subquery()
     )
-    latest_quizzes = {
+    return {
         class_id: (title, occurred_at)
         for class_id, title, occurred_at in session.execute(
             select(
@@ -283,6 +234,51 @@ def list_classes(
         )
         if class_id is not None
     }
+
+
+@router.get("", response_model=list[StudentClassResponse])
+def list_classes(
+    professor: ProfessorUser,
+    session: DbSession,
+    paging: Paging,
+    search: Annotated[str, Query(max_length=120)] = "",
+    grade_level: Annotated[str, Query(max_length=80)] = "",
+) -> list[StudentClassResponse]:
+    filters = [StudentClass.owner_id == professor.id]
+    if search:
+        filters.append(
+            StudentClass.name.ilike(
+                contains_pattern(search), escape=LIKE_ESCAPE_CHARACTER
+            )
+        )
+    if grade_level:
+        filters.append(StudentClass.grade_level == grade_level)
+    total = (
+        session.scalar(select(func.count()).select_from(StudentClass).where(*filters))
+        or 0
+    )
+    paging.set_total(total)
+    classes = list(
+        session.scalars(
+            select(StudentClass)
+            .where(*filters)
+            .order_by(
+                grade_level_order(StudentClass.grade_level),
+                StudentClass.grade_level,
+                StudentClass.name,
+                StudentClass.id,
+            )
+            .offset(paging.offset)
+            .limit(paging.page_size)
+        )
+    )
+    if not classes:
+        return []
+
+    class_ids = [student_class.id for student_class in classes]
+    students_by_class = class_students(class_ids, session)
+    completed_counts = completed_exam_counts(class_ids, session)
+    latest_quizzes = latest_exams(class_ids, session)
     return [
         class_response_from_details(
             student_class,
@@ -324,12 +320,10 @@ def delete_class(
 ) -> None:
     owned_class(class_id, professor, session)
     if class_has_active_exam_session(class_id, session):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.CLASS_USED_BY_WAITING_ROOM,
-                "Cette classe est utilisée par une salle d’attente active",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.CLASS_USED_BY_WAITING_ROOM,
+            "Cette classe est utilisée par une salle d’attente active",
         )
     if (
         session.scalar(
@@ -340,12 +334,10 @@ def delete_class(
         )
         is not None
     ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.CLASS_USED_BY_MAKEUP,
-                "Cette classe est utilisée par un rattrapage actif",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.CLASS_USED_BY_MAKEUP,
+            "Cette classe est utilisée par un rattrapage actif",
         )
     student_ids = list(
         session.scalars(select(Student.id).where(Student.class_id == class_id))
@@ -402,18 +394,16 @@ def assign_student_account(
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSession.class_id.in_([membership.class_id, class_id]),
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
                 QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
             .limit(1)
         )
         if active_class_id is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=api_error(
-                    ErrorCode.STUDENT_TRANSFER_DURING_SESSION,
-                    "Un élève ne peut pas être transféré pendant une session active",
-                ),
+            raise ApiError(
+                409,
+                ErrorCode.STUDENT_TRANSFER_DURING_SESSION,
+                "Un élève ne peut pas être transféré pendant une session active",
             )
         delete_unfinished_training_sessions([membership.id], session)
         membership.class_id = class_id
@@ -432,12 +422,10 @@ def assign_student_account(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.STUDENT_IDENTIFIER_TAKEN,
-                "Cet identifiant existe déjà dans la classe",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.STUDENT_IDENTIFIER_TAKEN,
+            "Cet identifiant existe déjà dans la classe",
         ) from None
     return class_response(student_class, session)
 
@@ -463,18 +451,12 @@ def unassign_student_account(
         )
     )
     if membership is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(
-                ErrorCode.CLASS_ASSIGNMENT_NOT_FOUND, "Affectation introuvable"
-            ),
+        raise ApiError(
+            404, ErrorCode.CLASS_ASSIGNMENT_NOT_FOUND, "Affectation introuvable"
         )
     if class_has_active_exam_session(class_id, session):
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.CLASS_HAS_ACTIVE_SESSION, "La classe a une session active"
-            ),
+        raise ApiError(
+            409, ErrorCode.CLASS_HAS_ACTIVE_SESSION, "La classe a une session active"
         )
     delete_student_membership(membership.id, session)
     session.commit()

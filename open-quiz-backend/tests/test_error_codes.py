@@ -3,7 +3,9 @@
 import ast
 from pathlib import Path
 
-from app.errors import ErrorCode, api_error
+from fastapi import HTTPException
+
+from app.errors import ApiError, ErrorCode, api_error
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -11,7 +13,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 BARE_ERRORS = {("app/routers/makeup.py", "control_makeup_session")}
 
 
-def http_exceptions() -> list[tuple[str, str, ast.Call]]:
+def error_calls(name: str) -> list[tuple[str, str, ast.Call]]:
     found = []
     for path in [*sorted((BACKEND / "app").rglob("*.py")), BACKEND / "main.py"]:
         relative = path.relative_to(BACKEND).as_posix()
@@ -25,27 +27,30 @@ def http_exceptions() -> list[tuple[str, str, ast.Call]]:
             (relative, function.name, node)
             for function in functions
             for node in ast.walk(function)
-            if isinstance(node, ast.Call)
-            and getattr(node.func, "id", None) == "HTTPException"
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == name
         )
     return found
 
 
-def test_every_http_exception_answers_with_a_code() -> None:
-    uncoded = []
-    for path, function, call in http_exceptions():
-        detail = next((k.value for k in call.keywords if k.arg == "detail"), None)
-        coded = (
-            isinstance(detail, ast.Call)
-            and getattr(detail.func, "id", None) == "api_error"
-        )
-        if not coded and (path, function) not in BARE_ERRORS:
-            uncoded.append(f"{path}:{call.lineno} in {function}")
+def test_every_error_is_raised_with_a_code() -> None:
+    """ApiError always carries a code; a bare HTTPException must be listed."""
+    uncoded = [
+        f"{path}:{call.lineno} in {function}"
+        for path, function, call in error_calls("HTTPException")
+        if (path, function) not in BARE_ERRORS
+    ]
     assert uncoded == []
 
 
 def test_the_scan_sees_the_routers() -> None:
-    assert len(http_exceptions()) > 100
+    assert len(error_calls("ApiError")) > 100
+
+
+def test_an_api_error_renders_its_code_and_message() -> None:
+    error = ApiError(404, ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable")
+    assert isinstance(error, HTTPException)
+    assert error.status_code == 404
+    assert error.detail == api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable")
 
 
 def test_an_error_pairs_its_code_with_a_message() -> None:

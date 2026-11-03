@@ -14,6 +14,7 @@ from random import SystemRandom
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.enums import Difficulty
 from app.models import Question, Quiz, QuizQuestionBank
 from app.schemas import QuizCreate
 
@@ -33,9 +34,9 @@ class InsufficientQuestionsError(Exception):
 
 def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
     return {
-        "easy": payload.easy_question_count,
-        "medium": payload.medium_question_count,
-        "hard": payload.hard_question_count,
+        Difficulty.EASY: payload.easy_question_count,
+        Difficulty.MEDIUM: payload.medium_question_count,
+        Difficulty.HARD: payload.hard_question_count,
     }
 
 

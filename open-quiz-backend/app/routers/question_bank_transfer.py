@@ -13,7 +13,6 @@ from pathlib import Path
 
 from fastapi import (
     APIRouter,
-    HTTPException,
     Request,
     Response,
     status,
@@ -23,7 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
-from app.errors import ErrorCode, api_error
+from app.enums import Difficulty
+from app.errors import ApiError, ErrorCode
 from app.grade_levels import ensure_grade_level, grade_level_import_context
 from app.models import (
     Question,
@@ -31,15 +31,13 @@ from app.models import (
     QuestionChoice,
     QuestionCode,
 )
-from app.question_responses import question_response
-from app.routers.question_banks import (
-    owned_question_bank,
-)
-from app.routers.questions import (
+from app.question_records import (
     MAX_IMPORT_IMAGE_BYTES,
     add_question,
     decode_image_payload,
+    owned_question_bank,
 )
+from app.question_responses import question_response
 from app.schemas import (
     QuestionBankResponse,
     QuestionBatchImport,
@@ -220,12 +218,10 @@ def import_question_bank(
             len(choice_image[0] or b"") for choice_image in choice_images
         )
         if total_image_bytes > MAX_IMPORT_IMAGE_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=api_error(
-                    ErrorCode.IMPORT_IMAGES_TOO_LARGE,
-                    "Le volume total des images importées est trop important",
-                ),
+            raise ApiError(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                ErrorCode.IMPORT_IMAGES_TOO_LARGE,
+                "Le volume total des images importées est trop important",
             )
         decoded_images.append(decoded_image)
         decoded_choice_images.append(choice_images)
@@ -240,12 +236,10 @@ def import_question_bank(
         session.flush()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NAME_TAKEN,
-                "Une banque existe déjà pour ce niveau et ce titre",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_NAME_TAKEN,
+            "Une banque existe déjà pour ce niveau et ce titre",
         ) from None
 
     created = [
@@ -275,13 +269,16 @@ def import_question_bank(
             update={
                 "question_count": len(questions),
                 "easy_question_count": sum(
-                    question.difficulty == "easy" for question in payload.questions
+                    question.difficulty == Difficulty.EASY
+                    for question in payload.questions
                 ),
                 "medium_question_count": sum(
-                    question.difficulty == "medium" for question in payload.questions
+                    question.difficulty == Difficulty.MEDIUM
+                    for question in payload.questions
                 ),
                 "hard_question_count": sum(
-                    question.difficulty == "hard" for question in payload.questions
+                    question.difficulty == Difficulty.HARD
+                    for question in payload.questions
                 ),
             }
         ),

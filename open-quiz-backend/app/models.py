@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -14,6 +15,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.enums import (
+    AnswerMode,
+    CorrectionMode,
+    Difficulty,
+    QuizMode,
+    SessionStatus,
+    allowed_values,
+)
 
 
 def utc_now() -> datetime:
@@ -159,6 +168,18 @@ class StoredImage(Base):
 
 class Question(Base):
     __tablename__ = "questions"
+    __table_args__ = (
+        CheckConstraint(
+            allowed_values("difficulty", Difficulty), name="ck_questions_difficulty"
+        ),
+        CheckConstraint(
+            allowed_values("answer_mode", AnswerMode), name="ck_questions_answer_mode"
+        ),
+        CheckConstraint(
+            allowed_values("correction_mode", CorrectionMode),
+            name="ck_questions_correction_mode",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     question_bank_id: Mapped[int] = mapped_column(
@@ -218,10 +239,13 @@ class QuestionChoice(Base):
 
 class Quiz(Base):
     __tablename__ = "quizzes"
+    __table_args__ = (
+        CheckConstraint(allowed_values("mode", QuizMode), name="ck_quizzes_mode"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    mode: Mapped[str] = mapped_column(String(20), default="exam", index=True)
+    mode: Mapped[str] = mapped_column(String(20), default=QuizMode.EXAM, index=True)
     title: Mapped[str] = mapped_column(String(160))
     source_language: Mapped[str] = mapped_column(String(35), default="fr")
     question_count: Mapped[int] = mapped_column(Integer)
@@ -261,6 +285,11 @@ class TrainingQuizProfile(Base):
 
 class QuizSession(Base):
     __tablename__ = "quiz_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            allowed_values("status", SessionStatus), name="ck_quiz_sessions_status"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), index=True)
@@ -278,7 +307,7 @@ class QuizSession(Base):
     )
     class_name: Mapped[str] = mapped_column(String(120))
     join_code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
-    status: Mapped[str] = mapped_column(String(20), default="waiting")
+    status: Mapped[str] = mapped_column(String(20), default=SessionStatus.WAITING)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
@@ -302,6 +331,11 @@ class QuizSession(Base):
 
 class MakeupSession(Base):
     __tablename__ = "makeup_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            allowed_values("status", SessionStatus), name="ck_makeup_sessions_status"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
@@ -310,7 +344,7 @@ class MakeupSession(Base):
     )
     class_name: Mapped[str] = mapped_column(String(120))
     join_code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
-    status: Mapped[str] = mapped_column(String(20), default="waiting")
+    status: Mapped[str] = mapped_column(String(20), default=SessionStatus.WAITING)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )

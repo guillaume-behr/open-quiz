@@ -17,6 +17,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.class_names import format_class_name
+from app.enums import QuizMode, SessionStatus
 from app.models import (
     Quiz,
     QuizAnswer,
@@ -53,28 +54,12 @@ def safe_spreadsheet_cell(value: str) -> str:
     return value
 
 
-def finished_session_responses(
-    rows: Sequence[tuple[QuizSession, Quiz]],
-    session: Session,
-) -> list[QuizSessionResponse]:
-    """Build finished-session responses with a fixed number of queries."""
-    if not rows:
-        return []
-    session_ids = [quiz_session.id for quiz_session, _ in rows]
+AnswerStatistics = dict[tuple[int, int], tuple[int, float, int]]
 
-    participants_by_session: dict[int, list[QuizParticipant]] = defaultdict(list)
-    participants = list(
-        session.scalars(
-            select(QuizParticipant)
-            .where(QuizParticipant.session_id.in_(session_ids))
-            .order_by(
-                QuizParticipant.session_id,
-                QuizParticipant.joined_at,
-                QuizParticipant.id,
-            )
-        )
-    )
-    answer_statistics = {
+
+def answer_statistics(session_ids: list[int], session: Session) -> AnswerStatistics:
+    """Answers given, score and answers awaiting grading, per participant."""
+    return {
         (session_id, participant_id): (
             answered_count,
             float(score),
@@ -93,10 +78,22 @@ def finished_session_responses(
         )
     }
 
+
+def counted_participants(
+    rows: Sequence[tuple[QuizSession, Quiz]],
+    participants: list[QuizParticipant],
+    statistics: AnswerStatistics,
+) -> dict[int, list[QuizParticipant]]:
+    """Each session's participants, without those who left before it started.
+
+    Someone who left the waiting room and never answered took no part in the
+    exam, so the result does not list them.
+    """
+    participants_by_session: dict[int, list[QuizParticipant]] = defaultdict(list)
     sessions_by_id = {quiz_session.id: quiz_session for quiz_session, _ in rows}
     for participant in participants:
         qs = sessions_by_id.get(participant.session_id)
-        answered_count = answer_statistics.get(
+        answered_count = statistics.get(
             (participant.session_id, participant.id), (0, 0, 0)
         )[0]
         if (
@@ -107,27 +104,15 @@ def finished_session_responses(
         ):
             continue
         participants_by_session[participant.session_id].append(participant)
+    return participants_by_session
 
-    (
-        common_by_session,
-        personalized_by_student,
-        personalized_by_identifier,
-    ) = load_session_question_assignments(session_ids, session)
-    personalized_counts: dict[int, int] = {}
-    all_assigned_question_ids = {
-        question_id
-        for question_ids in (
-            *common_by_session.values(),
-            *personalized_by_identifier.values(),
-        )
-        for question_id in question_ids
-    }
-    for (session_id, _), question_ids in personalized_by_identifier.items():
-        personalized_counts[session_id] = max(
-            personalized_counts.get(session_id, 0), len(question_ids)
-        )
 
-    maximums = question_maximum_scores(list(all_assigned_question_ids), session)
+def students_and_classes(
+    rows: Sequence[tuple[QuizSession, Quiz]],
+    participants: list[QuizParticipant],
+    session: Session,
+) -> tuple[dict[int, Student], dict[int, StudentClass]]:
+    """Current names of the students and classes, which may have changed."""
     student_ids = {
         participant.student_id
         for participant in participants
@@ -150,6 +135,94 @@ def finished_session_responses(
             select(StudentClass).where(StudentClass.id.in_(class_ids))
         )
     }
+    return students_by_id, classes_by_id
+
+
+def finished_participant_response(
+    participant: QuizParticipant,
+    session_id: int,
+    statistics: AnswerStatistics,
+    maximum_score: float,
+    students_by_id: dict[int, Student],
+) -> QuizParticipantResponse:
+    return QuizParticipantResponse(
+        id=participant.id,
+        student_identifier=participant.student_identifier,
+        student_display_name=(
+            students_by_id[participant.student_id].display_name
+            if participant.student_id in students_by_id
+            else participant.student_display_name
+        ),
+        answered_count=statistics.get((session_id, participant.id), (0, 0, 0))[0],
+        score=statistics.get((session_id, participant.id), (0, 0, 0))[1],
+        maximum_score=maximum_score,
+        pending_manual_grading_count=statistics.get(
+            (session_id, participant.id), (0, 0, 0)
+        )[2],
+        violation_count=(
+            0
+            if participant.last_violation_type == "paste_attempt"
+            else participant.violation_count
+        ),
+        last_violation_type=(
+            None
+            if participant.last_violation_type == "paste_attempt"
+            else participant.last_violation_type
+        ),
+        last_violation_at=(
+            None
+            if participant.last_violation_type == "paste_attempt"
+            else participant.last_violation_at
+        ),
+        joined_at=participant.joined_at,
+    )
+
+
+def finished_session_responses(
+    rows: Sequence[tuple[QuizSession, Quiz]],
+    session: Session,
+) -> list[QuizSessionResponse]:
+    """Build finished-session responses with a fixed number of queries."""
+    if not rows:
+        return []
+    session_ids = [quiz_session.id for quiz_session, _ in rows]
+
+    participants = list(
+        session.scalars(
+            select(QuizParticipant)
+            .where(QuizParticipant.session_id.in_(session_ids))
+            .order_by(
+                QuizParticipant.session_id,
+                QuizParticipant.joined_at,
+                QuizParticipant.id,
+            )
+        )
+    )
+    statistics = answer_statistics(session_ids, session)
+
+    participants_by_session = counted_participants(rows, participants, statistics)
+
+    (
+        common_by_session,
+        personalized_by_student,
+        personalized_by_identifier,
+    ) = load_session_question_assignments(session_ids, session)
+    personalized_counts: dict[int, int] = {}
+    all_assigned_question_ids = {
+        question_id
+        for question_ids in (
+            *common_by_session.values(),
+            *personalized_by_identifier.values(),
+        )
+        for question_id in question_ids
+    }
+    for (session_id, _), question_ids in personalized_by_identifier.items():
+        personalized_counts[session_id] = max(
+            personalized_counts.get(session_id, 0), len(question_ids)
+        )
+
+    maximums = question_maximum_scores(list(all_assigned_question_ids), session)
+    students_by_id, classes_by_id = students_and_classes(rows, participants, session)
 
     responses: list[QuizSessionResponse] = []
     for quiz_session, quiz in rows:
@@ -190,40 +263,12 @@ def finished_session_responses(
                     else 0
                 ),
                 participants=[
-                    QuizParticipantResponse(
-                        id=participant.id,
-                        student_identifier=participant.student_identifier,
-                        student_display_name=(
-                            students_by_id[participant.student_id].display_name
-                            if participant.student_id in students_by_id
-                            else participant.student_display_name
-                        ),
-                        answered_count=answer_statistics.get(
-                            (quiz_session.id, participant.id), (0, 0, 0)
-                        )[0],
-                        score=answer_statistics.get(
-                            (quiz_session.id, participant.id), (0, 0, 0)
-                        )[1],
-                        maximum_score=participant_maximums[participant.id],
-                        pending_manual_grading_count=answer_statistics.get(
-                            (quiz_session.id, participant.id), (0, 0, 0)
-                        )[2],
-                        violation_count=(
-                            0
-                            if participant.last_violation_type == "paste_attempt"
-                            else participant.violation_count
-                        ),
-                        last_violation_type=(
-                            None
-                            if participant.last_violation_type == "paste_attempt"
-                            else participant.last_violation_type
-                        ),
-                        last_violation_at=(
-                            None
-                            if participant.last_violation_type == "paste_attempt"
-                            else participant.last_violation_at
-                        ),
-                        joined_at=participant.joined_at,
+                    finished_participant_response(
+                        participant,
+                        quiz_session.id,
+                        statistics,
+                        participant_maximums[participant.id],
+                        students_by_id,
                     )
                     for participant in session_participants
                 ],
@@ -277,9 +322,9 @@ def stream_results_csv(
     with session_factory() as export_session:
         export_filters = [
             Quiz.owner_id == owner_id,
-            Quiz.mode == "exam",
+            Quiz.mode == QuizMode.EXAM,
             QuizSession.class_id == class_id,
-            QuizSession.status == "finished",
+            QuizSession.status == SessionStatus.FINISHED,
             retained_exam_result(retained_after),
         ]
         if quiz_id is not None:

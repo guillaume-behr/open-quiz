@@ -15,10 +15,15 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
-- None.
+- None. At startup the backend applies migration 0004, which adds CHECK
+  constraints on session statuses, quiz modes and question settings. A
+  database holding a value the application never writes makes it fail as a
+  whole: the schema stays as it was, and the backend log names the constraint.
 
 ### Changed
 
+- PostgreSQL now refuses session statuses, quiz modes, difficulties and answer
+  modes outside the values the application uses.
 - Listing or exporting results no longer deletes expired exam results: they
   are hidden at once and deleted by the hourly maintenance, which reports them
   in `security.data_retention_enforced`. The `quiz.results_retention_purged`

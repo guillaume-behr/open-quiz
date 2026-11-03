@@ -19,6 +19,7 @@ from fastapi import (
 from sqlalchemy import select
 
 from app.dependencies import authenticated_user_from_token
+from app.enums import SessionStatus
 from app.live_quiz import (
     active_quiz_sessions_topic,
     makeup_sessions_topic,
@@ -31,10 +32,10 @@ from app.models import (
     QuizSession,
     User,
 )
-from app.routers.makeup import list_makeup_sessions
-from app.routers.quizzes import (
+from app.participants import authenticated_participant
+from app.session_responses import (
     active_session_responses,
-    authenticated_participant,
+    makeup_session_responses,
     session_response,
     student_state_response,
 )
@@ -148,7 +149,10 @@ def live_teacher_session_snapshot(
             return None, False
         quiz_session, quiz = row
         state = session_response(quiz_session, quiz, session)
-    return state.model_dump(mode="json"), state.status in {"finished", "cancelled"}
+    return state.model_dump(mode="json"), state.status in {
+        SessionStatus.FINISHED,
+        SessionStatus.CANCELLED,
+    }
 
 
 def live_participant_is_authenticated(
@@ -177,7 +181,10 @@ def live_student_session_snapshot(
         except HTTPException:
             return None
         state = student_state_response(quiz_session, quiz, participant, session)
-    return state.model_dump(mode="json"), state.status in {"finished", "cancelled"}
+    return state.model_dump(mode="json"), state.status in {
+        SessionStatus.FINISHED,
+        SessionStatus.CANCELLED,
+    }
 
 
 def live_makeup_sessions_snapshot(
@@ -188,7 +195,7 @@ def live_makeup_sessions_snapshot(
         professor = session.get(User, professor_id)
         if professor is None or not professor.is_active:
             return None
-        sessions = list_makeup_sessions(professor, session)
+        sessions = makeup_session_responses(professor, session)
     return [item.model_dump(mode="json") for item in sessions]
 
 

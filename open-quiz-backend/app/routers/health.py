@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Request, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -14,9 +14,10 @@ def health(request: Request) -> dict[str, str]:
         with request.app.state.session_factory() as session:
             session.execute(text("SELECT 1"))
     except SQLAlchemyError as error:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=api_error(ErrorCode.DATABASE_UNAVAILABLE, "Database unavailable"),
+        raise ApiError(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            ErrorCode.DATABASE_UNAVAILABLE,
+            "Database unavailable",
         ) from error
     return {"status": "ok"}
 

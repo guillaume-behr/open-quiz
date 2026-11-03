@@ -1,18 +1,23 @@
 from datetime import UTC, datetime
 from hmac import compare_digest
 from time import time
-from urllib.parse import urlparse
 
 import jwt
 from cryptography.fernet import InvalidToken
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.audit import audit_event
+from app.auth_guards import (
+    enforce_global_auth_limit,
+    password_rate_subject,
+    two_factor_rate_subject,
+    validate_origin,
+)
 from app.database import affected_rows
 from app.dependencies import DbSession
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import (
     AuthenticationChallenge,
     RefreshSession,
@@ -56,37 +61,6 @@ REFRESH_PROOF_HEADER = "X-Refresh-Proof"
 # two-factor login. Only the login endpoint ever needs to read it.
 TWO_FACTOR_TRUST_COOKIE = "open_quiz_two_factor_trust"
 TWO_FACTOR_TRUST_COOKIE_PATH = "/api/auth/login"
-
-
-def validate_origin(request: Request) -> None:
-    origin = request.headers.get("origin")
-    settings = request.app.state.settings
-    expected = settings.frontend_origin.rstrip("/")
-    is_allowed = origin is not None and origin.rstrip("/") == expected
-    if origin is not None and settings.environment == "development":
-        parsed_origin = urlparse(origin)
-        is_local_development = (
-            parsed_origin.scheme in {"http", "https"}
-            and parsed_origin.hostname in {"localhost", "127.0.0.1", "::1"}
-            and parsed_origin.path in {"", "/"}
-            and not parsed_origin.username
-            and not parsed_origin.password
-            and not parsed_origin.query
-            and not parsed_origin.fragment
-        )
-        is_allowed = is_allowed or is_local_development
-
-    if not is_allowed:
-        audit_event(
-            "auth.origin_rejected",
-            origin=origin or "<missing>",
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_ORIGIN_REJECTED, "Origine de la requête refusée"
-            ),
-        )
 
 
 def set_refresh_cookie(
@@ -179,54 +153,6 @@ def browser_is_trusted(
     return user_id == user.id and compare_digest(
         version, current_two_factor_trust_version(user, two_factor, request)
     )
-
-
-def password_rate_subject(username: str) -> str:
-    return f"password:identity:{username}"
-
-
-def enforce_global_auth_limit(
-    request: Request,
-    *,
-    known_identity: bool = False,
-) -> None:
-    """Bound total authentication hashing work instance-wide regardless of source.
-
-    Unlike per-account buckets, this single budget cannot be evaded by
-    rotating usernames, so it caps the CPU cost an attacker can force.
-
-    Exhausting the budget must not take the instance offline. Without a floor,
-    anyone able to send a few thousand requests a minute denies every teacher
-    and student their login for the rest of the window, which during a lesson
-    costs more than the hashing the budget exists to bound. So a request that
-    names an account the instance already knows still proceeds: that account's
-    own bucket caps how much hashing it can be made to cost, leaving total work
-    bounded by the number of real accounts rather than by the request rate.
-
-    The floor is a deliberate trade. While the budget is exhausted, the
-    difference between 429 and 401 tells a caller that an identifier exists,
-    which the constant-time password path otherwise hides. Opening that oracle
-    costs a sustained flood that this function audits on every request, and the
-    identifiers it discloses are already derived from names the attacker would
-    have to know to ask the question.
-    """
-    retry_after = request.app.state.auth_global_rate_limiter.reserve("instance")
-    if not retry_after:
-        return
-    if known_identity:
-        audit_event("auth.global_budget_floor_used")
-        return
-    raise HTTPException(
-        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail=api_error(
-            ErrorCode.AUTH_RATE_LIMITED, "Trop de tentatives de connexion"
-        ),
-        headers={"Retry-After": str(retry_after)},
-    )
-
-
-def two_factor_rate_subject(user_id: int) -> str:
-    return f"two-factor:user:{user_id}"
 
 
 def validate_refresh_proof(request: Request, raw_token: str | None) -> bool:
@@ -373,15 +299,8 @@ def revoke_refresh_family(
     return True
 
 
-@router.post("/login", response_model=LoginResponse | LoginSessionResponse)
-def login(
-    payload: LoginRequest,
-    request: Request,
-    response: Response,
-    session: DbSession,
-) -> LoginResponse | LoginSessionResponse:
-    """Verify a password, then begin 2FA or, on a trusted browser, sign in."""
-    validate_origin(request)
+def password_user(payload: LoginRequest, request: Request, session: Session) -> User:
+    """The active account whose password this is, within the attempt limits."""
     user = session.scalar(select(User).where(User.username == payload.username))
     # Resolving the account before the budget check is what lets a real
     # teacher still sign in while an anonymous flood holds the budget open.
@@ -394,81 +313,103 @@ def login(
     retry_after = limiter.reserve(rate_subject)
     if retry_after:
         audit_event("auth.login_rate_limited")
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.AUTH_RATE_LIMITED, "Trop de tentatives de connexion"
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.AUTH_RATE_LIMITED,
+            "Trop de tentatives de connexion",
             headers={"Retry-After": str(retry_after)},
         )
     encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_valid = verify_password(payload.password, encoded_password)
     if user is None or not user.is_active or not password_valid:
         audit_event("auth.login_failed")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_INVALID_CREDENTIALS,
+            "Identifiants invalides",
         )
     limiter.clear_subject(rate_subject)
-    if payload.audience == "professor" and user.is_admin:
+    return user
+
+
+def require_audience(user: User, audience: str | None) -> None:
+    """Refuse a teacher account on the admin sign-in, and the reverse."""
+    if audience == "professor" and user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
             user_id=user.id,
-            audience=payload.audience,
+            audience=audience,
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
-                "Ce compte n’est pas un compte enseignant",
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
+            "Ce compte n’est pas un compte enseignant",
         )
-    if payload.audience == "admin" and not user.is_admin:
+    if audience == "admin" and not user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
             user_id=user.id,
-            audience=payload.audience,
+            audience=audience,
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_ADMIN_ACCOUNT_REQUIRED,
-                "Ce compte n’est pas un compte administrateur",
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_ADMIN_ACCOUNT_REQUIRED,
+            "Ce compte n’est pas un compte administrateur",
         )
+
+
+def begin_two_factor_setup(
+    user: User,
+    two_factor: TwoFactorCredential | None,
+    request: Request,
+    session: Session,
+) -> LoginResponse:
+    """Store a fresh authenticator secret and challenge its enrollment."""
     settings = request.app.state.settings
+    secret = generate_totp_secret()
+    encrypted_secret = encrypt_totp_secret(
+        secret,
+        settings.totp_encryption_key,
+    )
+    if two_factor is None:
+        two_factor = TwoFactorCredential(
+            user_id=user.id,
+            encrypted_secret=encrypted_secret,
+        )
+        session.add(two_factor)
+    else:
+        two_factor.encrypted_secret = encrypted_secret
+        two_factor.last_counter = None
+    challenge_token = issue_two_factor_challenge(
+        user.id,
+        "two_factor_setup",
+        request,
+        session,
+    )
+    session.commit()
+    audit_event("auth.two_factor_setup_started", user_id=user.id)
+    return LoginResponse(
+        status="setup_required",
+        challenge_token=challenge_token,
+        secret=secret,
+        provisioning_uri=provisioning_uri(secret, user.username),
+    )
+
+
+@router.post("/login", response_model=LoginResponse | LoginSessionResponse)
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    session: DbSession,
+) -> LoginResponse | LoginSessionResponse:
+    """Verify a password, then begin 2FA or, on a trusted browser, sign in."""
+    validate_origin(request)
+    user = password_user(payload, request, session)
+    require_audience(user, payload.audience)
     two_factor = session.get(TwoFactorCredential, user.id)
     if two_factor is None or not two_factor.confirmed:
-        secret = generate_totp_secret()
-        encrypted_secret = encrypt_totp_secret(
-            secret,
-            settings.totp_encryption_key,
-        )
-        if two_factor is None:
-            two_factor = TwoFactorCredential(
-                user_id=user.id,
-                encrypted_secret=encrypted_secret,
-            )
-            session.add(two_factor)
-        else:
-            two_factor.encrypted_secret = encrypted_secret
-            two_factor.last_counter = None
-        challenge_token = issue_two_factor_challenge(
-            user.id,
-            "two_factor_setup",
-            request,
-            session,
-        )
-        session.commit()
-        audit_event("auth.two_factor_setup_started", user_id=user.id)
-        return LoginResponse(
-            status="setup_required",
-            challenge_token=challenge_token,
-            secret=secret,
-            provisioning_uri=provisioning_uri(secret, user.username),
-        )
+        return begin_two_factor_setup(user, two_factor, request, session)
 
     if browser_is_trusted(request, user, two_factor):
         audit_event("auth.two_factor_trusted_browser", user_id=user.id)
@@ -489,25 +430,19 @@ def login(
     )
 
 
-@router.post("/2fa/verify", response_model=TokenResponse)
-def verify_two_factor(
-    payload: TwoFactorVerifyRequest,
-    request: Request,
-    response: Response,
-    session: DbSession,
-) -> TokenResponse:
-    """Complete 2FA setup or verify a login challenge."""
-    validate_origin(request)
+def challenged_user(
+    challenge_token: str, request: Request, session: Session, now: int
+) -> tuple[User, TwoFactorCredential, str]:
+    """The account a live two-factor challenge belongs to, and the challenge id."""
     settings = request.app.state.settings
     try:
         decoded = decode_two_factor_token(
-            payload.challenge_token,
+            challenge_token,
             settings.jwt_secret,
         )
     except jwt.PyJWTError, ValueError, KeyError:
         decoded = None
 
-    now = int(time())
     challenge = (
         session.get(AuthenticationChallenge, decoded[2])
         if decoded is not None
@@ -524,12 +459,10 @@ def verify_two_factor(
         ),
     )
     if decoded is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
-                "Vérification en deux étapes expirée ou invalide",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
+            "Vérification en deux étapes expirée ou invalide",
         )
     user_id, purpose, token_id_hash = decoded
 
@@ -551,24 +484,25 @@ def verify_two_factor(
         or challenge.used_at is not None
         or challenge.expires_at <= now
     ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
-                "Vérification en deux étapes expirée ou invalide",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
+            "Vérification en deux étapes expirée ou invalide",
         )
+    return user, two_factor, token_id_hash
 
+
+def reserve_two_factor_attempt(request: Request, user: User) -> str:
+    """Count one code attempt in both windows, and return its rate subject."""
     limiter = request.app.state.login_rate_limiter
     rate_subject = two_factor_rate_subject(user.id)
     retry_after = limiter.reserve(rate_subject)
     if retry_after:
         audit_event("auth.two_factor_rate_limited", user_id=user.id)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_RATE_LIMITED, "Trop de codes de vérification essayés"
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.AUTH_2FA_RATE_LIMITED,
+            "Trop de codes de vérification essayés",
             headers={"Retry-After": str(retry_after)},
         )
     # The short window alone still lets someone who holds the password try
@@ -579,14 +513,20 @@ def verify_two_factor(
     )
     if daily_retry_after:
         audit_event("auth.two_factor_daily_limit_reached", user_id=user.id)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_RATE_LIMITED, "Trop de codes de vérification essayés"
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.AUTH_2FA_RATE_LIMITED,
+            "Trop de codes de vérification essayés",
             headers={"Retry-After": str(daily_retry_after)},
         )
+    return rate_subject
 
+
+def matched_totp_counter(
+    two_factor: TwoFactorCredential, user: User, code: str, request: Request
+) -> int:
+    """The time step the submitted code matches, never one already used."""
+    settings = request.app.state.settings
     try:
         secret = decrypt_totp_secret(
             two_factor.encrypted_secret,
@@ -594,27 +534,31 @@ def verify_two_factor(
         )
     except InvalidToken:
         audit_event("auth.two_factor_secret_invalid", user_id=user.id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_UNAVAILABLE, "Double authentification indisponible"
-            ),
+        raise ApiError(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            ErrorCode.AUTH_2FA_UNAVAILABLE,
+            "Double authentification indisponible",
         ) from None
 
     matched_counter = verify_totp_code(
         secret,
-        payload.code,
+        code,
         two_factor.last_counter,
     )
     if matched_counter is None:
         audit_event("auth.two_factor_failed", user_id=user.id)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CODE_INVALID, "Code de vérification invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CODE_INVALID,
+            "Code de vérification invalide",
         )
+    return matched_counter
 
+
+def consume_code_and_challenge(
+    user: User, matched_counter: int, token_id_hash: str, now: int, session: Session
+) -> None:
+    """Record the code and the challenge as used, so neither works twice."""
     counter_result = session.execute(
         update(TwoFactorCredential)
         .where(
@@ -629,11 +573,10 @@ def verify_two_factor(
     )
     if affected_rows(counter_result) != 1:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CODE_USED, "Code de vérification déjà utilisé"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CODE_USED,
+            "Code de vérification déjà utilisé",
         )
     challenge_result = session.execute(
         update(AuthenticationChallenge)
@@ -646,57 +589,69 @@ def verify_two_factor(
     )
     if affected_rows(challenge_result) != 1:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
-                "Vérification en deux étapes expirée ou invalide",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
+            "Vérification en deux étapes expirée ou invalide",
         )
-    limiter.clear_subject(rate_subject)
+
+
+@router.post("/2fa/verify", response_model=TokenResponse)
+def verify_two_factor(
+    payload: TwoFactorVerifyRequest,
+    request: Request,
+    response: Response,
+    session: DbSession,
+) -> TokenResponse:
+    """Complete 2FA setup or verify a login challenge."""
+    validate_origin(request)
+    now = int(time())
+    user, two_factor, token_id_hash = challenged_user(
+        payload.challenge_token, request, session, now
+    )
+    rate_subject = reserve_two_factor_attempt(request, user)
+    matched_counter = matched_totp_counter(two_factor, user, payload.code, request)
+    consume_code_and_challenge(user, matched_counter, token_id_hash, now, session)
+    request.app.state.login_rate_limiter.clear_subject(rate_subject)
     audit_event("auth.two_factor_succeeded", user_id=user.id)
     tokens = issue_session(user, request, response, session)
     set_two_factor_trust_cookie(response, request, user, two_factor, payload.timezone)
     return tokens
 
 
-@router.post("/refresh", response_model=TokenResponse)
-def refresh(
-    request: Request,
-    response: Response,
-    session: DbSession,
-) -> TokenResponse:
-    """Rotate a valid refresh session and return a new access token."""
-    validate_origin(request)
+def presented_refresh_session(
+    request: Request, session: Session, now: int
+) -> RefreshSession:
+    """The live refresh session the cookie names, proved by this window.
+
+    Presenting one that was already rotated means the cookie leaked: its
+    whole family is revoked.
+    """
     raw_token = request.cookies.get(REFRESH_COOKIE)
     if raw_token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
     if not validate_refresh_proof(request, raw_token):
         audit_event("auth.refresh_proof_rejected")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_PROOF_INVALID, "Preuve de session invalide"
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_REFRESH_PROOF_INVALID,
+            "Preuve de session invalide",
         )
     stored_session = session.scalar(
         select(RefreshSession).where(
             RefreshSession.token_hash == hash_refresh_token(raw_token)
         )
     )
-    now = int(time())
     if stored_session is None or stored_session.expires_at <= now:
         audit_event("auth.refresh_rejected")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
     if stored_session.revoked_at is not None:
         family_revoked = revoke_refresh_family(session, stored_session.id, now)
@@ -705,13 +660,18 @@ def refresh(
             user_id=stored_session.user_id,
             family_revoked=family_revoked,
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
+    return stored_session
 
+
+def retire_refresh_session(
+    stored_session: RefreshSession, session: Session, now: int
+) -> RefreshSessionFamily:
+    """Revoke the session being rotated, and return the family it belongs to."""
     family = session.get(RefreshSessionFamily, stored_session.id)
     if family is None:
         family = RefreshSessionFamily(
@@ -736,13 +696,18 @@ def refresh(
             user_id=stored_session.user_id,
             family_revoked=family_revoked,
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
+    return family
 
+
+def refreshable_user(
+    stored_session: RefreshSession, session: Session, now: int
+) -> User:
+    """The account, unless it was disabled or lost its authenticator meanwhile."""
     user = session.get(User, stored_session.user_id)
     two_factor = session.get(TwoFactorCredential, stored_session.user_id)
     if (
@@ -760,12 +725,28 @@ def refresh(
             .values(revoked_at=now)
         )
         session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
+    return user
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(
+    request: Request,
+    response: Response,
+    session: DbSession,
+) -> TokenResponse:
+    """Rotate a valid refresh session and return a new access token."""
+    validate_origin(request)
+    now = int(time())
+    stored_session = presented_refresh_session(request, session, now)
+
+    family = retire_refresh_session(stored_session, session, now)
+
+    user = refreshable_user(stored_session, session, now)
 
     audit_event("auth.refresh_succeeded", user_id=user.id)
     return issue_session(
@@ -796,11 +777,10 @@ def logout(
     if raw_token:
         if not validate_refresh_proof(request, raw_token):
             audit_event("auth.logout_proof_rejected")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=api_error(
-                    ErrorCode.AUTH_REFRESH_PROOF_INVALID, "Preuve de session invalide"
-                ),
+            raise ApiError(
+                status.HTTP_403_FORBIDDEN,
+                ErrorCode.AUTH_REFRESH_PROOF_INVALID,
+                "Preuve de session invalide",
             )
         session.execute(
             update(RefreshSession)

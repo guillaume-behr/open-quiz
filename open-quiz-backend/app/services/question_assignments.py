@@ -12,6 +12,7 @@ from collections import defaultdict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.enums import SessionStatus
 from app.models import (
     QuizParticipant,
     QuizSession,
@@ -130,7 +131,7 @@ def current_question_id(
     session: Session,
 ) -> int | None:
     if (
-        quiz_session.status not in ("in_progress", "paused")
+        quiz_session.status not in (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED)
         or participant.current_position is None
     ):
         return None
@@ -154,7 +155,7 @@ def last_answered_question_id(
     instead of rejecting it outright.
     """
     if (
-        quiz_session.status not in ("in_progress", "finished")
+        quiz_session.status not in (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED)
         or participant.current_position is not None
     ):
         return None

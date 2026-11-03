@@ -6,25 +6,26 @@ list the results of their own finished exams, provisional until published.
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, cast
 
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
-    Response,
     status,
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.audit import audit_event
 from app.class_names import format_class_name
-from app.dependencies import DbSession, ProfessorUser
-from app.errors import ErrorCode, api_error
+from app.dependencies import DbSession, ProfessorUser, current_student
+from app.enums import AnswerMode, QuizMode, SessionStatus
+from app.errors import ApiError, ErrorCode
 from app.models import (
     Question,
     QuestionChoice,
@@ -38,19 +39,12 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
+    Paging,
     contains_pattern,
-    set_pagination_headers,
 )
 from app.question_responses import load_question_records
-from app.routers.quizzes import (
-    owned_quiz_session,
-    session_response,
-)
-from app.routers.student_auth import current_student
+from app.quiz_lookup import owned_quiz, owned_quiz_session
 from app.schemas import (
     QuizAnswerGrade,
     QuizAnswerReview,
@@ -70,7 +64,9 @@ from app.services.question_assignments import (
     session_question_ids,
 )
 from app.services.results import finished_session_responses, stream_results_csv
+from app.session_responses import session_response
 from app.session_retention import retained_exam_result
+from app.student_accounts import owned_class
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
@@ -86,16 +82,14 @@ def list_quiz_results(
     request: Request,
     professor: ProfessorUser,
     session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    paging: Paging,
     quiz_search: Annotated[str, Query(max_length=160)] = "",
     class_search: Annotated[str, Query(max_length=120)] = "",
 ) -> list[QuizSessionResponse]:
     filters = [
         Quiz.owner_id == professor.id,
-        Quiz.mode == "exam",
-        QuizSession.status == "finished",
+        Quiz.mode == QuizMode.EXAM,
+        QuizSession.status == SessionStatus.FINISHED,
         retained_exam_result(exam_result_cutoff(request)),
     ]
     if quiz_search:
@@ -119,7 +113,7 @@ def list_quiz_results(
         )
         or 0
     )
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     rows = list(
         session.execute(
             select(QuizSession, Quiz)
@@ -130,8 +124,8 @@ def list_quiz_results(
                 QuizSession.created_at.desc(),
                 QuizSession.id.desc(),
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(paging.offset)
+            .limit(paging.page_size)
         )
     )
     return finished_session_responses(rows, session)
@@ -145,27 +139,10 @@ def export_quiz_results(
     class_id: Annotated[int, Query(ge=1)],
     quiz_id: Annotated[int | None, Query(ge=1)] = None,
 ) -> StreamingResponse:
-    student_class = session.scalar(
-        select(StudentClass).where(
-            StudentClass.id == class_id,
-            StudentClass.owner_id == professor.id,
-        )
-    )
-    if student_class is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-        )
+    student_class = owned_class(class_id, professor, session)
 
     if quiz_id is not None:
-        quiz = session.scalar(
-            select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
-        )
-        if quiz is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
-            )
+        owned_quiz(quiz_id, professor, session)
     safe_class_id = student_class.id
     safe_quiz = f"-quiz-{quiz_id}" if quiz_id is not None else "-tous-les-quiz"
     filename = f"resultats-classe-{safe_class_id}{safe_quiz}.csv"
@@ -192,7 +169,7 @@ def answer_review(
 ) -> QuizAnswerReview:
     submitted = decoded_answer_data(answer)
     choices_by_id = {choice.id: choice for choice in choices}
-    if question.answer_mode == "written":
+    if question.answer_mode == AnswerMode.WRITTEN:
         submitted_answers = [str(submitted.get("written_answer", ""))]
         is_correct = (
             answer.score >= max_score if answer.is_graded and max_score > 0 else None
@@ -245,13 +222,11 @@ def list_participant_answers(
     session: DbSession,
 ) -> list[QuizAnswerReview]:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status != "finished":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
-                "Les réponses sont disponibles une fois le quiz terminé",
-            ),
+    if quiz_session.status != SessionStatus.FINISHED:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+            "Les réponses sont disponibles une fois le quiz terminé",
         )
     participant = session.scalar(
         select(QuizParticipant).where(
@@ -260,11 +235,10 @@ def list_participant_answers(
         )
     )
     if participant is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.PARTICIPANT_NOT_FOUND, "Participant introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.PARTICIPANT_NOT_FOUND,
+            "Participant introuvable",
         )
     rows = list(
         session.execute(
@@ -284,11 +258,10 @@ def list_participant_answers(
         )
         and len(rows) == 0
     ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.PARTICIPANT_NOT_FOUND, "Participant introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.PARTICIPANT_NOT_FOUND,
+            "Participant introuvable",
         )
     question_order = {
         question_id: position
@@ -325,21 +298,31 @@ def list_participant_answers(
     ]
 
 
-@router.get(
-    "/student/results",
-    response_model=list[StudentQuizHistoryItem],
-)
-def list_student_quiz_history(
-    student: Annotated[StudentAccount, Depends(current_student)],
-    session: DbSession,
-) -> list[StudentQuizHistoryItem]:
+@dataclass(frozen=True)
+class HistoryRecords:
+    """Everything a student's exam history reads, loaded once for all exams."""
+
+    question_ids_by_participant: dict[int, list[int]]
+    questions_by_id: dict[int, Question]
+    choices_by_question: dict[int, list[QuestionChoice]]
+    answers_by_participant_question: dict[tuple[int, int], QuizAnswer]
+    question_points: dict[int, float]
+    classes_by_id: dict[int, StudentClass]
+    codes_by_question: dict[int, QuestionCode]
+
+
+def student_exam_participations(
+    account_id: int, session: Session
+) -> list[tuple[QuizSession, QuizParticipant]]:
+    """A student account's finished exams, most recent first."""
     membership_ids = list(
-        session.scalars(select(Student.id).where(Student.account_id == student.id))
+        session.scalars(select(Student.id).where(Student.account_id == account_id))
     )
     if not membership_ids:
         return []
-    rows = list(
-        session.execute(
+    return [
+        (quiz_session, participant)
+        for quiz_session, participant in session.execute(
             select(QuizSession, QuizParticipant)
             .join(
                 QuizParticipant,
@@ -348,13 +331,18 @@ def list_student_quiz_history(
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizParticipant.student_id.in_(membership_ids),
-                QuizSession.status == "finished",
+                QuizSession.status == SessionStatus.FINISHED,
                 QuizSession.started_at.is_not(None),
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
             )
             .order_by(QuizSession.started_at.desc(), QuizSession.id.desc())
         )
-    )
+    ]
+
+
+def history_records(
+    rows: list[tuple[QuizSession, QuizParticipant]], session: Session
+) -> HistoryRecords:
     session_ids = [quiz_session.id for quiz_session, _ in rows]
     participant_ids = [participant.id for _, participant in rows]
     (
@@ -378,131 +366,164 @@ def list_student_quiz_history(
     questions_by_id, choices_by_question = load_question_records(
         all_question_ids, session
     )
-    answers_by_participant_question = {
-        (answer.participant_id, answer.question_id): answer
-        for answer in session.scalars(
-            select(QuizAnswer).where(QuizAnswer.participant_id.in_(participant_ids))
-        )
-    }
-    question_points = question_maximum_scores(list(all_question_ids), session)
     class_ids = {
         quiz_session.class_id
         for quiz_session, _ in rows
         if quiz_session.class_id is not None
     }
-    classes_by_id = {
-        student_class.id: student_class
-        for student_class in session.scalars(
-            select(StudentClass).where(StudentClass.id.in_(class_ids))
-        )
-    }
-
-    codes_by_question = {
-        code.question_id: code
-        for code in session.scalars(
-            select(QuestionCode).where(QuestionCode.question_id.in_(all_question_ids))
-        )
-    }
-
-    history: list[StudentQuizHistoryItem] = []
-    for quiz_session, participant in rows:
-        question_ids = question_ids_by_participant[participant.id]
-        answers_by_question = {
-            question_id: answers_by_participant_question.get(
-                (participant.id, question_id)
+    return HistoryRecords(
+        question_ids_by_participant=question_ids_by_participant,
+        questions_by_id=questions_by_id,
+        choices_by_question=choices_by_question,
+        answers_by_participant_question={
+            (answer.participant_id, answer.question_id): answer
+            for answer in session.scalars(
+                select(QuizAnswer).where(QuizAnswer.participant_id.in_(participant_ids))
             )
-            for question_id in question_ids
-        }
-        answers = []
-        for position, question_id in enumerate(question_ids):
-            question = questions_by_id.get(question_id)
-            if question is None:
-                continue
-            question_choices = choices_by_question[question.id]
-            q_code = codes_by_question.get(question.id)
-            answer = answers_by_question.get(question.id)
-            review = None
-            if answer is not None:
-                review = answer_review(
-                    answer,
-                    question,
-                    position,
-                    question_choices,
-                    question_points.get(question.id, 0),
-                    q_code,
-                )
-                submitted_answers = review.submitted_answers
-                score = review.score
-                max_score = review.max_score
-                if question.answer_mode == "written":
-                    is_correct = (
-                        (answer.score >= review.max_score)
-                        if answer.is_graded and review.max_score > 0
-                        else None
-                    )
-                else:
-                    correct_ids = {
-                        choice.id for choice in question_choices if choice.is_correct
-                    }
-                    is_correct = selected_choice_ids(answer) == correct_ids
-            else:
-                submitted_answers = []
-                score = 0.0
-                max_score = float(question_points.get(question.id, 0))
-                is_correct = False
-            answers.append(
-                StudentQuizHistoryAnswer(
-                    question_id=question.id,
-                    position=position + 1,
-                    prompt=question.prompt,
-                    difficulty=question.difficulty,
-                    answer_mode=question.answer_mode,
-                    code_content=q_code.content if q_code else None,
-                    code_language=q_code.language if q_code else None,
-                    response_language=question.response_language,
-                    submitted_answers=submitted_answers,
-                    expected_answers=[
-                        choice.label for choice in question_choices if choice.is_correct
-                    ],
-                    score=score,
-                    max_score=max_score,
-                    is_correct=is_correct,
-                    feedback=review.feedback if review else None,
+        },
+        question_points=question_maximum_scores(list(all_question_ids), session),
+        classes_by_id={
+            student_class.id: student_class
+            for student_class in session.scalars(
+                select(StudentClass).where(StudentClass.id.in_(class_ids))
+            )
+        },
+        codes_by_question={
+            code.question_id: code
+            for code in session.scalars(
+                select(QuestionCode).where(
+                    QuestionCode.question_id.in_(all_question_ids)
                 )
             )
-        history.append(
-            StudentQuizHistoryItem(
-                session_id=quiz_session.id,
-                quiz_title=quiz_session.quiz_title or "Quiz",
-                class_name=(
-                    format_class_name(
-                        classes_by_id[quiz_session.class_id].grade_level,
-                        classes_by_id[quiz_session.class_id].name,
-                    )
-                    if quiz_session.class_id in classes_by_id
-                    else quiz_session.class_name
-                ),
-                started_at=quiz_session.started_at,
-                grades_published=quiz_session.grades_published_at is not None,
-                score=round(
-                    sum(
-                        answer.score
-                        for answer in answers_by_question.values()
-                        if answer is not None
-                    ),
-                    2,
-                ),
-                maximum_score=round(
-                    sum(
-                        question_points.get(question_id, 0)
-                        for question_id in question_ids
-                    ),
-                    2,
-                ),
-                answers=answers,
-            )
+        },
+    )
+
+
+def history_answer(
+    question: Question,
+    position: int,
+    answer: QuizAnswer | None,
+    records: HistoryRecords,
+) -> StudentQuizHistoryAnswer:
+    """How a student answered one question of a finished exam."""
+    question_choices = records.choices_by_question[question.id]
+    q_code = records.codes_by_question.get(question.id)
+    review = None
+    if answer is not None:
+        review = answer_review(
+            answer,
+            question,
+            position,
+            question_choices,
+            records.question_points.get(question.id, 0),
+            q_code,
         )
-    return history
+        submitted_answers = review.submitted_answers
+        score = review.score
+        max_score = review.max_score
+        if question.answer_mode == AnswerMode.WRITTEN:
+            is_correct = (
+                (answer.score >= review.max_score)
+                if answer.is_graded and review.max_score > 0
+                else None
+            )
+        else:
+            correct_ids = {
+                choice.id for choice in question_choices if choice.is_correct
+            }
+            is_correct = selected_choice_ids(answer) == correct_ids
+    else:
+        submitted_answers = []
+        score = 0.0
+        max_score = float(records.question_points.get(question.id, 0))
+        is_correct = False
+    return StudentQuizHistoryAnswer(
+        question_id=question.id,
+        position=position + 1,
+        prompt=question.prompt,
+        difficulty=question.difficulty,
+        answer_mode=question.answer_mode,
+        code_content=q_code.content if q_code else None,
+        code_language=q_code.language if q_code else None,
+        response_language=question.response_language,
+        submitted_answers=submitted_answers,
+        expected_answers=[
+            choice.label for choice in question_choices if choice.is_correct
+        ],
+        score=score,
+        max_score=max_score,
+        is_correct=is_correct,
+        feedback=review.feedback if review else None,
+    )
+
+
+def history_item(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    records: HistoryRecords,
+) -> StudentQuizHistoryItem:
+    question_ids = records.question_ids_by_participant[participant.id]
+    answers_by_question = {
+        question_id: records.answers_by_participant_question.get(
+            (participant.id, question_id)
+        )
+        for question_id in question_ids
+    }
+    answers = [
+        history_answer(
+            question, position, answers_by_question.get(question.id), records
+        )
+        for position, question_id in enumerate(question_ids)
+        if (question := records.questions_by_id.get(question_id)) is not None
+    ]
+    return StudentQuizHistoryItem(
+        session_id=quiz_session.id,
+        quiz_title=quiz_session.quiz_title or "Quiz",
+        class_name=(
+            format_class_name(
+                records.classes_by_id[quiz_session.class_id].grade_level,
+                records.classes_by_id[quiz_session.class_id].name,
+            )
+            if quiz_session.class_id in records.classes_by_id
+            else quiz_session.class_name
+        ),
+        started_at=quiz_session.started_at,
+        grades_published=quiz_session.grades_published_at is not None,
+        score=round(
+            sum(
+                answer.score
+                for answer in answers_by_question.values()
+                if answer is not None
+            ),
+            2,
+        ),
+        maximum_score=round(
+            sum(
+                records.question_points.get(question_id, 0)
+                for question_id in question_ids
+            ),
+            2,
+        ),
+        answers=answers,
+    )
+
+
+@router.get(
+    "/student/results",
+    response_model=list[StudentQuizHistoryItem],
+)
+def list_student_quiz_history(
+    student: Annotated[StudentAccount, Depends(current_student)],
+    session: DbSession,
+) -> list[StudentQuizHistoryItem]:
+    rows = student_exam_participations(student.id, session)
+    if not rows:
+        return []
+    records = history_records(rows, session)
+    return [
+        history_item(quiz_session, participant, records)
+        for quiz_session, participant in rows
+    ]
 
 
 @router.post(
@@ -515,13 +536,11 @@ def publish_quiz_grades(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status != "finished":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
-                "Les notes ne peuvent être publiées qu'une fois le quiz terminé",
-            ),
+    if quiz_session.status != SessionStatus.FINISHED:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+            "Les notes ne peuvent être publiées qu'une fois le quiz terminé",
         )
     pending_count = session.scalar(
         select(func.count(QuizAnswer.id)).where(
@@ -530,12 +549,10 @@ def publish_quiz_grades(
         )
     )
     if pending_count:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.GRADES_PENDING,
-                "Toutes les réponses doivent être corrigées avant publication",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.GRADES_PENDING,
+            "Toutes les réponses doivent être corrigées avant publication",
         )
     if quiz_session.grades_published_at is None:
         quiz_session.grades_published_at = datetime.now(UTC)
@@ -561,21 +578,17 @@ def grade_written_answer(
     session: DbSession,
 ) -> QuizAnswerReview:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status != "finished":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
-                "La correction est disponible une fois le quiz terminé",
-            ),
+    if quiz_session.status != SessionStatus.FINISHED:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+            "La correction est disponible une fois le quiz terminé",
         )
     if quiz_session.grades_published_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.GRADES_PUBLISHED,
-                "Les notes publiées ne peuvent plus être modifiées",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.GRADES_PUBLISHED,
+            "Les notes publiées ne peuvent plus être modifiées",
         )
     row = session.execute(
         select(QuizAnswer, Question)
@@ -586,9 +599,8 @@ def grade_written_answer(
         )
     ).one_or_none()
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.ANSWER_NOT_FOUND, "Réponse introuvable"),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.ANSWER_NOT_FOUND, "Réponse introuvable"
         )
     answer, question = row
     participant = session.get(QuizParticipant, answer.participant_id)
@@ -598,21 +610,17 @@ def grade_written_answer(
         else []
     )
     if question.id not in question_ids:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.ANSWER_QUESTION_NOT_IN_SESSION,
-                "La question ne fait pas partie de cette session",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.ANSWER_QUESTION_NOT_IN_SESSION,
+            "La question ne fait pas partie de cette session",
         )
     position = question_ids.index(question.id)
-    if question.answer_mode != "written":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.ANSWER_NOT_WRITTEN,
-                "Seules les réponses rédactionnelles sont corrigées manuellement",
-            ),
+    if question.answer_mode != AnswerMode.WRITTEN:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.ANSWER_NOT_WRITTEN,
+            "Seules les réponses rédactionnelles sont corrigées manuellement",
         )
     choices = list(
         session.scalars(
@@ -626,12 +634,10 @@ def grade_written_answer(
         quiz_session, session, cast(QuizParticipant, participant)
     ).get(question.id, 0)
     if payload.score > max_score:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.GRADE_ABOVE_MAXIMUM,
-                f"La note ne peut pas dépasser {max_score:g}",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.GRADE_ABOVE_MAXIMUM,
+            f"La note ne peut pas dépasser {max_score:g}",
         )
     answer.score = payload.score
     answer.is_graded = True

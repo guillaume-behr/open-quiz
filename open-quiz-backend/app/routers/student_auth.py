@@ -1,16 +1,20 @@
-from hmac import compare_digest
 from typing import Annotated
 
-import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy import select
 
 from app.audit import audit_event
-from app.dependencies import DbSession
-from app.errors import ErrorCode, api_error
+from app.auth_guards import (
+    enforce_global_auth_limit,
+    student_password_rate_subject,
+    validate_origin,
+)
+from app.dependencies import (
+    DbSession,
+    current_student,
+)
+from app.errors import ApiError, ErrorCode
 from app.models import StudentAccount
-from app.routers.auth import enforce_global_auth_limit, validate_origin
 from app.schemas import (
     StudentAccountResponse,
     StudentLoginRequest,
@@ -20,64 +24,11 @@ from app.security import (
     DUMMY_PASSWORD_HASH,
     access_token_version,
     create_student_access_token,
-    decode_student_access_token,
     verify_password,
 )
 from app.student_accounts import student_account_response
 
 router = APIRouter(prefix="/api/student-auth", tags=["student authentication"])
-student_bearer = HTTPBearer(auto_error=False)
-
-
-def student_password_rate_subject(identifier: str) -> str:
-    return f"student-password:identity:{identifier}"
-
-
-def student_from_token(
-    token: str, request: Request, session: DbSession
-) -> StudentAccount | None:
-    try:
-        student_id, version = decode_student_access_token(
-            token, request.app.state.settings.jwt_secret
-        )
-    except jwt.PyJWTError, ValueError, KeyError:
-        return None
-    account = session.get(StudentAccount, student_id)
-    if (
-        account is None
-        or not account.is_active
-        or not compare_digest(
-            version,
-            access_token_version(
-                account.password_hash,
-                request.app.state.settings.jwt_secret,
-                account.access_token_generation,
-            ),
-        )
-    ):
-        return None
-    return account
-
-
-def current_student(
-    request: Request,
-    session: DbSession,
-    credentials: HTTPAuthorizationCredentials | None = Depends(student_bearer),
-) -> StudentAccount:
-    account = (
-        student_from_token(credentials.credentials, request, session)
-        if credentials is not None
-        else None
-    )
-    if account is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.STUDENT_SESSION_INVALID, "Session élève invalide ou expirée"
-            ),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return account
 
 
 @router.post("/login", response_model=StudentLoginResponse)
@@ -100,11 +51,10 @@ def login_student(
     limiter = request.app.state.login_rate_limiter
     retry_after = limiter.reserve(subject)
     if retry_after:
-        raise HTTPException(
-            status_code=429,
-            detail=api_error(
-                ErrorCode.AUTH_RATE_LIMITED, "Trop de tentatives de connexion"
-            ),
+        raise ApiError(
+            429,
+            ErrorCode.AUTH_RATE_LIMITED,
+            "Trop de tentatives de connexion",
             headers={"Retry-After": str(retry_after)},
         )
     encoded = account.password_hash if account else DUMMY_PASSWORD_HASH
@@ -113,11 +63,8 @@ def login_student(
     password_valid = verify_password(payload.password, encoded)
     if account is None or not account.is_active or not password_valid:
         audit_event("student_auth.login_failed")
-        raise HTTPException(
-            status_code=401,
-            detail=api_error(
-                ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
-            ),
+        raise ApiError(
+            401, ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
         )
     limiter.clear_subject(subject)
     token = create_student_access_token(

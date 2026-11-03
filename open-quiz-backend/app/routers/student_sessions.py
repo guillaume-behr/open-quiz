@@ -15,7 +15,6 @@ from fastapi import (
     APIRouter,
     Depends,
     Header,
-    HTTPException,
     Request,
     Response,
     status,
@@ -23,10 +22,13 @@ from fastapi import (
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.database import affected_rows
-from app.dependencies import DbSession
-from app.errors import ErrorCode, api_error
+from app.dependencies import DbSession, current_student
+from app.enums import AnswerMode, QuizMode, SessionStatus
+from app.errors import ApiError, ErrorCode
+from app.live_updates import publish_quiz_update
 from app.models import (
     Question,
     QuestionChoice,
@@ -38,17 +40,14 @@ from app.models import (
     Student,
     StudentAccount,
 )
-from app.question_responses import load_question_records
-from app.routers.quizzes import (
+from app.participants import (
     VIOLATION_DEDUPLICATION_SECONDS,
     authenticated_participant,
     enforce_public_rate_limit,
     participant_token_hash,
-    publish_quiz_update,
     reject_quiz_join,
-    student_state_response,
 )
-from app.routers.student_auth import current_student
+from app.question_responses import load_question_records
 from app.schemas import (
     QuizJoin,
     StudentQuizAnswer,
@@ -74,26 +73,27 @@ from app.services.session_lifecycle import (
     finish_when_nobody_can_answer,
     quiz_session_is_due,
 )
+from app.session_responses import student_state_response
 from app.session_status import ACTIVE_SESSION_STATUSES
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
 
-@router.post(
-    "/join",
-    response_model=StudentQuizJoinResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def join_quiz(
+def joinable_session(
     payload: QuizJoin,
+    account: StudentAccount,
     request: Request,
-    session: DbSession,
-    account: StudentAccount = Depends(current_student),
-) -> StudentQuizJoinResponse:
+    session: Session,
+) -> tuple[QuizSession, Quiz, Student, str]:
+    """The exam a student joins, their place in its class, and its rate subject.
+
+    Every refusal looks the same and counts against the join limit, so the
+    answers never tell an unknown code from a session of another class.
+    """
     row = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(QuizSession.join_code == payload.join_code, Quiz.mode == "exam")
+        .where(QuizSession.join_code == payload.join_code, Quiz.mode == QuizMode.EXAM)
     ).first()
     if row is None:
         reject_quiz_join(request, f"join:unknown:{account.id}")
@@ -128,86 +128,103 @@ def join_quiz(
             )
             .values(student_identifier=student.identifier)
         )
-    existing = session.scalar(
-        select(QuizParticipant).where(
-            QuizParticipant.session_id == quiz_session.id,
-            QuizParticipant.student_id == student.id,
+    return quiz_session, quiz, student, join_subject
+
+
+def rejoin_quiz(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    existing: QuizParticipant,
+    student: Student,
+    join_subject: str,
+    request: Request,
+    session: Session,
+) -> StudentQuizJoinResponse:
+    """Reconnect a participant who left, on a new token."""
+    if existing.left_at is None or quiz_session.status not in {
+        SessionStatus.WAITING,
+        SessionStatus.IN_PROGRESS,
+        SessionStatus.PAUSED,
+    }:
+        reject_quiz_join(request, join_subject)
+    participant_token = token_urlsafe(32)
+    active_session = session.execute(
+        update(QuizSession)
+        .where(
+            QuizSession.id == quiz_session.id,
+            QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
+        .values(status=QuizSession.status)
+        .execution_options(synchronize_session=False)
     )
-    if existing is not None:
-        if existing.left_at is None or quiz_session.status not in {
-            "waiting",
-            "in_progress",
-            "paused",
-        }:
-            reject_quiz_join(request, join_subject)
-        participant_token = token_urlsafe(32)
-        active_session = session.execute(
-            update(QuizSession)
+    if affected_rows(active_session) != 1:
+        session.rollback()
+        reject_quiz_join(request, join_subject)
+    # Starting a session places only present participants on their first
+    # question. Someone who left the waiting room and comes back after the
+    # start has no position, which reads as "finished" everywhere: they
+    # would see no question and could never answer.
+    resume_position = existing.current_position
+    if (
+        resume_position is None
+        and quiz_session.status != SessionStatus.WAITING
+        and existing.submitted_at is None
+        and session.scalar(
+            select(QuizAnswer.id)
             .where(
-                QuizSession.id == quiz_session.id,
-                QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == existing.id,
             )
-            .values(status=QuizSession.status)
-            .execution_options(synchronize_session=False)
+            .limit(1)
         )
-        if affected_rows(active_session) != 1:
-            session.rollback()
-            reject_quiz_join(request, join_subject)
-        # Starting a session places only present participants on their first
-        # question. Someone who left the waiting room and comes back after the
-        # start has no position, which reads as "finished" everywhere: they
-        # would see no question and could never answer.
-        resume_position = existing.current_position
-        if (
-            resume_position is None
-            and quiz_session.status != "waiting"
-            and existing.submitted_at is None
-            and session.scalar(
-                select(QuizAnswer.id)
-                .where(
-                    QuizAnswer.session_id == quiz_session.id,
-                    QuizAnswer.participant_id == existing.id,
-                )
-                .limit(1)
-            )
-            is None
-        ):
-            resume_position = 0
-        reconnected = session.execute(
-            update(QuizParticipant)
-            .where(
-                QuizParticipant.id == existing.id,
-                QuizParticipant.left_at.is_not(None),
-            )
-            .values(
-                access_token_hash=participant_token_hash(participant_token),
-                left_at=None,
-                current_position=resume_position,
-                student_identifier=student.identifier,
-                student_display_name=student.display_name,
-            )
-            .execution_options(synchronize_session=False)
+        is None
+    ):
+        resume_position = 0
+    reconnected = session.execute(
+        update(QuizParticipant)
+        .where(
+            QuizParticipant.id == existing.id,
+            QuizParticipant.left_at.is_not(None),
         )
-        if affected_rows(reconnected) != 1:
-            session.rollback()
-            reject_quiz_join(request, join_subject)
-        session.commit()
-        session.refresh(existing)
-        publish_quiz_update(request, quiz_session, session)
-        state = student_state_response(quiz_session, quiz, existing, session)
-        return StudentQuizJoinResponse(
-            **state.model_dump(), participant_token=participant_token
+        .values(
+            access_token_hash=participant_token_hash(participant_token),
+            left_at=None,
+            current_position=resume_position,
+            student_identifier=student.identifier,
+            student_display_name=student.display_name,
         )
-    if quiz_session.status != "waiting":
+        .execution_options(synchronize_session=False)
+    )
+    if affected_rows(reconnected) != 1:
+        session.rollback()
+        reject_quiz_join(request, join_subject)
+    session.commit()
+    session.refresh(existing)
+    publish_quiz_update(request, quiz_session, session)
+    state = student_state_response(quiz_session, quiz, existing, session)
+    return StudentQuizJoinResponse(
+        **state.model_dump(), participant_token=participant_token
+    )
+
+
+def first_join(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    student: Student,
+    join_subject: str,
+    request: Request,
+    session: Session,
+) -> StudentQuizJoinResponse:
+    """Add a student to a waiting room they have not entered yet."""
+    if quiz_session.status != SessionStatus.WAITING:
         reject_quiz_join(request, join_subject)
     waiting = session.execute(
         update(QuizSession)
         .where(
             QuizSession.id == quiz_session.id,
-            QuizSession.status == "waiting",
+            QuizSession.status == SessionStatus.WAITING,
         )
-        .values(status="waiting")
+        .values(status=SessionStatus.WAITING)
         .execution_options(synchronize_session=False)
     )
     if affected_rows(waiting) != 1:
@@ -233,6 +250,33 @@ def join_quiz(
         **state.model_dump(),
         participant_token=participant_token,
     )
+
+
+@router.post(
+    "/join",
+    response_model=StudentQuizJoinResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def join_quiz(
+    payload: QuizJoin,
+    request: Request,
+    session: DbSession,
+    account: StudentAccount = Depends(current_student),
+) -> StudentQuizJoinResponse:
+    quiz_session, quiz, student, join_subject = joinable_session(
+        payload, account, request, session
+    )
+    existing = session.scalar(
+        select(QuizParticipant).where(
+            QuizParticipant.session_id == quiz_session.id,
+            QuizParticipant.student_id == student.id,
+        )
+    )
+    if existing is not None:
+        return rejoin_quiz(
+            quiz_session, quiz, existing, student, join_subject, request, session
+        )
+    return first_join(quiz_session, quiz, student, join_subject, request, session)
 
 
 @router.post(
@@ -283,43 +327,26 @@ def get_student_quiz_state(
     return student_state_response(quiz_session, quiz, participant, session)
 
 
-@router.post(
-    "/student/sessions/{join_code}/answer",
-    response_model=StudentQuizStateResponse,
-)
-def submit_student_answer(
-    join_code: str,
-    payload: StudentQuizAnswer,
-    request: Request,
-    session: DbSession,
-    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
-) -> StudentQuizStateResponse:
-    quiz_session, quiz, participant = authenticated_participant(
-        join_code, quiz_token, request, session
-    )
-    enforce_public_rate_limit(
-        request,
-        "quiz_participant_rate_limiter",
-        f"participant:{participant.id}",
-    )
-    expire_quiz_session(quiz_session, quiz, session)
+def require_answer_accepted(
+    quiz_session: QuizSession, participant: QuizParticipant, session: Session
+) -> None:
+    """Reject an answer the session, the student or an exam does not allow."""
     # "finished" is allowed past this gate only so a concurrent duplicate of
     # the last answer can still be recognised below: finish_when_nobody_can_answer
     # runs in the same transaction as the winning submission, so a losing
     # duplicate can reach here after that transition already committed. Any
     # other non-"in_progress" status (paused included) still rejects outright.
-    if quiz_session.status not in ("in_progress", "finished"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_NOT_ACCEPTING_ANSWERS,
-                "Le quiz n’accepte pas de réponses actuellement",
-            ),
+    if quiz_session.status not in (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED):
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_NOT_ACCEPTING_ANSWERS,
+            "Le quiz n’accepte pas de réponses actuellement",
         )
     if participant.student_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(ErrorCode.QUIZ_STUDENT_REMOVED, "L’élève n’existe plus"),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_STUDENT_REMOVED,
+            "L’élève n’existe plus",
         )
     if (
         quiz_session.training_question_bank_id is not None
@@ -329,54 +356,69 @@ def submit_student_answer(
     ):
         # Opening an exam discards these trainings; this also covers one
         # started concurrently, which must not give feedback during the exam.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.TRAINING_BLOCKED_BY_EXAM,
-                "Cet entraînement est indisponible pendant un examen",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.TRAINING_BLOCKED_BY_EXAM,
+            "Cet entraînement est indisponible pendant un examen",
         )
+
+
+def answered_question(
+    quiz_session: QuizSession, participant: QuizParticipant, session: Session
+) -> tuple[Question, list[QuestionChoice], bool]:
+    """The question an answer is for, its choices, and whether it is retargeted.
+
+    A participant who already answered everything has no current question;
+    the answer is then retargeted at their last one, so that a concurrent
+    duplicate of their final answer can be recognised.
+    """
     question_id = current_question_id(quiz_session, participant, session)
     retargeting_finished_answer = question_id is None
     if retargeting_finished_answer:
         question_id = last_answered_question_id(quiz_session, participant, session)
     if question_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_NO_CURRENT_QUESTION, "Aucune question en cours"
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_NO_CURRENT_QUESTION,
+            "Aucune question en cours",
         )
     questions_by_id, choices_by_question = load_question_records([question_id], session)
     question = questions_by_id.get(question_id)
     if question is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_QUESTION_UNAVAILABLE,
-                "La question actuelle n’est pas disponible",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_QUESTION_UNAVAILABLE,
+            "La question actuelle n’est pas disponible",
         )
-    choices = choices_by_question.get(question_id, [])
-    choices_by_id = {choice.id: choice for choice in choices}
+    return (
+        question,
+        choices_by_question.get(question_id, []),
+        retargeting_finished_answer,
+    )
 
+
+def validated_answer(
+    payload: StudentQuizAnswer,
+    question: Question,
+    choices: list[QuestionChoice],
+    quiz: Quiz,
+) -> tuple[dict[str, object], TrainingFeedback | None]:
+    """The answer to store, and the immediate feedback a training gives."""
     feedback: TrainingFeedback | None = None
-    if question.answer_mode == "written":
+    if question.answer_mode == AnswerMode.WRITTEN:
         written_answer = (payload.written_answer or "").strip()
         if not written_answer or payload.selected_choice_ids is not None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=api_error(
-                    ErrorCode.ANSWER_WRITTEN_REQUIRED,
-                    "Une réponse rédactionnelle est requise",
-                ),
+            raise ApiError(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                ErrorCode.ANSWER_WRITTEN_REQUIRED,
+                "Une réponse rédactionnelle est requise",
             )
         answer_data: dict[str, object] = {"written_answer": written_answer}
         expected_answer = next(
             (choice.label for choice in choices if choice.is_correct),
             "",
         )
-        if quiz.mode == "training":
+        if quiz.mode == QuizMode.TRAINING:
             feedback = TrainingFeedback(
                 question_id=question.id,
                 is_correct=None,
@@ -385,67 +427,76 @@ def submit_student_answer(
                 submitted_answer=written_answer,
                 requires_manual_review=True,
             )
-    else:
-        if payload.selected_choice_ids is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=api_error(
-                    ErrorCode.ANSWER_CHOICE_REQUIRED,
-                    "Au moins une proposition doit être sélectionnée",
-                ),
-            )
-        selected_ids = list(dict.fromkeys(payload.selected_choice_ids or []))
-        if payload.written_answer is not None or (
-            question.answer_mode == "single"
-            and question.answer_mode_disclosed
-            and len(selected_ids) != 1
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=api_error(
-                    ErrorCode.ANSWER_MODE_MISMATCH,
-                    "La réponse envoyée ne correspond pas au type de la question",
-                ),
-            )
-        if any(choice_id not in choices_by_id for choice_id in selected_ids):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=api_error(
-                    ErrorCode.ANSWER_CHOICE_INVALID,
-                    "Une proposition sélectionnée est invalide",
-                ),
-            )
-        answer_data = {"selected_choice_ids": selected_ids}
-        if quiz.mode == "training":
-            correct_ids = [choice.id for choice in choices if choice.is_correct]
-            feedback = TrainingFeedback(
-                question_id=question.id,
-                is_correct=set(selected_ids) == set(correct_ids),
-                correct_choice_ids=correct_ids,
-            )
-
-    if retargeting_finished_answer:
-        # The participant already moved past this question: only accept the
-        # submission if it matches what a concurrent duplicate already
-        # recorded for it, rather than silently rewriting a finished answer.
-        existing_answer = session.scalar(
-            select(QuizAnswer).where(
-                QuizAnswer.session_id == quiz_session.id,
-                QuizAnswer.participant_id == participant.id,
-                QuizAnswer.question_id == question_id,
-            )
+        return answer_data, feedback
+    if payload.selected_choice_ids is None:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.ANSWER_CHOICE_REQUIRED,
+            "Au moins une proposition doit être sélectionnée",
         )
-        if (
-            existing_answer is None
-            or decoded_answer_data(existing_answer) != answer_data
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=api_error(
-                    ErrorCode.QUIZ_NO_CURRENT_QUESTION, "Aucune question en cours"
-                ),
-            )
+    selected_ids = list(dict.fromkeys(payload.selected_choice_ids or []))
+    if payload.written_answer is not None or (
+        question.answer_mode == AnswerMode.SINGLE
+        and question.answer_mode_disclosed
+        and len(selected_ids) != 1
+    ):
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.ANSWER_MODE_MISMATCH,
+            "La réponse envoyée ne correspond pas au type de la question",
+        )
+    choices_by_id = {choice.id: choice for choice in choices}
+    if any(choice_id not in choices_by_id for choice_id in selected_ids):
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.ANSWER_CHOICE_INVALID,
+            "Une proposition sélectionnée est invalide",
+        )
+    if quiz.mode == QuizMode.TRAINING:
+        correct_ids = [choice.id for choice in choices if choice.is_correct]
+        feedback = TrainingFeedback(
+            question_id=question.id,
+            is_correct=set(selected_ids) == set(correct_ids),
+            correct_choice_ids=correct_ids,
+        )
+    return {"selected_choice_ids": selected_ids}, feedback
 
+
+def require_same_finished_answer(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    question_id: int,
+    answer_data: dict[str, object],
+    session: Session,
+) -> None:
+    """Accept a retargeted answer only as a duplicate of the recorded one.
+
+    The participant already moved past this question: the submission must
+    match what a concurrent duplicate already recorded for it, rather than
+    silently rewrite a finished answer.
+    """
+    existing_answer = session.scalar(
+        select(QuizAnswer).where(
+            QuizAnswer.session_id == quiz_session.id,
+            QuizAnswer.participant_id == participant.id,
+            QuizAnswer.question_id == question_id,
+        )
+    )
+    if existing_answer is None or decoded_answer_data(existing_answer) != answer_data:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_NO_CURRENT_QUESTION,
+            "Aucune question en cours",
+        )
+
+
+def store_answer(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    question_id: int,
+    answer_data: dict[str, object],
+    session: Session,
+) -> None:
     # Atomic upsert: concurrent submissions for the same question can never
     # create duplicate answers nor crash on the uniqueness constraint.
     answer_statement = insert(QuizAnswer).values(
@@ -470,6 +521,15 @@ def submit_student_answer(
             },
         )
     )
+
+
+def advance_participant(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    participant: QuizParticipant,
+    session: Session,
+) -> None:
+    """Move to the next question, or past the last one."""
     total_questions = len(session_question_ids(quiz_session, session, participant))
     if (
         participant.current_position is not None
@@ -485,6 +545,39 @@ def submit_student_answer(
     ):
         # Without the review step the last answer is the final submission.
         participant.submitted_at = datetime.now(UTC)
+
+
+@router.post(
+    "/student/sessions/{join_code}/answer",
+    response_model=StudentQuizStateResponse,
+)
+def submit_student_answer(
+    join_code: str,
+    payload: StudentQuizAnswer,
+    request: Request,
+    session: DbSession,
+    quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
+) -> StudentQuizStateResponse:
+    quiz_session, quiz, participant = authenticated_participant(
+        join_code, quiz_token, request, session
+    )
+    enforce_public_rate_limit(
+        request,
+        "quiz_participant_rate_limiter",
+        f"participant:{participant.id}",
+    )
+    expire_quiz_session(quiz_session, quiz, session)
+    require_answer_accepted(quiz_session, participant, session)
+    question, choices, retargeting = answered_question(
+        quiz_session, participant, session
+    )
+    answer_data, feedback = validated_answer(payload, question, choices, quiz)
+    if retargeting:
+        require_same_finished_answer(
+            quiz_session, participant, question.id, answer_data, session
+        )
+    store_answer(quiz_session, participant, question.id, answer_data, session)
+    advance_participant(quiz_session, quiz, participant, session)
     session.flush()
     finish_when_nobody_can_answer(quiz_session, quiz, session)
     session.commit()
@@ -505,12 +598,10 @@ def submit_student_answer(
 def require_answer_review_offered(quiz_session: QuizSession, quiz: Quiz) -> None:
     """Reject a review request on a quiz that has no final submission step."""
     if not answer_review_enabled(quiz_session, quiz):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
-                "La relecture des réponses n’est pas disponible",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
+            "La relecture des réponses n’est pas disponible",
         )
 
 
@@ -524,13 +615,11 @@ def require_reviewable_participant(
     The session must still be running and every assigned question must already
     have an answer.
     """
-    if quiz_session.status != "in_progress":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
-                "La relecture des réponses n’est pas disponible",
-            ),
+    if quiz_session.status != SessionStatus.IN_PROGRESS:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
+            "La relecture des réponses n’est pas disponible",
         )
     question_ids = session_question_ids(quiz_session, session, participant)
     answered_question_ids = set(
@@ -542,12 +631,10 @@ def require_reviewable_participant(
         )
     )
     if not question_ids or not set(question_ids).issubset(answered_question_ids):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_ANSWERS_INCOMPLETE,
-                "Toutes les questions doivent être répondues",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_ANSWERS_INCOMPLETE,
+            "Toutes les questions doivent être répondues",
         )
 
 
@@ -669,17 +756,15 @@ def navigate_student_quiz(
         and set(question_ids).issubset(answered_question_ids)
     )
     if (
-        quiz_session.status != "in_progress"
+        quiz_session.status != SessionStatus.IN_PROGRESS
         or not allow_previous_questions
         or (participant.current_position is None and not reviewing)
         or target_position not in accessible_positions
     ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_PREVIOUS_QUESTION_LOCKED,
-                "Le retour à cette question n’est pas autorisé",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_PREVIOUS_QUESTION_LOCKED,
+            "Le retour à cette question n’est pas autorisé",
         )
     participant.current_position = target_position
     session.commit()
@@ -713,7 +798,10 @@ def report_student_violation(
         f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status != "in_progress" or participant.current_position is None:
+    if (
+        quiz_session.status != SessionStatus.IN_PROGRESS
+        or participant.current_position is None
+    ):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     now = datetime.now(UTC)
     last_violation_at = participant.last_violation_at
@@ -754,10 +842,11 @@ def active_participant_for_image(
     )
     # A read: a session past its deadline is refused like a finished one,
     # and left for the expiry loop to finish.
-    if quiz_session.status != "in_progress" or quiz_session_is_due(quiz_session, quiz):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
+    if quiz_session.status != SessionStatus.IN_PROGRESS or quiz_session_is_due(
+        quiz_session, quiz
+    ):
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     return quiz_session, participant
 
@@ -779,15 +868,13 @@ def get_student_question_image(
         missing_detail,
     )
     if current_question_id(quiz_session, participant, session) != question_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     question = session.get(Question, question_id)
     if question is None or question.image is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     return Response(
         content=question.image.data,
@@ -818,13 +905,12 @@ def get_student_choice_image(
         .where(
             QuestionChoice.id == choice_id,
             QuestionChoice.question_id == question_id,
-            Question.answer_mode != "written",
+            Question.answer_mode != AnswerMode.WRITTEN,
         )
     )
     if choice is None or choice.image is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     return Response(
         content=choice.image.data,

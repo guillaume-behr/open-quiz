@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 from pydantic import ValidationError
 
+from app import question_records
 from app.images import (
     MAX_IMAGE_BYTES,
     MAX_IMAGE_DIMENSION,
@@ -159,7 +160,9 @@ def test_question_images_are_validated(
             == status_code
         )
 
-    monkeypatch.setattr(questions, "MAX_IMAGE_BYTES", len(VALID_PNG) - 1)
+    # The question image is checked in the router, choice images on creation.
+    for module in (questions, question_records):
+        monkeypatch.setattr(module, "MAX_IMAGE_BYTES", len(VALID_PNG) - 1)
     too_large = client.post(
         url,
         headers=headers,
