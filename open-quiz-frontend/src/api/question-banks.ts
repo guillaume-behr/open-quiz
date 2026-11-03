@@ -1,3 +1,5 @@
+import { PAGE_SIZE } from "@/lib/utils"
+
 import { largeRequestSignal, request, requestBlob, requestPage } from "./client"
 import type {
     NewQuestion,
@@ -10,11 +12,13 @@ import type {
 } from "./types"
 import { readJsonImportFile } from "@/lib/json-import"
 
+/** With `focus`, the page returned is the one holding that bank. */
 export function getQuestionBanks(
     page = 1,
     search = "",
     gradeLevel = "",
-    pageSize = 8
+    pageSize = PAGE_SIZE,
+    focus: number | null = null
 ): Promise<Page<QuestionBank>> {
     const params = new URLSearchParams({
         page: String(page),
@@ -22,6 +26,7 @@ export function getQuestionBanks(
     })
     if (search) params.set("search", search)
     if (gradeLevel) params.set("grade_level", gradeLevel)
+    if (focus !== null) params.set("focus", String(focus))
     return requestPage<QuestionBank>(`/api/question-banks?${params}`)
 }
 

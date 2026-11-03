@@ -186,6 +186,10 @@ défaut et 100 au maximum. Les réponses exposent :
 - `X-Page-Size` ;
 - `X-Total-Count`.
 
+Les listes de quiz et de banques acceptent aussi `focus=<id>` : la réponse est
+alors la page qui contient cet élément, indiquée par `X-Page`. L’interface
+s’en sert pour afficher un élément tout juste enregistré.
+
 ### Mises à jour temps réel
 
 Les routes `/api/quizzes/live/*` diffusent les changements de sessions aux

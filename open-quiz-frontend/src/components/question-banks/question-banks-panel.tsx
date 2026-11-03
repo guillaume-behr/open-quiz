@@ -4,13 +4,12 @@ import {
     deleteQuestion,
     downloadQuestionBank,
     downloadQuestionBatchExample,
-    getAllQuestionBanks,
     getQuestionBanks,
     getQuestions,
     importQuestionBatch,
     updateQuestionBank,
 } from "@/api/question-banks"
-import { naturalCompare, pageContaining, saveBlob } from "@/lib/utils"
+import { naturalCompare, PAGE_SIZE, saveBlob } from "@/lib/utils"
 import { describeJsonImportFailure } from "@/lib/json-import"
 import { ApiError } from "@/api/client"
 import type { GradeLevel, Question, QuestionBank } from "@/api/types"
@@ -37,8 +36,6 @@ function compareQuestionBanks(
         naturalCompare(first.chapter, second.chapter)
     )
 }
-
-const PAGE_SIZE = 8
 
 function exportFilename(bank: QuestionBank): string {
     const safeName = `${bank.grade_level}-${bank.chapter}`
@@ -67,16 +64,33 @@ export function QuestionBanksPanel({
 }: QuestionBanksPanelProps) {
     const { t } = useTranslation()
     const [page, setPage] = useState(1)
+    // A bank just saved: the list shows the page that holds it.
+    const [focusedBankId, setFocusedBankId] = useState<number | null>(null)
     const [titleFilter, setTitleFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
     const bankList = useResource(
         useCallback(
-            () => getQuestionBanks(page, titleFilter.trim(), gradeLevelFilter),
-            [gradeLevelFilter, page, titleFilter]
+            () =>
+                getQuestionBanks(
+                    page,
+                    titleFilter.trim(),
+                    gradeLevelFilter,
+                    PAGE_SIZE,
+                    focusedBankId
+                ),
+            [focusedBankId, gradeLevelFilter, page, titleFilter]
         )
     )
     const questionBanks = bankList.data?.items ?? []
     const totalPages = bankList.data?.totalPages ?? 1
+    // While a saved item is focused, the API picks the page that holds it.
+    const shownPage =
+        focusedBankId === null ? page : (bankList.data?.page ?? page)
+
+    function showPage(nextPage: number): void {
+        setFocusedBankId(null)
+        setPage(nextPage)
+    }
     const lastPage = bankList.data?.totalPages
     // A deletion can leave the current page past the end of the list.
     if (lastPage !== undefined && page > lastPage) setPage(lastPage)
@@ -194,8 +208,8 @@ export function QuestionBanksPanel({
         setSelectedBankId(null)
         setTitleFilter("")
         setGradeLevelFilter("")
-        const allBanks = await getAllQuestionBanks().catch(() => [])
-        setPage(pageContaining(allBanks, saved.id, PAGE_SIZE))
+        // Saving may move the bank to another page: show the one holding it.
+        setFocusedBankId(saved.id)
         bankList.reload()
         onCreateDialogOpenChange(false)
     }
@@ -301,6 +315,7 @@ export function QuestionBanksPanel({
             setIsImportDialogOpen(false)
             setImportFile(null)
             setPage(1)
+            setFocusedBankId(imported.question_bank.id)
             bankList.reload()
         } finally {
             if (importInputRef.current) importInputRef.current.value = ""
@@ -338,16 +353,16 @@ export function QuestionBanksPanel({
                 batchMessage={batchMessage}
                 onTitleFilterChange={(value) => {
                     setTitleFilter(value)
-                    setPage(1)
+                    showPage(1)
                 }}
                 onGradeLevelFilterChange={(value) => {
                     setGradeLevelFilter(value)
-                    setPage(1)
+                    showPage(1)
                 }}
                 onDeleteGradeLevel={onDeleteGradeLevel}
-                page={page}
+                page={shownPage}
                 totalPages={totalPages}
-                onPageChange={setPage}
+                onPageChange={showPage}
                 onImport={openImportDialog}
                 onDownloadExample={() => void handleDownloadExample()}
                 onExport={(bank) => void handleExport(bank)}

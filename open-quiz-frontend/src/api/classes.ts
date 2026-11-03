@@ -1,3 +1,5 @@
+import { PAGE_SIZE } from "@/lib/utils"
+
 import { request, requestBlob, requestPage } from "./client"
 import type { Page, StudentClass } from "./types"
 
@@ -5,7 +7,7 @@ export function getStudentClasses(
     page = 1,
     search = "",
     gradeLevel = "",
-    pageSize = 8
+    pageSize = PAGE_SIZE
 ): Promise<Page<StudentClass>> {
     const params = new URLSearchParams({
         page: String(page),

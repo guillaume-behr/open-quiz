@@ -57,6 +57,7 @@ from app.pagination import (
     MAX_PAGE,
     MAX_PAGE_SIZE,
     contains_pattern,
+    focused_page,
     set_pagination_headers,
 )
 from app.question_responses import load_question_records, load_question_responses
@@ -917,6 +918,7 @@ def list_quizzes(
     search: Annotated[str, Query(max_length=160)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
     mode: Annotated[str, Query(pattern="^exam$")] = "exam",
+    focus: Annotated[int | None, Query(ge=1)] = None,
 ) -> list[QuizResponse]:
     filters = [Quiz.owner_id == professor.id, Quiz.mode == mode]
     if search:
@@ -934,13 +936,16 @@ def list_quizzes(
                 .where(QuestionBank.grade_level == grade_level)
             )
         )
+    order = (Quiz.title, Quiz.id)
+    if focus is not None:
+        page = focused_page(session, Quiz, filters, order, focus, page_size) or page
     total = session.scalar(select(func.count()).select_from(Quiz).where(*filters)) or 0
     set_pagination_headers(response, page=page, page_size=page_size, total=total)
     quizzes = list(
         session.scalars(
             select(Quiz)
             .where(*filters)
-            .order_by(Quiz.title, Quiz.id)
+            .order_by(*order)
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

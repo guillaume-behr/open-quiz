@@ -6,7 +6,6 @@ import {
     createQuiz,
     deleteQuiz,
     deleteQuizSession,
-    getAllQuizzes,
     getQuizzes,
     launchQuiz,
     pauseQuizSession,
@@ -47,7 +46,7 @@ import {
 } from "react"
 import { LoaderCircle, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { pageContaining } from "@/lib/utils"
+import { PAGE_SIZE } from "@/lib/utils"
 import { apiErrorMessage } from "@/lib/errors"
 
 type QuizzesPanelProps = {
@@ -56,8 +55,6 @@ type QuizzesPanelProps = {
     gradeLevels: GradeLevel[]
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
 }
-
-const PAGE_SIZE = 8
 
 function isActiveSession(session: QuizSession): boolean {
     return isActiveSessionStatus(session.status)
@@ -75,6 +72,8 @@ export function QuizzesPanel({
 }: QuizzesPanelProps) {
     const { t, i18n } = useTranslation()
     const [page, setPage] = useState(1)
+    // A quiz just created: the list shows the page that holds it.
+    const [focusedQuizId, setFocusedQuizId] = useState<number | null>(null)
     const [quizFilter, setQuizFilter] = useState("")
     const [gradeLevelFilter, setGradeLevelFilter] = useState("")
     const support = useResource(loadSupportData)
@@ -86,13 +85,22 @@ export function QuizzesPanel({
                     page,
                     quizFilter.trim(),
                     gradeLevelFilter,
-                    PAGE_SIZE
+                    PAGE_SIZE,
+                    focusedQuizId
                 ),
-            [gradeLevelFilter, page, quizFilter]
+            [focusedQuizId, gradeLevelFilter, page, quizFilter]
         )
     )
     const quizzes = quizList.data?.items ?? []
     const totalPages = quizList.data?.totalPages ?? 1
+    // While a saved item is focused, the API picks the page that holds it.
+    const shownPage =
+        focusedQuizId === null ? page : (quizList.data?.page ?? page)
+
+    function showPage(nextPage: number): void {
+        setFocusedQuizId(null)
+        setPage(nextPage)
+    }
     const [sessions, setSessions] = useState<QuizSession[]>([])
     const [liveSessionsLoadFailed, setLiveSessionsLoadFailed] = useState(false)
     const [form, dispatchForm] = useReducer(quizFormReducer, emptyQuizForm)
@@ -285,16 +293,15 @@ export function QuizzesPanel({
             )
             onCreateDialogOpenChange(false)
             dispatchForm({ type: "reset" })
+            quizList.reload()
         } else {
             const quiz = await createQuiz(payload)
             onCreateDialogOpenChange(false)
             dispatchForm({ type: "reset" })
             setQuizFilter("")
             setGradeLevelFilter("")
-            const allQuizzes = await getAllQuizzes().catch(() => [])
-            setPage(pageContaining(allQuizzes, quiz.id, PAGE_SIZE))
+            setFocusedQuizId(quiz.id)
         }
-        quizList.reload()
     }
 
     function openPreview(quiz: Quiz): void {
@@ -431,16 +438,16 @@ export function QuizzesPanel({
                 gradeLevelFilter={gradeLevelFilter}
                 onQuizFilterChange={(value) => {
                     setQuizFilter(value)
-                    setPage(1)
+                    showPage(1)
                 }}
                 onGradeLevelFilterChange={(value) => {
                     setGradeLevelFilter(value)
-                    setPage(1)
+                    showPage(1)
                 }}
                 onDeleteGradeLevel={onDeleteGradeLevel}
-                page={page}
+                page={shownPage}
                 totalPages={totalPages}
-                onPageChange={setPage}
+                onPageChange={showPage}
                 onEdit={openQuizEditor}
                 onPreview={openPreview}
                 onLaunch={(quiz) => {

@@ -1,4 +1,8 @@
+from typing import Any
+
 from fastapi import Response
+from sqlalchemy import ColumnElement, func, select, tuple_
+from sqlalchemy.orm import Session
 
 DEFAULT_PAGE_SIZE = 8
 MAX_PAGE_SIZE = 100
@@ -14,6 +18,34 @@ def set_pagination_headers(
     response.headers["X-Page"] = str(page)
     response.headers["X-Page-Size"] = str(page_size)
     response.headers["X-Total-Count"] = str(total)
+
+
+def focused_page(
+    session: Session,
+    model: Any,
+    filters: list[ColumnElement[bool]],
+    order: tuple[Any, ...],
+    focus_id: int,
+    page_size: int,
+) -> int | None:
+    """The page that holds ``focus_id`` in a list sorted by ``order``.
+
+    ``order`` must end with the primary key, so that rows compare as they
+    sort. Returns None when the row is not in the filtered list, letting the
+    caller keep the requested page. A client uses this after creating an
+    item, to show the page that holds it without loading every page.
+    """
+    target = session.execute(
+        select(*order).where(*filters, model.id == focus_id)
+    ).one_or_none()
+    if target is None:
+        return None
+    preceding = session.scalar(
+        select(func.count())
+        .select_from(model)
+        .where(*filters, tuple_(*order) < tuple_(*target))
+    )
+    return (preceding or 0) // page_size + 1
 
 
 LIKE_ESCAPE_CHARACTER = "\\"
