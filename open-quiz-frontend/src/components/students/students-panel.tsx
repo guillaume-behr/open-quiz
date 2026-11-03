@@ -33,9 +33,26 @@ import {
     UserRound,
     UserRoundPlus,
 } from "lucide-react"
-import { type FormEvent, useEffect, useState } from "react"
+import { usePagedList } from "@/hooks/use-paged-list"
+import { useResource } from "@/hooks/use-resource"
+import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+
+const STUDENTS_PAGE_SIZE = 12
+
+function loadStudents(
+    page: number,
+    filters: { search: string; classId: string; status: string }
+) {
+    return getStudents(
+        page,
+        filters.search.trim(),
+        STUDENTS_PAGE_SIZE,
+        filters.classId,
+        filters.status
+    )
+}
 
 export function StudentsPanel({
     isCreateDialogOpen,
@@ -45,16 +62,23 @@ export function StudentsPanel({
     onCreateDialogOpenChange: (open: boolean) => void
 }) {
     const { t } = useTranslation()
-    const [students, setStudents] = useState<StudentAccount[]>([])
-    const [classes, setClasses] = useState<StudentClass[]>([])
-    const [search, setSearch] = useState("")
-    const [classFilter, setClassFilter] = useState("")
-    const [statusFilter, setStatusFilter] = useState("")
-    const [page, setPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [reloadKey, setReloadKey] = useState(0)
-    const [isLoading, setIsLoading] = useState(true)
-    const [loadError, setLoadError] = useState<string | null>(null)
+    const studentList = usePagedList(loadStudents, {
+        search: "",
+        classId: "",
+        status: "",
+    })
+    const students = studentList.items
+    const {
+        search,
+        classId: classFilter,
+        status: statusFilter,
+    } = studentList.filters
+    const isLoading = !studentList.hasSettled
+    const loadError = studentList.error ? t("students-load-error") : null
+    const classList = useResource(getAllStudentClasses)
+    const classes: StudentClass[] = classList.error
+        ? []
+        : (classList.data ?? [])
     const [editing, setEditing] = useState<StudentAccount | null>(null)
     const [deleting, setDeleting] = useState<StudentAccount | null>(null)
     const [displayName, setDisplayName] = useState("")
@@ -71,34 +95,10 @@ export function StudentsPanel({
     const [formError, setFormError] = useState<string | null>(null)
     const [exportError, setExportError] = useState<string | null>(null)
 
-    useEffect(() => {
-        let active = true
-        getAllStudentClasses()
-            .then((items) => active && setClasses(items))
-            .catch(() => active && setClasses([]))
-        return () => {
-            active = false
-        }
-    }, [reloadKey])
-
-    useEffect(() => {
-        let active = true
-        getStudents(page, search.trim(), 12, classFilter, statusFilter)
-            .then((result) => {
-                if (!active) return
-                setStudents(result.items)
-                setTotalPages(result.totalPages)
-                setLoadError(null)
-                if (result.page > result.totalPages) {
-                    setPage(result.totalPages)
-                }
-            })
-            .catch(() => active && setLoadError(t("students-load-error")))
-            .finally(() => active && setIsLoading(false))
-        return () => {
-            active = false
-        }
-    }, [classFilter, page, reloadKey, search, statusFilter, t])
+    function reloadLists() {
+        studentList.reload()
+        classList.reload()
+    }
 
     function closeForm() {
         onCreateDialogOpenChange(false)
@@ -180,10 +180,10 @@ export function StudentsPanel({
                 }
             }
             closeForm()
-            setReloadKey((value) => value + 1)
+            reloadLists()
         } catch (error) {
             if (classAssignmentFailed && !editing) {
-                setReloadKey((value) => value + 1)
+                reloadLists()
             }
             setFormError(
                 apiErrorMessage(
@@ -208,7 +208,7 @@ export function StudentsPanel({
         try {
             await deleteStudentAccount(deleting.id)
             setDeleting(null)
-            setReloadKey((value) => value + 1)
+            reloadLists()
         } catch (caught) {
             setFormError(
                 apiErrorMessage(caught, t, t("student-account-delete-error"))
@@ -252,8 +252,10 @@ export function StudentsPanel({
                                 id="student-filter-search"
                                 value={search}
                                 onChange={(event) => {
-                                    setSearch(event.target.value)
-                                    setPage(1)
+                                    studentList.setFilter(
+                                        "search",
+                                        event.target.value
+                                    )
                                 }}
                                 placeholder={t("search-student")}
                             />
@@ -267,8 +269,10 @@ export function StudentsPanel({
                                 className={NATIVE_SELECT_CLASS_NAME}
                                 value={classFilter}
                                 onChange={(event) => {
-                                    setClassFilter(event.target.value)
-                                    setPage(1)
+                                    studentList.setFilter(
+                                        "classId",
+                                        event.target.value
+                                    )
                                 }}
                             >
                                 <option value="">{t("all-classes")}</option>
@@ -297,8 +301,10 @@ export function StudentsPanel({
                                 className={NATIVE_SELECT_CLASS_NAME}
                                 value={statusFilter}
                                 onChange={(event) => {
-                                    setStatusFilter(event.target.value)
-                                    setPage(1)
+                                    studentList.setFilter(
+                                        "status",
+                                        event.target.value
+                                    )
                                 }}
                             >
                                 <option value="">{t("all-statuses")}</option>
@@ -311,10 +317,7 @@ export function StudentsPanel({
                                 type="button"
                                 variant="outline"
                                 onClick={() => {
-                                    setSearch("")
-                                    setClassFilter("")
-                                    setStatusFilter("")
-                                    setPage(1)
+                                    studentList.resetFilters()
                                 }}
                             >
                                 {t("clear-filters")}
@@ -430,9 +433,9 @@ export function StudentsPanel({
                         </div>
                     )}
                     <Pagination
-                        currentPage={page}
-                        totalPages={totalPages}
-                        onPageChange={setPage}
+                        currentPage={studentList.page}
+                        totalPages={studentList.totalPages}
+                        onPageChange={studentList.showPage}
                     />
                 </div>
             </div>

@@ -43,6 +43,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
 import { useAsyncAction } from "@/hooks/use-async-action"
+import { usePagedList } from "@/hooks/use-paged-list"
 import { useResource } from "@/hooks/use-resource"
 
 type ResultsViewMode = "cards" | "schedule"
@@ -90,25 +91,17 @@ type ResultsPanelProps = {
     onExportDialogOpenChange: (open: boolean) => void
 }
 
+function loadResults(page: number, filters: { quiz: string; class: string }) {
+    return getQuizResults(page, filters.quiz.trim(), filters.class.trim())
+}
+
 export function ResultsPanel({
     isExportDialogOpen,
     onExportDialogOpenChange,
 }: ResultsPanelProps) {
     const { t, i18n } = useTranslation()
-    const [page, setPage] = useState(1)
-    const [quizFilter, setQuizFilter] = useState("")
-    const [classFilter, setClassFilter] = useState("")
-    const resultList = useResource(
-        useCallback(
-            () => getQuizResults(page, quizFilter.trim(), classFilter.trim()),
-            [classFilter, page, quizFilter]
-        )
-    )
-    const results = resultList.data?.items ?? []
-    const totalPages = resultList.data?.totalPages ?? 1
-    const lastPage = resultList.data?.totalPages
-    // A deletion can leave the current page past the end of the list.
-    if (lastPage !== undefined && page > lastPage) setPage(lastPage)
+    const resultList = usePagedList(loadResults, { quiz: "", class: "" })
+    const results = resultList.items
     const classList = useResource(getAllStudentClasses)
     const classes = classList.data ?? []
     const [viewMode, setViewMode] = useState<ResultsViewMode>(storedResultsView)
@@ -299,11 +292,13 @@ export function ResultsPanel({
                             </FieldLabel>
                             <Input
                                 id="result-quiz-filter"
-                                value={quizFilter}
+                                value={resultList.filters.quiz}
                                 placeholder={t("search-quiz")}
                                 onChange={(event) => {
-                                    setQuizFilter(event.target.value)
-                                    setPage(1)
+                                    resultList.setFilter(
+                                        "quiz",
+                                        event.target.value
+                                    )
                                 }}
                             />
                         </Field>
@@ -314,11 +309,13 @@ export function ResultsPanel({
                             <select
                                 id="result-class-filter"
                                 className={NATIVE_SELECT_CLASS_NAME}
-                                value={classFilter}
+                                value={resultList.filters.class}
                                 disabled={classList.isLoading}
                                 onChange={(event) => {
-                                    setClassFilter(event.target.value)
-                                    setPage(1)
+                                    resultList.setFilter(
+                                        "class",
+                                        event.target.value
+                                    )
                                 }}
                             >
                                 <option value="">{t("all-classes")}</option>
@@ -335,14 +332,13 @@ export function ResultsPanel({
                                 ))}
                             </select>
                         </Field>
-                        {(quizFilter || classFilter) && (
+                        {(resultList.filters.quiz ||
+                            resultList.filters.class) && (
                             <Button
                                 type="button"
                                 variant="outline"
                                 onClick={() => {
-                                    setQuizFilter("")
-                                    setClassFilter("")
-                                    setPage(1)
+                                    resultList.resetFilters()
                                 }}
                             >
                                 {t("clear-filters")}
@@ -502,9 +498,9 @@ export function ResultsPanel({
                                 </div>
                             )}
                             <Pagination
-                                currentPage={page}
-                                totalPages={totalPages}
-                                onPageChange={setPage}
+                                currentPage={resultList.page}
+                                totalPages={resultList.totalPages}
+                                onPageChange={resultList.showPage}
                             />
                         </>
                     )}

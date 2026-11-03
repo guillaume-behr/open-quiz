@@ -25,6 +25,7 @@ import { type FormEvent, useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
 import { useAsyncAction } from "@/hooks/use-async-action"
+import { usePagedList } from "@/hooks/use-paged-list"
 import { useResource } from "@/hooks/use-resource"
 
 function compareQuestionBanks(
@@ -55,6 +56,21 @@ type QuestionBanksPanelProps = {
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
 }
 
+/** With a focused bank, the API answers the page that holds it. */
+function loadQuestionBanks(
+    page: number,
+    filters: { title: string; gradeLevel: string },
+    focus: number | null
+) {
+    return getQuestionBanks(
+        page,
+        filters.title.trim(),
+        filters.gradeLevel,
+        PAGE_SIZE,
+        focus
+    )
+}
+
 export function QuestionBanksPanel({
     isCreateDialogOpen,
     onCreateDialogOpenChange,
@@ -63,37 +79,11 @@ export function QuestionBanksPanel({
     onDeleteGradeLevel,
 }: QuestionBanksPanelProps) {
     const { t } = useTranslation()
-    const [page, setPage] = useState(1)
-    // A bank just saved: the list shows the page that holds it.
-    const [focusedBankId, setFocusedBankId] = useState<number | null>(null)
-    const [titleFilter, setTitleFilter] = useState("")
-    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
-    const bankList = useResource(
-        useCallback(
-            () =>
-                getQuestionBanks(
-                    page,
-                    titleFilter.trim(),
-                    gradeLevelFilter,
-                    PAGE_SIZE,
-                    focusedBankId
-                ),
-            [focusedBankId, gradeLevelFilter, page, titleFilter]
-        )
-    )
-    const questionBanks = bankList.data?.items ?? []
-    const totalPages = bankList.data?.totalPages ?? 1
-    // While a saved item is focused, the API picks the page that holds it.
-    const shownPage =
-        focusedBankId === null ? page : (bankList.data?.page ?? page)
-
-    function showPage(nextPage: number): void {
-        setFocusedBankId(null)
-        setPage(nextPage)
-    }
-    const lastPage = bankList.data?.totalPages
-    // A deletion can leave the current page past the end of the list.
-    if (lastPage !== undefined && page > lastPage) setPage(lastPage)
+    const bankList = usePagedList(loadQuestionBanks, {
+        title: "",
+        gradeLevel: "",
+    })
+    const questionBanks = bankList.items
     const [gradeLevel, setGradeLevel] = useState("")
     const [title, setTitle] = useState("")
     const [editingBank, setEditingBank] = useState<QuestionBank | null>(null)
@@ -206,11 +196,8 @@ export function QuestionBanksPanel({
         setEditingBank(null)
         setBankView(null)
         setSelectedBankId(null)
-        setTitleFilter("")
-        setGradeLevelFilter("")
         // Saving may move the bank to another page: show the one holding it.
-        setFocusedBankId(saved.id)
-        bankList.reload()
+        bankList.focus(saved.id)
         onCreateDialogOpenChange(false)
     }
 
@@ -314,9 +301,7 @@ export function QuestionBanksPanel({
             )
             setIsImportDialogOpen(false)
             setImportFile(null)
-            setPage(1)
-            setFocusedBankId(imported.question_bank.id)
-            bankList.reload()
+            bankList.focus(imported.question_bank.id)
         } finally {
             if (importInputRef.current) importInputRef.current.value = ""
         }
@@ -342,8 +327,8 @@ export function QuestionBanksPanel({
             <QuestionBanksList
                 banks={questionBanks}
                 gradeLevels={gradeLevels}
-                titleFilter={titleFilter}
-                gradeLevelFilter={gradeLevelFilter}
+                titleFilter={bankList.filters.title}
+                gradeLevelFilter={bankList.filters.gradeLevel}
                 isLoading={!bankList.hasSettled}
                 loadError={
                     bankList.error ? t("question-banks-load-error") : null
@@ -352,17 +337,15 @@ export function QuestionBanksPanel({
                 batchError={batchError}
                 batchMessage={batchMessage}
                 onTitleFilterChange={(value) => {
-                    setTitleFilter(value)
-                    showPage(1)
+                    bankList.setFilter("title", value)
                 }}
                 onGradeLevelFilterChange={(value) => {
-                    setGradeLevelFilter(value)
-                    showPage(1)
+                    bankList.setFilter("gradeLevel", value)
                 }}
                 onDeleteGradeLevel={onDeleteGradeLevel}
-                page={shownPage}
-                totalPages={totalPages}
-                onPageChange={showPage}
+                page={bankList.page}
+                totalPages={bankList.totalPages}
+                onPageChange={bankList.showPage}
                 onImport={openImportDialog}
                 onDownloadExample={() => void handleDownloadExample()}
                 onExport={(bank) => void handleExport(bank)}

@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
 import { useAsyncAction } from "@/hooks/use-async-action"
+import { usePagedList } from "@/hooks/use-paged-list"
 import { useResource } from "@/hooks/use-resource"
 import {
     type FormEvent,
@@ -64,6 +65,21 @@ function loadSupportData() {
     return Promise.all([getAllQuestionBanks(), getAllStudentClasses()])
 }
 
+/** With a focused quiz, the API answers the page that holds it. */
+function loadQuizzes(
+    page: number,
+    filters: { search: string; gradeLevel: string },
+    focus: number | null
+) {
+    return getQuizzes(
+        page,
+        filters.search.trim(),
+        filters.gradeLevel,
+        PAGE_SIZE,
+        focus
+    )
+}
+
 export function QuizzesPanel({
     isCreateDialogOpen,
     onCreateDialogOpenChange,
@@ -71,36 +87,10 @@ export function QuizzesPanel({
     onDeleteGradeLevel,
 }: QuizzesPanelProps) {
     const { t, i18n } = useTranslation()
-    const [page, setPage] = useState(1)
-    // A quiz just created: the list shows the page that holds it.
-    const [focusedQuizId, setFocusedQuizId] = useState<number | null>(null)
-    const [quizFilter, setQuizFilter] = useState("")
-    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
     const support = useResource(loadSupportData)
     const [banks, classes] = support.data ?? [[], []]
-    const quizList = useResource(
-        useCallback(
-            () =>
-                getQuizzes(
-                    page,
-                    quizFilter.trim(),
-                    gradeLevelFilter,
-                    PAGE_SIZE,
-                    focusedQuizId
-                ),
-            [focusedQuizId, gradeLevelFilter, page, quizFilter]
-        )
-    )
-    const quizzes = quizList.data?.items ?? []
-    const totalPages = quizList.data?.totalPages ?? 1
-    // While a saved item is focused, the API picks the page that holds it.
-    const shownPage =
-        focusedQuizId === null ? page : (quizList.data?.page ?? page)
-
-    function showPage(nextPage: number): void {
-        setFocusedQuizId(null)
-        setPage(nextPage)
-    }
+    const quizList = usePagedList(loadQuizzes, { search: "", gradeLevel: "" })
+    const quizzes = quizList.items
     const [sessions, setSessions] = useState<QuizSession[]>([])
     const [liveSessionsLoadFailed, setLiveSessionsLoadFailed] = useState(false)
     const [form, dispatchForm] = useReducer(quizFormReducer, emptyQuizForm)
@@ -131,10 +121,6 @@ export function QuizzesPanel({
         "cancel" | "delete" | null
     >(null)
     const activeSessionId = activeSession?.id
-
-    const lastPage = quizList.data?.totalPages
-    // A deletion can leave the current page past the end of the list.
-    if (lastPage !== undefined && page > lastPage) setPage(lastPage)
 
     useEffect(
         () =>
@@ -298,9 +284,7 @@ export function QuizzesPanel({
             const quiz = await createQuiz(payload)
             onCreateDialogOpenChange(false)
             dispatchForm({ type: "reset" })
-            setQuizFilter("")
-            setGradeLevelFilter("")
-            setFocusedQuizId(quiz.id)
+            quizList.focus(quiz.id)
         }
     }
 
@@ -434,20 +418,18 @@ export function QuizzesPanel({
                 gradeLevels={gradeLevels}
                 isLoading={!support.hasSettled || !quizList.hasSettled}
                 loadError={loadError}
-                quizFilter={quizFilter}
-                gradeLevelFilter={gradeLevelFilter}
+                quizFilter={quizList.filters.search}
+                gradeLevelFilter={quizList.filters.gradeLevel}
                 onQuizFilterChange={(value) => {
-                    setQuizFilter(value)
-                    showPage(1)
+                    quizList.setFilter("search", value)
                 }}
                 onGradeLevelFilterChange={(value) => {
-                    setGradeLevelFilter(value)
-                    showPage(1)
+                    quizList.setFilter("gradeLevel", value)
                 }}
                 onDeleteGradeLevel={onDeleteGradeLevel}
-                page={shownPage}
-                totalPages={totalPages}
-                onPageChange={showPage}
+                page={quizList.page}
+                totalPages={quizList.totalPages}
+                onPageChange={quizList.showPage}
                 onEdit={openQuizEditor}
                 onPreview={openPreview}
                 onLaunch={(quiz) => {

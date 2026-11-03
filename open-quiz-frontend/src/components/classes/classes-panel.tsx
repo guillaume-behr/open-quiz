@@ -17,7 +17,7 @@ import { ClassFormDialog } from "@/components/classes/class-form-dialog"
 import { ClassImportDialog } from "@/components/classes/class-import-dialog"
 import { writeCredentialCards } from "@/components/classes/print-credentials"
 import { StudentAssignmentDialog } from "@/components/classes/student-assignment-dialog"
-import { useResource } from "@/hooks/use-resource"
+import { usePagedList } from "@/hooks/use-paged-list"
 import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -41,9 +41,16 @@ import {
     UsersRound,
     Upload,
 } from "lucide-react"
-import { type FormEvent, useCallback, useState } from "react"
+import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+
+function loadClasses(
+    page: number,
+    filters: { search: string; gradeLevel: string }
+) {
+    return getStudentClasses(page, filters.search.trim(), filters.gradeLevel)
+}
 
 export function ClassesPanel({
     gradeLevels,
@@ -59,17 +66,11 @@ export function ClassesPanel({
     onCreateDialogOpenChange: (open: boolean) => void
 }) {
     const { t, i18n } = useTranslation()
-    const [search, setSearch] = useState("")
-    const [gradeLevelFilter, setGradeLevelFilter] = useState("")
-    const [page, setPage] = useState(1)
-    const classList = useResource(
-        useCallback(
-            () => getStudentClasses(page, search.trim(), gradeLevelFilter),
-            [gradeLevelFilter, page, search]
-        )
-    )
-    const classes = classList.data?.items ?? []
-    const totalPages = classList.data?.totalPages ?? 1
+    const classList = usePagedList(loadClasses, {
+        search: "",
+        gradeLevel: "",
+    })
+    const classes = classList.items
     const isLoading = !classList.hasSettled
     const loadError = classList.error ? t("classes-load-error") : null
     const [editing, setEditing] = useState<StudentClass | null>(null)
@@ -98,8 +99,7 @@ export function ClassesPanel({
         }
     }
 
-    // Show the managed class as the list last loaded it, and bring the page
-    // back within range when a deletion shortened the list.
+    // Show the managed class as the list last loaded it.
     const [syncedList, setSyncedList] = useState(classList.data)
     if (classList.data !== syncedList) {
         setSyncedList(classList.data)
@@ -111,7 +111,6 @@ export function ClassesPanel({
                       current)
                     : null
             )
-            if (loaded.page > loaded.totalPages) setPage(loaded.totalPages)
         }
     }
 
@@ -307,10 +306,12 @@ export function ClassesPanel({
                             </FieldLabel>
                             <Input
                                 id="class-filter-search"
-                                value={search}
+                                value={classList.filters.search}
                                 onChange={(event) => {
-                                    setSearch(event.target.value)
-                                    setPage(1)
+                                    classList.setFilter(
+                                        "search",
+                                        event.target.value
+                                    )
                                 }}
                                 placeholder={t("search-class")}
                             />
@@ -321,25 +322,23 @@ export function ClassesPanel({
                             </FieldLabel>
                             <GradeLevelSelect
                                 id="class-filter-grade-level"
-                                value={gradeLevelFilter}
+                                value={classList.filters.gradeLevel}
                                 levels={gradeLevels}
                                 onChange={(value) => {
-                                    setGradeLevelFilter(value)
-                                    setPage(1)
+                                    classList.setFilter("gradeLevel", value)
                                 }}
                                 onDelete={onDeleteGradeLevel}
                                 required={false}
                                 placeholder={t("all-grade-levels")}
                             />
                         </Field>
-                        {(search || gradeLevelFilter) && (
+                        {(classList.filters.search ||
+                            classList.filters.gradeLevel) && (
                             <Button
                                 type="button"
                                 variant="outline"
                                 onClick={() => {
-                                    setSearch("")
-                                    setGradeLevelFilter("")
-                                    setPage(1)
+                                    classList.resetFilters()
                                 }}
                             >
                                 {t("clear-filters")}
@@ -392,7 +391,8 @@ export function ClassesPanel({
                             <UsersRound className="mb-2 size-8" />
                             <p>
                                 {t(
-                                    search || gradeLevelFilter
+                                    classList.filters.search ||
+                                        classList.filters.gradeLevel
                                         ? "no-class-filtered"
                                         : "no-class"
                                 )}
@@ -485,9 +485,9 @@ export function ClassesPanel({
                     )}
                     {error && <FieldError className="mt-4">{error}</FieldError>}
                     <Pagination
-                        currentPage={page}
-                        totalPages={totalPages}
-                        onPageChange={setPage}
+                        currentPage={classList.page}
+                        totalPages={classList.totalPages}
+                        onPageChange={classList.showPage}
                     />
                 </div>
             </div>
