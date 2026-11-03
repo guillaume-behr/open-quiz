@@ -16,3 +16,7 @@ indent_size = 4
 
 [*.md]
 trim_trailing_whitespace = false
+
+# The layout `caddy fmt` enforces; Caddy warns at startup otherwise.
+[Caddyfile]
+indent_style = tab

@@ -34,9 +34,11 @@ async def check_websocket_proxy() -> None:
         try:
             await websocket.recv()
         except ConnectionClosed as error:
-            if error.code != 1008:
+            # rcvd is the close frame the server sent, None if it sent none.
+            close_code = error.rcvd.code if error.rcvd else None
+            if close_code != 1008:
                 raise RuntimeError(
-                    f"Unexpected WebSocket close code: {error.code}"
+                    f"Unexpected WebSocket close code: {close_code}"
                 ) from error
             return
     raise RuntimeError("Invalid WebSocket credentials were not rejected")

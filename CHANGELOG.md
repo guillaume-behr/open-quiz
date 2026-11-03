@@ -28,6 +28,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   are hidden at once and deleted by the hourly maintenance, which reports them
   in `security.data_retention_enforced`. The `quiz.results_retention_purged`
   audit event is gone.
+- The backend runs on uvloop 0.23.0, which no longer calls
+  `asyncio.iscoroutinefunction` (removed in Python 3.16), with anyio 4.15.1
+  and Starlette 1.7.0.
+- The Python runner loads the Pyodide loader from `/pyodide/` with the rest of
+  the runtime instead of bundling it, which shrinks its worker to about 1 kB.
 
 ## [1.0.0] — 2026-11-03
 
