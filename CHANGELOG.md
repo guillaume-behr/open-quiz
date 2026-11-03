@@ -7,11 +7,16 @@ break compatibility).
 
 Each version starts with **Upgrade actions**: what an administrator must do
 beyond `sh ./update.sh`. “None” means the update script is enough. Keep a
-copy of `open-quiz-backend/.env` before any update; from the next release on,
-`update.sh` backs up the database itself (earlier versions: back up
-PostgreSQL by hand).
+copy of `open-quiz-backend/.env` and `open-quiz-backend/.env.database` before
+any update; since 1.0.0, `update.sh` backs up the database itself (before
+1.0.0: back up PostgreSQL by hand).
 
 ## [Unreleased]
+
+## [1.0.0] — 2026-11-03
+
+First stable version: from here on, a version that breaks compatibility or
+the upgrade path changes the major number.
 
 ### Upgrade actions
 
@@ -181,7 +186,8 @@ PostgreSQL by hand).
 
 First tagged version.
 
-[Unreleased]: https://github.com/guillaume-behr/open-quiz/compare/1518fe7...HEAD
+[Unreleased]: https://github.com/guillaume-behr/open-quiz/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/guillaume-behr/open-quiz/compare/1518fe7...v1.0.0
 [0.4.0]: https://github.com/guillaume-behr/open-quiz/compare/v0.3.5...1518fe7
 [0.3.5]: https://github.com/guillaume-behr/open-quiz/compare/v0.3.0...v0.3.5
 [0.3.0]: https://github.com/guillaume-behr/open-quiz/releases/tag/v0.3.0
