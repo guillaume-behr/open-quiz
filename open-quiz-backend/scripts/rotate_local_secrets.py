@@ -13,6 +13,7 @@ ROTATED_KEYS = ("JWT_SECRET", "ADMIN_PASSWORD")
 
 
 def rotate() -> None:
+    now = int(time())
     secure_defaults = {
         "JWT_SECRET": token_urlsafe(48),
         "ADMIN_PASSWORD": token_urlsafe(24),
@@ -37,7 +38,7 @@ def rotate() -> None:
 
     # ENV_FILE has no suffix (".env" is a bare stem), so with_suffix() would
     # produce ".env.env.<timestamp>.bak". Name the sibling file explicitly.
-    backup = ENV_FILE.with_name(f"{ENV_FILE.name}.{int(time())}.bak")
+    backup = ENV_FILE.with_name(f"{ENV_FILE.name}.{now}.bak")
     write_private_file(backup, ENV_FILE.read_text(encoding="utf-8"))
 
     ENV_FILE.write_text("\n".join(output) + "\n", encoding="utf-8")
@@ -48,7 +49,7 @@ def rotate() -> None:
         session.execute(
             update(RefreshSession)
             .where(RefreshSession.revoked_at.is_(None))
-            .values(revoked_at=int(time()))
+            .values(revoked_at=now)
         )
         session.commit()
     print(f"Backup written to {backup}")
