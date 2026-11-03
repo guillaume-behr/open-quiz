@@ -524,9 +524,9 @@ identifiable.
 Renseignez-les dans `open-quiz-backend/.env`, puis redémarrez l’API. En
 production, les mentions obligatoires laissées vides sont énumérées au
 démarrage dans les journaux, sous l’événement
-`security.public_information_incomplete`. Le contact du DPO et les deux URL
-d’accessibilité en sont exclus : ils restent facultatifs pour le logiciel, pas
-nécessairement pour vous.
+`security.public_information_incomplete`. Le contact du DPO, le contact
+d’accessibilité et les deux URL d’accessibilité en sont exclus : ils restent
+facultatifs pour le logiciel, pas nécessairement pour vous.
 
 ### Responsable du traitement et droits
 

@@ -2,7 +2,8 @@
 
 Editing a question regrades the finished sessions that used it, and a
 question that any exam session has drawn cannot be deleted. Uploaded images
-are normalized and served only to the bank's owner.
+are normalized; these routes serve them only to the bank's owner, and students
+load them through their participation (app/routers/student_sessions.py).
 """
 
 import json
@@ -289,7 +290,7 @@ def create_question(
     payload: str = Form(),
     image: UploadFile | None = File(default=None),
 ) -> QuestionResponse:
-    """Create a choice question, optionally with a private image."""
+    """Create a choice or written question, optionally with a private image."""
     owned_question_bank(question_bank_id, professor, session)
     question_count = session.scalar(
         select(func.count())

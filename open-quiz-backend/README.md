@@ -104,6 +104,8 @@ est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` 
 | `STUDENT_ACCESS_TOKEN_HOURS`       | `2`     | 2 à 12            |
 | `LOGIN_ATTEMPTS`                   | `10`    | 3 à 50            |
 | `LOGIN_WINDOW_SECONDS`             | `900`   | 60 minimum        |
+| `TWO_FACTOR_DAILY_ATTEMPTS`        | `30`    | 5 à 500           |
+| `TWO_FACTOR_BROWSER_TRUST`         | `true`  | `true` ou `false` |
 | `GLOBAL_LOGIN_ATTEMPTS`            | `2000`  | 50 à 100 000      |
 | `GLOBAL_LOGIN_WINDOW_SECONDS`      | `60`    | 10 à 3 600        |
 | `QUIZ_JOIN_ATTEMPTS`               | `60`    | 5 à 500           |
@@ -203,7 +205,8 @@ relaie aux autres workers Uvicorn par `LISTEN/NOTIFY` de PostgreSQL
 (`app/live_relay.py`) : plusieurs workers peuvent donc servir la même instance.
 Une notification émise pendant qu’un worker se reconnecte à la base est perdue
 pour lui ; la réconciliation périodique des flux le remet à jour. Le nombre de
-workers se règle avec `WEB_CONCURRENCY`, voir
+workers se règle avec `WEB_CONCURRENCY`, alimentée sous Docker Compose par
+`OPEN_QUIZ_API_WORKERS`, voir
 [le guide de déploiement](../docs/deployment.md#plusieurs-workers).
 
 ## 🧩 Modèle fonctionnel

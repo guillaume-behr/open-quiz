@@ -139,7 +139,11 @@ def update_question_bank(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuestionBankResponse:
-    """Update the title and grade level of a question bank."""
+    """Update the chapter and grade level of a question bank.
+
+    A new grade level withdraws the bank from the training of the classes of
+    another level.
+    """
     question_bank = owned_question_bank(question_bank_id, professor, session)
     if question_bank.grade_level != payload.grade_level:
         mismatched_class_ids = select(StudentClass.id).where(
