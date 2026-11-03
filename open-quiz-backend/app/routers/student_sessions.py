@@ -96,11 +96,11 @@ def join_quiz(
         .where(QuizSession.join_code == payload.join_code, Quiz.mode == "exam")
     ).first()
     if row is None:
-        reject_quiz_join(request, session, f"join:unknown:{account.id}")
+        reject_quiz_join(request, f"join:unknown:{account.id}")
     quiz_session, quiz = row
     join_subject = f"join:session:{quiz_session.id}"
     if quiz_session.class_id is None:
-        reject_quiz_join(request, session, join_subject)
+        reject_quiz_join(request, join_subject)
     student = session.scalar(
         select(Student).where(
             Student.class_id == quiz_session.class_id,
@@ -108,7 +108,7 @@ def join_quiz(
         )
     )
     if student is None:
-        reject_quiz_join(request, session, join_subject)
+        reject_quiz_join(request, join_subject)
     if quiz_session.same_questions_for_all is False:
         assigned_question_id = session.scalar(
             select(QuizSessionStudentQuestion.question_id)
@@ -119,7 +119,7 @@ def join_quiz(
             .limit(1)
         )
         if assigned_question_id is None:
-            reject_quiz_join(request, session, join_subject)
+            reject_quiz_join(request, join_subject)
         session.execute(
             update(QuizSessionStudentQuestion)
             .where(
@@ -140,7 +140,7 @@ def join_quiz(
             "in_progress",
             "paused",
         }:
-            reject_quiz_join(request, session, join_subject)
+            reject_quiz_join(request, join_subject)
         participant_token = token_urlsafe(32)
         active_session = session.execute(
             update(QuizSession)
@@ -153,7 +153,7 @@ def join_quiz(
         )
         if affected_rows(active_session) != 1:
             session.rollback()
-            reject_quiz_join(request, session, join_subject)
+            reject_quiz_join(request, join_subject)
         # Starting a session places only present participants on their first
         # question. Someone who left the waiting room and comes back after the
         # start has no position, which reads as "finished" everywhere: they
@@ -191,7 +191,7 @@ def join_quiz(
         )
         if affected_rows(reconnected) != 1:
             session.rollback()
-            reject_quiz_join(request, session, join_subject)
+            reject_quiz_join(request, join_subject)
         session.commit()
         session.refresh(existing)
         publish_quiz_update(request, quiz_session, session)
@@ -200,7 +200,7 @@ def join_quiz(
             **state.model_dump(), participant_token=participant_token
         )
     if quiz_session.status != "waiting":
-        reject_quiz_join(request, session, join_subject)
+        reject_quiz_join(request, join_subject)
     waiting = session.execute(
         update(QuizSession)
         .where(
@@ -212,7 +212,7 @@ def join_quiz(
     )
     if affected_rows(waiting) != 1:
         session.rollback()
-        reject_quiz_join(request, session, join_subject)
+        reject_quiz_join(request, join_subject)
     participant_token = token_urlsafe(32)
     participant = QuizParticipant(
         session_id=quiz_session.id,
@@ -226,7 +226,7 @@ def join_quiz(
         session.commit()
     except IntegrityError:
         session.rollback()
-        reject_quiz_join(request, session, join_subject)
+        reject_quiz_join(request, join_subject)
     publish_quiz_update(request, quiz_session, session)
     state = student_state_response(quiz_session, quiz, participant, session)
     return StudentQuizJoinResponse(
@@ -250,7 +250,6 @@ def leave_student_quiz(
     )
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
@@ -278,7 +277,6 @@ def get_student_quiz_state(
     )
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
@@ -301,7 +299,6 @@ def submit_student_answer(
     )
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
@@ -570,7 +567,6 @@ def review_student_answers(
     )
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
@@ -608,7 +604,6 @@ def submit_student_quiz(
     )
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
@@ -644,7 +639,6 @@ def navigate_student_quiz(
     )
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
@@ -715,7 +709,6 @@ def report_student_violation(
     )
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_violation_rate_limiter",
         f"participant:{participant.id}",
     )
@@ -756,7 +749,6 @@ def active_participant_for_image(
     )
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )

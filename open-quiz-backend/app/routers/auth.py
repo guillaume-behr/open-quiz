@@ -187,7 +187,6 @@ def password_rate_subject(username: str) -> str:
 
 def enforce_global_auth_limit(
     request: Request,
-    session: DbSession,
     *,
     known_identity: bool = False,
 ) -> None:
@@ -211,9 +210,7 @@ def enforce_global_auth_limit(
     identifiers it discloses are already derived from names the attacker would
     have to know to ask the question.
     """
-    retry_after = request.app.state.auth_global_rate_limiter.reserve(
-        session, "instance"
-    )
+    retry_after = request.app.state.auth_global_rate_limiter.reserve("instance")
     if not retry_after:
         return
     if known_identity:
@@ -390,12 +387,11 @@ def login(
     # teacher still sign in while an anonymous flood holds the budget open.
     enforce_global_auth_limit(
         request,
-        session,
         known_identity=user is not None and user.is_active,
     )
     limiter = request.app.state.login_rate_limiter
     rate_subject = password_rate_subject(payload.username)
-    retry_after = limiter.reserve(session, rate_subject)
+    retry_after = limiter.reserve(rate_subject)
     if retry_after:
         audit_event("auth.login_rate_limited")
         raise HTTPException(
@@ -415,7 +411,7 @@ def login(
                 ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
             ),
         )
-    limiter.clear_subject(session, rate_subject)
+    limiter.clear_subject(rate_subject)
     if payload.audience == "professor" and user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
@@ -521,7 +517,6 @@ def verify_two_factor(
     # this caller earns the same budget floor as a known account.
     enforce_global_auth_limit(
         request,
-        session,
         known_identity=(
             challenge is not None
             and challenge.used_at is None
@@ -566,7 +561,7 @@ def verify_two_factor(
 
     limiter = request.app.state.login_rate_limiter
     rate_subject = two_factor_rate_subject(user.id)
-    retry_after = limiter.reserve(session, rate_subject)
+    retry_after = limiter.reserve(rate_subject)
     if retry_after:
         audit_event("auth.two_factor_rate_limited", user_id=user.id)
         raise HTTPException(
@@ -580,7 +575,7 @@ def verify_two_factor(
     # about a thousand codes a day; this caps the guesses per day. Success does
     # not reset it, so a legitimate login cannot refill an attacker's budget.
     daily_retry_after = request.app.state.two_factor_daily_rate_limiter.reserve(
-        session, rate_subject
+        rate_subject
     )
     if daily_retry_after:
         audit_event("auth.two_factor_daily_limit_reached", user_id=user.id)
@@ -658,7 +653,7 @@ def verify_two_factor(
                 "Vérification en deux étapes expirée ou invalide",
             ),
         )
-    limiter.clear_subject(session, rate_subject)
+    limiter.clear_subject(rate_subject)
     audit_event("auth.two_factor_succeeded", user_id=user.id)
     tokens = issue_session(user, request, response, session)
     set_two_factor_trust_cookie(response, request, user, two_factor, payload.timezone)

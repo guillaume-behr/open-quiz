@@ -460,7 +460,6 @@ def join_makeup_session(
         # Bound join-code brute-force per student account, never per IP.
         enforce_public_rate_limit(
             request,
-            session,
             "quiz_join_rate_limiter",
             f"makeup-join:account:{account.id}",
         )
@@ -529,7 +528,6 @@ def select_makeup_quiz(
     if makeup is None:
         enforce_public_rate_limit(
             request,
-            session,
             "quiz_join_rate_limiter",
             f"makeup-join:account:{account.id}",
         )

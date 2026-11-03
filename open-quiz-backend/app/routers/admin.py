@@ -174,10 +174,10 @@ def reset_user_credentials(
         )
     session.commit()
     limiter = request.app.state.login_rate_limiter
-    limiter.clear_subject(session, password_rate_subject(user.username))
-    limiter.clear_subject(session, two_factor_rate_subject(user.id))
+    limiter.clear_subject(password_rate_subject(user.username))
+    limiter.clear_subject(two_factor_rate_subject(user.id))
     request.app.state.two_factor_daily_rate_limiter.clear_subject(
-        session, two_factor_rate_subject(user.id)
+        two_factor_rate_subject(user.id)
     )
     session.refresh(user)
     audit_event(

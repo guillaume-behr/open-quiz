@@ -169,9 +169,9 @@ PostgreSQL. Mesuré sur 4 cœurs avec PostgreSQL local, ce relais réveille les
 (2,6 ms au 95ᵉ centile), et 250 WebSockets en 8 ms. Le script
 `python -m scripts.live_relay_benchmark` refait cette mesure sur une instance.
 
-Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes, et 2
-pour le relais. Restez sous `max_connections` (100 par défaut) : au-delà de
-4 workers, augmentez-le ou réduisez leur nombre.
+Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes, 5 pour
+les limites de débit et 2 pour le relais. Restez sous `max_connections` (100
+par défaut) : au-delà de 4 workers, augmentez-le ou réduisez leur nombre.
 
 ### Changer le sous-réseau interne
 

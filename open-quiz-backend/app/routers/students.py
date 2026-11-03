@@ -365,7 +365,7 @@ def update_student_account(
     # moves the student out of reach of whoever targeted the old one.
     limiter = request.app.state.login_rate_limiter
     for identifier in {previous_identifier, account.identifier}:
-        limiter.clear_subject(session, student_password_rate_subject(identifier))
+        limiter.clear_subject(student_password_rate_subject(identifier))
     audit_event(
         "students.account_updated",
         professor_id=professor.id,

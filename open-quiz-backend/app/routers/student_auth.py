@@ -94,12 +94,11 @@ def login_student(
     # anonymous flood holds the instance-wide budget open.
     enforce_global_auth_limit(
         request,
-        session,
         known_identity=account is not None and account.is_active,
     )
     subject = student_password_rate_subject(payload.identifier)
     limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.reserve(session, subject)
+    retry_after = limiter.reserve(subject)
     if retry_after:
         raise HTTPException(
             status_code=429,
@@ -120,7 +119,7 @@ def login_student(
                 ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
             ),
         )
-    limiter.clear_subject(session, subject)
+    limiter.clear_subject(subject)
     token = create_student_access_token(
         account.id,
         request.app.state.settings.jwt_secret,
