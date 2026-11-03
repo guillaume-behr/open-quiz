@@ -791,7 +791,11 @@ def logout(
     session: DbSession,
     payload: LogoutRequest | None = None,
 ) -> None:
-    """Revoke the current refresh session and clear its cookie."""
+    """Revoke the current refresh session and clear its cookie.
+
+    The two-factor trust cookie survives a plain logout; ``forget_browser``
+    clears it too.
+    """
     validate_origin(request)
     raw_token = request.cookies.get(REFRESH_COOKIE)
     if raw_token:

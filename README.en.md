@@ -226,10 +226,20 @@ GDPR:
 | `PRIVACY_LEGAL_BASIS`        | the legal basis, spelled out             |
 | `PRIVACY_RECIPIENTS`         | who accesses the data, the host included |
 
-These are the seven values without which the public pages stay incomplete.
-Retention periods applied by the purge already have defaults and are displayed
-automatically. At startup, the API lists the values it considers mandatory
-under the `security.public_information_incomplete` event.
+Retention periods applied by the purge — exam results, practice sessions,
+problem reports — already have defaults and are displayed automatically: you
+have nothing to copy.
+
+Three more durations are free text, for what the purge does not cover, such as
+the lifetime of a student account: `PRIVACY_TEACHER_DATA_RETENTION`,
+`PRIVACY_STUDENT_DATA_RETENTION` and `PRIVACY_SECURITY_LOG_RETENTION`. Left
+empty, they too show “Not provided” on `/privacy`. With the seven values above,
+these are the ten values a production instance lists at startup under the
+`security.public_information_incomplete` event. Only the DPO contact and the
+three accessibility values (contact and two URLs) remain optional for the
+software. The
+[deployment guide](docs/deployment.md#-configurer-les-mentions-rgpd-et-légales)
+describes each of them.
 
 ### 3. Create a teacher account
 

@@ -28,11 +28,12 @@ def _active_sessions_before(
 def close_abandoned_sessions(cutoff: datetime, session: Session) -> tuple[int, int]:
     """Settle sessions their teacher never came back to close.
 
-    A session only leaves an active status when its owner opens the dashboard,
-    so a teacher who is disabled or who has left keeps participant names,
-    answers and monitoring events alive forever. This sweep is the owner-free
-    path: a quiz lasts at most eight hours, so anything still open long past
-    the cutoff is over.
+    A running session ends with its timer, but a waiting room never launched
+    or a session left paused stays active until its owner closes it, so a
+    teacher who is disabled or who has left keeps participant names, answers
+    and monitoring events alive forever. This sweep is the owner-free path: a
+    quiz lasts at most eight hours, so anything still open long past the
+    cutoff is over.
 
     An exam that collected answers is graded and then kept under the ordinary
     result retention; one that collected none holds nothing but the names of a

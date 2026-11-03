@@ -2,7 +2,7 @@
 
 Teachers list and export the results of their finished sessions, read each
 participant's answers, grade written answers and publish the grades; students
-list their own published results.
+list the results of their own finished exams, provisional until published.
 """
 
 from collections import defaultdict

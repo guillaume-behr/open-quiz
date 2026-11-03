@@ -235,18 +235,20 @@ et 14 du RGPD :
 | `PRIVACY_LEGAL_BASIS`        | la base légale retenue, en toutes lettres |
 | `PRIVACY_RECIPIENTS`         | qui accède aux données, hébergeur compris |
 
-Ce sont les sept valeurs sans lesquelles les pages publiques restent
-incomplètes. Les durées appliquées par la purge — résultats d’examens,
-entraînements, signalements — ont déjà une valeur par défaut et s’affichent
-toutes seules : vous n’avez rien à recopier.
+Les durées appliquées par la purge — résultats d’examens, entraînements,
+signalements — ont déjà une valeur par défaut et s’affichent toutes seules :
+vous n’avez rien à recopier.
 
-Restent facultatives pour le logiciel : le contact du DPO, les deux URL
-d’accessibilité, et les trois durées que vous annoncez en toutes lettres pour
-ce que la purge ne couvre pas, comme la durée de vie d’un compte élève. Le
-guide de déploiement
-[décrit chacune](docs/deployment.md#-configurer-les-mentions-rgpd-et-légales),
-et l’API énumère au démarrage celles qu’elle juge obligatoires, sous
-l’événement `security.public_information_incomplete`.
+Trois autres durées s’annoncent en toutes lettres, pour ce que la purge ne
+couvre pas, comme la durée de vie d’un compte élève :
+`PRIVACY_TEACHER_DATA_RETENTION`, `PRIVACY_STUDENT_DATA_RETENTION` et
+`PRIVACY_SECURITY_LOG_RETENTION`. Laissées vides, elles s’affichent elles aussi
+« Non renseigné » sur `/privacy`. Avec les sept valeurs ci-dessus, ce sont les
+dix valeurs qu’une instance de production énumère au démarrage sous
+l’événement `security.public_information_incomplete`. Seuls le contact du DPO
+et les trois valeurs d’accessibilité (contact et deux URL) restent facultatifs
+pour le logiciel. Le guide de déploiement
+[décrit chacune](docs/deployment.md#-configurer-les-mentions-rgpd-et-légales).
 
 ### 3. Créer un compte enseignant
 
