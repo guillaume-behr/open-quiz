@@ -19,6 +19,11 @@ PostgreSQL by hand).
   migrations by itself, then applies the pending ones, including the move of
   question images into `stored_images`. Keep the backup taken before the
   update until the instance has restarted cleanly.
+- **From 0.4.x, back up by hand before the first `sh ./update.sh`**: the
+  0.4 script that fetches this version applies the migrations without taking
+  a backup, so the backups `update.sh` takes afterwards already hold the new
+  schema. From the deployment directory:
+  `docker compose exec -T open-quiz-database pg_dump --username=open_quiz --dbname=open_quiz --format=custom > open-quiz-before-1.0.0.dump`.
 - The API now connects to PostgreSQL with its own unprivileged role,
   `open_quiz_app`, and the database container no longer receives the
   application's secrets. `update.sh` migrates the deployment by itself: it moves

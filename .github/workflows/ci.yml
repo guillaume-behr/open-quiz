@@ -164,6 +164,13 @@ jobs:
           docker compose up --build --wait --detach
           docker compose exec -T open-quiz-backend \
             /app/.venv/bin/python scripts/container_network_smoke.py
+          # update.sh refuses to pull from a working tree with local changes:
+          # the files a deployment writes must all be ignored by Git.
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            echo "::error::a deployment file is not ignored by Git; update.sh would refuse to update"
+            exit 1
+          fi
       - name: Stop smoke-test containers
         if: always()
         run: docker compose down --volumes

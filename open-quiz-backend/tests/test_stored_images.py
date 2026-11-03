@@ -145,3 +145,33 @@ def test_purging_skips_an_image_a_concurrent_save_reuses(tmp_path: Path) -> None
             purging.execute(select(1))
             purging.commit()
         assert stored_image_count(client) == 1
+
+
+def test_exporting_a_bank_streams_every_question_and_its_image(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "stored-images-export")) as client:
+        environment = exam_environment(client)
+        headers = environment["teacher_headers"]
+        bank_id = environment["question"]["question_bank_id"]
+        for prompt, image in (("Pictured", True), ("Plain", False), ("Also", True)):
+            client.post(
+                f"/api/question-banks/{bank_id}/questions",
+                headers=headers,
+                data={"payload": question_payload(prompt)},
+                files={"image": ("image.png", VALID_PNG, "image/png")}
+                if image
+                else None,
+            )
+        exported = client.get(f"/api/question-banks/{bank_id}/export", headers=headers)
+        assert exported.status_code == 200
+        questions = exported.json()["questions"]
+        assert [question["prompt"] for question in questions][-3:] == [
+            "Pictured",
+            "Plain",
+            "Also",
+        ]
+        images = [question["image"] for question in questions[-3:]]
+        assert images[1] is None
+        assert images[0] == images[2]
+        assert images[0]["content_type"] == "image/png"
