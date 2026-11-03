@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import (
     APIRouter,
     Query,
-    Response,
     status,
 )
 from sqlalchemy import delete, func, select
@@ -22,13 +21,10 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
+    Paging,
     contains_pattern,
     focused_page,
-    set_pagination_headers,
 )
 from app.question_bank_summaries import (
     question_bank_summary_query,
@@ -51,9 +47,7 @@ router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
 def list_question_banks(
     professor: ProfessorUser,
     session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    paging: Paging,
     search: Annotated[str, Query(max_length=160)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
     focus: Annotated[int | None, Query(ge=1)] = None,
@@ -73,22 +67,22 @@ def list_question_banks(
         filters.append(QuestionBank.grade_level == grade_level)
     order = (QuestionBank.grade_level, QuestionBank.chapter, QuestionBank.id)
     if focus is not None:
-        page = (
-            focused_page(session, QuestionBank, filters, order, focus, page_size)
-            or page
+        paging.page = (
+            focused_page(session, QuestionBank, filters, order, focus, paging.page_size)
+            or paging.page
         )
     total = (
         session.scalar(select(func.count()).select_from(QuestionBank).where(*filters))
         or 0
     )
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     rows = session.execute(
         question_bank_summary_query()
         .where(*filters)
         .group_by(QuestionBank.id)
         .order_by(*order)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset(paging.offset)
+        .limit(paging.page_size)
     )
     return [
         question_bank_summary_response(

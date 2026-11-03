@@ -1,6 +1,7 @@
-from typing import Any
+from dataclasses import dataclass
+from typing import Annotated, Any
 
-from fastapi import Response
+from fastapi import Depends, Query, Response
 from sqlalchemy import ColumnElement, func, select, tuple_
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,35 @@ MAX_PAGE_SIZE = 100
 # PostgreSQL bigint: an unbounded page overflowed it and failed with a 500.
 # A million pages of the largest size is far past any real list.
 MAX_PAGE = 1_000_000
+
+
+@dataclass
+class Pagination:
+    """The page a list endpoint answers, and the headers that describe it."""
+
+    page: int
+    page_size: int
+    response: Response
+
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.page_size
+
+    def set_total(self, total: int) -> None:
+        set_pagination_headers(
+            self.response, page=self.page, page_size=self.page_size, total=total
+        )
+
+
+def pagination(
+    response: Response,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+) -> Pagination:
+    return Pagination(page=page, page_size=page_size, response=response)
+
+
+Paging = Annotated[Pagination, Depends(pagination)]
 
 
 def set_pagination_headers(

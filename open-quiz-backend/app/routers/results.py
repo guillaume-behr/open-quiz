@@ -14,7 +14,6 @@ from fastapi import (
     Depends,
     Query,
     Request,
-    Response,
     status,
 )
 from fastapi.responses import StreamingResponse
@@ -38,12 +37,9 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
+    Paging,
     contains_pattern,
-    set_pagination_headers,
 )
 from app.question_responses import load_question_records
 from app.quiz_lookup import owned_quiz, owned_quiz_session
@@ -84,9 +80,7 @@ def list_quiz_results(
     request: Request,
     professor: ProfessorUser,
     session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    paging: Paging,
     quiz_search: Annotated[str, Query(max_length=160)] = "",
     class_search: Annotated[str, Query(max_length=120)] = "",
 ) -> list[QuizSessionResponse]:
@@ -117,7 +111,7 @@ def list_quiz_results(
         )
         or 0
     )
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     rows = list(
         session.execute(
             select(QuizSession, Quiz)
@@ -128,8 +122,8 @@ def list_quiz_results(
                 QuizSession.created_at.desc(),
                 QuizSession.id.desc(),
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(paging.offset)
+            .limit(paging.page_size)
         )
     )
     return finished_session_responses(rows, session)

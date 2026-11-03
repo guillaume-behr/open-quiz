@@ -21,12 +21,9 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
+    Paging,
     contains_pattern,
-    set_pagination_headers,
 )
 from app.schemas import (
     StudentAccountCreate,
@@ -115,9 +112,7 @@ def credential_response(
 def list_student_accounts(
     professor: ProfessorUser,
     session: DbSession,
-    response: Response,
-    page: int = Query(1, ge=1, le=MAX_PAGE),
-    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    paging: Paging,
     search: str = Query("", max_length=120),
     class_id: Annotated[int | None, Query(ge=1)] = None,
     unassigned: bool = False,
@@ -158,7 +153,7 @@ def list_student_accounts(
         session.scalar(select(func.count()).select_from(StudentAccount).where(*filters))
         or 0
     )
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     rows = session.execute(
         select(
             StudentAccount,
@@ -170,8 +165,8 @@ def list_student_accounts(
         .outerjoin(StudentClass, StudentClass.id == Student.class_id)
         .where(*filters)
         .order_by(StudentAccount.display_name, StudentAccount.identifier)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        .offset(paging.offset)
+        .limit(paging.page_size)
     )
     return [
         student_account_response_from_membership(
