@@ -1,5 +1,6 @@
 import os
 from dataclasses import Field, dataclass, fields
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -69,6 +70,29 @@ def validate_optional_public_url(name: str, value: str, environment: str) -> Non
         raise ValueError(f"Production {name} must use HTTPS")
 
 
+BOUNDS = "bounds"
+
+
+def bounded(default: int, minimum: int, maximum: int | None = None) -> Any:
+    """A numeric setting with its accepted range, declared next to its field."""
+    return dataclass_field(default=default, metadata={BOUNDS: (minimum, maximum)})
+
+
+def check_bounds(settings: Any) -> None:
+    """Refuse any bounded setting outside its range, naming its variable."""
+    for setting in fields(settings):
+        if BOUNDS not in setting.metadata:
+            continue
+        minimum, maximum = setting.metadata[BOUNDS]
+        value = getattr(settings, setting.name)
+        name = environment_variable(setting)
+        if maximum is None:
+            if value < minimum:
+                raise ValueError(f"{name} must be at least {minimum}")
+        elif not minimum <= value <= maximum:
+            raise ValueError(f"{name} must be between {minimum} and {maximum}")
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -78,26 +102,28 @@ class Settings:
     admin_username: str
     admin_password: str
     frontend_origin: str
-    access_token_minutes: int = 15
-    refresh_token_days: int = 7
-    student_access_token_hours: int = 2
-    login_attempts: int = 10
-    login_window_seconds: int = 900
-    two_factor_daily_attempts: int = 30
+    access_token_minutes: int = bounded(15, 1, 30)
+    refresh_token_days: int = bounded(7, 1, 30)
+    # A student session has no refresh step, so it must outlast a lesson:
+    # below two hours students would be signed out mid-class.
+    student_access_token_hours: int = bounded(2, 2, 12)
+    login_attempts: int = bounded(10, 3, 50)
+    login_window_seconds: int = bounded(900, 60)
+    two_factor_daily_attempts: int = bounded(30, 5, 500)
     two_factor_browser_trust: bool = True
-    global_login_attempts: int = 2000
-    global_login_window_seconds: int = 60
-    quiz_join_attempts: int = 60
-    quiz_participant_attempts: int = 900
-    quiz_violation_attempts: int = 60
-    quiz_rate_window_seconds: int = 60
-    quiz_result_retention_days: int = 365
-    training_result_retention_days: int = 365
-    abandoned_session_retention_days: int = 7
-    problem_report_attempts: int = 60
-    problem_report_window_seconds: int = 900
-    problem_report_retention_days: int = 90
-    max_request_body_bytes: int = 65536
+    global_login_attempts: int = bounded(2000, 50, 100000)
+    global_login_window_seconds: int = bounded(60, 10, 3600)
+    quiz_join_attempts: int = bounded(60, 5, 500)
+    quiz_participant_attempts: int = bounded(900, 30, 5000)
+    quiz_violation_attempts: int = bounded(60, 5, 500)
+    quiz_rate_window_seconds: int = bounded(60, 10, 3600)
+    quiz_result_retention_days: int = bounded(365, 1, 3650)
+    training_result_retention_days: int = bounded(365, 1, 3650)
+    abandoned_session_retention_days: int = bounded(7, 1, 90)
+    problem_report_attempts: int = bounded(60, 1, 5000)
+    problem_report_window_seconds: int = bounded(900, 60, 86400)
+    problem_report_retention_days: int = bounded(90, 1, 365)
+    max_request_body_bytes: int = bounded(65536, 1024, 1048576)
     environment: str = "development"
     legal_host_name: str = ""
     legal_host_address: str = ""
@@ -172,52 +198,7 @@ class Settings:
             self.admin_password,
             minimum_unique_characters=6,
         )
-        if not 1 <= self.access_token_minutes <= 30:
-            raise ValueError("ACCESS_TOKEN_MINUTES must be between 1 and 30")
-        if not 1 <= self.refresh_token_days <= 30:
-            raise ValueError("REFRESH_TOKEN_DAYS must be between 1 and 30")
-        # A student session has no refresh step, so it must outlast a lesson:
-        # below two hours students would be signed out mid-class.
-        if not 2 <= self.student_access_token_hours <= 12:
-            raise ValueError("STUDENT_ACCESS_TOKEN_HOURS must be between 2 and 12")
-        if not 3 <= self.login_attempts <= 50:
-            raise ValueError("LOGIN_ATTEMPTS must be between 3 and 50")
-        if self.login_window_seconds < 60:
-            raise ValueError("LOGIN_WINDOW_SECONDS must be at least 60")
-        if not 5 <= self.two_factor_daily_attempts <= 500:
-            raise ValueError("TWO_FACTOR_DAILY_ATTEMPTS must be between 5 and 500")
-        if not 50 <= self.global_login_attempts <= 100000:
-            raise ValueError("GLOBAL_LOGIN_ATTEMPTS must be between 50 and 100000")
-        if not 10 <= self.global_login_window_seconds <= 3600:
-            raise ValueError("GLOBAL_LOGIN_WINDOW_SECONDS must be between 10 and 3600")
-        if not 5 <= self.quiz_join_attempts <= 500:
-            raise ValueError("QUIZ_JOIN_ATTEMPTS must be between 5 and 500")
-        if not 30 <= self.quiz_participant_attempts <= 5000:
-            raise ValueError("QUIZ_PARTICIPANT_ATTEMPTS must be between 30 and 5000")
-        if not 5 <= self.quiz_violation_attempts <= 500:
-            raise ValueError("QUIZ_VIOLATION_ATTEMPTS must be between 5 and 500")
-        if not 10 <= self.quiz_rate_window_seconds <= 3600:
-            raise ValueError("QUIZ_RATE_WINDOW_SECONDS must be between 10 and 3600")
-        if not 1 <= self.quiz_result_retention_days <= 3650:
-            raise ValueError("QUIZ_RESULT_RETENTION_DAYS must be between 1 and 3650")
-        if not 1 <= self.training_result_retention_days <= 3650:
-            raise ValueError(
-                "TRAINING_RESULT_RETENTION_DAYS must be between 1 and 3650"
-            )
-        if not 1 <= self.abandoned_session_retention_days <= 90:
-            raise ValueError(
-                "ABANDONED_SESSION_RETENTION_DAYS must be between 1 and 90"
-            )
-        if not 1 <= self.problem_report_attempts <= 5000:
-            raise ValueError("PROBLEM_REPORT_ATTEMPTS must be between 1 and 5000")
-        if not 60 <= self.problem_report_window_seconds <= 86400:
-            raise ValueError(
-                "PROBLEM_REPORT_WINDOW_SECONDS must be between 60 and 86400"
-            )
-        if not 1 <= self.problem_report_retention_days <= 365:
-            raise ValueError("PROBLEM_REPORT_RETENTION_DAYS must be between 1 and 365")
-        if not 1024 <= self.max_request_body_bytes <= 1048576:
-            raise ValueError("MAX_REQUEST_BODY_BYTES must be between 1024 and 1048576")
+        check_bounds(self)
 
         origin = urlparse(self.frontend_origin)
         if origin.scheme not in {"http", "https"} or not origin.netloc:
