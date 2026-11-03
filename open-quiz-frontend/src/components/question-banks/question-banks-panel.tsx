@@ -2,15 +2,11 @@ import {
     createQuestionBank,
     deleteQuestionBank,
     deleteQuestion,
-    downloadQuestionBank,
-    downloadQuestionBatchExample,
     getQuestionBanks,
     getQuestions,
-    importQuestionBatch,
     updateQuestionBank,
 } from "@/api/question-banks"
-import { naturalCompare, PAGE_SIZE, saveBlob } from "@/lib/utils"
-import { describeJsonImportFailure } from "@/lib/json-import"
+import { naturalCompare, PAGE_SIZE } from "@/lib/utils"
 import { ApiError } from "@/api/client"
 import type { GradeLevel, Question, QuestionBank } from "@/api/types"
 import { QuestionBankFormDialog } from "@/components/question-banks/question-bank-form-dialog"
@@ -19,9 +15,10 @@ import {
     ImportQuestionBankDialog,
     QuestionFormDialog,
 } from "@/components/question-banks/question-bank-secondary-dialogs"
+import { useBankTransfer } from "@/components/question-banks/use-bank-transfer"
 import { QuestionBanksList } from "@/components/question-banks/question-banks-list"
 import { QuestionsManager } from "@/components/question-banks/questions-dialog"
-import { type FormEvent, useCallback, useRef, useState } from "react"
+import { type FormEvent, useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
 import { useAsyncAction } from "@/hooks/use-async-action"
@@ -36,16 +33,6 @@ function compareQuestionBanks(
         naturalCompare(first.grade_level, second.grade_level) ||
         naturalCompare(first.chapter, second.chapter)
     )
-}
-
-function exportFilename(bank: QuestionBank): string {
-    const safeName = `${bank.grade_level}-${bank.chapter}`
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .toLowerCase()
-    return `banque-${safeName || bank.id}.json`
 }
 
 type QuestionBanksPanelProps = {
@@ -110,13 +97,17 @@ export function QuestionBanksPanel({
     const [questionToDelete, setQuestionToDelete] = useState<Question | null>(
         null
     )
-    const [isBatchBusy, setIsBatchBusy] = useState(false)
-    const [batchMessage, setBatchMessage] = useState<string | null>(null)
-    const [batchError, setBatchError] = useState<string | null>(null)
-    const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
-    const [importFile, setImportFile] = useState<File | null>(null)
     const [bankToDelete, setBankToDelete] = useState<QuestionBank | null>(null)
-    const importInputRef = useRef<HTMLInputElement>(null)
+
+    const transfer = useBankTransfer({
+        onImported: async (imported) => {
+            updateBanks((banks) =>
+                [...banks, imported.question_bank].sort(compareQuestionBanks)
+            )
+            await onCreateGradeLevel(imported.question_bank.grade_level)
+            bankList.focus(imported.question_bank.id)
+        },
+    })
 
     const saving = useAsyncAction(saveBank, (caughtError) =>
         apiErrorMessage(
@@ -146,15 +137,6 @@ export function QuestionBanksPanel({
                     ? t("question-in-use-error")
                     : t("question-delete-error")
             )
-    )
-    const importing = useAsyncAction(importBank, (caughtError) =>
-        apiErrorMessage(
-            caughtError,
-            t,
-            caughtError instanceof ApiError && caughtError.status === 409
-                ? t("json-import-duplicate-error")
-                : describeJsonImportFailure(caughtError, t("json-import-error"))
-        )
     )
 
     function updateBanks(update: (banks: QuestionBank[]) => QuestionBank[]) {
@@ -231,36 +213,6 @@ export function QuestionBanksPanel({
         setBankView("questions")
     }
 
-    async function handleDownloadExample(): Promise<void> {
-        setBatchError(null)
-        setIsBatchBusy(true)
-        try {
-            saveBlob(
-                await downloadQuestionBatchExample(),
-                "open-quiz-questions-example.json"
-            )
-        } catch {
-            setBatchError(t("json-download-error"))
-        } finally {
-            setIsBatchBusy(false)
-        }
-    }
-
-    async function handleExport(bank: QuestionBank): Promise<void> {
-        setBatchError(null)
-        setBatchMessage(null)
-        setIsBatchBusy(true)
-        try {
-            saveBlob(await downloadQuestionBank(bank.id), exportFilename(bank))
-        } catch (caughtError) {
-            setBatchError(
-                apiErrorMessage(caughtError, t, t("json-export-error"))
-            )
-        } finally {
-            setIsBatchBusy(false)
-        }
-    }
-
     async function deleteSelectedBank(): Promise<void> {
         if (!bankToDelete) return
         await deleteQuestionBank(bankToDelete.id)
@@ -286,42 +238,6 @@ export function QuestionBanksPanel({
         setBankView("questions")
     }
 
-    async function importBank(file: File): Promise<void> {
-        setBatchMessage(null)
-        try {
-            const imported = await importQuestionBatch(file)
-            updateBanks((banks) =>
-                [...banks, imported.question_bank].sort(compareQuestionBanks)
-            )
-            await onCreateGradeLevel(imported.question_bank.grade_level)
-            setBatchMessage(
-                t("questions-imported", {
-                    count: imported.questions.length,
-                })
-            )
-            setIsImportDialogOpen(false)
-            setImportFile(null)
-            bankList.focus(imported.question_bank.id)
-        } finally {
-            if (importInputRef.current) importInputRef.current.value = ""
-        }
-    }
-
-    function openImportDialog(): void {
-        setBatchError(null)
-        importing.setError(null)
-        setBatchMessage(null)
-        setImportFile(null)
-        if (importInputRef.current) importInputRef.current.value = ""
-        setIsImportDialogOpen(true)
-    }
-
-    function handleImportSubmit(event: FormEvent<HTMLFormElement>): void {
-        event.preventDefault()
-        if (!importFile) return
-        void importing.run(importFile)
-    }
-
     return (
         <div className="mt-6">
             <QuestionBanksList
@@ -333,9 +249,9 @@ export function QuestionBanksPanel({
                 loadError={
                     bankList.error ? t("question-banks-load-error") : null
                 }
-                isBatchBusy={isBatchBusy || importing.isPending}
-                batchError={batchError}
-                batchMessage={batchMessage}
+                isBatchBusy={transfer.isBusy}
+                batchError={transfer.batchError}
+                batchMessage={transfer.batchMessage}
                 onTitleFilterChange={(value) => {
                     bankList.setFilter("title", value)
                 }}
@@ -346,9 +262,9 @@ export function QuestionBanksPanel({
                 page={bankList.page}
                 totalPages={bankList.totalPages}
                 onPageChange={bankList.showPage}
-                onImport={openImportDialog}
-                onDownloadExample={() => void handleDownloadExample()}
-                onExport={(bank) => void handleExport(bank)}
+                onImport={transfer.openImportDialog}
+                onDownloadExample={() => void transfer.handleDownloadExample()}
+                onExport={(bank) => void transfer.handleExport(bank)}
                 onDelete={(bank) => {
                     deletingBank.setError(null)
                     setBankToDelete(bank)
@@ -435,18 +351,14 @@ export function QuestionBanksPanel({
             />
 
             <ImportQuestionBankDialog
-                open={isImportDialogOpen}
-                file={importFile}
-                inputRef={importInputRef}
-                isBusy={isBatchBusy || importing.isPending}
-                error={importing.error}
-                onFileChange={setImportFile}
-                onClose={() => {
-                    setIsImportDialogOpen(false)
-                    importing.setError(null)
-                    setImportFile(null)
-                }}
-                onSubmit={handleImportSubmit}
+                open={transfer.isImportDialogOpen}
+                file={transfer.importFile}
+                inputRef={transfer.importInputRef}
+                isBusy={transfer.isBusy}
+                error={transfer.importError}
+                onFileChange={transfer.setImportFile}
+                onClose={transfer.closeImportDialog}
+                onSubmit={transfer.handleImportSubmit}
             />
 
             <DeleteEntityDialog

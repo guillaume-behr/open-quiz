@@ -1,21 +1,14 @@
 import { getAllStudentClasses } from "@/api/classes"
-import { ApiError, getLiveAccessToken } from "@/api/client"
 import { getAllQuestionBanks } from "@/api/question-banks"
 import {
-    cancelQuizSession,
     createQuiz,
     deleteQuiz,
-    deleteQuizSession,
     getQuizzes,
     launchQuiz,
-    pauseQuizSession,
     previewQuiz,
-    resumeQuizSession,
-    startQuizSession,
     updateQuiz,
 } from "@/api/quizzes"
-import type { GradeLevel, Quiz, QuizSession } from "@/api/types"
-import { ActiveQuizSessionDialog } from "@/components/quizzes/active-quiz-session-dialog"
+import type { GradeLevel, Quiz } from "@/api/types"
 import { printExamSubjects } from "@/components/quizzes/print-quiz"
 import { QuizFormDialog } from "@/components/quizzes/quiz-form-dialog"
 import {
@@ -27,25 +20,15 @@ import {
     LaunchQuizDialog,
     PrintQuizDialog,
     QuizPreviewDialog,
-    SessionActionDialog,
 } from "@/components/quizzes/quiz-secondary-dialogs"
 import { QuizzesList } from "@/components/quizzes/quizzes-list"
-import { isActiveSessionStatus } from "@/lib/session-status"
-import { connectLiveUpdates } from "@/lib/live-updates"
-import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
-import { FieldError } from "@/components/ui/field"
+import { LiveSessionDialogs } from "@/components/quizzes/live-session-dialogs"
+import { useLiveQuizSessions } from "@/components/quizzes/use-live-quiz-sessions"
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
 import { useAsyncAction } from "@/hooks/use-async-action"
 import { usePagedList } from "@/hooks/use-paged-list"
 import { useResource } from "@/hooks/use-resource"
-import {
-    type FormEvent,
-    useCallback,
-    useEffect,
-    useReducer,
-    useState,
-} from "react"
-import { LoaderCircle, Trash2 } from "lucide-react"
+import { type FormEvent, useCallback, useReducer, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PAGE_SIZE } from "@/lib/utils"
 import { apiErrorMessage } from "@/lib/errors"
@@ -55,10 +38,6 @@ type QuizzesPanelProps = {
     onCreateDialogOpenChange: (open: boolean) => void
     gradeLevels: GradeLevel[]
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
-}
-
-function isActiveSession(session: QuizSession): boolean {
-    return isActiveSessionStatus(session.status)
 }
 
 function loadSupportData() {
@@ -91,8 +70,7 @@ export function QuizzesPanel({
     const [banks, classes] = support.data ?? [[], []]
     const quizList = usePagedList(loadQuizzes, { search: "", gradeLevel: "" })
     const quizzes = quizList.items
-    const [sessions, setSessions] = useState<QuizSession[]>([])
-    const [liveSessionsLoadFailed, setLiveSessionsLoadFailed] = useState(false)
+    const live = useLiveQuizSessions()
     const [form, dispatchForm] = useReducer(quizFormReducer, emptyQuizForm)
     const [previewedQuiz, setPreviewedQuiz] = useState<Quiz | null>(null)
     const preview = useResource(
@@ -109,72 +87,6 @@ export function QuizzesPanel({
     const [quizToPrint, setQuizToPrint] = useState<Quiz | null>(null)
     const [printClassId, setPrintClassId] = useState("")
     const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null)
-    const [activeSession, setActiveSession] = useState<QuizSession | null>(null)
-    const [activeSessionError, setActiveSessionError] = useState<string | null>(
-        null
-    )
-    const [isStarting, setIsStarting] = useState(false)
-    const [sessionAction, setSessionAction] = useState<
-        "pause" | "resume" | "cancel" | "delete" | null
-    >(null)
-    const [sessionActionToConfirm, setSessionActionToConfirm] = useState<
-        "cancel" | "delete" | null
-    >(null)
-    const activeSessionId = activeSession?.id
-
-    useEffect(
-        () =>
-            connectLiveUpdates<QuizSession[]>({
-                path: "/api/quizzes/live/teacher/sessions",
-                getToken: getLiveAccessToken,
-                onData: (updatedSessions) => {
-                    const activeSessions =
-                        updatedSessions.filter(isActiveSession)
-                    setSessions(activeSessions)
-                    setActiveSession((current) => {
-                        if (!current) return null
-                        return (
-                            activeSessions.find(
-                                (session) => session.id === current.id
-                            ) ?? current
-                        )
-                    })
-                    setLiveSessionsLoadFailed(false)
-                },
-                onUnavailable: () => setLiveSessionsLoadFailed(true),
-            }),
-        []
-    )
-
-    useEffect(() => {
-        if (!activeSessionId) return
-        // Keep one subscription for the lifetime of the dialog. Reconnecting
-        // around every Start/Pause/Resume request creates a gap exactly while
-        // the backend publishes the corresponding state change.
-        return connectLiveUpdates<QuizSession>({
-            path: `/api/quizzes/live/teacher/sessions/${activeSessionId}`,
-            getToken: getLiveAccessToken,
-            onData: (session) => {
-                setActiveSessionError(null)
-                setActiveSession(session)
-                setSessions((current) =>
-                    isActiveSession(session)
-                        ? current.map((item) =>
-                              item.id === session.id ? session : item
-                          )
-                        : current.filter((item) => item.id !== session.id)
-                )
-            },
-            onDeleted: () => {
-                setSessions((current) =>
-                    current.filter((item) => item.id !== activeSessionId)
-                )
-                setActiveSession(null)
-            },
-            onUnavailable: () =>
-                setActiveSessionError(t("quiz-session-refresh-error")),
-        })
-    }, [activeSessionId, t])
 
     const availableByDifficulty = availableQuestionCounts(
         banks,
@@ -185,7 +97,7 @@ export function QuizzesPanel({
         0
     )
     const loadError =
-        support.error || quizList.error || liveSessionsLoadFailed
+        support.error || quizList.error || live.liveSessionsLoadFailed
             ? t("quizzes-load-error")
             : null
 
@@ -302,105 +214,9 @@ export function QuizzesPanel({
             quizToLaunch.id,
             Number(selectedClassId)
         )
-        setSessions((current) =>
-            current.some((item) => item.id === session.id)
-                ? current.map((item) =>
-                      item.id === session.id ? session : item
-                  )
-                : [session, ...current]
-        )
         setQuizToLaunch(null)
         setSelectedClassId("")
-        setActiveSessionError(null)
-        setActiveSession(session)
-    }
-
-    async function handleStart(): Promise<void> {
-        if (!activeSession) return
-        setActiveSessionError(null)
-        setIsStarting(true)
-        try {
-            const started = await startQuizSession(activeSession.id)
-            setActiveSession(started)
-            setSessions((current) =>
-                current.map((session) =>
-                    session.id === started.id ? started : session
-                )
-            )
-        } catch (caught) {
-            setActiveSessionError(
-                apiErrorMessage(caught, t, t("quiz-start-error"))
-            )
-        } finally {
-            setIsStarting(false)
-        }
-    }
-
-    function updateSession(updated: QuizSession): void {
-        setActiveSession(updated)
-        setSessions((current) =>
-            current.map((session) =>
-                session.id === updated.id ? updated : session
-            )
-        )
-    }
-
-    async function handleSessionAction(
-        action: "pause" | "resume" | "cancel"
-    ): Promise<void> {
-        if (!activeSession) return
-        setActiveSessionError(null)
-        setSessionAction(action)
-        try {
-            if (action === "cancel") {
-                await cancelQuizSession(activeSession.id)
-                setSessions((current) =>
-                    current.filter((item) => item.id !== activeSession.id)
-                )
-                setActiveSession(null)
-            } else {
-                const updated =
-                    action === "pause"
-                        ? await pauseQuizSession(activeSession.id)
-                        : await resumeQuizSession(activeSession.id)
-                updateSession(updated)
-            }
-            setSessionActionToConfirm(null)
-        } catch (caught) {
-            setActiveSessionError(
-                apiErrorMessage(
-                    caught,
-                    t,
-                    caught instanceof ApiError && caught.status === 409
-                        ? action === "cancel"
-                            ? t("quiz-cancel-with-answers-error")
-                            : t("quiz-session-action-error")
-                        : t("quiz-session-action-error")
-                )
-            )
-        } finally {
-            setSessionAction(null)
-        }
-    }
-
-    async function handleDeleteSession(): Promise<void> {
-        if (!activeSession) return
-        setActiveSessionError(null)
-        setSessionAction("delete")
-        try {
-            await deleteQuizSession(activeSession.id)
-            setSessions((current) =>
-                current.filter((session) => session.id !== activeSession.id)
-            )
-            setSessionActionToConfirm(null)
-            setActiveSession(null)
-        } catch (caught) {
-            setActiveSessionError(
-                apiErrorMessage(caught, t, t("quiz-session-delete-error"))
-            )
-        } finally {
-            setSessionAction(null)
-        }
+        live.showLaunchedSession(session)
     }
 
     async function deleteSelectedQuiz(): Promise<void> {
@@ -414,7 +230,7 @@ export function QuizzesPanel({
         <div className="mt-6">
             <QuizzesList
                 quizzes={quizzes}
-                sessions={sessions}
+                sessions={live.sessions}
                 gradeLevels={gradeLevels}
                 isLoading={!support.hasSettled || !quizList.hasSettled}
                 loadError={loadError}
@@ -446,8 +262,7 @@ export function QuizzesPanel({
                     setQuizToPrint(quiz)
                 }}
                 onOpenSession={(quizSession) => {
-                    setActiveSessionError(null)
-                    setActiveSession(quizSession)
+                    live.openSession(quizSession)
                 }}
             />
 
@@ -570,76 +385,19 @@ export function QuizzesPanel({
                 onSubmit={(event) => void printing.run(event)}
             />
 
-            <ActiveQuizSessionDialog
-                session={activeSession}
-                error={activeSessionError}
-                isStarting={isStarting}
-                action={sessionAction}
-                onClose={() => {
-                    setActiveSession(null)
-                    setActiveSessionError(null)
-                }}
-                onStart={() => void handleStart()}
-                onPause={() => void handleSessionAction("pause")}
-                onResume={() => void handleSessionAction("resume")}
-                onConfirmCancel={() => {
-                    setActiveSessionError(null)
-                    setSessionActionToConfirm("cancel")
-                }}
-                onConfirmDelete={() => {
-                    setActiveSessionError(null)
-                    setSessionActionToConfirm("delete")
-                }}
-            />
+            <LiveSessionDialogs live={live} />
 
-            <SessionActionDialog
-                actionToConfirm={sessionActionToConfirm}
-                currentAction={sessionAction}
-                error={activeSessionError}
-                onClose={() => setSessionActionToConfirm(null)}
-                onConfirm={(action) =>
-                    action === "delete"
-                        ? void handleDeleteSession()
-                        : void handleSessionAction("cancel")
-                }
-            />
-
-            <Dialog
+            <ConfirmDeleteDialog
                 open={quizToDelete !== null}
-                onOpenChange={(open) => {
-                    if (!open && !deleting.isPending) setQuizToDelete(null)
-                }}
                 title={t("delete-quiz")}
                 description={t("delete-quiz-help", {
                     title: quizToDelete?.title ?? "",
                 })}
-                size="sm"
-            >
-                {deleting.error && (
-                    <FieldError className="mb-4">{deleting.error}</FieldError>
-                )}
-                <div className="flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        disabled={deleting.isPending}
-                        onClick={() => setQuizToDelete(null)}
-                    >
-                        {t("cancel")}
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        disabled={deleting.isPending}
-                        onClick={() => void deleting.run()}
-                    >
-                        {deleting.isPending ? (
-                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                        ) : (
-                            <Trash2 />
-                        )}
-                        {t("delete")}
-                    </Button>
-                </div>
-            </Dialog>
+                isBusy={deleting.isPending}
+                error={deleting.error}
+                onClose={() => setQuizToDelete(null)}
+                onConfirm={() => void deleting.run()}
+            />
         </div>
     )
 }

@@ -1,5 +1,6 @@
 import type { Question, QuestionBank } from "@/api/types"
 import { Button } from "@/components/ui/button"
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
 import { Dialog } from "@/components/ui/dialog"
 import {
     Field,
@@ -121,40 +122,16 @@ export function DeleteEntityDialog({
     const helpKey =
         kind === "bank" ? "delete-question-bank-help" : "delete-question-help"
     return (
-        <Dialog
+        <ConfirmDeleteDialog
             open={open}
-            onOpenChange={(nextOpen) => {
-                if (!nextOpen && !isBusy) onClose()
-            }}
             title={t(titleKey)}
             description={t(helpKey, { title })}
-            size="sm"
-        >
-            <div className="space-y-4">
-                {error && <FieldError>{error}</FieldError>}
-                <div className="flex justify-end gap-2">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={isBusy}
-                        onClick={onClose}
-                    >
-                        {t("cancel")}
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="destructive"
-                        disabled={isBusy}
-                        onClick={onConfirm}
-                    >
-                        {isBusy && (
-                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                        )}
-                        {t(titleKey)}
-                    </Button>
-                </div>
-            </div>
-        </Dialog>
+            confirmLabel={t(titleKey)}
+            isBusy={isBusy}
+            error={error}
+            onClose={onClose}
+            onConfirm={onConfirm}
+        />
     )
 }
 

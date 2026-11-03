@@ -13,34 +13,19 @@ import {
     getClassStudentCredentials,
 } from "@/api/students"
 import type { GradeLevel, StudentAccount, StudentClass } from "@/api/types"
+import { ClassCard, ClassFilters } from "@/components/classes/class-card"
+import { ClassStudentsSection } from "@/components/classes/class-students-section"
 import { ClassFormDialog } from "@/components/classes/class-form-dialog"
 import { ClassImportDialog } from "@/components/classes/class-import-dialog"
 import { writeCredentialCards } from "@/components/classes/print-credentials"
 import { StudentAssignmentDialog } from "@/components/classes/student-assignment-dialog"
 import { usePagedList } from "@/hooks/use-paged-list"
-import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
-import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { formatClassName, saveBlob } from "@/lib/utils"
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
+import { FieldError } from "@/components/ui/field"
+import { saveBlob } from "@/lib/utils"
 import { Pagination } from "@/components/ui/pagination"
-import {
-    FileJson,
-    LoaderCircle,
-    Pencil,
-    Printer,
-    Trash2,
-    UserMinus,
-    UserPlus,
-    UsersRound,
-    Upload,
-} from "lucide-react"
+import { FileJson, LoaderCircle, UsersRound, Upload } from "lucide-react"
 import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
@@ -82,8 +67,6 @@ export function ClassesPanel({
     const [gradeLevel, setGradeLevel] = useState("")
     const [newGradeLevel, setNewGradeLevel] = useState("")
     const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
-    const [newStudentFirstName, setNewStudentFirstName] = useState("")
-    const [newStudentLastName, setNewStudentLastName] = useState("")
     const [isBusy, setIsBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [importOpen, setImportOpen] = useState(false)
@@ -195,30 +178,28 @@ export function ClassesPanel({
         }
     }
 
-    async function createAndAssignStudent() {
-        if (
-            !managed ||
-            !newStudentFirstName.trim() ||
-            !newStudentLastName.trim()
-        )
-            return
+    async function createAndAssignStudent(
+        firstName: string,
+        lastName: string
+    ): Promise<boolean> {
+        if (!managed) return false
         setIsBusy(true)
         setError(null)
         try {
             const account = await createStudentAccount({
-                first_name: newStudentFirstName.trim(),
-                last_name: newStudentLastName.trim(),
+                first_name: firstName,
+                last_name: lastName,
             })
             const updated = await assignStudentAccount(managed.id, account.id)
             setManaged(updated)
             setEditing(updated)
-            setNewStudentFirstName("")
-            setNewStudentLastName("")
             classList.reload()
+            return true
         } catch (caught) {
             setError(
                 apiErrorMessage(caught, t, t("student-account-save-error"))
             )
+            return false
         } finally {
             setIsBusy(false)
         }
@@ -297,55 +278,13 @@ export function ClassesPanel({
     return (
         <div className="mt-6">
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                <aside className="h-fit rounded-xl border bg-background p-4">
-                    <h3 className="font-semibold">{t("filters")}</h3>
-                    <FieldGroup className="mt-4 gap-4">
-                        <Field>
-                            <FieldLabel htmlFor="class-filter-search">
-                                {t("search")}
-                            </FieldLabel>
-                            <Input
-                                id="class-filter-search"
-                                value={classList.filters.search}
-                                onChange={(event) => {
-                                    classList.setFilter(
-                                        "search",
-                                        event.target.value
-                                    )
-                                }}
-                                placeholder={t("search-class")}
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="class-filter-grade-level">
-                                {t("grade-level")}
-                            </FieldLabel>
-                            <GradeLevelSelect
-                                id="class-filter-grade-level"
-                                value={classList.filters.gradeLevel}
-                                levels={gradeLevels}
-                                onChange={(value) => {
-                                    classList.setFilter("gradeLevel", value)
-                                }}
-                                onDelete={onDeleteGradeLevel}
-                                required={false}
-                                placeholder={t("all-grade-levels")}
-                            />
-                        </Field>
-                        {(classList.filters.search ||
-                            classList.filters.gradeLevel) && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                    classList.resetFilters()
-                                }}
-                            >
-                                {t("clear-filters")}
-                            </Button>
-                        )}
-                    </FieldGroup>
-                </aside>
+                <ClassFilters
+                    filters={classList.filters}
+                    gradeLevels={gradeLevels}
+                    onFilterChange={classList.setFilter}
+                    onReset={classList.resetFilters}
+                    onDeleteGradeLevel={onDeleteGradeLevel}
+                />
                 <div className="min-w-0">
                     <div className="mb-4 flex items-center justify-between gap-3">
                         <h3 className="font-semibold">{t("classes")}</h3>
@@ -406,80 +345,21 @@ export function ClassesPanel({
                             className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
                         >
                             {classes.map((studentClass) => (
-                                <article
+                                <ClassCard
                                     key={studentClass.id}
-                                    className="relative rounded-xl border bg-background p-4"
-                                >
-                                    <Button
-                                        type="button"
-                                        size="icon-sm"
-                                        variant="ghost"
-                                        className="absolute end-12 top-4"
-                                        onClick={() => {
-                                            setEditing(studentClass)
-                                            setManaged(studentClass)
-                                            setClassName(studentClass.name)
-                                            setGradeLevel(
-                                                studentClass.grade_level
-                                            )
-                                        }}
-                                        aria-label={t("edit-class")}
-                                        title={t("edit-class")}
-                                    >
-                                        <Pencil />
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        size="icon-sm"
-                                        variant="destructive"
-                                        className="absolute end-4 top-4"
-                                        onClick={() =>
-                                            setDeleting(studentClass)
-                                        }
-                                        aria-label={t("delete-class")}
-                                        title={t("delete-class")}
-                                    >
-                                        <Trash2 />
-                                    </Button>
-                                    <div className="flex items-start gap-3 pe-20">
-                                        <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                                            <UsersRound className="size-5" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="mt-1 flex flex-wrap items-center gap-2">
-                                                <p className="font-semibold break-words">
-                                                    {formatClassName(
-                                                        studentClass.grade_level,
-                                                        studentClass.name
-                                                    )}
-                                                </p>
-                                                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-primary">
-                                                    {t("student-count", {
-                                                        count: studentClass.student_count,
-                                                    })}
-                                                </span>
-                                            </div>
-                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() =>
-                                                        void printCredentials(
-                                                            studentClass
-                                                        )
-                                                    }
-                                                    disabled={isBusy}
-                                                >
-                                                    <Printer />
-                                                    {t(
-                                                        "print-student-credentials"
-                                                    )}
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </article>
+                                    studentClass={studentClass}
+                                    isBusy={isBusy}
+                                    onEdit={() => {
+                                        setEditing(studentClass)
+                                        setManaged(studentClass)
+                                        setClassName(studentClass.name)
+                                        setGradeLevel(studentClass.grade_level)
+                                    }}
+                                    onDelete={() => setDeleting(studentClass)}
+                                    onPrint={() =>
+                                        void printCredentials(studentClass)
+                                    }
+                                />
                             ))}
                         </div>
                     )}
@@ -522,108 +402,13 @@ export function ClassesPanel({
                 onSubmit={saveClass}
                 studentManagement={
                     managed ? (
-                        <section className="space-y-4 border-t pt-5">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <h3 className="font-semibold">
-                                        {t("manage-students")}
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground">
-                                        {t("student-count", {
-                                            count: managed.student_count,
-                                        })}
-                                    </p>
-                                </div>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => void openAssignment()}
-                                    disabled={isBusy}
-                                >
-                                    <UserPlus />
-                                    {t("assign-student")}
-                                </Button>
-                            </div>
-                            <div className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[1fr_1fr_auto]">
-                                <Input
-                                    value={newStudentFirstName}
-                                    onChange={(event) =>
-                                        setNewStudentFirstName(
-                                            event.target.value
-                                        )
-                                    }
-                                    placeholder={t("first-name")}
-                                    aria-label={t("first-name")}
-                                />
-                                <Input
-                                    value={newStudentLastName}
-                                    onChange={(event) =>
-                                        setNewStudentLastName(
-                                            event.target.value
-                                        )
-                                    }
-                                    placeholder={t("last-name")}
-                                    aria-label={t("last-name")}
-                                />
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() =>
-                                        void createAndAssignStudent()
-                                    }
-                                    disabled={
-                                        isBusy ||
-                                        !newStudentFirstName.trim() ||
-                                        !newStudentLastName.trim()
-                                    }
-                                >
-                                    <UserPlus />
-                                    {t("create-student-account")}
-                                </Button>
-                            </div>
-                            {managed.students.length === 0 ? (
-                                <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
-                                    {t("no-student")}
-                                </p>
-                            ) : (
-                                <ul className="max-h-56 divide-y overflow-auto rounded-lg border bg-background">
-                                    {managed.students.map((student) => (
-                                        <li
-                                            key={student.id}
-                                            className="flex items-center justify-between gap-3 px-4 py-3"
-                                        >
-                                            <div>
-                                                <p className="font-medium">
-                                                    {student.display_name}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {student.identifier}
-                                                </p>
-                                            </div>
-                                            {student.account_id !== null && (
-                                                <Button
-                                                    type="button"
-                                                    size="icon-sm"
-                                                    variant="ghost"
-                                                    disabled={isBusy}
-                                                    onClick={() =>
-                                                        void unassign(
-                                                            student.account_id!
-                                                        )
-                                                    }
-                                                    aria-label={t(
-                                                        "unassign-student"
-                                                    )}
-                                                >
-                                                    <UserMinus />
-                                                </Button>
-                                            )}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </section>
+                        <ClassStudentsSection
+                            studentClass={managed}
+                            isBusy={isBusy}
+                            onOpenAssignment={() => void openAssignment()}
+                            onCreateStudent={createAndAssignStudent}
+                            onUnassign={(accountId) => void unassign(accountId)}
+                        />
                     ) : undefined
                 }
             />
@@ -640,29 +425,14 @@ export function ClassesPanel({
                 onAssign={(accountIds) => void assign(accountIds)}
             />
 
-            <Dialog
+            <ConfirmDeleteDialog
                 open={deleting !== null}
-                onOpenChange={(open) => !open && setDeleting(null)}
                 title={t("delete-class")}
                 description={t("delete-class-help", { name: deleting?.name })}
-                size="sm"
-            >
-                <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setDeleting(null)}>
-                        {t("cancel")}
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        disabled={isBusy}
-                        onClick={() => void removeClass()}
-                    >
-                        {isBusy && (
-                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                        )}
-                        {t("delete")}
-                    </Button>
-                </div>
-            </Dialog>
+                isBusy={isBusy}
+                onClose={() => setDeleting(null)}
+                onConfirm={() => void removeClass()}
+            />
         </div>
     )
 }
