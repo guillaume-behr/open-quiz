@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from hashlib import sha256
 from math import ceil
 from random import SystemRandom
@@ -543,38 +543,6 @@ def quiz_session_class_name(quiz_session: QuizSession, session: DbSession) -> st
     if student_class is None:
         return quiz_session.class_name
     return format_class_name(student_class.grade_level, student_class.name)
-
-
-def purge_expired_quiz_results(
-    professor: ProfessorUser,
-    request: Request,
-    session: DbSession,
-) -> int:
-    cutoff = datetime.now(UTC) - timedelta(
-        days=request.app.state.settings.quiz_result_retention_days
-    )
-    expired_ids = list(
-        session.scalars(
-            select(QuizSession.id)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                Quiz.owner_id == professor.id,
-                Quiz.mode == "exam",
-                QuizSession.status == "finished",
-                QuizSession.started_at.is_not(None),
-                QuizSession.started_at <= cutoff,
-            )
-        )
-    )
-    if expired_ids:
-        delete_quiz_session_records(expired_ids, session)
-        session.commit()
-        audit_event(
-            "quiz.results_retention_purged",
-            professor_id=professor.id,
-            deleted_count=len(expired_ids),
-        )
-    return len(expired_ids)
 
 
 def participant_token_hash(token: str) -> str:

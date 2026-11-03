@@ -5,6 +5,8 @@ import json
 from base64 import b64encode
 from pathlib import Path
 
+import main
+
 from support import (
     ADMIN_PASSWORD,
     VALID_PNG,
@@ -1515,6 +1517,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert expiring_session["id"] not in {
             result["id"] for result in results_after_expiry.json()
         }
+        # Results past retention are only hidden: maintenance deletes them.
+        main.enforce_data_retention(
+            client.app.state.session_factory, client.app.state.settings
+        )
         assert (
             client.get(
                 "/api/quizzes/sessions/active",

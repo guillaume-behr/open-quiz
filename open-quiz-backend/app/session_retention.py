@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Quiz, QuizAnswer, QuizParticipant, QuizSession
@@ -79,6 +79,30 @@ def expired_training_session_ids(cutoff: datetime, session: Session) -> list[int
                 Quiz.mode == "training",
                 QuizSession.status == "finished",
                 QuizSession.created_at <= cutoff,
+            )
+        )
+    )
+
+
+def retained_exam_result(cutoff: datetime) -> ColumnElement[bool]:
+    """Whether a finished exam session is still within its result retention.
+
+    Results read by teachers apply this filter, so an expired result is never
+    shown or exported even before the next maintenance pass deletes it.
+    """
+    return or_(QuizSession.started_at.is_(None), QuizSession.started_at > cutoff)
+
+
+def expired_exam_result_ids(cutoff: datetime, session: Session) -> list[int]:
+    """List finished exam sessions past their result retention."""
+    return list(
+        session.scalars(
+            select(QuizSession.id)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                Quiz.mode == "exam",
+                QuizSession.status == "finished",
+                ~retained_exam_result(cutoff),
             )
         )
     )
