@@ -1,4 +1,7 @@
 **/.env
+# The database superuser password, written by install.sh and update.sh: an
+# untracked file would make update.sh refuse to pull.
+**/.env.database
 **/.env.*.bak
 **/.venv/
 **/.uv-cache*/

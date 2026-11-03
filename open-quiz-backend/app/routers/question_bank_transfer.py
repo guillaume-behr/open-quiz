@@ -215,12 +215,18 @@ def export_questions(
         yield ',\n  "questions": ['
         first = True
         with session_factory() as export_session:
-            questions = export_session.scalars(
-                select(Question)
-                .where(Question.question_bank_id == bank_id)
-                .order_by(Question.created_at, Question.id)
+            # Load one question at a time and expunge it once written, so that
+            # memory holds a single question's images: a question kept from an
+            # earlier query would be detached and could not load its image.
+            question_ids = list(
+                export_session.scalars(
+                    select(Question.id)
+                    .where(Question.question_bank_id == bank_id)
+                    .order_by(Question.created_at, Question.id)
+                )
             )
-            for question in questions:
+            for question_id in question_ids:
+                question = export_session.get_one(Question, question_id)
                 choices = list(
                     export_session.scalars(
                         select(QuestionChoice)

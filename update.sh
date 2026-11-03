@@ -45,12 +45,6 @@ setup_compose
 [ -f "$ENV_FILE" ] \
     || fail "missing open-quiz-backend/.env; run 'sh ./install.sh' to create it"
 
-# Deployments from before the API had its own PostgreSQL role: split the
-# superuser password into the database's file, then switch the API's role.
-# The running containers keep their settings until they are recreated below.
-ensure_database_environment_file "$ENV_FILE" "$DATABASE_ENV_FILE"
-use_application_database_role "$ENV_FILE"
-
 if [ "$pull" = true ]; then
     require_commands git
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
@@ -88,6 +82,14 @@ elif database_is_running; then
 else
     step 'Skipping the database backup: the database is not running yet'
 fi
+
+# Deployments from before the API had its own PostgreSQL role: split the
+# superuser password into the database's file, then switch the API's role.
+# Only now, once the revision is fetched and the data backed up: a check that
+# fails above leaves both files as they were, and the role is created right
+# below. The running containers keep their settings until they are recreated.
+ensure_database_environment_file "$ENV_FILE" "$DATABASE_ENV_FILE"
+use_application_database_role "$ENV_FILE"
 
 step 'Starting the database'
 compose up --detach --wait --wait-timeout 120 open-quiz-database
