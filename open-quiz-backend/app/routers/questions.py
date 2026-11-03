@@ -83,7 +83,7 @@ def normalized_uploaded_image(
     image_data = image.file.read(MAX_IMAGE_BYTES + 1)
     if len(image_data) > MAX_IMAGE_BYTES:
         raise ApiError(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status.HTTP_413_CONTENT_TOO_LARGE,
             ErrorCode.IMAGE_TOO_LARGE,
             "L’image est trop volumineuse",
         )
@@ -214,7 +214,7 @@ def create_question(
         > MAX_IMPORT_IMAGE_BYTES
     ):
         raise ApiError(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status.HTTP_413_CONTENT_TOO_LARGE,
             ErrorCode.QUESTION_IMAGES_TOO_LARGE,
             "Le volume total des images de la question est trop important",
         )
@@ -418,7 +418,7 @@ def require_image_budget(
         > MAX_IMPORT_IMAGE_BYTES
     ):
         raise ApiError(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status.HTTP_413_CONTENT_TOO_LARGE,
             ErrorCode.QUESTION_IMAGES_TOO_LARGE,
             "Le volume total des images de la question est trop important",
         )

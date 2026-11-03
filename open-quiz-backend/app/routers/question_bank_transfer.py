@@ -219,7 +219,7 @@ def import_question_bank(
         )
         if total_image_bytes > MAX_IMPORT_IMAGE_BYTES:
             raise ApiError(
-                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status.HTTP_413_CONTENT_TOO_LARGE,
                 ErrorCode.IMPORT_IMAGES_TOO_LARGE,
                 "Le volume total des images importées est trop important",
             )

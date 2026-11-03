@@ -763,17 +763,21 @@ def test_container_network_smoke_checks(monkeypatch: pytest.MonkeyPatch) -> None
     with pytest.raises(RuntimeError, match="Unexpected health response"):
         smoke.check_http_proxy()
 
-    def closed(code: int) -> ConnectionClosed:
-        return ConnectionClosed(Close(code, "closed"), None)
+    def closed(code: int | None) -> ConnectionClosed:
+        frame = None if code is None else Close(code, "closed")
+        return ConnectionClosed(frame, None)
 
     sockets = [
         _FakeWebSocket(closed(1008)),
         _FakeWebSocket(closed(1011)),
+        _FakeWebSocket(closed(None)),
         _FakeWebSocket(None),
     ]
     monkeypatch.setattr(smoke, "connect", lambda *_, **__: sockets.pop(0))
     asyncio.run(smoke.check_websocket_proxy())
-    with pytest.raises(RuntimeError, match="Unexpected WebSocket close code"):
+    with pytest.raises(RuntimeError, match="Unexpected WebSocket close code: 1011"):
+        asyncio.run(smoke.check_websocket_proxy())
+    with pytest.raises(RuntimeError, match="Unexpected WebSocket close code: None"):
         asyncio.run(smoke.check_websocket_proxy())
     with pytest.raises(RuntimeError, match="were not rejected"):
         asyncio.run(smoke.check_websocket_proxy())
