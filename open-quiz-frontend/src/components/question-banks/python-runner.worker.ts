@@ -1,6 +1,11 @@
 /// <reference lib="webworker" />
 
-import { loadPyodide } from "pyodide"
+import type { loadPyodide as LoadPyodide } from "pyodide"
+
+// The loader is served from /pyodide/ with the rest of the runtime
+// (scripts/copy-pyodide.mjs) rather than bundled: its Node.js code paths
+// would otherwise pull node: built-ins into the browser build.
+const PYODIDE_URL = "/pyodide/"
 
 type RunRequest = {
     id: string
@@ -58,8 +63,15 @@ function restrictSandboxCapabilities() {
     sandboxRestricted = true
 }
 
+async function loadRuntime(): Promise<PythonRuntime> {
+    const { loadPyodide } = (await import(
+        /* @vite-ignore */ `${PYODIDE_URL}pyodide.mjs`
+    )) as { loadPyodide: typeof LoadPyodide }
+    return loadPyodide({ indexURL: PYODIDE_URL })
+}
+
 function runtime(): Promise<PythonRuntime> {
-    runtimePromise ??= loadPyodide({ indexURL: "/pyodide/" }).catch((error) => {
+    runtimePromise ??= loadRuntime().catch((error: unknown) => {
         runtimePromise = undefined
         throw error
     })

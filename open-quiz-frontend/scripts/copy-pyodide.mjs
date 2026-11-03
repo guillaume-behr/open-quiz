@@ -1,8 +1,8 @@
 // The Python runner loads Pyodide from /pyodide/ (python-runner.worker.ts),
-// which Vite serves from public/. These files come from the pyodide package
-// pinned in package.json, so they always match the JavaScript loader that
-// imports them; they are copied on every dev start and build rather than
-// committed.
+// which Vite serves from public/. The loader itself is served from there too
+// instead of being bundled. These files come from the pyodide package pinned
+// in package.json, so the loader and the runtime always match; they are
+// copied on every dev start and build rather than committed.
 import { copyFile, mkdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -14,6 +14,8 @@ const files = [
     "pyodide-lock.json",
     "pyodide.asm.mjs",
     "pyodide.asm.wasm",
+    "pyodide.mjs",
+    "pyodide.mjs.map",
     "python_stdlib.zip",
 ]
 

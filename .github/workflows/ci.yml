@@ -73,10 +73,12 @@ jobs:
         working-directory: open-quiz-frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
-      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6.0.2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
         with:
-          package_json_file: open-quiz-frontend/package.json
-          run_install: false
+          node-version: 24
+      # Node 24's Corepack installs the pnpm version package.json pins.
+      - run: corepack enable && corepack install
+      # Again, now that pnpm exists, to restore and save its store.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
         with:
           node-version: 24
@@ -98,10 +100,12 @@ jobs:
         working-directory: open-quiz-frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
-      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6.0.2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
         with:
-          package_json_file: open-quiz-frontend/package.json
-          run_install: false
+          node-version: 24
+      # Node 24's Corepack installs the pnpm version package.json pins.
+      - run: corepack enable && corepack install
+      # Again, now that pnpm exists, to restore and save its store.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
         with:
           node-version: 24
@@ -133,14 +137,18 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.0.0
         with:
           context: open-quiz-backend
-          push: false
+          # An explicit output, attestations included, instead of leaving
+          # the result only in the build cache.
+          outputs: type=oci,dest=${{ runner.temp }}/open-quiz-backend.tar
           provenance: mode=max
           sbom: true
       - name: Build frontend with provenance and SBOM
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.0.0
         with:
           context: open-quiz-frontend
-          push: false
+          # An explicit output, attestations included, instead of leaving
+          # the result only in the build cache.
+          outputs: type=oci,dest=${{ runner.temp }}/open-quiz-frontend.tar
           provenance: mode=max
           sbom: true
       - name: Run container HTTP and WebSocket smoke test
