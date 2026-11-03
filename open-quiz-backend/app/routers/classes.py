@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
 from app.grade_levels import (
     ensure_grade_level,
@@ -66,7 +67,7 @@ def class_has_active_exam_session(class_id: int, session: DbSession) -> bool:
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSession.class_id == class_id,
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
                 QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
         )
@@ -112,8 +113,8 @@ def class_response(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSession.class_id == student_class.id,
-            QuizSession.status == "finished",
-            Quiz.mode == "exam",
+            QuizSession.status == SessionStatus.FINISHED,
+            Quiz.mode == QuizMode.EXAM,
         )
     )
     latest_quiz = session.execute(
@@ -126,8 +127,8 @@ def class_response(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSession.class_id == student_class.id,
-            QuizSession.status == "finished",
-            Quiz.mode == "exam",
+            QuizSession.status == SessionStatus.FINISHED,
+            Quiz.mode == QuizMode.EXAM,
         )
         .order_by(
             QuizSession.started_at.desc(),
@@ -239,8 +240,8 @@ def list_classes(
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSession.class_id.in_(class_ids),
-                QuizSession.status == "finished",
-                Quiz.mode == "exam",
+                QuizSession.status == SessionStatus.FINISHED,
+                Quiz.mode == QuizMode.EXAM,
             )
             .group_by(QuizSession.class_id)
         )
@@ -267,8 +268,8 @@ def list_classes(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSession.class_id.in_(class_ids),
-            QuizSession.status == "finished",
-            Quiz.mode == "exam",
+            QuizSession.status == SessionStatus.FINISHED,
+            Quiz.mode == QuizMode.EXAM,
         )
         .subquery()
     )
@@ -402,7 +403,7 @@ def assign_student_account(
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSession.class_id.in_([membership.class_id, class_id]),
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
                 QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
             .limit(1)

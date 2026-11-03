@@ -12,6 +12,7 @@ from collections import defaultdict
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
+from app.enums import AnswerMode
 from app.models import (
     Question,
     QuestionChoice,
@@ -116,7 +117,7 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
         if question is None:
             answer.score = 0
             answer.is_graded = True
-        elif question.answer_mode == "written":
+        elif question.answer_mode == AnswerMode.WRITTEN:
             if not answer.is_graded:
                 answer.score = 0
         else:
@@ -156,7 +157,7 @@ def question_maximum_scores(
                 QuestionChoice.question_id,
                 case(
                     (
-                        Question.answer_mode == "single",
+                        Question.answer_mode == AnswerMode.SINGLE,
                         func.max(positive_points),
                     ),
                     else_=func.sum(positive_points),
@@ -264,7 +265,7 @@ def training_result(
         question = questions.get(question_id)
         if question is None:
             continue
-        if question.answer_mode == "written":
+        if question.answer_mode == AnswerMode.WRITTEN:
             if question_id in answers:
                 pending += 1
             continue

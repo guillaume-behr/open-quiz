@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import ColumnElement, or_, select, update
 from sqlalchemy.orm import Session
 
+from app.enums import QuizMode, SessionStatus
 from app.models import Quiz, QuizAnswer, QuizParticipant, QuizSession
 from app.quiz_session_records import delete_quiz_session_records
 from app.services.grading import compute_final_scores
@@ -43,7 +44,7 @@ def close_abandoned_sessions(cutoff: datetime, session: Session) -> tuple[int, i
     """
     finished = 0
     discarded: list[int] = []
-    for quiz_session in _active_sessions_before(cutoff, "exam", session):
+    for quiz_session in _active_sessions_before(cutoff, QuizMode.EXAM, session):
         answered = session.scalar(
             select(QuizAnswer.id)
             .where(QuizAnswer.session_id == quiz_session.id)
@@ -57,13 +58,13 @@ def close_abandoned_sessions(cutoff: datetime, session: Session) -> tuple[int, i
             .where(QuizParticipant.session_id == quiz_session.id)
             .values(current_position=None)
         )
-        quiz_session.status = "finished"
+        quiz_session.status = SessionStatus.FINISHED
         compute_final_scores(quiz_session, session)
         finished += 1
 
     discarded.extend(
         quiz_session.id
-        for quiz_session in _active_sessions_before(cutoff, "training", session)
+        for quiz_session in _active_sessions_before(cutoff, QuizMode.TRAINING, session)
     )
     delete_quiz_session_records(discarded, session)
     return finished, len(discarded)
@@ -76,8 +77,8 @@ def expired_training_session_ids(cutoff: datetime, session: Session) -> list[int
             select(QuizSession.id)
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
-                Quiz.mode == "training",
-                QuizSession.status == "finished",
+                Quiz.mode == QuizMode.TRAINING,
+                QuizSession.status == SessionStatus.FINISHED,
                 QuizSession.created_at <= cutoff,
             )
         )
@@ -100,8 +101,8 @@ def expired_exam_result_ids(cutoff: datetime, session: Session) -> list[int]:
             select(QuizSession.id)
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
-                Quiz.mode == "exam",
-                QuizSession.status == "finished",
+                Quiz.mode == QuizMode.EXAM,
+                QuizSession.status == SessionStatus.FINISHED,
                 ~retained_exam_result(cutoff),
             )
         )

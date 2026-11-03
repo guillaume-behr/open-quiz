@@ -5,9 +5,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import reject_predictable_secret
+from app.enums import AnswerMode, Difficulty, QuizMode, SessionStatus
 
 MAX_QUESTIONS_PER_BANK = 500
-QuizSessionStatus = Literal["waiting", "in_progress", "paused", "finished", "cancelled"]
 
 
 def _normalize_optional_code(value: str | None) -> str | None:
@@ -441,8 +441,8 @@ class QuestionChoiceCreate(BaseModel):
 
 class QuestionCreate(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
-    difficulty: Literal["easy", "medium", "hard"]
-    answer_mode: Literal["single", "multiple", "written"]
+    difficulty: Difficulty
+    answer_mode: AnswerMode
     answer_mode_disclosed: bool = True
     response_language: CodeLanguage | None = None
     allow_code_execution: bool = False
@@ -471,21 +471,24 @@ class QuestionCreate(BaseModel):
         if len(existing_choice_ids) != len(set(existing_choice_ids)):
             raise ValueError("Une proposition ne peut être utilisée qu’une fois")
         correct_count = sum(choice.is_correct for choice in self.choices)
-        if self.answer_mode != "written" and len(self.choices) < 2:
+        if self.answer_mode != AnswerMode.WRITTEN and len(self.choices) < 2:
             raise ValueError("Une question nécessite au moins deux propositions")
-        if self.answer_mode == "written" and len(self.choices) != 1:
+        if self.answer_mode == AnswerMode.WRITTEN and len(self.choices) != 1:
             raise ValueError(
                 "Une question rédactionnelle nécessite une réponse attendue"
             )
-        if self.answer_mode == "written" and not self.answer_mode_disclosed:
+        if self.answer_mode == AnswerMode.WRITTEN and not self.answer_mode_disclosed:
             raise ValueError(
                 "Le type d’une réponse rédactionnelle ne peut pas être masqué"
             )
-        if self.answer_mode != "written" and self.response_language is not None:
+        if (
+            self.answer_mode != AnswerMode.WRITTEN
+            and self.response_language is not None
+        ):
             raise ValueError(
                 "Un langage de réponse est réservé aux questions rédactionnelles"
             )
-        if self.answer_mode != "written" and self.allow_code_execution:
+        if self.answer_mode != AnswerMode.WRITTEN and self.allow_code_execution:
             raise ValueError(
                 "L’exécution de code est réservée aux questions rédactionnelles"
             )
@@ -495,7 +498,10 @@ class QuestionCreate(BaseModel):
             )
         if correct_count == 0:
             raise ValueError("Une question nécessite au moins une bonne réponse")
-        if self.answer_mode in {"single", "written"} and correct_count != 1:
+        if (
+            self.answer_mode in {AnswerMode.SINGLE, AnswerMode.WRITTEN}
+            and correct_count != 1
+        ):
             raise ValueError(
                 "Une question à choix unique nécessite une seule bonne réponse"
             )
@@ -522,8 +528,8 @@ class QuestionChoiceResponse(BaseModel):
 class QuestionContentResponse(BaseModel):
     id: int
     prompt: str
-    difficulty: Literal["easy", "medium", "hard"]
-    answer_mode: Literal["single", "multiple", "written"]
+    difficulty: Difficulty
+    answer_mode: AnswerMode
     answer_mode_disclosed: bool
     response_language: str | None
     allow_code_execution: bool
@@ -558,7 +564,7 @@ class QuestionBatchImportResponse(BaseModel):
 
 
 class QuizCreate(BaseModel):
-    mode: Literal["exam"] = "exam"
+    mode: Literal[QuizMode.EXAM] = QuizMode.EXAM
     title: str = Field(min_length=1, max_length=160)
     source_language: str = Field(
         default="fr",
@@ -617,7 +623,7 @@ class QuizBankSummary(BaseModel):
 
 class QuizResponse(BaseModel):
     id: int
-    mode: Literal["exam", "training"]
+    mode: QuizMode
     title: str
     source_language: str
     question_count: int
@@ -651,7 +657,7 @@ class MakeupQuizOption(BaseModel):
 class MakeupSessionJoinResponse(BaseModel):
     join_code: str
     class_name: str
-    status: Literal["waiting"]
+    status: Literal[SessionStatus.WAITING]
     quizzes: list[MakeupQuizOption]
 
 
@@ -684,7 +690,7 @@ class MakeupSessionResponse(BaseModel):
     class_id: int | None
     class_name: str
     join_code: str
-    status: QuizSessionStatus
+    status: SessionStatus
     quizzes: list[MakeupQuizOption]
     participant_count: int
     participants: list[MakeupParticipantResponse]
@@ -698,7 +704,7 @@ class QuizSessionResponse(BaseModel):
     class_id: int | None
     class_name: str
     join_code: str
-    status: QuizSessionStatus
+    status: SessionStatus
     participant_count: int
     participants: list[QuizParticipantResponse]
     median_maximum_score: float = 0
@@ -715,7 +721,7 @@ class StudentQuizSessionResponse(BaseModel):
     class_name: str
     student_name: str
     join_code: str
-    status: QuizSessionStatus
+    status: SessionStatus
     ends_at: datetime | None
 
 
@@ -745,7 +751,7 @@ class StudentAnswerSummary(BaseModel):
     question_number: int
     question_id: int
     prompt: str
-    answer_mode: Literal["single", "multiple", "written"]
+    answer_mode: AnswerMode
     submitted_answers: list[str]
 
 
@@ -791,8 +797,8 @@ class QuizAnswerReview(BaseModel):
     question_id: int
     position: int
     prompt: str
-    difficulty: Literal["easy", "medium", "hard"]
-    answer_mode: Literal["single", "multiple", "written"]
+    difficulty: Difficulty
+    answer_mode: AnswerMode
     code_content: str | None = None
     code_language: str | None = None
     response_language: str | None = None
@@ -809,8 +815,8 @@ class StudentQuizHistoryAnswer(BaseModel):
     question_id: int
     position: int
     prompt: str
-    difficulty: Literal["easy", "medium", "hard"]
-    answer_mode: Literal["single", "multiple", "written"]
+    difficulty: Difficulty
+    answer_mode: AnswerMode
     code_content: str | None = None
     code_language: str | None = None
     response_language: str | None = None

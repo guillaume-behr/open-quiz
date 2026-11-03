@@ -6,13 +6,16 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 
+import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine
+from sqlalchemy import CheckConstraint, create_engine, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
 from app.database import Base, migration_config, postgres_url
+from app.enums import SessionStatus
 from app.models import (
     Question,
     QuestionBank,
@@ -198,3 +201,46 @@ def test_concurrent_startups_migrate_the_database_once(tmp_path: Path) -> None:
         assert worker.returncode == 0, errors.decode()
 
     assert_schema_matches_models(database_url)
+
+
+def test_vocabulary_constraints_match_the_models_and_refuse_unknown_values(
+    tmp_path: Path,
+) -> None:
+    """The database accepts exactly the values app.enums names."""
+    settings = settings_for(tmp_path / "vocabulary")
+    with make_client(settings):
+        pass
+
+    engine = create_engine(postgres_url(settings.database_url))
+    try:
+        with engine.connect() as connection:
+            stored = dict(
+                connection.execute(
+                    text(
+                        "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint "
+                        "WHERE contype = 'c' AND conname LIKE 'ck\\_%' "
+                        "AND connamespace = current_schema()::regnamespace"
+                    )
+                ).tuples()
+            )
+        declared = {
+            constraint.name
+            for table in Base.metadata.tables.values()
+            for constraint in table.constraints
+            if isinstance(constraint, CheckConstraint)
+        }
+        assert set(stored) == declared
+        for member in SessionStatus:
+            assert f"'{member.value}'" in stored["ck_quiz_sessions_status"]
+
+        with DbSession(engine) as session:
+            owner = User(username="vocabulary", display_name="V", password_hash="x")
+            session.add(owner)
+            session.flush()
+            session.add(
+                Quiz(owner_id=owner.id, title="Typo", question_count=1, mode="exams")
+            )
+            with pytest.raises(IntegrityError, match="ck_quizzes_mode"):
+                session.flush()
+    finally:
+        engine.dispose()

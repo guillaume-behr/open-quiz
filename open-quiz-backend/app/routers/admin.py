@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
+from app.enums import QuizMode
 from app.errors import ErrorCode, api_error
 from app.grade_levels import ensure_default_grade_levels
 from app.models import (
@@ -207,7 +208,7 @@ def delete_user(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             Quiz.owner_id == user.id,
-            Quiz.mode == "exam",
+            Quiz.mode == QuizMode.EXAM,
             QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
         .limit(1)

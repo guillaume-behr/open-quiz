@@ -23,6 +23,7 @@ from app.audit import audit_event
 from app.class_names import format_class_name
 from app.database import affected_rows
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import AnswerMode, Difficulty, QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
 from app.live_quiz import (
     LiveQuizHub,
@@ -251,9 +252,9 @@ def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse
             QuizQuestionBank.quiz_id,
             QuestionBank,
             func.count(Question.id),
-            func.sum(case((Question.difficulty == "easy", 1), else_=0)),
-            func.sum(case((Question.difficulty == "medium", 1), else_=0)),
-            func.sum(case((Question.difficulty == "hard", 1), else_=0)),
+            func.sum(case((Question.difficulty == Difficulty.EASY, 1), else_=0)),
+            func.sum(case((Question.difficulty == Difficulty.MEDIUM, 1), else_=0)),
+            func.sum(case((Question.difficulty == Difficulty.HARD, 1), else_=0)),
         )
         .join(
             QuizQuestionBank,
@@ -316,7 +317,7 @@ def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
         return quiz
     quiz = Quiz(
         owner_id=owner_id,
-        mode="training",
+        mode=QuizMode.TRAINING,
         title="Entraînement",
         source_language="fr",
         question_count=0,
@@ -476,13 +477,13 @@ def session_response(
                 has_finished=has_finished(participant),
                 score=(
                     answers_by_student.get(participant.id, (0, 0, 0))[1]
-                    if quiz_session.status == "finished"
+                    if quiz_session.status == SessionStatus.FINISHED
                     else 0
                 ),
                 maximum_score=maximum_scores.get(participant.id, 0.0),
                 pending_manual_grading_count=(
                     answers_by_student.get(participant.id, (0, 0, 0))[2]
-                    if quiz_session.status == "finished"
+                    if quiz_session.status == SessionStatus.FINISHED
                     else 0
                 ),
                 violation_count=(
@@ -629,10 +630,10 @@ def public_answer_mode(question: Question) -> str:
     still validates and grades against the real stored mode.
     """
     if not question.answer_mode_disclosed and question.answer_mode in {
-        "single",
-        "multiple",
+        AnswerMode.SINGLE,
+        AnswerMode.MULTIPLE,
     }:
-        return "multiple"
+        return AnswerMode.MULTIPLE
     return question.answer_mode
 
 
@@ -664,7 +665,7 @@ def student_answer_summaries(
         if question is None or answer is None:
             continue
         submitted = decoded_answer_data(answer)
-        if question.answer_mode == "written":
+        if question.answer_mode == AnswerMode.WRITTEN:
             submitted_answers = [str(submitted.get("written_answer", ""))]
         else:
             choices_by_id = {
@@ -708,7 +709,7 @@ def student_question_response(
         )
     choices = (
         []
-        if question.answer_mode == "written"
+        if question.answer_mode == AnswerMode.WRITTEN
         else choices_by_question.get(question.id, [])
     )
     choices.sort(
@@ -788,7 +789,7 @@ def student_state_response(
     # quiz allows going back, until they submit their paper.
     awaiting_final_submission = (
         review_enabled
-        and quiz_session.status in ("in_progress", "paused")
+        and quiz_session.status in (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED)
         and participant.submitted_at is None
         and participant.current_position is None
         and bool(question_ids)
@@ -806,7 +807,7 @@ def student_state_response(
         question_number=(
             participant.current_position + 1
             if participant.current_position is not None
-            and quiz_session.status == "in_progress"
+            and quiz_session.status == SessionStatus.IN_PROGRESS
             else None
         ),
         total_questions=len(question_ids),
@@ -836,11 +837,12 @@ def student_state_response(
                 participant,
                 session,
             )
-            if question_id is not None and quiz_session.status == "in_progress"
+            if question_id is not None
+            and quiz_session.status == SessionStatus.IN_PROGRESS
             else None
         ),
     )
-    if quiz.mode == "training" and quiz_session.status == "finished":
+    if quiz.mode == QuizMode.TRAINING and quiz_session.status == SessionStatus.FINISHED:
         score, maximum, pending = training_result(quiz_session, participant, session)
         state.potential_score = score
         state.potential_maximum_score = maximum
@@ -877,7 +879,7 @@ def list_quizzes(
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     search: Annotated[str, Query(max_length=160)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
-    mode: Annotated[str, Query(pattern="^exam$")] = "exam",
+    mode: Annotated[str, Query(pattern="^exam$")] = QuizMode.EXAM,
     focus: Annotated[int | None, Query(ge=1)] = None,
 ) -> list[QuizResponse]:
     filters = [Quiz.owner_id == professor.id, Quiz.mode == mode]
@@ -963,7 +965,7 @@ def active_session_responses(
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 Quiz.owner_id == professor.id,
-                QuizSession.status == "cancelled",
+                QuizSession.status == SessionStatus.CANCELLED,
                 ~QuizSession.id.in_(select(QuizAnswer.session_id)),
             )
         )
@@ -976,7 +978,7 @@ def active_session_responses(
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             Quiz.owner_id == professor.id,
-            Quiz.mode == "exam",
+            Quiz.mode == QuizMode.EXAM,
             QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
@@ -1018,7 +1020,7 @@ def delete_quiz_session(
     session: DbSession,
 ) -> None:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status not in {"finished", "cancelled"}:
+    if quiz_session.status not in {SessionStatus.FINISHED, SessionStatus.CANCELLED}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
@@ -1048,15 +1050,15 @@ def start_quiz_session(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status == "waiting":
+    if quiz_session.status == SessionStatus.WAITING:
         started_at = datetime.now(UTC)
         transition = session.execute(
             update(QuizSession)
             .where(
                 QuizSession.id == quiz_session.id,
-                QuizSession.status == "waiting",
+                QuizSession.status == SessionStatus.WAITING,
             )
-            .values(status="in_progress", started_at=started_at)
+            .values(status=SessionStatus.IN_PROGRESS, started_at=started_at)
             .execution_options(synchronize_session=False)
         )
         if affected_rows(transition) != 1:
@@ -1080,7 +1082,7 @@ def start_quiz_session(
                     "Au moins un élève doit rejoindre le quiz avant son démarrage",
                 ),
             )
-        quiz_session.status = "in_progress"
+        quiz_session.status = SessionStatus.IN_PROGRESS
         quiz_session.started_at = started_at
         for participant in participants:
             participant.current_position = 0
@@ -1121,7 +1123,7 @@ def delete_quiz(
             select(QuizSession.id)
             .where(
                 QuizSession.quiz_id == quiz.id,
-                QuizSession.status == "finished",
+                QuizSession.status == SessionStatus.FINISHED,
             )
             .limit(1)
         )
@@ -1163,7 +1165,7 @@ def delete_quiz(
         session.scalars(
             select(QuizSession.id).where(
                 QuizSession.quiz_id == quiz.id,
-                QuizSession.status == "cancelled",
+                QuizSession.status == SessionStatus.CANCELLED,
             )
         )
     )
@@ -1189,7 +1191,7 @@ def pause_quiz_session(
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
     expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status != "in_progress":
+    if quiz_session.status != SessionStatus.IN_PROGRESS:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_error(
@@ -1197,7 +1199,7 @@ def pause_quiz_session(
                 "Seul un quiz en cours peut être mis en pause",
             ),
         )
-    quiz_session.status = "paused"
+    quiz_session.status = SessionStatus.PAUSED
     quiz_session.paused_at = datetime.now(UTC)
     session.commit()
     session.refresh(quiz_session)
@@ -1216,7 +1218,7 @@ def resume_quiz_session(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status != "paused" or quiz_session.paused_at is None:
+    if quiz_session.status != SessionStatus.PAUSED or quiz_session.paused_at is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_error(
@@ -1228,7 +1230,7 @@ def resume_quiz_session(
         quiz_session.paused_duration_seconds or 0
     ) + ceil(max(0, (datetime.now(UTC) - quiz_session.paused_at).total_seconds()))
     quiz_session.paused_at = None
-    quiz_session.status = "in_progress"
+    quiz_session.status = SessionStatus.IN_PROGRESS
     session.commit()
     session.refresh(quiz_session)
     publish_quiz_update(request, quiz_session, session)
@@ -1292,7 +1294,7 @@ def preview_quiz(
     session: DbSession,
 ) -> list[QuestionResponse]:
     quiz = owned_quiz(quiz_id, professor, session)
-    if quiz.mode != "exam":
+    if quiz.mode != QuizMode.EXAM:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
@@ -1311,7 +1313,7 @@ def update_quiz(
     session: DbSession,
 ) -> QuizResponse:
     quiz = owned_quiz(quiz_id, professor, session)
-    if quiz.mode != "exam":
+    if quiz.mode != QuizMode.EXAM:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
@@ -1334,7 +1336,7 @@ def update_quiz(
         )
     validate_bank_selection(payload, professor, session)
     quiz.title = payload.title
-    quiz.mode = "exam"
+    quiz.mode = QuizMode.EXAM
     quiz.source_language = payload.source_language
     quiz.question_count = payload.question_count
     quiz.duration_seconds = payload.duration_seconds
@@ -1371,7 +1373,7 @@ def launch_quiz(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz = owned_quiz(quiz_id, professor, session)
-    if quiz.mode != "exam":
+    if quiz.mode != QuizMode.EXAM:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_error(
@@ -1424,7 +1426,7 @@ def launch_quiz(
         class_id=student_class.id,
         class_name=format_class_name(student_class.grade_level, student_class.name),
         join_code=generate_join_code(session),
-        status="waiting",
+        status=SessionStatus.WAITING,
     )
     session.add(quiz_session)
     session.flush()

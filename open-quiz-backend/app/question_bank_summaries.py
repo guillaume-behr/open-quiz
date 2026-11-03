@@ -1,6 +1,7 @@
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
+from app.enums import Difficulty
 from app.models import Question, QuestionBank
 from app.schemas import QuestionBankResponse
 
@@ -10,9 +11,9 @@ def question_bank_summary_query():
     return select(
         QuestionBank,
         func.count(Question.id),
-        func.sum(case((Question.difficulty == "easy", 1), else_=0)),
-        func.sum(case((Question.difficulty == "medium", 1), else_=0)),
-        func.sum(case((Question.difficulty == "hard", 1), else_=0)),
+        func.sum(case((Question.difficulty == Difficulty.EASY, 1), else_=0)),
+        func.sum(case((Question.difficulty == Difficulty.MEDIUM, 1), else_=0)),
+        func.sum(case((Question.difficulty == Difficulty.HARD, 1), else_=0)),
     ).outerjoin(Question, Question.question_bank_id == QuestionBank.id)
 
 

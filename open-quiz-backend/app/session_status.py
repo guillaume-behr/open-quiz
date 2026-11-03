@@ -1,1 +1,7 @@
-ACTIVE_SESSION_STATUSES = ("waiting", "in_progress", "paused")
+from app.enums import SessionStatus
+
+ACTIVE_SESSION_STATUSES = (
+    SessionStatus.WAITING,
+    SessionStatus.IN_PROGRESS,
+    SessionStatus.PAUSED,
+)

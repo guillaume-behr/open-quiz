@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from sqlalchemy import delete, func, select, union
 
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import CorrectionMode, QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
 from app.images import (
     ALLOWED_IMAGE_TYPES,
@@ -126,7 +127,7 @@ def question_is_in_launched_quiz(question_id: int, session: DbSession) -> bool:
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSessionQuestion.question_id == question_id,
-            Quiz.mode == "exam",
+            Quiz.mode == QuizMode.EXAM,
         )
     )
     if common_assignment is not None:
@@ -141,7 +142,7 @@ def question_is_in_launched_quiz(question_id: int, session: DbSession) -> bool:
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSessionStudentQuestion.question_id == question_id,
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
             )
         )
         is not None
@@ -190,7 +191,7 @@ def add_question(
         answer_mode_disclosed=payload.answer_mode_disclosed,
         response_language=payload.response_language,
         allow_code_execution=payload.allow_code_execution,
-        correction_mode="automatic",
+        correction_mode=CorrectionMode.AUTOMATIC,
         image_sha256=store_image(session, image_data, image_content_type),
     )
     session.add(question)
@@ -378,7 +379,7 @@ def regrade_affected_sessions(
 
     has_makeup_child = False
     for quiz_session in affected_sessions:
-        if quiz_session.status == "finished":
+        if quiz_session.status == SessionStatus.FINISHED:
             compute_final_scores(quiz_session, session)
         if quiz_session.makeup_session_id is not None:
             has_makeup_child = True
@@ -424,7 +425,7 @@ def update_question(
     question.answer_mode_disclosed = question_payload.answer_mode_disclosed
     question.response_language = question_payload.response_language
     question.allow_code_execution = question_payload.allow_code_execution
-    question.correction_mode = "automatic"
+    question.correction_mode = CorrectionMode.AUTOMATIC
     if image_data and image_content_type:
         question.image_sha256 = store_image(session, image_data, image_content_type)
     elif question_payload.remove_image:

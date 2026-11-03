@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import AnswerMode, QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
 from app.models import (
     Question,
@@ -94,8 +95,8 @@ def list_quiz_results(
 ) -> list[QuizSessionResponse]:
     filters = [
         Quiz.owner_id == professor.id,
-        Quiz.mode == "exam",
-        QuizSession.status == "finished",
+        Quiz.mode == QuizMode.EXAM,
+        QuizSession.status == SessionStatus.FINISHED,
         retained_exam_result(exam_result_cutoff(request)),
     ]
     if quiz_search:
@@ -192,7 +193,7 @@ def answer_review(
 ) -> QuizAnswerReview:
     submitted = decoded_answer_data(answer)
     choices_by_id = {choice.id: choice for choice in choices}
-    if question.answer_mode == "written":
+    if question.answer_mode == AnswerMode.WRITTEN:
         submitted_answers = [str(submitted.get("written_answer", ""))]
         is_correct = (
             answer.score >= max_score if answer.is_graded and max_score > 0 else None
@@ -245,7 +246,7 @@ def list_participant_answers(
     session: DbSession,
 ) -> list[QuizAnswerReview]:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status != "finished":
+    if quiz_session.status != SessionStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_error(
@@ -348,9 +349,9 @@ def list_student_quiz_history(
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizParticipant.student_id.in_(membership_ids),
-                QuizSession.status == "finished",
+                QuizSession.status == SessionStatus.FINISHED,
                 QuizSession.started_at.is_not(None),
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
             )
             .order_by(QuizSession.started_at.desc(), QuizSession.id.desc())
         )
@@ -434,7 +435,7 @@ def list_student_quiz_history(
                 submitted_answers = review.submitted_answers
                 score = review.score
                 max_score = review.max_score
-                if question.answer_mode == "written":
+                if question.answer_mode == AnswerMode.WRITTEN:
                     is_correct = (
                         (answer.score >= review.max_score)
                         if answer.is_graded and review.max_score > 0
@@ -515,7 +516,7 @@ def publish_quiz_grades(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status != "finished":
+    if quiz_session.status != SessionStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_error(
@@ -561,7 +562,7 @@ def grade_written_answer(
     session: DbSession,
 ) -> QuizAnswerReview:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status != "finished":
+    if quiz_session.status != SessionStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_error(
@@ -606,7 +607,7 @@ def grade_written_answer(
             ),
         )
     position = question_ids.index(question.id)
-    if question.answer_mode != "written":
+    if question.answer_mode != AnswerMode.WRITTEN:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=api_error(

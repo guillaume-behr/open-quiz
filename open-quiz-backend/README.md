@@ -309,7 +309,7 @@ développement à jour, générez-la puis relisez-la :
 
 ```shell
 uv run alembic upgrade head
-uv run alembic revision --autogenerate --rev-id 0004 -m "describe the change"
+uv run alembic revision --autogenerate --rev-id 0005 -m "describe the change"
 ```
 
 La commande lit `DATABASE_URL` dans l’environnement ou dans `.env`. Numérotez
