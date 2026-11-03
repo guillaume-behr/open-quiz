@@ -11,7 +11,6 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
-from app.enums import QuizMode
 from app.errors import ErrorCode, api_error
 from app.grade_levels import ensure_grade_level
 from app.models import (
@@ -20,11 +19,7 @@ from app.models import (
     QuestionBank,
     QuestionChoice,
     QuestionCode,
-    Quiz,
     QuizQuestionBank,
-    QuizSession,
-    QuizSessionQuestion,
-    QuizSessionStudentQuestion,
     StudentClass,
 )
 from app.pagination import (
@@ -40,7 +35,10 @@ from app.question_bank_summaries import (
     question_bank_summary_query,
     question_bank_summary_response,
 )
-from app.quiz_session_records import delete_quiz_session_records
+from app.question_records import (
+    discard_training_sessions_using_questions,
+    owned_question_bank,
+)
 from app.schemas import (
     QuestionBankCreate,
     QuestionBankResponse,
@@ -238,52 +236,3 @@ def delete_question_bank(
     )
     session.execute(delete(QuestionBank).where(QuestionBank.id == question_bank_id))
     session.commit()
-
-
-def owned_question_bank(
-    question_bank_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
-) -> QuestionBank:
-    question_bank = session.scalar(
-        select(QuestionBank).where(
-            QuestionBank.id == question_bank_id,
-            QuestionBank.owner_id == professor.id,
-        )
-    )
-    if question_bank is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NOT_FOUND, "Banque de questions introuvable"
-            ),
-        )
-    return question_bank
-
-
-def discard_training_sessions_using_questions(
-    question_ids: list[int],
-    session: DbSession,
-) -> None:
-    """Drop every training attempt that drew any of these questions."""
-    if not question_ids:
-        return
-    common_session_ids = select(QuizSessionQuestion.session_id).where(
-        QuizSessionQuestion.question_id.in_(question_ids)
-    )
-    personalized_session_ids = select(QuizSessionStudentQuestion.session_id).where(
-        QuizSessionStudentQuestion.question_id.in_(question_ids)
-    )
-    training_session_ids = list(
-        session.scalars(
-            select(QuizSession.id)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                Quiz.mode == QuizMode.TRAINING,
-                QuizSession.id.in_(common_session_ids.union(personalized_session_ids)),
-            )
-        )
-    )
-    if not training_session_ids:
-        return
-    delete_quiz_session_records(training_session_ids, session)

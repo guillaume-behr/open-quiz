@@ -25,9 +25,15 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.class_names import format_class_name
 from app.database import affected_rows
-from app.dependencies import DbSession, ProfessorUser
+from app.dependencies import DbSession, ProfessorUser, current_student
 from app.enums import QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
+from app.live_updates import (
+    publish_active_quiz_sessions_update,
+    publish_makeup_update,
+    publish_quiz_topics,
+    publish_quiz_update,
+)
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -41,21 +47,12 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
-from app.routers.quizzes import (
+from app.participants import (
     enforce_public_rate_limit,
     generate_join_code,
     participant_token_hash,
-    publish_active_quiz_sessions_update,
-    publish_makeup_update,
-    publish_quiz_topics,
-    publish_quiz_update,
-    quiz_responses,
-    session_response,
-    student_state_response,
 )
-from app.routers.student_auth import current_student
 from app.schemas import (
-    MakeupParticipantResponse,
     MakeupQuizOption,
     MakeupQuizSelection,
     MakeupSessionCreate,
@@ -77,67 +74,14 @@ from app.services.session_lifecycle import (
     delete_makeup_session_records,
     discard_active_training_sessions,
 )
+from app.session_responses import (
+    makeup_session_response,
+    makeup_session_responses,
+    quiz_responses,
+    student_state_response,
+)
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
-
-
-def makeup_session_response(
-    makeup: MakeupSession, session: DbSession
-) -> MakeupSessionResponse:
-    quizzes = list(
-        session.scalars(
-            select(Quiz)
-            .join(MakeupSessionQuiz, MakeupSessionQuiz.quiz_id == Quiz.id)
-            .where(MakeupSessionQuiz.session_id == makeup.id)
-            .order_by(Quiz.title, Quiz.id)
-        )
-    )
-    child_sessions = list(
-        session.scalars(
-            select(QuizSession)
-            .where(QuizSession.makeup_session_id == makeup.id)
-            .order_by(QuizSession.id)
-        )
-    )
-    quizzes_by_id = {quiz.id: quiz for quiz in quizzes}
-    child_responses = [
-        session_response(child, quizzes_by_id[child.quiz_id], session)
-        for child in child_sessions
-        if child.quiz_id in quizzes_by_id
-    ]
-    participants = [
-        MakeupParticipantResponse(
-            **participant.model_dump(),
-            quiz_title=child.quiz_title,
-            total_questions=child.total_questions,
-        )
-        for child in child_responses
-        for participant in child.participants
-    ]
-    return MakeupSessionResponse(
-        id=makeup.id,
-        class_id=makeup.class_id,
-        class_name=(
-            format_class_name(student_class.grade_level, student_class.name)
-            if makeup.class_id is not None
-            and (student_class := session.get(StudentClass, makeup.class_id))
-            is not None
-            else makeup.class_name
-        ),
-        join_code=makeup.join_code,
-        status=makeup.status,
-        quizzes=[
-            MakeupQuizOption(
-                id=quiz.id,
-                title=quiz.title,
-                duration_seconds=quiz.duration_seconds,
-            )
-            for quiz in quizzes
-        ],
-        participant_count=len(participants),
-        participants=participants,
-        created_at=makeup.created_at,
-    )
 
 
 def owned_makeup_session(
@@ -163,34 +107,7 @@ def owned_makeup_session(
 def list_makeup_sessions(
     professor: ProfessorUser, session: DbSession
 ) -> list[MakeupSessionResponse]:
-    obsolete_cancelled_ids = list(
-        session.scalars(
-            select(MakeupSession.id).where(
-                MakeupSession.owner_id == professor.id,
-                MakeupSession.status == SessionStatus.CANCELLED,
-                ~MakeupSession.id.in_(
-                    select(QuizSession.makeup_session_id)
-                    .join(QuizAnswer, QuizAnswer.session_id == QuizSession.id)
-                    .where(QuizSession.makeup_session_id.is_not(None))
-                ),
-            )
-        )
-    )
-    for makeup_session_id in obsolete_cancelled_ids:
-        delete_makeup_session_records(makeup_session_id, session)
-    if obsolete_cancelled_ids:
-        session.commit()
-    makeups = list(
-        session.scalars(
-            select(MakeupSession)
-            .where(
-                MakeupSession.owner_id == professor.id,
-                MakeupSession.status != SessionStatus.CANCELLED,
-            )
-            .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
-        )
-    )
-    return [makeup_session_response(item, session) for item in makeups]
+    return makeup_session_responses(professor, session)
 
 
 def class_finished_quiz_ids(

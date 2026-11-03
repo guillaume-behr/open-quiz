@@ -9,6 +9,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
+from app.auth_guards import student_password_rate_subject
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import QuizMode
 from app.errors import ErrorCode, api_error
@@ -27,7 +28,6 @@ from app.pagination import (
     contains_pattern,
     set_pagination_headers,
 )
-from app.routers.student_auth import student_password_rate_subject
 from app.schemas import (
     StudentAccountCreate,
     StudentAccountCreatedResponse,

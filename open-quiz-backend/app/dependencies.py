@@ -9,8 +9,12 @@ from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
 from app.errors import ErrorCode, api_error
-from app.models import TwoFactorCredential, User
-from app.security import access_token_version, decode_access_token
+from app.models import StudentAccount, TwoFactorCredential, User
+from app.security import (
+    access_token_version,
+    decode_access_token,
+    decode_student_access_token,
+)
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -106,3 +110,53 @@ def require_professor(user: CurrentUser) -> User:
 
 
 ProfessorUser = Annotated[User, Depends(require_professor)]
+
+
+student_bearer = HTTPBearer(auto_error=False)
+
+
+def student_from_token(
+    token: str, request: Request, session: DbSession
+) -> StudentAccount | None:
+    try:
+        student_id, version = decode_student_access_token(
+            token, request.app.state.settings.jwt_secret
+        )
+    except jwt.PyJWTError, ValueError, KeyError:
+        return None
+    account = session.get(StudentAccount, student_id)
+    if (
+        account is None
+        or not account.is_active
+        or not compare_digest(
+            version,
+            access_token_version(
+                account.password_hash,
+                request.app.state.settings.jwt_secret,
+                account.access_token_generation,
+            ),
+        )
+    ):
+        return None
+    return account
+
+
+def current_student(
+    request: Request,
+    session: DbSession,
+    credentials: HTTPAuthorizationCredentials | None = Depends(student_bearer),
+) -> StudentAccount:
+    account = (
+        student_from_token(credentials.credentials, request, session)
+        if credentials is not None
+        else None
+    )
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=api_error(
+                ErrorCode.STUDENT_SESSION_INVALID, "Session élève invalide ou expirée"
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return account

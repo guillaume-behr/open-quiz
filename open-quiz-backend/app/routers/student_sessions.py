@@ -25,9 +25,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
 from app.database import affected_rows
-from app.dependencies import DbSession
+from app.dependencies import DbSession, current_student
 from app.enums import AnswerMode, QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
+from app.live_updates import publish_quiz_update
 from app.models import (
     Question,
     QuestionChoice,
@@ -39,17 +40,14 @@ from app.models import (
     Student,
     StudentAccount,
 )
-from app.question_responses import load_question_records
-from app.routers.quizzes import (
+from app.participants import (
     VIOLATION_DEDUPLICATION_SECONDS,
     authenticated_participant,
     enforce_public_rate_limit,
     participant_token_hash,
-    publish_quiz_update,
     reject_quiz_join,
-    student_state_response,
 )
-from app.routers.student_auth import current_student
+from app.question_responses import load_question_records
 from app.schemas import (
     QuizJoin,
     StudentQuizAnswer,
@@ -75,6 +73,7 @@ from app.services.session_lifecycle import (
     finish_when_nobody_can_answer,
     quiz_session_is_due,
 )
+from app.session_responses import student_state_response
 from app.session_status import ACTIVE_SESSION_STATUSES
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])

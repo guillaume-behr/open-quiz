@@ -27,6 +27,7 @@ from app.database import (
 from app.errors import ErrorCode, api_error
 from app.live_quiz import LiveQuizHub
 from app.live_relay import PostgresLiveRelay
+from app.live_updates import publish_session_change
 from app.middleware import RequestBodyLimitMiddleware
 from app.models import (
     AuthenticationChallenge,
@@ -65,7 +66,6 @@ from app.routers import (
     training,
     users,
 )
-from app.routers.quizzes import publish_session_change
 from app.security import hash_password, verify_password
 from app.services.question_draws import InsufficientQuestionsError
 from app.services.session_lifecycle import expire_due_quiz_sessions
