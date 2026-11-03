@@ -221,7 +221,7 @@ def test_vocabulary_constraints_match_the_models_and_refuse_unknown_values(
                         "WHERE contype = 'c' AND conname LIKE 'ck\\_%' "
                         "AND connamespace = current_schema()::regnamespace"
                     )
-                ).tuples()
+                ).all()
             )
         declared = {
             constraint.name
