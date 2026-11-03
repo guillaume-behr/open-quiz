@@ -437,3 +437,32 @@ def test_the_trusted_browser_is_forgotten_even_when_signed_out(
             == 204
         )
         assert client.cookies.get(TWO_FACTOR_TRUST_COOKIE) is None
+
+
+def test_a_login_at_local_midnight_is_trusted_for_a_full_day() -> None:
+    paris = ZoneInfo("Europe/Paris")
+    now = datetime(2026, 11, 3, 0, 0, tzinfo=paris)
+    assert end_of_trusted_day(now, "Europe/Paris") == datetime(
+        2026, 11, 4, tzinfo=paris
+    )
+
+
+def test_the_short_spring_forward_day_ends_at_midnight() -> None:
+    # Clocks go forward on 29 March 2026: that local day only lasts 23 hours.
+    paris = ZoneInfo("Europe/Paris")
+    now = datetime(2026, 3, 29, 0, 30, tzinfo=paris)
+    end = end_of_trusted_day(now, "Europe/Paris")
+    assert end == datetime(2026, 3, 30, tzinfo=paris)
+    assert end - now.astimezone(UTC) == timedelta(hours=22, minutes=30)
+
+
+def test_the_trusted_day_follows_the_browser_zone_not_utc() -> None:
+    # 11:00 UTC is already 01:00 the next day in Kiribati (UTC+14).
+    now = datetime(2026, 11, 3, 11, 0, tzinfo=UTC)
+    kiritimati = ZoneInfo("Pacific/Kiritimati")
+    assert end_of_trusted_day(now, "Pacific/Kiritimati") == datetime(
+        2026, 11, 5, tzinfo=kiritimati
+    )
+    assert end_of_trusted_day(now, "Pacific/Kiritimati") - now <= (
+        TWO_FACTOR_TRUST_MAXIMUM
+    )

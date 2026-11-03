@@ -1,13 +1,23 @@
 """The scoring rule and question maximums, exercised without FastAPI."""
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.models import QuestionChoice
+from app.database import build_session_factory
+from app.models import Question, QuestionBank, QuestionChoice, User
+from app.security import hash_password
 from app.services import grading
-from app.services.grading import question_maximum_scores, selected_choice_score
+from app.services.grading import (
+    question_maximum_scores,
+    selected_choice_ids,
+    selected_choice_score,
+)
+
+from support import settings_for
 
 
 def test_selecting_wrong_choices_cancels_non_negative_partial_credit() -> None:
@@ -127,3 +137,196 @@ def test_training_results_skip_missing_questions(
         0.0,
         0,
     )
+
+
+def choice(choice_id: int, *, correct: bool, points: float) -> QuestionChoice:
+    return QuestionChoice(id=choice_id, is_correct=correct, points=points)
+
+
+@pytest.mark.parametrize("allow_negative_points", [False, True])
+def test_an_empty_selection_scores_zero(allow_negative_points: bool) -> None:
+    choices = [choice(1, correct=True, points=1), choice(2, correct=False, points=-1)]
+    assert (
+        selected_choice_score(
+            choices, set(), allow_negative_points=allow_negative_points
+        )
+        == 0
+    )
+
+
+def test_a_question_without_choices_scores_zero() -> None:
+    assert selected_choice_score([], {1, 2}, allow_negative_points=True) == 0
+
+
+def test_selected_ids_from_another_question_are_ignored() -> None:
+    # A forged payload can name any id: only this question's choices count.
+    choices = [choice(1, correct=True, points=2)]
+    assert selected_choice_score(choices, {1, 999}, allow_negative_points=False) == 2
+
+
+def test_scores_are_rounded_to_two_decimals() -> None:
+    choices = [
+        choice(1, correct=True, points=0.1),
+        choice(2, correct=True, points=0.2),
+        choice(3, correct=True, points=1 / 3),
+    ]
+    assert selected_choice_score(choices, {1, 2}, allow_negative_points=False) == 0.3
+    assert (
+        selected_choice_score(choices, {1, 2, 3}, allow_negative_points=False) == 0.63
+    )
+
+
+def test_a_negative_correct_choice_only_costs_in_negative_mode() -> None:
+    choices = [
+        choice(1, correct=True, points=2),
+        choice(2, correct=True, points=-0.5),
+    ]
+    assert selected_choice_score(choices, {1, 2}, allow_negative_points=False) == 2
+    assert selected_choice_score(choices, {1, 2}, allow_negative_points=True) == 1.5
+
+
+def test_a_priced_distractor_alone_scores_below_zero_in_negative_mode() -> None:
+    choices = [
+        choice(1, correct=True, points=1),
+        choice(2, correct=False, points=-0.5),
+    ]
+    assert selected_choice_score(choices, {2}, allow_negative_points=True) == -0.5
+    assert selected_choice_score(choices, {2}, allow_negative_points=False) == 0
+
+
+def test_a_positive_distractor_still_zeroes_the_question_in_negative_mode() -> None:
+    choices = [
+        choice(1, correct=True, points=1),
+        choice(2, correct=False, points=0.5),
+        choice(3, correct=False, points=-0.25),
+    ]
+    assert selected_choice_score(choices, {1, 2, 3}, allow_negative_points=True) == 0
+
+
+def stored_answer(answer_data: str) -> SimpleNamespace:
+    return SimpleNamespace(answer_data=answer_data)
+
+
+@pytest.mark.parametrize(
+    ("answer_data", "expected"),
+    [
+        ("{}", set()),
+        ('{"selected_choice_ids": null}', set()),
+        ('{"selected_choice_ids": "12"}', set()),
+        ('{"selected_choice_ids": 12}', set()),
+        ('{"selected_choice_ids": {"1": true}}', set()),
+        ('{"selected_choice_ids": []}', set()),
+        ('{"selected_choice_ids": [1, 1, 2]}', {1, 2}),
+        ('{"text": "free text"}', set()),
+    ],
+)
+def test_selected_choice_ids_tolerate_odd_payloads(
+    answer_data: str, expected: set[int]
+) -> None:
+    assert selected_choice_ids(stored_answer(answer_data)) == expected
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        # Unhashable entries used to make set() raise a TypeError.
+        ("[[1]]", set()),
+        ('[{"id": 1}]', set()),
+        ('[1, [2], {"id": 3}, 4]', {1, 4}),
+        # Booleans compare equal to ids 0 and 1, and strings never match an id.
+        ("[true, false]", set()),
+        ('["1", 1.5, null]', set()),
+    ],
+)
+def test_selected_choice_ids_keep_only_integer_ids(
+    entries: str, expected: set[int]
+) -> None:
+    assert (
+        selected_choice_ids(stored_answer(f'{{"selected_choice_ids": {entries}}}'))
+        == expected
+    )
+
+
+def test_a_corrupted_selection_scores_zero_instead_of_crashing() -> None:
+    choices = [choice(1, correct=True, points=1)]
+    answer = stored_answer('{"selected_choice_ids": [[1], true]}')
+    assert (
+        selected_choice_score(
+            choices, selected_choice_ids(answer), allow_negative_points=False
+        )
+        == 0
+    )
+
+
+@pytest.fixture
+def session_factory(tmp_path: Path) -> sessionmaker[Session]:
+    return build_session_factory(settings_for(tmp_path / "edges").database_url)
+
+
+def add_question(
+    session: Session, bank_id: int, answer_mode: str, choices: list[tuple[bool, float]]
+) -> int:
+    question = Question(
+        question_bank_id=bank_id,
+        prompt="Prompt",
+        difficulty="easy",
+        answer_mode=answer_mode,
+        correction_mode="automatic",
+    )
+    session.add(question)
+    session.flush()
+    session.add_all(
+        QuestionChoice(
+            question_id=question.id,
+            label=f"Choice {position}",
+            is_correct=is_correct,
+            points=points,
+            position=position,
+        )
+        for position, (is_correct, points) in enumerate(choices)
+    )
+    session.flush()
+    return question.id
+
+
+def test_question_maximums_follow_the_scoring_rule(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        owner = User(
+            username="owner",
+            display_name="Owner",
+            password_hash=hash_password("an-unused-password-value"),
+        )
+        session.add(owner)
+        session.flush()
+        bank = QuestionBank(owner_id=owner.id, grade_level="Tle", chapter="Edges")
+        session.add(bank)
+        session.flush()
+        single = add_question(
+            session, bank.id, "single", [(True, 1), (True, 3), (False, 5)]
+        )
+        multiple = add_question(
+            session,
+            bank.id,
+            "multiple",
+            [(True, 1.25), (True, 2), (True, -1), (False, 4)],
+        )
+        written = add_question(session, bank.id, "written", [])
+        only_distractors = add_question(
+            session, bank.id, "multiple", [(False, 2), (False, -1)]
+        )
+        unknown = 10**9
+
+        maximums = question_maximum_scores(
+            [single, multiple, written, only_distractors, unknown], session
+        )
+
+    # A single-answer question pays its best correct choice, never their sum.
+    assert maximums[single] == 3
+    # Negative correct choices and priced distractors never raise the ceiling.
+    assert maximums[multiple] == 3.25
+    assert maximums[written] == 0
+    assert maximums[only_distractors] == 0
+    assert maximums[unknown] == 0
+    assert list(maximums) == [single, multiple, written, only_distractors, unknown]

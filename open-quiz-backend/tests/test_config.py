@@ -17,12 +17,14 @@ import main
 from app.config import secure_private_file, write_private_file
 from app.database import postgres_url
 from app.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
+from app.pagination import MAX_PAGE, MAX_PAGE_SIZE
 from main import create_app
 
 from support import (
     FRONTEND_ORIGIN,
     JWT_SECRET,
     TEST_CLIENT_BACKEND_OPTIONS,
+    create_professor,
     exam_environment,
     login_admin,
     make_client,
@@ -485,3 +487,80 @@ def test_student_tokens_default_to_two_hours_and_reject_shorter_lifetimes(
             token = environment["student_headers"]["Authorization"].split()[1]
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         assert payload["exp"] - payload["iat"] == expected_hours * 3600
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "page=0",
+        "page=-1",
+        "page=abc",
+        "page_size=0",
+        f"page_size={MAX_PAGE_SIZE + 1}",
+        "page_size=1.5",
+    ],
+)
+def test_out_of_range_pagination_is_refused(tmp_path: Path, query: str) -> None:
+    with make_client(settings_for(tmp_path / "test.db")) as client:
+        headers = login_admin(client)
+        response = client.get(f"/api/admin/users?{query}", headers=headers)
+        assert response.status_code == 422
+
+
+def test_pages_past_the_end_are_empty_but_keep_the_total(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "test.db")) as client:
+        headers = login_admin(client)
+        full = client.get(
+            f"/api/admin/users?page_size={MAX_PAGE_SIZE}", headers=headers
+        )
+        assert full.status_code == 200
+        assert full.headers["X-Page-Size"] == str(MAX_PAGE_SIZE)
+        total = full.headers["X-Total-Count"]
+        assert int(total) == len(full.json()) >= 1
+
+        beyond = client.get("/api/admin/users?page=1000", headers=headers)
+        assert beyond.status_code == 200
+        assert beyond.json() == []
+        assert beyond.headers["X-Page"] == "1000"
+        assert beyond.headers["X-Total-Count"] == total
+
+
+ADMIN_LISTS = ["/api/admin/users", "/api/problem-reports"]
+PROFESSOR_LISTS = [
+    "/api/classes",
+    "/api/question-banks",
+    "/api/quizzes",
+    "/api/quizzes/sessions/results",
+    "/api/students",
+]
+
+
+@pytest.mark.parametrize("page", [MAX_PAGE + 1, 2**62, 10**30])
+def test_an_overflowing_page_is_refused_on_every_list(
+    tmp_path: Path, page: int
+) -> None:
+    """An unbounded page overflowed the bigint OFFSET and failed with a 500."""
+    with make_client(settings_for(tmp_path / "test.db")) as client:
+        admin_headers = login_admin(client)
+        _, professor_headers = create_professor(client, admin_headers)
+        for path, headers in [
+            *((path, admin_headers) for path in ADMIN_LISTS),
+            *((path, professor_headers) for path in PROFESSOR_LISTS),
+        ]:
+            response = client.get(f"{path}?page={page}", headers=headers)
+            assert response.status_code == 422, path
+
+
+def test_the_last_allowed_page_is_served_empty(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "test.db")) as client:
+        admin_headers = login_admin(client)
+        _, professor_headers = create_professor(client, admin_headers)
+        for path, headers in [
+            *((path, admin_headers) for path in ADMIN_LISTS),
+            *((path, professor_headers) for path in PROFESSOR_LISTS),
+        ]:
+            response = client.get(
+                f"{path}?page={MAX_PAGE}&page_size={MAX_PAGE_SIZE}", headers=headers
+            )
+            assert response.status_code == 200, path
+            assert response.json() == [], path

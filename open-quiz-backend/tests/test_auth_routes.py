@@ -12,23 +12,27 @@ from time import sleep, time
 import jwt
 import pyotp
 import pytest
+from cryptography.fernet import InvalidToken
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
 
 import main
+from app import rate_limit, security
 from app.database import build_session_factory
 from app.models import (
     AuthenticationChallenge,
     GradeLevel,
+    LoginRateLimit,
     RefreshSession,
     RefreshSessionFamily,
     SecurityState,
     TwoFactorCredential,
     User,
 )
-from app.rate_limit import LoginRateLimiter
+from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.schemas import (
     LoginRequest,
@@ -37,14 +41,20 @@ from app.schemas import (
 from app.security import (
     DUMMY_PASSWORD_HASH,
     access_token_version,
+    create_access_token,
     create_refresh_token,
+    create_two_factor_token,
     decode_access_token,
     decode_student_access_token,
     decode_two_factor_token,
+    decrypt_student_password,
     decrypt_totp_secret,
+    encrypt_student_password,
+    encrypt_totp_secret,
     hash_password,
     hash_refresh_token,
     refresh_request_proof,
+    verify_totp_code,
 )
 from main import create_app
 from scripts.reset_two_factor import reset
@@ -1388,3 +1398,253 @@ def test_student_logout_revokes_tokens_but_keeps_quiz_participation(
             },
         )
         assert relogin.status_code == 200
+
+
+OTHER_SECRET = "another-secret-that-is-long-enough-too"
+
+
+def unsigned_token(payload: dict) -> str:
+    return jwt.encode(payload, key=None, algorithm="none")
+
+
+def claims(token_type: str, **extra) -> dict:
+    now = datetime.now(UTC)
+    return {
+        "sub": "1",
+        "type": token_type,
+        "ver": "version",
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+        **extra,
+    }
+
+
+@pytest.mark.parametrize("decode", [decode_access_token, decode_student_access_token])
+def test_unsigned_tokens_are_refused(decode) -> None:
+    for token_type in ("access", "student_access"):
+        with pytest.raises(jwt.InvalidTokenError):
+            decode(unsigned_token(claims(token_type)), JWT_SECRET)
+
+
+def test_a_tampered_access_token_is_refused() -> None:
+    token = create_access_token(1, JWT_SECRET, 5, "version")
+    header, payload, signature = token.split(".")
+    forged = jwt.encode(claims("access", sub="2"), OTHER_SECRET, algorithm="HS256")
+    with pytest.raises(jwt.InvalidSignatureError):
+        decode_access_token(f"{header}.{forged.split('.')[1]}.{signature}", JWT_SECRET)
+    with pytest.raises(jwt.InvalidSignatureError):
+        decode_access_token(token, OTHER_SECRET)
+
+
+@pytest.mark.parametrize("missing", ["sub", "type", "ver", "iat", "exp"])
+def test_access_tokens_require_every_claim(missing: str) -> None:
+    payload = claims("access")
+    del payload[missing]
+    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        decode_access_token(token, JWT_SECRET)
+
+
+def test_a_non_numeric_subject_is_refused() -> None:
+    token = jwt.encode(claims("access", sub="admin"), JWT_SECRET, algorithm="HS256")
+    with pytest.raises(ValueError, match="invalid literal"):
+        decode_access_token(token, JWT_SECRET)
+
+
+def test_an_ended_session_yields_an_already_expired_access_token() -> None:
+    ended = int((datetime.now(UTC) - timedelta(minutes=1)).timestamp())
+    token = create_access_token(1, JWT_SECRET, 5, "version", session_expires_at=ended)
+    with pytest.raises(jwt.ExpiredSignatureError):
+        decode_access_token(token, JWT_SECRET)
+
+
+@pytest.mark.parametrize("purpose", ["two_factor_setup", "two_factor_verification"])
+def test_two_factor_tokens_round_trip(purpose: str) -> None:
+    token, token_hash, expires_at = create_two_factor_token(7, JWT_SECRET, purpose)
+    assert decode_two_factor_token(token, JWT_SECRET) == (7, purpose, token_hash)
+    assert 0 < expires_at - datetime.now(UTC).timestamp() <= 300
+
+
+@pytest.mark.parametrize(
+    ("encrypt", "decrypt"),
+    [
+        (encrypt_totp_secret, decrypt_totp_secret),
+        (encrypt_student_password, decrypt_student_password),
+    ],
+)
+def test_encrypted_secrets_round_trip_only_with_their_key(encrypt, decrypt) -> None:
+    plaintext = "JBSWY3DPEHPK3PXP-é"
+    first = encrypt(plaintext, JWT_SECRET)
+    second = encrypt(plaintext, JWT_SECRET)
+    # Fernet adds a random IV: the same secret never encrypts the same way twice.
+    assert first != second
+    assert decrypt(first, JWT_SECRET) == decrypt(second, JWT_SECRET) == plaintext
+    with pytest.raises(InvalidToken):
+        decrypt(first, OTHER_SECRET)
+    with pytest.raises(InvalidToken):
+        decrypt(first[:-4] + "AAAA", JWT_SECRET)
+
+
+def test_refresh_proofs_depend_on_both_token_and_secret() -> None:
+    proof = refresh_request_proof("token", JWT_SECRET)
+    assert proof == refresh_request_proof("token", JWT_SECRET)
+    assert proof != refresh_request_proof("token", OTHER_SECRET)
+    assert proof != refresh_request_proof("token2", JWT_SECRET)
+    # A proof is not the bare token hash an attacker could compute.
+    assert proof != hash_refresh_token("token")
+    assert len(hash_refresh_token("")) == 64
+
+
+TOTP_SECRET = pyotp.random_base32()
+# Mid-step, so the frozen clock is nowhere near a 30-second boundary.
+FROZEN_NOW = datetime(2026, 11, 3, 12, 0, 15, tzinfo=UTC)
+
+
+@pytest.fixture
+def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> int:
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return FROZEN_NOW if tz is None else FROZEN_NOW.astimezone(tz)
+
+    monkeypatch.setattr(security, "datetime", FrozenDatetime)
+    return pyotp.TOTP(TOTP_SECRET).timecode(FROZEN_NOW)
+
+
+def code_at(counter: int) -> str:
+    return pyotp.TOTP(TOTP_SECRET).generate_otp(counter)
+
+
+@pytest.mark.parametrize("offset", [-1, 0, 1])
+def test_totp_accepts_one_step_of_clock_drift(frozen_clock: int, offset: int) -> None:
+    counter = frozen_clock + offset
+    assert verify_totp_code(TOTP_SECRET, code_at(counter), None) == counter
+
+
+@pytest.mark.parametrize("offset", [-3, -2, 2, 3])
+def test_totp_refuses_codes_beyond_one_step(frozen_clock: int, offset: int) -> None:
+    assert verify_totp_code(TOTP_SECRET, code_at(frozen_clock + offset), None) is None
+
+
+def test_totp_refuses_a_replayed_or_older_code(frozen_clock: int) -> None:
+    current = code_at(frozen_clock)
+    assert verify_totp_code(TOTP_SECRET, current, frozen_clock) is None
+    assert verify_totp_code(TOTP_SECRET, current, frozen_clock + 1) is None
+    assert (
+        verify_totp_code(TOTP_SECRET, code_at(frozen_clock - 1), frozen_clock - 1)
+        is None
+    )
+    # A code newer than the last used one is still fine.
+    assert (
+        verify_totp_code(TOTP_SECRET, code_at(frozen_clock + 1), frozen_clock)
+        == frozen_clock + 1
+    )
+
+
+def test_totp_refuses_malformed_codes(frozen_clock: int) -> None:
+    current = code_at(frozen_clock)
+    for code in ("", current[:-1], f" {current}", f"{current}0", "abcdef"):
+        assert verify_totp_code(TOTP_SECRET, code, None) is None
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    now = [1_800_000_000]
+    monkeypatch.setattr(rate_limit, "time", lambda: now[0])
+    return now
+
+
+@pytest.fixture
+def limiter_sessions(tmp_path: Path) -> sessionmaker[Session]:
+    return build_session_factory(settings_for(tmp_path / "limiters").database_url)
+
+
+def stored_attempts(session: Session) -> list[int]:
+    return list(session.scalars(select(LoginRateLimit.attempts)))
+
+
+def test_the_login_limiter_allows_exactly_its_limit(
+    limiter_sessions: sessionmaker[Session], clock: list[int]
+) -> None:
+    limiter = LoginRateLimiter(3, 60, JWT_SECRET)
+    with limiter_sessions() as session:
+        assert [limiter.reserve(session, "alice") for _ in range(3)] == [0, 0, 0]
+        assert limiter.reserve(session, "alice") == 60
+        clock[0] += 45
+        assert limiter.reserve(session, "alice") == 15
+        # Refused attempts are released: they never push the count past the
+        # limit, so a successful step frees exactly one attempt.
+        assert stored_attempts(session) == [3]
+        limiter.release(session, "alice")
+        assert limiter.reserve(session, "alice") == 0
+        assert limiter.reserve(session, "alice") > 0
+
+
+def test_the_login_limiter_resets_when_its_window_ends(
+    limiter_sessions: sessionmaker[Session], clock: list[int]
+) -> None:
+    limiter = LoginRateLimiter(1, 60, JWT_SECRET)
+    with limiter_sessions() as session:
+        assert limiter.reserve(session, "alice") == 0
+        clock[0] += 59
+        assert limiter.reserve(session, "alice") == 1
+        clock[0] += 1
+        assert limiter.reserve(session, "alice") == 0
+
+
+def test_releasing_never_goes_below_zero(
+    limiter_sessions: sessionmaker[Session], clock: list[int]
+) -> None:
+    limiter = LoginRateLimiter(2, 60, JWT_SECRET)
+    with limiter_sessions() as session:
+        limiter.release(session, "nobody")
+        assert stored_attempts(session) == []
+        limiter.reserve(session, "alice")
+        limiter.release(session, "alice")
+        limiter.release(session, "alice")
+        assert stored_attempts(session) == [0]
+        # Extra releases bank no credit: the limit still applies in full.
+        assert [limiter.reserve(session, "alice") for _ in range(3)] == [0, 0, 60]
+
+
+def test_clearing_a_subject_restores_its_attempts(
+    limiter_sessions: sessionmaker[Session], clock: list[int]
+) -> None:
+    limiter = LoginRateLimiter(1, 60, JWT_SECRET)
+    with limiter_sessions() as session:
+        limiter.reserve(session, "alice")
+        assert limiter.reserve(session, "alice") > 0
+        limiter.clear_subject(session, "alice")
+        assert limiter.reserve(session, "alice") == 0
+
+
+def test_limiters_keep_subjects_and_namespaces_apart(
+    limiter_sessions: sessionmaker[Session], clock: list[int]
+) -> None:
+    short = LoginRateLimiter(1, 60, JWT_SECRET)
+    daily = LoginRateLimiter(1, 86400, JWT_SECRET, namespace="daily")
+    with limiter_sessions() as session:
+        assert short.reserve(session, "alice") == 0
+        assert short.reserve(session, "bob") == 0
+        assert daily.reserve(session, "alice") == 0
+        # The short window expiring purges its own namespace only.
+        clock[0] += 61
+        assert short.reserve(session, "carol") == 0
+        assert daily.reserve(session, "alice") > 0
+
+
+def test_the_public_limiter_keeps_counting_refusals(
+    limiter_sessions: sessionmaker[Session], clock: list[int]
+) -> None:
+    limiter = FixedWindowRateLimiter(2, 60, "join")
+    with limiter_sessions() as session:
+        assert [limiter.reserve(session, "10.0.0.1") for _ in range(4)] == [
+            0,
+            0,
+            60,
+            60,
+        ]
+        assert stored_attempts(session) == [4]
+        assert limiter.reserve(session, "10.0.0.2") == 0
+        clock[0] += 60
+        assert limiter.reserve(session, "10.0.0.1") == 0
