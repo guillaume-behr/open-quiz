@@ -1,3 +1,5 @@
+import { PAGE_SIZE } from "@/lib/utils"
+
 import { request, requestPage } from "./client"
 import type { Page, ProblemReport } from "./types"
 
@@ -20,7 +22,7 @@ export function createProblemReport(
 
 export function getProblemReports(page = 1): Promise<Page<ProblemReport>> {
     return requestPage<ProblemReport>(
-        `/api/problem-reports?page=${page}&page_size=8`
+        `/api/problem-reports?page=${page}&page_size=${PAGE_SIZE}`
     )
 }
 

@@ -32,6 +32,7 @@ from app.pagination import (
     MAX_PAGE,
     MAX_PAGE_SIZE,
     contains_pattern,
+    focused_page,
     set_pagination_headers,
 )
 from app.question_bank_summaries import (
@@ -57,8 +58,12 @@ def list_question_banks(
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     search: Annotated[str, Query(max_length=160)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
+    focus: Annotated[int | None, Query(ge=1)] = None,
 ) -> list[QuestionBankResponse]:
-    """Return one filtered page of question banks owned by the professor."""
+    """Return one filtered page of question banks owned by the professor.
+
+    With ``focus``, the page returned is the one holding that bank.
+    """
     filters = [QuestionBank.owner_id == professor.id]
     if search:
         filters.append(
@@ -68,6 +73,12 @@ def list_question_banks(
         )
     if grade_level:
         filters.append(QuestionBank.grade_level == grade_level)
+    order = (QuestionBank.grade_level, QuestionBank.chapter, QuestionBank.id)
+    if focus is not None:
+        page = (
+            focused_page(session, QuestionBank, filters, order, focus, page_size)
+            or page
+        )
     total = (
         session.scalar(select(func.count()).select_from(QuestionBank).where(*filters))
         or 0
@@ -77,7 +88,7 @@ def list_question_banks(
         question_bank_summary_query()
         .where(*filters)
         .group_by(QuestionBank.id)
-        .order_by(QuestionBank.grade_level, QuestionBank.chapter)
+        .order_by(*order)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )

@@ -680,3 +680,55 @@ def test_update_question_in_used_bank_regrades_affected_sessions(
             "code": "QUESTION_IN_LAUNCHED_QUIZ",
             "message": "Cette question est utilisée par un quiz déjà lancé",
         }
+
+
+def test_listings_return_the_page_holding_a_focused_item(environment) -> None:
+    """A client finds a new bank or quiz in one request, whatever its page."""
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    bank_ids = [
+        client.post(
+            "/api/question-banks",
+            headers=headers,
+            json={"grade_level": "5e", "chapter": f"Focus {index:02}"},
+        ).json()["id"]
+        for index in range(7)
+    ]
+    focused = client.get(
+        "/api/question-banks",
+        headers=headers,
+        params={"page_size": 3, "search": "Focus", "focus": bank_ids[6]},
+    )
+    assert focused.headers["X-Page"] == "3"
+    assert [bank["id"] for bank in focused.json()] == [bank_ids[6]]
+    # A bank outside the filtered list leaves the requested page.
+    filtered_out = client.get(
+        "/api/question-banks",
+        headers=headers,
+        params={"page": 2, "page_size": 3, "search": "Focus 0", "focus": 999999},
+    )
+    assert filtered_out.headers["X-Page"] == "2"
+
+    quiz_ids = [
+        client.post(
+            "/api/quizzes",
+            headers=headers,
+            json={
+                "title": f"Focus quiz {index}",
+                "question_bank_ids": [environment["question"]["question_bank_id"]],
+                "easy_question_count": 1,
+                "medium_question_count": 0,
+                "hard_question_count": 0,
+            },
+        ).json()["id"]
+        for index in range(4)
+    ]
+    focused_quizzes = client.get(
+        "/api/quizzes",
+        headers=headers,
+        params={"page_size": 2, "search": "Focus quiz", "focus": quiz_ids[3]},
+    )
+    assert focused_quizzes.headers["X-Page"] == "2"
+    assert quiz_ids[3] in [quiz["id"] for quiz in focused_quizzes.json()]
+    missing_quiz = client.get("/api/quizzes", headers=headers, params={"focus": 999999})
+    assert missing_quiz.headers["X-Page"] == "1"

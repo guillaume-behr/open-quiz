@@ -1,3 +1,5 @@
+import { PAGE_SIZE } from "@/lib/utils"
+
 import { request, requestBlob, requestPage } from "./client"
 import type {
     MakeupJoin,
@@ -15,11 +17,13 @@ import type {
     TrainingHistoryItem,
 } from "./types"
 
+/** With `focus`, the page returned is the one holding that quiz. */
 export function getQuizzes(
     page = 1,
     search = "",
     gradeLevel = "",
-    pageSize = 8
+    pageSize = PAGE_SIZE,
+    focus: number | null = null
 ): Promise<Page<Quiz>> {
     const params = new URLSearchParams({
         page: String(page),
@@ -28,6 +32,7 @@ export function getQuizzes(
     })
     if (search) params.set("search", search)
     if (gradeLevel) params.set("grade_level", gradeLevel)
+    if (focus !== null) params.set("focus", String(focus))
     return requestPage<Quiz>(`/api/quizzes?${params}`)
 }
 
