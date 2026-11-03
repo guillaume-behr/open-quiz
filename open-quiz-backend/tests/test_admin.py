@@ -10,6 +10,7 @@ from fastapi import status
 from sqlalchemy import select
 
 from app.models import (
+    Base,
     QuestionBank,
     Quiz,
     QuizAnswer,
@@ -25,6 +26,7 @@ from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.security import (
     refresh_request_proof,
 )
+from app.user_records import ERASED_TABLES
 
 from support import (
     ADMIN_PASSWORD,
@@ -466,3 +468,18 @@ def test_admin_cannot_delete_a_professor_running_an_exam(tmp_path: Path) -> None
         assert refused.json()["detail"]["code"] == "TEACHER_IN_ACTIVE_EXAM"
         with client.app.state.session_factory() as session:
             assert session.get(User, teacher_id) is not None
+
+
+def test_account_erasure_covers_every_table_that_depends_on_users() -> None:
+    """A new table owned through users must be added to the erasure."""
+    dependent = {"users"}
+    grew = True
+    while grew:
+        grew = False
+        for name, table in Base.metadata.tables.items():
+            if name not in dependent and any(
+                key.column.table.name in dependent for key in table.foreign_keys
+            ):
+                dependent.add(name)
+                grew = True
+    assert dependent == ERASED_TABLES
