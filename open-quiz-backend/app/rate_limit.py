@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from hashlib import sha256
 from hmac import new as hmac_new
 from time import time
@@ -12,23 +13,25 @@ from app.models import LoginRateLimit
 TWO_FACTOR_DAILY_WINDOW_SECONDS = 86400
 TWO_FACTOR_DAILY_NAMESPACE = "two-factor-daily"
 
+# Limiters write in transactions of their own, through their own sessions:
+# they must neither commit the work a route has pending nor lose a counted
+# attempt when that route rolls back. main.create_app() gives them a small
+# engine apart from the request pool, so a request holding a connection never
+# waits on that same pool to count an attempt.
+LimiterSessions = Callable[[], Session]
+
 
 def _reserve_window(
-    session: Session,
+    sessions: LimiterSessions,
     *,
     limiter_key: str,
-    namespace: str,
     limit: int,
     window_seconds: int,
 ) -> int:
     now = int(time())
     cutoff = now - window_seconds
-    session.execute(
-        delete(LoginRateLimit).where(
-            LoginRateLimit.limiter_key.like(f"{namespace}:%"),
-            LoginRateLimit.window_started_at <= cutoff,
-        )
-    )
+    # An expired row is reset by the upsert below; the hourly maintenance
+    # deletes the ones nobody uses any more.
     expired = LoginRateLimit.window_started_at <= cutoff
     statement = (
         insert(LoginRateLimit)
@@ -55,8 +58,8 @@ def _reserve_window(
             LoginRateLimit.window_started_at,
         )
     )
-    attempts, window_started_at = session.execute(statement).one()
-    session.commit()
+    with sessions() as session, session.begin():
+        attempts, window_started_at = session.execute(statement).one()
     if attempts <= limit:
         return 0
     return max(1, window_seconds - (now - window_started_at))
@@ -68,73 +71,62 @@ class LoginRateLimiter:
     # 16.7M buckets. The bound exists to stop attacker-chosen identifiers from
     # growing the table without limit, not to be small: at four characters two
     # unrelated accounts collided often enough that failed logins against one
-    # locked the other out. Expired rows are deleted on every reservation, so
+    # locked the other out. The hourly maintenance deletes expired rows, so
     # the extra width costs far less than that collateral lockout.
     BUCKET_HEX_CHARACTERS = 6
 
     def __init__(
         self,
+        sessions: LimiterSessions,
         account_limit: int,
         window_seconds: int,
         secret: str,
         namespace: str = "account",
     ) -> None:
+        self.sessions = sessions
         self.account_limit = account_limit
         self.window_seconds = window_seconds
         self.secret = secret.encode()
-        # Each window needs its own namespace: a reservation purges the expired
-        # rows of its namespace, which would erase a longer window's buckets.
+        # Each window needs its own namespace: two windows sharing a key would
+        # reset each other's counters.
         self.namespace = namespace
 
-    def reserve(
-        self,
-        session: Session,
-        subject: str,
-    ) -> int:
+    def reserve(self, subject: str) -> int:
         """Atomically reserve an authentication attempt.
 
         A zero return value means the caller may continue. A positive value is
         the number of seconds to advertise in Retry-After.
         """
         retry_after = _reserve_window(
-            session,
+            self.sessions,
             limiter_key=self._account_key(subject),
-            namespace=self.namespace,
             limit=self.account_limit,
             window_seconds=self.window_seconds,
         )
         if retry_after == 0:
             return 0
-        self.release(session, subject)
+        self.release(subject)
         return retry_after
 
-    def release(
-        self,
-        session: Session,
-        subject: str,
-    ) -> None:
+    def release(self, subject: str) -> None:
         """Release the reservation for a successful authentication step."""
-        session.execute(
-            update(LoginRateLimit)
-            .where(
-                LoginRateLimit.limiter_key == self._account_key(subject),
-                LoginRateLimit.attempts > 0,
+        with self.sessions() as session, session.begin():
+            session.execute(
+                update(LoginRateLimit)
+                .where(
+                    LoginRateLimit.limiter_key == self._account_key(subject),
+                    LoginRateLimit.attempts > 0,
+                )
+                .values(attempts=LoginRateLimit.attempts - 1)
             )
-            .values(attempts=LoginRateLimit.attempts - 1)
-        )
-        session.commit()
 
-    def clear_subject(
-        self,
-        session: Session,
-        subject: str,
-    ) -> None:
-        session.execute(
-            delete(LoginRateLimit).where(
-                LoginRateLimit.limiter_key == self._account_key(subject)
+    def clear_subject(self, subject: str) -> None:
+        with self.sessions() as session, session.begin():
+            session.execute(
+                delete(LoginRateLimit).where(
+                    LoginRateLimit.limiter_key == self._account_key(subject)
+                )
             )
-        )
-        session.commit()
 
     def _account_key(self, subject: str) -> str:
         # Bound attacker-controlled identifiers to a fixed number of buckets.
@@ -149,16 +141,22 @@ class LoginRateLimiter:
 class FixedWindowRateLimiter:
     """Database-backed limiter for public quiz endpoints."""
 
-    def __init__(self, limit: int, window_seconds: int, namespace: str) -> None:
+    def __init__(
+        self,
+        sessions: LimiterSessions,
+        limit: int,
+        window_seconds: int,
+        namespace: str,
+    ) -> None:
+        self.sessions = sessions
         self.limit = limit
         self.window_seconds = window_seconds
         self.namespace = namespace
 
-    def reserve(self, session: Session, subject: str) -> int:
+    def reserve(self, subject: str) -> int:
         return _reserve_window(
-            session,
+            self.sessions,
             limiter_key=self._key(subject),
-            namespace=self.namespace,
             limit=self.limit,
             window_seconds=self.window_seconds,
         )

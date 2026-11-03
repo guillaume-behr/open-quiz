@@ -40,7 +40,7 @@ def create_problem_report(
     # no client identifier (especially an IP address) is ever used as a quota
     # identity.
     retry_after = request.app.state.problem_report_rate_limiter.reserve(
-        session, "problem-report:instance"
+        "problem-report:instance"
     )
     if retry_after:
         raise HTTPException(

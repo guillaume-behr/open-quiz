@@ -49,14 +49,18 @@ def reset(username: str, settings: Settings | None = None) -> bool:
         # must not keep the rightful owner from enrolling again.
         subject = two_factor_rate_subject(user.id)
         LoginRateLimiter(
-            settings.login_attempts, settings.login_window_seconds, settings.jwt_secret
-        ).clear_subject(session, subject)
+            session_factory,
+            settings.login_attempts,
+            settings.login_window_seconds,
+            settings.jwt_secret,
+        ).clear_subject(subject)
         LoginRateLimiter(
+            session_factory,
             settings.two_factor_daily_attempts,
             TWO_FACTOR_DAILY_WINDOW_SECONDS,
             settings.jwt_secret,
             namespace=TWO_FACTOR_DAILY_NAMESPACE,
-        ).clear_subject(session, subject)
+        ).clear_subject(subject)
         audit_event("security.two_factor_reset_by_script", user_id=user.id)
         return True
 

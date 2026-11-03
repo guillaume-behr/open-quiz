@@ -26,6 +26,7 @@ from app.models import (
     AuthenticationChallenge,
     GradeLevel,
     LoginRateLimit,
+    ProblemReport,
     RefreshSession,
     RefreshSessionFamily,
     SecurityState,
@@ -584,7 +585,7 @@ def test_login_accepts_the_exact_configured_password_with_spaces(
 def test_login_rate_limit_buckets_use_a_secret_key() -> None:
     subject = "password:identity:known-user"
     secret = "private-rate-limit-key"
-    limiter = LoginRateLimiter(5, 900, secret)
+    limiter = LoginRateLimiter(sessionmaker(), 5, 900, secret)
     expected_digest = hmac_new(
         secret.encode(),
         subject.encode(),
@@ -593,6 +594,7 @@ def test_login_rate_limit_buckets_use_a_secret_key() -> None:
 
     assert limiter._account_key(subject) == f"account:{expected_digest}"
     assert limiter._account_key(subject) != LoginRateLimiter(
+        sessionmaker(),
         5,
         900,
         "different-private-key",
@@ -1566,85 +1568,104 @@ def stored_attempts(session: Session) -> list[int]:
 def test_the_login_limiter_allows_exactly_its_limit(
     limiter_sessions: sessionmaker[Session], clock: list[int]
 ) -> None:
-    limiter = LoginRateLimiter(3, 60, JWT_SECRET)
+    limiter = LoginRateLimiter(limiter_sessions, 3, 60, JWT_SECRET)
     with limiter_sessions() as session:
-        assert [limiter.reserve(session, "alice") for _ in range(3)] == [0, 0, 0]
-        assert limiter.reserve(session, "alice") == 60
+        assert [limiter.reserve("alice") for _ in range(3)] == [0, 0, 0]
+        assert limiter.reserve("alice") == 60
         clock[0] += 45
-        assert limiter.reserve(session, "alice") == 15
+        assert limiter.reserve("alice") == 15
         # Refused attempts are released: they never push the count past the
         # limit, so a successful step frees exactly one attempt.
         assert stored_attempts(session) == [3]
-        limiter.release(session, "alice")
-        assert limiter.reserve(session, "alice") == 0
-        assert limiter.reserve(session, "alice") > 0
+        limiter.release("alice")
+        assert limiter.reserve("alice") == 0
+        assert limiter.reserve("alice") > 0
 
 
 def test_the_login_limiter_resets_when_its_window_ends(
     limiter_sessions: sessionmaker[Session], clock: list[int]
 ) -> None:
-    limiter = LoginRateLimiter(1, 60, JWT_SECRET)
-    with limiter_sessions() as session:
-        assert limiter.reserve(session, "alice") == 0
+    limiter = LoginRateLimiter(limiter_sessions, 1, 60, JWT_SECRET)
+    with limiter_sessions():
+        assert limiter.reserve("alice") == 0
         clock[0] += 59
-        assert limiter.reserve(session, "alice") == 1
+        assert limiter.reserve("alice") == 1
         clock[0] += 1
-        assert limiter.reserve(session, "alice") == 0
+        assert limiter.reserve("alice") == 0
 
 
 def test_releasing_never_goes_below_zero(
     limiter_sessions: sessionmaker[Session], clock: list[int]
 ) -> None:
-    limiter = LoginRateLimiter(2, 60, JWT_SECRET)
+    limiter = LoginRateLimiter(limiter_sessions, 2, 60, JWT_SECRET)
     with limiter_sessions() as session:
-        limiter.release(session, "nobody")
+        limiter.release("nobody")
         assert stored_attempts(session) == []
-        limiter.reserve(session, "alice")
-        limiter.release(session, "alice")
-        limiter.release(session, "alice")
+        limiter.reserve("alice")
+        limiter.release("alice")
+        limiter.release("alice")
         assert stored_attempts(session) == [0]
         # Extra releases bank no credit: the limit still applies in full.
-        assert [limiter.reserve(session, "alice") for _ in range(3)] == [0, 0, 60]
+        assert [limiter.reserve("alice") for _ in range(3)] == [0, 0, 60]
 
 
 def test_clearing_a_subject_restores_its_attempts(
     limiter_sessions: sessionmaker[Session], clock: list[int]
 ) -> None:
-    limiter = LoginRateLimiter(1, 60, JWT_SECRET)
-    with limiter_sessions() as session:
-        limiter.reserve(session, "alice")
-        assert limiter.reserve(session, "alice") > 0
-        limiter.clear_subject(session, "alice")
-        assert limiter.reserve(session, "alice") == 0
+    limiter = LoginRateLimiter(limiter_sessions, 1, 60, JWT_SECRET)
+    with limiter_sessions():
+        limiter.reserve("alice")
+        assert limiter.reserve("alice") > 0
+        limiter.clear_subject("alice")
+        assert limiter.reserve("alice") == 0
 
 
 def test_limiters_keep_subjects_and_namespaces_apart(
     limiter_sessions: sessionmaker[Session], clock: list[int]
 ) -> None:
-    short = LoginRateLimiter(1, 60, JWT_SECRET)
-    daily = LoginRateLimiter(1, 86400, JWT_SECRET, namespace="daily")
-    with limiter_sessions() as session:
-        assert short.reserve(session, "alice") == 0
-        assert short.reserve(session, "bob") == 0
-        assert daily.reserve(session, "alice") == 0
-        # The short window expiring purges its own namespace only.
+    short = LoginRateLimiter(limiter_sessions, 1, 60, JWT_SECRET)
+    daily = LoginRateLimiter(limiter_sessions, 1, 86400, JWT_SECRET, namespace="daily")
+    with limiter_sessions():
+        assert short.reserve("alice") == 0
+        assert short.reserve("bob") == 0
+        assert daily.reserve("alice") == 0
+        # The short window expiring resets its own buckets only.
         clock[0] += 61
-        assert short.reserve(session, "carol") == 0
-        assert daily.reserve(session, "alice") > 0
+        assert short.reserve("carol") == 0
+        assert daily.reserve("alice") > 0
+
+
+def test_limiters_never_commit_the_callers_work(
+    limiter_sessions: sessionmaker[Session], clock: list[int]
+) -> None:
+    """A reservation outlives a rollback, and leaves pending work pending."""
+    login = LoginRateLimiter(limiter_sessions, 1, 60, JWT_SECRET)
+    public = FixedWindowRateLimiter(limiter_sessions, 1, 60, "join")
+    with limiter_sessions() as session:
+        session.add(ProblemReport(message="Pending", page_path="/"))
+        session.flush()
+        assert login.reserve("alice") == 0
+        assert public.reserve("alice") == 0
+        login.release("alice")
+        login.clear_subject("bob")
+        session.rollback()
+        assert session.scalars(select(ProblemReport)).all() == []
+        assert public.reserve("alice") > 0
+        assert sorted(stored_attempts(session)) == [0, 2]
 
 
 def test_the_public_limiter_keeps_counting_refusals(
     limiter_sessions: sessionmaker[Session], clock: list[int]
 ) -> None:
-    limiter = FixedWindowRateLimiter(2, 60, "join")
+    limiter = FixedWindowRateLimiter(limiter_sessions, 2, 60, "join")
     with limiter_sessions() as session:
-        assert [limiter.reserve(session, "10.0.0.1") for _ in range(4)] == [
+        assert [limiter.reserve("10.0.0.1") for _ in range(4)] == [
             0,
             0,
             60,
             60,
         ]
         assert stored_attempts(session) == [4]
-        assert limiter.reserve(session, "10.0.0.2") == 0
+        assert limiter.reserve("10.0.0.2") == 0
         clock[0] += 60
-        assert limiter.reserve(session, "10.0.0.1") == 0
+        assert limiter.reserve("10.0.0.1") == 0

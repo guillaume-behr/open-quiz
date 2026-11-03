@@ -18,7 +18,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.access_log import AccessLogMiddleware
 from app.audit import audit_event
 from app.config import Settings, get_settings
-from app.database import MAINTENANCE_LOCK_KEY, build_session_factory, postgres_url
+from app.database import (
+    MAINTENANCE_LOCK_KEY,
+    build_rate_limiter_session_factory,
+    build_session_factory,
+    postgres_url,
+)
 from app.errors import ErrorCode, api_error
 from app.live_quiz import LiveQuizHub
 from app.live_relay import PostgresLiveRelay
@@ -430,7 +435,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.live_quiz_hub.publish_local,
     )
     app.state.live_quiz_hub.attach_relay(live_relay.send)
+    limiter_sessions = build_rate_limiter_session_factory(settings.database_url)
     app.state.login_rate_limiter = LoginRateLimiter(
+        limiter_sessions,
         settings.login_attempts,
         settings.login_window_seconds,
         settings.jwt_secret,
@@ -438,32 +445,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Caps how many codes one account may try per day, so that someone who
     # holds the password cannot keep guessing at the short window's pace.
     app.state.two_factor_daily_rate_limiter = LoginRateLimiter(
+        limiter_sessions,
         settings.two_factor_daily_attempts,
         TWO_FACTOR_DAILY_WINDOW_SECONDS,
         settings.jwt_secret,
         namespace=TWO_FACTOR_DAILY_NAMESPACE,
     )
     app.state.auth_global_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
         settings.global_login_attempts,
         settings.global_login_window_seconds,
         "auth",
     )
     app.state.quiz_join_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
         settings.quiz_join_attempts,
         settings.quiz_rate_window_seconds,
         "quiz-join",
     )
     app.state.quiz_participant_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
         settings.quiz_participant_attempts,
         settings.quiz_rate_window_seconds,
         "quiz-participant",
     )
     app.state.quiz_violation_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
         settings.quiz_violation_attempts,
         settings.quiz_rate_window_seconds,
         "quiz-violation",
     )
     app.state.problem_report_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
         settings.problem_report_attempts,
         settings.problem_report_window_seconds,
         "problem-report",

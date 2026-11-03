@@ -74,6 +74,24 @@ def build_session_factory(database_url: str) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
+# Rate limiters count attempts in short transactions of their own while a
+# request holds its own connection. Drawing both from one pool would let a
+# burst of requests take every connection and then wait for another to count
+# their attempt, so limiters get this separate, small pool.
+RATE_LIMITER_POOL_SIZE = 2
+RATE_LIMITER_POOL_OVERFLOW = 3
+
+
+def build_rate_limiter_session_factory(database_url: str) -> sessionmaker[Session]:
+    engine = create_engine(
+        postgres_url(database_url),
+        pool_pre_ping=True,
+        pool_size=RATE_LIMITER_POOL_SIZE,
+        max_overflow=RATE_LIMITER_POOL_OVERFLOW,
+    )
+    return sessionmaker(bind=engine)
+
+
 def affected_rows(result: Result[Any]) -> int:
     """Count the rows an UPDATE or DELETE changed.
 

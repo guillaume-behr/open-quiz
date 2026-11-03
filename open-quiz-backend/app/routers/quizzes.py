@@ -171,12 +171,11 @@ def publish_active_quiz_sessions_update(request: HTTPConnection, owner_id: int) 
 
 def enforce_public_rate_limit(
     request: HTTPConnection,
-    session: DbSession,
     limiter_name: str,
     subject: str,
 ) -> None:
     limiter = getattr(request.app.state, limiter_name)
-    retry_after = limiter.reserve(session, subject)
+    retry_after = limiter.reserve(subject)
     if retry_after:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -196,14 +195,9 @@ def quiz_join_rejected() -> HTTPException:
     )
 
 
-def reject_quiz_join(
-    request: Request,
-    session: DbSession,
-    subject: str,
-) -> NoReturn:
+def reject_quiz_join(request: Request, subject: str) -> NoReturn:
     enforce_public_rate_limit(
         request,
-        session,
         "quiz_join_rate_limiter",
         subject,
     )
@@ -606,7 +600,6 @@ def authenticated_participant(
     if not token:
         enforce_public_rate_limit(
             request,
-            session,
             "quiz_join_rate_limiter",
             public_session_subject(join_code, "participant-auth", session),
         )
@@ -633,7 +626,6 @@ def authenticated_participant(
     if row is None:
         enforce_public_rate_limit(
             request,
-            session,
             "quiz_join_rate_limiter",
             public_session_subject(join_code, "participant-auth", session),
         )
