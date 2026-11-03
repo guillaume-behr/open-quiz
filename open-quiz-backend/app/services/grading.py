@@ -60,7 +60,12 @@ def selected_choice_score(
 
 
 def decoded_answer_data(answer: QuizAnswer) -> dict:
-    """Read a stored answer payload, tolerating any unreadable legacy row."""
+    """Read a stored answer payload, treating an unreadable one as empty.
+
+    The answer route only stores JSON objects, so this is a safeguard against
+    rows changed outside the application, such as a hand-edited database or a
+    damaged backup: scoring that session must not fail on one bad row.
+    """
     try:
         submitted = json.loads(answer.answer_data)
     except TypeError, ValueError:
@@ -69,8 +74,21 @@ def decoded_answer_data(answer: QuizAnswer) -> dict:
 
 
 def selected_choice_ids(answer: QuizAnswer) -> set[int]:
+    """Choice ids of a stored answer, ignoring any entry that is not an id.
+
+    The answer route validates every id as an integer before storing it, so
+    this only matters for a row changed outside the application. Such a row
+    could hold nested lists or objects, which are unhashable, or booleans,
+    which would compare equal to ids 0 and 1.
+    """
     selected = decoded_answer_data(answer).get("selected_choice_ids")
-    return set(selected) if isinstance(selected, list) else set()
+    if not isinstance(selected, list):
+        return set()
+    return {
+        choice_id
+        for choice_id in selected
+        if isinstance(choice_id, int) and not isinstance(choice_id, bool)
+    }
 
 
 def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:

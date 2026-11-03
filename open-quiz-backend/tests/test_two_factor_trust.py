@@ -1,5 +1,6 @@
 """A browser that passed two-factor login today, and the daily cap on codes."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import time
@@ -138,24 +139,41 @@ def test_another_browser_or_account_still_needs_the_code(tmp_path: Path) -> None
         )
 
 
-@pytest.mark.parametrize(
-    "cookie",
-    [
-        "not-a-token",
-        create_access_token(1, JWT_SECRET, 5, "version"),
-        create_two_factor_trust_token(
-            1, JWT_SECRET, "version", datetime.now(UTC) - timedelta(minutes=1)
-        ),
-        create_two_factor_trust_token(
-            1, "another-secret-that-is-long-enough", "version", datetime.now(UTC)
-        ),
-    ],
-)
+# Built when the test runs, not when it is collected: a token minted at
+# collection expires before a slow suite reaches the test, and is then refused
+# for its age instead of for the reason the case names.
+UNUSABLE_TRUST_COOKIES: dict[str, Callable[[], str]] = {
+    "malformed": lambda: "not-a-token",
+    "access-token": lambda: create_access_token(1, JWT_SECRET, 5, "version"),
+    "expired": lambda: create_two_factor_trust_token(
+        1, JWT_SECRET, "version", datetime.now(UTC) - timedelta(minutes=1)
+    ),
+    "foreign-secret": lambda: create_two_factor_trust_token(
+        1,
+        "another-secret-that-is-long-enough",
+        "version",
+        datetime.now(UTC) + timedelta(minutes=5),
+    ),
+    "non-numeric-subject": lambda: jwt.encode(
+        {
+            "sub": "not-a-number",
+            "type": "two_factor_trust",
+            "ver": "version",
+            "iat": datetime.now(UTC),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    ),
+}
+
+
+@pytest.mark.parametrize("cookie", UNUSABLE_TRUST_COOKIES)
 def test_an_unusable_trust_cookie_is_ignored(tmp_path: Path, cookie: str) -> None:
     with make_client(settings_for(tmp_path / "test.db")) as client:
         complete_first_login(client, "root-admin", ADMIN_PASSWORD)
         forget_trusted_browser(client)
-        client.cookies.set(TWO_FACTOR_TRUST_COOKIE, cookie)
+        client.cookies.set(TWO_FACTOR_TRUST_COOKIE, UNUSABLE_TRUST_COOKIES[cookie]())
         assert (
             log_in(client, "root-admin", ADMIN_PASSWORD).json()["status"]
             == "verification_required"
@@ -368,6 +386,12 @@ def test_the_browser_timezone_is_sanitized(
     assert request.timezone == expected
 
 
+def test_trust_tokens_refuse_another_token_type() -> None:
+    access_token = create_access_token(1, JWT_SECRET, 5, "version")
+    with pytest.raises(jwt.InvalidTokenError, match="Unexpected token type"):
+        decode_two_factor_trust_token(access_token, JWT_SECRET)
+
+
 @pytest.mark.parametrize("version", [None, ""])
 def test_trust_tokens_require_a_version(version: str | None) -> None:
     token = jwt.encode(
@@ -413,3 +437,32 @@ def test_the_trusted_browser_is_forgotten_even_when_signed_out(
             == 204
         )
         assert client.cookies.get(TWO_FACTOR_TRUST_COOKIE) is None
+
+
+def test_a_login_at_local_midnight_is_trusted_for_a_full_day() -> None:
+    paris = ZoneInfo("Europe/Paris")
+    now = datetime(2026, 11, 3, 0, 0, tzinfo=paris)
+    assert end_of_trusted_day(now, "Europe/Paris") == datetime(
+        2026, 11, 4, tzinfo=paris
+    )
+
+
+def test_the_short_spring_forward_day_ends_at_midnight() -> None:
+    # Clocks go forward on 29 March 2026: that local day only lasts 23 hours.
+    paris = ZoneInfo("Europe/Paris")
+    now = datetime(2026, 3, 29, 0, 30, tzinfo=paris)
+    end = end_of_trusted_day(now, "Europe/Paris")
+    assert end == datetime(2026, 3, 30, tzinfo=paris)
+    assert end - now.astimezone(UTC) == timedelta(hours=22, minutes=30)
+
+
+def test_the_trusted_day_follows_the_browser_zone_not_utc() -> None:
+    # 11:00 UTC is already 01:00 the next day in Kiribati (UTC+14).
+    now = datetime(2026, 11, 3, 11, 0, tzinfo=UTC)
+    kiritimati = ZoneInfo("Pacific/Kiritimati")
+    assert end_of_trusted_day(now, "Pacific/Kiritimati") == datetime(
+        2026, 11, 5, tzinfo=kiritimati
+    )
+    assert end_of_trusted_day(now, "Pacific/Kiritimati") - now <= (
+        TWO_FACTOR_TRUST_MAXIMUM
+    )

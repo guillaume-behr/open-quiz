@@ -8,7 +8,12 @@ from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
 from app.errors import ErrorCode, api_error
 from app.models import ProblemReport
-from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.pagination import (
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE,
+    MAX_PAGE_SIZE,
+    set_pagination_headers,
+)
 from app.schemas import ProblemReportCreate, ProblemReportResponse
 
 router = APIRouter(prefix="/api/problem-reports", tags=["problem reports"])
@@ -64,7 +69,7 @@ def list_problem_reports(
     _: AdminUser,
     session: DbSession,
     response: Response,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
 ) -> list[ProblemReport]:
     purge_expired_reports(request, session)

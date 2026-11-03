@@ -768,3 +768,9 @@ def test_search_patterns_match_their_text_literally() -> None:
     assert contains_pattern("5e A") == "%5e A%"
     assert contains_pattern("50%_off") == r"%50\%\_off%"
     assert contains_pattern("a\\b") == r"%a\\b%"
+
+
+def test_search_patterns_for_empty_or_wildcard_only_input() -> None:
+    assert contains_pattern("") == "%%"
+    assert contains_pattern("%%") == r"%\%\%%"
+    assert contains_pattern("\\%") == r"%\\\%%"

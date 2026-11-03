@@ -17,7 +17,12 @@ from app.models import (
     TwoFactorCredential,
     User,
 )
-from app.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, set_pagination_headers
+from app.pagination import (
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE,
+    MAX_PAGE_SIZE,
+    set_pagination_headers,
+)
 from app.routers.auth import password_rate_subject, two_factor_rate_subject
 from app.schemas import (
     UserCreate,
@@ -65,7 +70,7 @@ def list_users(
     _: AdminUser,
     session: DbSession,
     response: Response,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
 ) -> list[User]:
     """Return one page of users to an authenticated administrator."""

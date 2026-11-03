@@ -21,6 +21,7 @@ from app.models import (
 from app.pagination import (
     DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
+    MAX_PAGE,
     MAX_PAGE_SIZE,
     contains_pattern,
     set_pagination_headers,
@@ -113,7 +114,7 @@ def list_student_accounts(
     professor: ProfessorUser,
     session: DbSession,
     response: Response,
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=MAX_PAGE),
     page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     search: str = Query("", max_length=120),
     class_id: Annotated[int | None, Query(ge=1)] = None,
