@@ -38,14 +38,19 @@ from app.services.grading import (
 from app.session_status import ACTIVE_SESSION_STATUSES
 
 
-def quiz_ends_at(quiz_session: QuizSession, quiz: Quiz) -> datetime | None:
+def quiz_ends_at(
+    quiz_session: QuizSession, quiz: Quiz, now: datetime | None = None
+) -> datetime | None:
+    """When a started session runs out of time, its pause so far included."""
     started_at = quiz_session.started_at
     if started_at is None:
         return None
     paused_duration = quiz_session.paused_duration_seconds or 0
     if quiz_session.status == "paused" and quiz_session.paused_at is not None:
         paused_duration += ceil(
-            max(0, (datetime.now(UTC) - quiz_session.paused_at).total_seconds())
+            max(
+                0, ((now or datetime.now(UTC)) - quiz_session.paused_at).total_seconds()
+            )
         )
     duration_seconds = quiz_session.duration_seconds
     if duration_seconds is None:
@@ -66,13 +71,14 @@ def answer_review_enabled(quiz_session: QuizSession, quiz: Quiz) -> bool:
     return quiz.allow_answer_review
 
 
-def quiz_session_is_due(quiz_session: QuizSession, quiz: Quiz) -> bool:
-    """Whether a running session has used up its time."""
-    ends_at = quiz_ends_at(quiz_session, quiz)
+def quiz_session_is_due(
+    quiz_session: QuizSession, quiz: Quiz, now: datetime | None = None
+) -> bool:
+    """Whether a running session has used up its time at ``now``."""
+    now = now or datetime.now(UTC)
+    ends_at = quiz_ends_at(quiz_session, quiz, now)
     return (
-        quiz_session.status == "in_progress"
-        and ends_at is not None
-        and datetime.now(UTC) >= ends_at
+        quiz_session.status == "in_progress" and ends_at is not None and now >= ends_at
     )
 
 
@@ -127,7 +133,9 @@ def expire_quiz_session(
         session.refresh(quiz_session)
 
 
-def expire_due_quiz_sessions(session: Session) -> list[QuizSession]:
+def expire_due_quiz_sessions(
+    session: Session, now: datetime | None = None
+) -> list[QuizSession]:
     """Finish every running session whose time is up, in one transaction.
 
     The application runs this every few seconds, so a session ends on time
@@ -137,6 +145,7 @@ def expire_due_quiz_sessions(session: Session) -> list[QuizSession]:
     """
     if not session.scalar(select(func.pg_try_advisory_xact_lock(EXPIRY_LOCK_KEY))):
         return []
+    now = now or datetime.now(UTC)
     finished = [
         quiz_session
         for quiz_session, quiz in session.execute(
@@ -144,7 +153,7 @@ def expire_due_quiz_sessions(session: Session) -> list[QuizSession]:
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(QuizSession.status == "in_progress")
         ).all()
-        if quiz_session_is_due(quiz_session, quiz)
+        if quiz_session_is_due(quiz_session, quiz, now)
         and finish_expired_session(quiz_session, quiz, session)
     ]
     session.commit()

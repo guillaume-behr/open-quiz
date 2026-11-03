@@ -226,21 +226,17 @@ def synchronize_security_state(
         session.commit()
 
 
-def enforce_data_retention(session_factory, settings: Settings) -> None:
-    now = int(time())
-    quiz_cutoff = datetime.now(UTC) - timedelta(
-        days=settings.quiz_result_retention_days
-    )
-    training_cutoff = datetime.now(UTC) - timedelta(
-        days=settings.training_result_retention_days
-    )
-    abandoned_cutoff = datetime.now(UTC) - timedelta(
-        days=settings.abandoned_session_retention_days
-    )
-    report_cutoff = datetime.now(UTC) - timedelta(
-        days=settings.problem_report_retention_days
-    )
-    limiter_cutoff = now - max(
+def enforce_data_retention(
+    session_factory, settings: Settings, now: datetime | None = None
+) -> None:
+    """Delete or settle everything past its retention, as of one instant."""
+    now = now or datetime.now(UTC)
+    epoch = int(now.timestamp())
+    quiz_cutoff = now - timedelta(days=settings.quiz_result_retention_days)
+    training_cutoff = now - timedelta(days=settings.training_result_retention_days)
+    abandoned_cutoff = now - timedelta(days=settings.abandoned_session_retention_days)
+    report_cutoff = now - timedelta(days=settings.problem_report_retention_days)
+    limiter_cutoff = epoch - max(
         settings.login_window_seconds,
         TWO_FACTOR_DAILY_WINDOW_SECONDS,
         settings.quiz_rate_window_seconds,
@@ -259,7 +255,7 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
         delete_quiz_session_records(expired_training_ids, session)
 
         expired_refresh_session_ids = select(RefreshSession.id).where(
-            RefreshSession.expires_at <= now
+            RefreshSession.expires_at <= epoch
         )
         session.execute(
             delete(RefreshSessionFamily).where(
@@ -267,11 +263,11 @@ def enforce_data_retention(session_factory, settings: Settings) -> None:
             )
         )
         expired_refresh_count = session.execute(
-            delete(RefreshSession).where(RefreshSession.expires_at <= now)
+            delete(RefreshSession).where(RefreshSession.expires_at <= epoch)
         ).rowcount
         expired_challenge_count = session.execute(
             delete(AuthenticationChallenge).where(
-                AuthenticationChallenge.expires_at <= now
+                AuthenticationChallenge.expires_at <= epoch
             )
         ).rowcount
         expired_report_count = session.execute(

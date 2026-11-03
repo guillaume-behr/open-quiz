@@ -290,6 +290,36 @@ def test_discarded_sessions_release_their_join_codes(tmp_path: Path) -> None:
         assert reserved_codes == live_codes
 
 
+def test_retention_runs_as_of_the_instant_it_is_given(tmp_path: Path) -> None:
+    """Every cutoff derives from one ``now``, which tests can set directly."""
+    settings = settings_for(
+        tmp_path / "retention-instant",
+        quiz_result_retention_days=30,
+    )
+    with make_client(settings) as client:
+        professor, _ = create_professor(client, login_admin(client))
+        with client.app.state.session_factory() as session:
+            recent_id = seeded_exam_session(
+                session,
+                professor["id"],
+                join_code="NOW001",
+                status_value="finished",
+                created_at=datetime.now(UTC) - timedelta(days=5),
+                with_answer=True,
+            )
+            session.commit()
+
+        factory = client.app.state.session_factory
+        main.enforce_data_retention(factory, settings)
+        with factory() as session:
+            assert session.get(QuizSession, recent_id) is not None
+
+        later = datetime.now(UTC) + timedelta(days=30)
+        main.enforce_data_retention(factory, settings, now=later)
+        with factory() as session:
+            assert session.get(QuizSession, recent_id) is None
+
+
 def test_results_hide_expired_exams_without_deleting_them(tmp_path: Path) -> None:
     """Reading results never writes: maintenance alone deletes expired ones."""
     settings = settings_for(
