@@ -10,6 +10,7 @@ import csv
 import io
 from collections import defaultdict
 from collections.abc import Callable, Iterator, Sequence
+from datetime import datetime
 from statistics import median
 
 from sqlalchemy import case, func, select
@@ -38,6 +39,7 @@ from app.services.question_assignments import (
 from app.services.session_lifecycle import (
     quiz_ends_at,
 )
+from app.session_retention import retained_exam_result
 
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
@@ -243,11 +245,14 @@ def stream_results_csv(
     owner_id: int,
     class_id: int,
     quiz_id: int | None,
+    *,
+    retained_after: datetime,
 ) -> Iterator[str]:
     """Stream a class's finished exam results as CSV, one participant per row.
 
     The response outlives the request's database session, so the rows are
-    read through a session of their own, in batches of 50 sessions.
+    read through a session of their own, in batches of 50 sessions. Results
+    started before ``retained_after`` are past retention and left out.
     """
     output = io.StringIO(newline="")
     writer = csv.writer(output)
@@ -275,6 +280,7 @@ def stream_results_csv(
             Quiz.mode == "exam",
             QuizSession.class_id == class_id,
             QuizSession.status == "finished",
+            retained_exam_result(retained_after),
         ]
         if quiz_id is not None:
             export_filters.append(QuizSession.quiz_id == quiz_id)

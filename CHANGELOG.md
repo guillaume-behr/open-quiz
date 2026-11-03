@@ -13,6 +13,17 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ## [Unreleased]
 
+### Upgrade actions
+
+- None.
+
+### Changed
+
+- Listing or exporting results no longer deletes expired exam results: they
+  are hidden at once and deleted by the hourly maintenance, which reports them
+  in `security.data_retention_enforced`. The `quiz.results_retention_purged`
+  audit event is gone.
+
 ## [1.0.0] — 2026-11-03
 
 First stable version: from here on, a version that breaks compatibility or
