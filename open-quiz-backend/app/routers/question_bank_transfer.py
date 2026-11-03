@@ -9,6 +9,7 @@ format with sample questions.
 import json
 from base64 import b64encode
 from collections.abc import Iterator
+from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -47,6 +48,9 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
+# The questions of the downloadable example; the route adds the grade level,
+# which depends on the teacher's own levels.
+EXAMPLE_FILE = Path(__file__).with_name("question_bank_example.json")
 
 
 def downloadable_json(content: object, filename: str) -> Response:
@@ -68,125 +72,19 @@ def download_import_example(
     available_grade_levels, grade_level_comment = grade_level_import_context(
         professor.id, session
     )
-    example = {
-        "version": 1,
-        "question_bank": {
-            "_comment_grade_level": grade_level_comment,
-            "grade_level": (
-                available_grade_levels[0] if available_grade_levels else "Tle"
-            ),
-            "chapter": "Exemple complet",
-        },
-        "questions": [
-            {
-                "prompt": "Quelle est la capitale de la France ?",
-                "difficulty": "easy",
-                "answer_mode": "single",
-                "answer_mode_disclosed": True,
-                "response_language": None,
-                "allow_code_execution": False,
-                "choices": [
-                    {
-                        "label": "Paris",
-                        "is_correct": True,
-                        "points": 3,
-                        "image": None,
-                        "code_language": None,
-                        "code_content": None,
-                    },
-                    {
-                        "label": "Lyon",
-                        "is_correct": False,
-                        "points": 0,
-                        "image": None,
-                        "code_language": None,
-                        "code_content": None,
-                    },
-                ],
-                "code_language": None,
-                "code_content": None,
-                "image": None,
-            },
-            {
-                "prompt": "Quels nombres sont premiers ?",
-                "difficulty": "medium",
-                "answer_mode": "multiple",
-                "answer_mode_disclosed": False,
-                "response_language": None,
-                "allow_code_execution": False,
-                "choices": [
-                    {
-                        "label": "2",
-                        "is_correct": True,
-                        "points": 3,
-                        "image": None,
-                        "code_language": "python",
-                        "code_content": "print(2)",
-                    },
-                    {
-                        "label": "3",
-                        "is_correct": True,
-                        "points": 3,
-                        "image": {
-                            "content_type": "image/png",
-                            "data_base64": (
-                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
-                                "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
-                            ),
-                        },
-                        "code_language": None,
-                        "code_content": None,
-                    },
-                    {
-                        "label": "4",
-                        "is_correct": False,
-                        "points": -1,
-                        "image": {
-                            "content_type": "image/png",
-                            "data_base64": (
-                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
-                                "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
-                            ),
-                        },
-                        "code_language": "javascript",
-                        "code_content": "console.log(4)",
-                    },
-                ],
-                "code_language": "python",
-                "code_content": "numbers = [2, 3, 4]\nprint(numbers)",
-                "image": {
-                    "content_type": "image/png",
-                    "data_base64": (
-                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
-                        "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
-                    ),
-                },
-            },
-            {
-                "prompt": "Écrivez un programme Python qui affiche la somme de 2 et 3.",
-                "difficulty": "hard",
-                "answer_mode": "written",
-                "answer_mode_disclosed": True,
-                "response_language": "python",
-                "allow_code_execution": True,
-                "choices": [
-                    {
-                        "label": "print(2 + 3)",
-                        "is_correct": True,
-                        "points": 9,
-                        "image": None,
-                        "code_language": None,
-                        "code_content": None,
-                    },
-                ],
-                "code_language": None,
-                "code_content": None,
-                "image": None,
-            },
-        ],
-    }
+    example = json.loads(EXAMPLE_FILE.read_text(encoding="utf-8"))
     return downloadable_json(
-        example,
+        {
+            "version": example["version"],
+            "question_bank": {
+                "_comment_grade_level": grade_level_comment,
+                "grade_level": (
+                    available_grade_levels[0] if available_grade_levels else "Tle"
+                ),
+                **example["question_bank"],
+            },
+            "questions": example["questions"],
+        },
         "open-quiz-questions-example.json",
     )
 
