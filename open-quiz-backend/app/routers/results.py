@@ -12,7 +12,6 @@ from typing import Annotated, cast
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -25,7 +24,7 @@ from app.audit import audit_event
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser, current_student
 from app.enums import AnswerMode, QuizMode, SessionStatus
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import (
     Question,
     QuestionChoice,
@@ -47,7 +46,7 @@ from app.pagination import (
     set_pagination_headers,
 )
 from app.question_responses import load_question_records
-from app.quiz_lookup import owned_quiz_session
+from app.quiz_lookup import owned_quiz, owned_quiz_session
 from app.schemas import (
     QuizAnswerGrade,
     QuizAnswerReview,
@@ -69,6 +68,7 @@ from app.services.question_assignments import (
 from app.services.results import finished_session_responses, stream_results_csv
 from app.session_responses import session_response
 from app.session_retention import retained_exam_result
+from app.student_accounts import owned_class
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
@@ -143,27 +143,10 @@ def export_quiz_results(
     class_id: Annotated[int, Query(ge=1)],
     quiz_id: Annotated[int | None, Query(ge=1)] = None,
 ) -> StreamingResponse:
-    student_class = session.scalar(
-        select(StudentClass).where(
-            StudentClass.id == class_id,
-            StudentClass.owner_id == professor.id,
-        )
-    )
-    if student_class is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-        )
+    student_class = owned_class(class_id, professor, session)
 
     if quiz_id is not None:
-        quiz = session.scalar(
-            select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
-        )
-        if quiz is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
-            )
+        owned_quiz(quiz_id, professor, session)
     safe_class_id = student_class.id
     safe_quiz = f"-quiz-{quiz_id}" if quiz_id is not None else "-tous-les-quiz"
     filename = f"resultats-classe-{safe_class_id}{safe_quiz}.csv"
@@ -244,12 +227,10 @@ def list_participant_answers(
 ) -> list[QuizAnswerReview]:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
     if quiz_session.status != SessionStatus.FINISHED:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
-                "Les réponses sont disponibles une fois le quiz terminé",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+            "Les réponses sont disponibles une fois le quiz terminé",
         )
     participant = session.scalar(
         select(QuizParticipant).where(
@@ -258,11 +239,10 @@ def list_participant_answers(
         )
     )
     if participant is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.PARTICIPANT_NOT_FOUND, "Participant introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.PARTICIPANT_NOT_FOUND,
+            "Participant introuvable",
         )
     rows = list(
         session.execute(
@@ -282,11 +262,10 @@ def list_participant_answers(
         )
         and len(rows) == 0
     ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.PARTICIPANT_NOT_FOUND, "Participant introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.PARTICIPANT_NOT_FOUND,
+            "Participant introuvable",
         )
     question_order = {
         question_id: position
@@ -514,12 +493,10 @@ def publish_quiz_grades(
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor, session)
     if quiz_session.status != SessionStatus.FINISHED:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
-                "Les notes ne peuvent être publiées qu'une fois le quiz terminé",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+            "Les notes ne peuvent être publiées qu'une fois le quiz terminé",
         )
     pending_count = session.scalar(
         select(func.count(QuizAnswer.id)).where(
@@ -528,12 +505,10 @@ def publish_quiz_grades(
         )
     )
     if pending_count:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.GRADES_PENDING,
-                "Toutes les réponses doivent être corrigées avant publication",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.GRADES_PENDING,
+            "Toutes les réponses doivent être corrigées avant publication",
         )
     if quiz_session.grades_published_at is None:
         quiz_session.grades_published_at = datetime.now(UTC)
@@ -560,20 +535,16 @@ def grade_written_answer(
 ) -> QuizAnswerReview:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
     if quiz_session.status != SessionStatus.FINISHED:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_SESSION_NOT_FINISHED,
-                "La correction est disponible une fois le quiz terminé",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_FINISHED,
+            "La correction est disponible une fois le quiz terminé",
         )
     if quiz_session.grades_published_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.GRADES_PUBLISHED,
-                "Les notes publiées ne peuvent plus être modifiées",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.GRADES_PUBLISHED,
+            "Les notes publiées ne peuvent plus être modifiées",
         )
     row = session.execute(
         select(QuizAnswer, Question)
@@ -584,9 +555,8 @@ def grade_written_answer(
         )
     ).one_or_none()
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.ANSWER_NOT_FOUND, "Réponse introuvable"),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.ANSWER_NOT_FOUND, "Réponse introuvable"
         )
     answer, question = row
     participant = session.get(QuizParticipant, answer.participant_id)
@@ -596,21 +566,17 @@ def grade_written_answer(
         else []
     )
     if question.id not in question_ids:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.ANSWER_QUESTION_NOT_IN_SESSION,
-                "La question ne fait pas partie de cette session",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.ANSWER_QUESTION_NOT_IN_SESSION,
+            "La question ne fait pas partie de cette session",
         )
     position = question_ids.index(question.id)
     if question.answer_mode != AnswerMode.WRITTEN:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.ANSWER_NOT_WRITTEN,
-                "Seules les réponses rédactionnelles sont corrigées manuellement",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.ANSWER_NOT_WRITTEN,
+            "Seules les réponses rédactionnelles sont corrigées manuellement",
         )
     choices = list(
         session.scalars(
@@ -624,12 +590,10 @@ def grade_written_answer(
         quiz_session, session, cast(QuizParticipant, participant)
     ).get(question.id, 0)
     if payload.score > max_score:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.GRADE_ABOVE_MAXIMUM,
-                f"La note ne peut pas dépasser {max_score:g}",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.GRADE_ABOVE_MAXIMUM,
+            f"La note ne peut pas dépasser {max_score:g}",
         )
     answer.score = payload.score
     answer.is_graded = True

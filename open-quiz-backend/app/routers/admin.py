@@ -1,7 +1,7 @@
 from time import time
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -9,7 +9,7 @@ from app.audit import audit_event
 from app.auth_guards import password_rate_subject, two_factor_rate_subject
 from app.dependencies import AdminUser, DbSession
 from app.enums import QuizMode
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.grade_levels import ensure_default_grade_levels
 from app.models import (
     AuthenticationChallenge,
@@ -41,11 +41,10 @@ router = APIRouter(prefix="/api/admin", tags=["administration"])
 def professor_account(user_id: int, session: DbSession) -> User:
     user = session.get(User, user_id)
     if user is None or user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.TEACHER_NOT_FOUND, "Compte enseignant introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.TEACHER_NOT_FOUND,
+            "Compte enseignant introuvable",
         )
     return user
 
@@ -110,11 +109,10 @@ def create_user(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.USERNAME_TAKEN, "Cet identifiant est déjà utilisé"
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.USERNAME_TAKEN,
+            "Cet identifiant est déjà utilisé",
         ) from None
     session.refresh(user)
     audit_event(
@@ -214,12 +212,10 @@ def delete_user(
         .limit(1)
     )
     if running is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.TEACHER_IN_ACTIVE_EXAM,
-                "Cet enseignant anime une session d’examen en cours",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.TEACHER_IN_ACTIVE_EXAM,
+            "Cet enseignant anime une session d’examen en cours",
         )
     delete_user_records(user.id, session)
     session.commit()

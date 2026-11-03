@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 from starlette.requests import HTTPConnection
 
 from app.dependencies import DbSession
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import (
     Quiz,
     QuizJoinCode,
@@ -42,21 +42,19 @@ def enforce_public_rate_limit(
     limiter = getattr(request.app.state, limiter_name)
     retry_after = limiter.reserve(subject)
     if retry_after:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.QUIZ_RATE_LIMITED, "Trop de tentatives pour rejoindre le quiz"
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.QUIZ_RATE_LIMITED,
+            "Trop de tentatives pour rejoindre le quiz",
             headers={"Retry-After": str(retry_after)},
         )
 
 
 def quiz_join_rejected() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail=api_error(
-            ErrorCode.QUIZ_JOIN_REJECTED, "Impossible de rejoindre ce quiz"
-        ),
+    return ApiError(
+        status.HTTP_403_FORBIDDEN,
+        ErrorCode.QUIZ_JOIN_REJECTED,
+        "Impossible de rejoindre ce quiz",
     )
 
 
@@ -101,12 +99,10 @@ def authenticated_participant(
             "quiz_join_rate_limiter",
             public_session_subject(join_code, "participant-auth", session),
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.QUIZ_PARTICIPANT_TOKEN_MISSING,
-                "Jeton de participation au quiz manquant",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.QUIZ_PARTICIPANT_TOKEN_MISSING,
+            "Jeton de participation au quiz manquant",
         )
     row = session.execute(
         select(QuizSession, Quiz, QuizParticipant)
@@ -127,12 +123,10 @@ def authenticated_participant(
             "quiz_join_rate_limiter",
             public_session_subject(join_code, "participant-auth", session),
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.QUIZ_PARTICIPANT_TOKEN_INVALID,
-                "Jeton de participation au quiz invalide",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.QUIZ_PARTICIPANT_TOKEN_INVALID,
+            "Jeton de participation au quiz invalide",
         )
     participant = row[2]
     active_account = session.scalar(
@@ -141,12 +135,10 @@ def authenticated_participant(
         .where(Student.id == participant.student_id)
     )
     if active_account is not True:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.QUIZ_PARTICIPANT_TOKEN_INVALID,
-                "Jeton de participation au quiz invalide",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.QUIZ_PARTICIPANT_TOKEN_INVALID,
+            "Jeton de participation au quiz invalide",
         )
     return row
 
@@ -162,10 +154,8 @@ def generate_join_code(session: DbSession) -> str:
         )
         if reserved_code is not None:
             return code
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=api_error(
-            ErrorCode.QUIZ_CODE_GENERATION_FAILED,
-            "Impossible de générer un code de quiz",
-        ),
+    raise ApiError(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        ErrorCode.QUIZ_CODE_GENERATION_FAILED,
+        "Impossible de générer un code de quiz",
     )

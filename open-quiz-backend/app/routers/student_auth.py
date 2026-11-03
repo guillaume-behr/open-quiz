@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy import select
 
 from app.audit import audit_event
@@ -13,7 +13,7 @@ from app.dependencies import (
     DbSession,
     current_student,
 )
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import StudentAccount
 from app.schemas import (
     StudentAccountResponse,
@@ -51,11 +51,10 @@ def login_student(
     limiter = request.app.state.login_rate_limiter
     retry_after = limiter.reserve(subject)
     if retry_after:
-        raise HTTPException(
-            status_code=429,
-            detail=api_error(
-                ErrorCode.AUTH_RATE_LIMITED, "Trop de tentatives de connexion"
-            ),
+        raise ApiError(
+            429,
+            ErrorCode.AUTH_RATE_LIMITED,
+            "Trop de tentatives de connexion",
             headers={"Retry-After": str(retry_after)},
         )
     encoded = account.password_hash if account else DUMMY_PASSWORD_HASH
@@ -64,11 +63,8 @@ def login_student(
     password_valid = verify_password(payload.password, encoded)
     if account is None or not account.is_active or not password_valid:
         audit_event("student_auth.login_failed")
-        raise HTTPException(
-            status_code=401,
-            detail=api_error(
-                ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
-            ),
+        raise ApiError(
+            401, ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
         )
     limiter.clear_subject(subject)
     token = create_student_access_token(

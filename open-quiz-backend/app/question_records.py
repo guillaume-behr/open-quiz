@@ -4,14 +4,13 @@ from base64 import b64decode
 from binascii import Error as Base64Error
 
 from fastapi import (
-    HTTPException,
     status,
 )
 from sqlalchemy import select
 
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import CorrectionMode, QuizMode
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.images import (
     MAX_IMAGE_BYTES,
     InvalidImageError,
@@ -48,11 +47,10 @@ def owned_question_bank(
         )
     )
     if question_bank is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NOT_FOUND, "Banque de questions introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.QUESTION_BANK_NOT_FOUND,
+            "Banque de questions introuvable",
         )
     return question_bank
 
@@ -115,12 +113,10 @@ def add_question(
             payload.choices, choice_images, strict=True
         )
     ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.CHOICE_CONTENT_REQUIRED,
-                "Une proposition nécessite du texte, une image ou du code",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.CHOICE_CONTENT_REQUIRED,
+            "Une proposition nécessite du texte, une image ou du code",
         )
     question = Question(
         question_bank_id=question_bank_id,
@@ -173,25 +169,20 @@ def decode_image_payload(
     try:
         image_data = b64decode(image.data_base64, validate=True)
     except Base64Error, ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.IMAGE_ENCODING_INVALID,
-                "Une image importée n’est pas encodée correctement",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.IMAGE_ENCODING_INVALID,
+            "Une image importée n’est pas encodée correctement",
         ) from None
     if not image_data or len(image_data) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.IMAGE_INVALID,
-                "Une image importée est vide ou trop volumineuse",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.IMAGE_INVALID,
+            "Une image importée est vide ou trop volumineuse",
         )
     try:
         return normalize_image(image_data, image.content_type)
     except InvalidImageError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(ErrorCode.IMAGE_INVALID, str(error)),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, ErrorCode.IMAGE_INVALID, str(error)
         ) from None

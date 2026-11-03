@@ -4,7 +4,7 @@ from time import time
 
 import jwt
 from cryptography.fernet import InvalidToken
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,7 @@ from app.auth_guards import (
 )
 from app.database import affected_rows
 from app.dependencies import DbSession
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import (
     AuthenticationChallenge,
     RefreshSession,
@@ -320,22 +320,20 @@ def login(
     retry_after = limiter.reserve(rate_subject)
     if retry_after:
         audit_event("auth.login_rate_limited")
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.AUTH_RATE_LIMITED, "Trop de tentatives de connexion"
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.AUTH_RATE_LIMITED,
+            "Trop de tentatives de connexion",
             headers={"Retry-After": str(retry_after)},
         )
     encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_valid = verify_password(payload.password, encoded_password)
     if user is None or not user.is_active or not password_valid:
         audit_event("auth.login_failed")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_INVALID_CREDENTIALS,
+            "Identifiants invalides",
         )
     limiter.clear_subject(rate_subject)
     if payload.audience == "professor" and user.is_admin:
@@ -344,12 +342,10 @@ def login(
             user_id=user.id,
             audience=payload.audience,
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
-                "Ce compte n’est pas un compte enseignant",
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
+            "Ce compte n’est pas un compte enseignant",
         )
     if payload.audience == "admin" and not user.is_admin:
         audit_event(
@@ -357,12 +353,10 @@ def login(
             user_id=user.id,
             audience=payload.audience,
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_ADMIN_ACCOUNT_REQUIRED,
-                "Ce compte n’est pas un compte administrateur",
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_ADMIN_ACCOUNT_REQUIRED,
+            "Ce compte n’est pas un compte administrateur",
         )
     settings = request.app.state.settings
     two_factor = session.get(TwoFactorCredential, user.id)
@@ -450,12 +444,10 @@ def verify_two_factor(
         ),
     )
     if decoded is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
-                "Vérification en deux étapes expirée ou invalide",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
+            "Vérification en deux étapes expirée ou invalide",
         )
     user_id, purpose, token_id_hash = decoded
 
@@ -477,12 +469,10 @@ def verify_two_factor(
         or challenge.used_at is not None
         or challenge.expires_at <= now
     ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
-                "Vérification en deux étapes expirée ou invalide",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
+            "Vérification en deux étapes expirée ou invalide",
         )
 
     limiter = request.app.state.login_rate_limiter
@@ -490,11 +480,10 @@ def verify_two_factor(
     retry_after = limiter.reserve(rate_subject)
     if retry_after:
         audit_event("auth.two_factor_rate_limited", user_id=user.id)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_RATE_LIMITED, "Trop de codes de vérification essayés"
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.AUTH_2FA_RATE_LIMITED,
+            "Trop de codes de vérification essayés",
             headers={"Retry-After": str(retry_after)},
         )
     # The short window alone still lets someone who holds the password try
@@ -505,11 +494,10 @@ def verify_two_factor(
     )
     if daily_retry_after:
         audit_event("auth.two_factor_daily_limit_reached", user_id=user.id)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_RATE_LIMITED, "Trop de codes de vérification essayés"
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.AUTH_2FA_RATE_LIMITED,
+            "Trop de codes de vérification essayés",
             headers={"Retry-After": str(daily_retry_after)},
         )
 
@@ -520,11 +508,10 @@ def verify_two_factor(
         )
     except InvalidToken:
         audit_event("auth.two_factor_secret_invalid", user_id=user.id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_UNAVAILABLE, "Double authentification indisponible"
-            ),
+        raise ApiError(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            ErrorCode.AUTH_2FA_UNAVAILABLE,
+            "Double authentification indisponible",
         ) from None
 
     matched_counter = verify_totp_code(
@@ -534,11 +521,10 @@ def verify_two_factor(
     )
     if matched_counter is None:
         audit_event("auth.two_factor_failed", user_id=user.id)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CODE_INVALID, "Code de vérification invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CODE_INVALID,
+            "Code de vérification invalide",
         )
 
     counter_result = session.execute(
@@ -555,11 +541,10 @@ def verify_two_factor(
     )
     if affected_rows(counter_result) != 1:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CODE_USED, "Code de vérification déjà utilisé"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CODE_USED,
+            "Code de vérification déjà utilisé",
         )
     challenge_result = session.execute(
         update(AuthenticationChallenge)
@@ -572,12 +557,10 @@ def verify_two_factor(
     )
     if affected_rows(challenge_result) != 1:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
-                "Vérification en deux étapes expirée ou invalide",
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
+            "Vérification en deux étapes expirée ou invalide",
         )
     limiter.clear_subject(rate_subject)
     audit_event("auth.two_factor_succeeded", user_id=user.id)
@@ -596,19 +579,17 @@ def refresh(
     validate_origin(request)
     raw_token = request.cookies.get(REFRESH_COOKIE)
     if raw_token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
     if not validate_refresh_proof(request, raw_token):
         audit_event("auth.refresh_proof_rejected")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_PROOF_INVALID, "Preuve de session invalide"
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_REFRESH_PROOF_INVALID,
+            "Preuve de session invalide",
         )
     stored_session = session.scalar(
         select(RefreshSession).where(
@@ -618,11 +599,10 @@ def refresh(
     now = int(time())
     if stored_session is None or stored_session.expires_at <= now:
         audit_event("auth.refresh_rejected")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
     if stored_session.revoked_at is not None:
         family_revoked = revoke_refresh_family(session, stored_session.id, now)
@@ -631,11 +611,10 @@ def refresh(
             user_id=stored_session.user_id,
             family_revoked=family_revoked,
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
 
     family = session.get(RefreshSessionFamily, stored_session.id)
@@ -662,11 +641,10 @@ def refresh(
             user_id=stored_session.user_id,
             family_revoked=family_revoked,
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
 
     user = session.get(User, stored_session.user_id)
@@ -686,11 +664,10 @@ def refresh(
             .values(revoked_at=now)
         )
         session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.AUTH_REFRESH_SESSION_INVALID, "Session de connexion invalide"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
         )
 
     audit_event("auth.refresh_succeeded", user_id=user.id)
@@ -722,11 +699,10 @@ def logout(
     if raw_token:
         if not validate_refresh_proof(request, raw_token):
             audit_event("auth.logout_proof_rejected")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=api_error(
-                    ErrorCode.AUTH_REFRESH_PROOF_INVALID, "Preuve de session invalide"
-                ),
+            raise ApiError(
+                status.HTTP_403_FORBIDDEN,
+                ErrorCode.AUTH_REFRESH_PROOF_INVALID,
+                "Preuve de session invalide",
             )
         session.execute(
             update(RefreshSession)

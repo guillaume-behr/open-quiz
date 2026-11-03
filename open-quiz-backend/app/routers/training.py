@@ -13,7 +13,6 @@ from typing import cast
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     status,
 )
 from sqlalchemy import delete, func, select
@@ -21,7 +20,7 @@ from sqlalchemy import delete, func, select
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser, current_student
 from app.enums import SessionStatus
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import (
     ClassTrainingQuestionBank,
     Question,
@@ -53,6 +52,7 @@ from app.services.session_lifecycle import (
     discard_previous_training_sessions,
 )
 from app.session_responses import student_state_response
+from app.student_accounts import owned_class
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
@@ -66,17 +66,7 @@ def list_class_training_question_banks(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuestionBankResponse]:
-    student_class = session.scalar(
-        select(StudentClass).where(
-            StudentClass.id == class_id,
-            StudentClass.owner_id == professor.id,
-        )
-    )
-    if student_class is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-        )
+    student_class = owned_class(class_id, professor, session)
     assignments = list(
         session.execute(
             select(
@@ -111,17 +101,7 @@ def update_class_training_question_banks(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuestionBankResponse]:
-    student_class = session.scalar(
-        select(StudentClass).where(
-            StudentClass.id == class_id,
-            StudentClass.owner_id == professor.id,
-        )
-    )
-    if student_class is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-        )
+    student_class = owned_class(class_id, professor, session)
     bank_ids = [item.question_bank_id for item in payload.question_banks]
     banks = list(
         session.scalars(
@@ -132,22 +112,16 @@ def update_class_training_question_banks(
         )
     )
     if len(banks) != len(bank_ids):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_SELECTION_INVALID,
-                "Une ou plusieurs banques de questions sont invalides",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.QUESTION_BANK_SELECTION_INVALID,
+            "Une ou plusieurs banques de questions sont invalides",
         )
     if any(bank.grade_level != student_class.grade_level for bank in banks):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                api_error(
-                    ErrorCode.TRAINING_BANKS_GRADE_MISMATCH,
-                    "Les banques d’entraînement doivent correspondre au niveau de la classe",
-                )
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.TRAINING_BANKS_GRADE_MISMATCH,
+            "Les banques d’entraînement doivent correspondre au niveau de la classe",
         )
     available = dict(
         session.execute(
@@ -161,12 +135,10 @@ def update_class_training_question_banks(
         item.question_count > available.get(item.question_bank_id, 0)
         for item in configured_items
     ):
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                ErrorCode.TRAINING_QUESTION_COUNT_EXCEEDED,
-                "Le nombre demandé dépasse les questions disponibles",
-            ),
+        raise ApiError(
+            422,
+            ErrorCode.TRAINING_QUESTION_COUNT_EXCEEDED,
+            "Le nombre demandé dépasse les questions disponibles",
         )
     session.execute(
         delete(ClassTrainingQuestionBank).where(
@@ -233,12 +205,10 @@ def list_student_training_history(
 ) -> list[TrainingHistoryItem]:
     membership = session.scalar(select(Student).where(Student.account_id == student.id))
     if membership is None:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.TRAINING_CLASS_REQUIRED,
-                "L’élève doit être affecté à une classe",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.TRAINING_CLASS_REQUIRED,
+            "L’élève doit être affecté à une classe",
         )
     rows = list(
         session.execute(
@@ -289,19 +259,14 @@ def start_training_quiz(
         .where(Student.account_id == student.id)
     ).first()
     if membership is None:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.TRAINING_CLASS_REQUIRED,
-                "L’élève doit être affecté à une classe",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.TRAINING_CLASS_REQUIRED,
+            "L’élève doit être affecté à une classe",
         )
     class_student, student_class = membership
     if question_bank_id in active_exam_bank_ids_for_class(student_class.id, session):
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(ErrorCode.TRAINING_NOT_FOUND, "Entraînement introuvable"),
-        )
+        raise ApiError(404, ErrorCode.TRAINING_NOT_FOUND, "Entraînement introuvable")
     assigned = session.execute(
         select(QuestionBank, ClassTrainingQuestionBank.question_count)
         .join(
@@ -316,19 +281,14 @@ def start_training_quiz(
         )
     ).first()
     if assigned is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(ErrorCode.TRAINING_NOT_FOUND, "Entraînement introuvable"),
-        )
+        raise ApiError(404, ErrorCode.TRAINING_NOT_FOUND, "Entraînement introuvable")
     bank, configured_count = assigned
     question_ids = draw_training_question_ids(bank.id, session)[:configured_count]
     if not question_ids:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.TRAINING_BANK_EMPTY,
-                "Cette banque ne contient encore aucune question",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.TRAINING_BANK_EMPTY,
+            "Cette banque ne contient encore aucune question",
         )
     quiz = training_profile_quiz(student.owner_id, session)
     discard_previous_training_sessions(student, class_student, session)

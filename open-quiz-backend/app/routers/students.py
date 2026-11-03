@@ -3,7 +3,7 @@ import unicodedata
 from typing import Annotated
 
 from cryptography.fernet import InvalidToken
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -12,7 +12,7 @@ from app.audit import audit_event
 from app.auth_guards import student_password_rate_subject
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import QuizMode
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import (
     Quiz,
     QuizSession,
@@ -43,6 +43,7 @@ from app.security import (
 from app.session_status import ACTIVE_SESSION_STATUSES
 from app.student_accounts import (
     generated_student_password,
+    owned_class,
     owned_student_account,
     student_account_response,
     student_account_response_from_membership,
@@ -123,12 +124,10 @@ def list_student_accounts(
     is_active: bool | None = None,
 ) -> list[StudentAccountResponse]:
     if class_id is not None and unassigned:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.STUDENT_FILTERS_INVALID,
-                "Les filtres de classe sont incompatibles",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.STUDENT_FILTERS_INVALID,
+            "Les filtres de classe sont incompatibles",
         )
     filters = [StudentAccount.owner_id == professor.id]
     if search:
@@ -138,17 +137,7 @@ def list_student_accounts(
             | StudentAccount.identifier.ilike(term, escape=LIKE_ESCAPE_CHARACTER)
         )
     if class_id is not None:
-        student_class = session.scalar(
-            select(StudentClass.id).where(
-                StudentClass.id == class_id,
-                StudentClass.owner_id == professor.id,
-            )
-        )
-        if student_class is None:
-            raise HTTPException(
-                status_code=404,
-                detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-            )
+        owned_class(class_id, professor, session)
         filters.append(
             StudentAccount.id.in_(
                 select(Student.account_id).where(
@@ -209,17 +198,7 @@ def list_student_credentials(
 ) -> list[StudentCredentialResponse]:
     query = select(StudentAccount).where(StudentAccount.owner_id == professor.id)
     if class_id is not None:
-        owned_class = session.scalar(
-            select(StudentClass.id).where(
-                StudentClass.id == class_id,
-                StudentClass.owner_id == professor.id,
-            )
-        )
-        if owned_class is None:
-            raise HTTPException(
-                status_code=404,
-                detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-            )
+        owned_class(class_id, professor, session)
         query = query.join(Student, Student.account_id == StudentAccount.id).where(
             Student.class_id == class_id
         )
@@ -294,12 +273,10 @@ def create_student_account(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.STUDENT_IDENTIFIER_TAKEN,
-                "Cet identifiant élève est déjà utilisé",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.STUDENT_IDENTIFIER_TAKEN,
+            "Cet identifiant élève est déjà utilisé",
         ) from None
     session.refresh(account)
     audit_event(
@@ -353,12 +330,10 @@ def update_student_account(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.STUDENT_IDENTIFIER_TAKEN,
-                "Cet identifiant élève est déjà utilisé",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.STUDENT_IDENTIFIER_TAKEN,
+            "Cet identifiant élève est déjà utilisé",
         ) from None
     # Student identifiers are easy to guess, so a classmate can exhaust a
     # student's login attempts on purpose. Saving the account is the teacher's
@@ -394,12 +369,10 @@ def delete_student_account(
             )
         )
         if active is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=api_error(
-                    ErrorCode.STUDENT_ACCOUNT_IN_ACTIVE_SESSION,
-                    "Ce compte participe à une session active",
-                ),
+            raise ApiError(
+                409,
+                ErrorCode.STUDENT_ACCOUNT_IN_ACTIVE_SESSION,
+                "Ce compte participe à une session active",
             )
         delete_student_membership(membership.id, session)
     session.execute(delete(StudentAccount).where(StudentAccount.id == account.id))

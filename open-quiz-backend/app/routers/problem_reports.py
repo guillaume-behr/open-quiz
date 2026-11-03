@@ -1,12 +1,12 @@
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy import delete, func, select
 
 from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import ProblemReport
 from app.pagination import (
     DEFAULT_PAGE_SIZE,
@@ -43,12 +43,10 @@ def create_problem_report(
         "problem-report:instance"
     )
     if retry_after:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=api_error(
-                ErrorCode.PROBLEM_REPORT_RATE_LIMITED,
-                "Trop de signalements envoyés. Réessayez plus tard.",
-            ),
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.PROBLEM_REPORT_RATE_LIMITED,
+            "Trop de signalements envoyés. Réessayez plus tard.",
             headers={"Retry-After": str(retry_after)},
         )
     purge_expired_reports(request, session)
@@ -94,11 +92,10 @@ def delete_problem_report(
 ) -> Response:
     report = session.get(ProblemReport, report_id)
     if report is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.PROBLEM_REPORT_NOT_FOUND, "Signalement introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.PROBLEM_REPORT_NOT_FOUND,
+            "Signalement introuvable",
         )
     session.delete(report)
     session.commit()
