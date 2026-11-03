@@ -19,7 +19,7 @@ from fastapi import (
 from sqlalchemy import delete, func, select
 
 from app.class_names import format_class_name
-from app.dependencies import DbSession, ProfessorUser
+from app.dependencies import DbSession, ProfessorUser, current_student
 from app.enums import SessionStatus
 from app.errors import ErrorCode, api_error
 from app.models import (
@@ -33,14 +33,9 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
+from app.participants import generate_join_code, participant_token_hash
 from app.question_bank_summaries import load_question_bank_summaries
-from app.routers.quizzes import (
-    generate_join_code,
-    participant_token_hash,
-    student_state_response,
-    training_profile_quiz,
-)
-from app.routers.student_auth import current_student
+from app.quiz_lookup import training_profile_quiz
 from app.schemas import (
     QuestionBankResponse,
     StudentQuizJoinResponse,
@@ -57,6 +52,7 @@ from app.services.session_lifecycle import (
     active_exam_bank_ids_for_class,
     discard_previous_training_sessions,
 )
+from app.session_responses import student_state_response
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 

@@ -32,10 +32,10 @@ from app.models import (
     QuizSession,
     User,
 )
-from app.routers.makeup import list_makeup_sessions
-from app.routers.quizzes import (
+from app.participants import authenticated_participant
+from app.session_responses import (
     active_session_responses,
-    authenticated_participant,
+    makeup_session_responses,
     session_response,
     student_state_response,
 )
@@ -195,7 +195,7 @@ def live_makeup_sessions_snapshot(
         professor = session.get(User, professor_id)
         if professor is None or not professor.is_active:
             return None
-        sessions = list_makeup_sessions(professor, session)
+        sessions = makeup_session_responses(professor, session)
     return [item.model_dump(mode="json") for item in sessions]
 
 

@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
+from app.auth_guards import password_rate_subject, two_factor_rate_subject
 from app.dependencies import AdminUser, DbSession
 from app.enums import QuizMode
 from app.errors import ErrorCode, api_error
@@ -24,7 +25,6 @@ from app.pagination import (
     MAX_PAGE_SIZE,
     set_pagination_headers,
 )
-from app.routers.auth import password_rate_subject, two_factor_rate_subject
 from app.schemas import (
     UserCreate,
     UserCredentialReset,

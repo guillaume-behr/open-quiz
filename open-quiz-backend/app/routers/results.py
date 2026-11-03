@@ -23,7 +23,7 @@ from sqlalchemy import func, select
 
 from app.audit import audit_event
 from app.class_names import format_class_name
-from app.dependencies import DbSession, ProfessorUser
+from app.dependencies import DbSession, ProfessorUser, current_student
 from app.enums import AnswerMode, QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
 from app.models import (
@@ -47,11 +47,7 @@ from app.pagination import (
     set_pagination_headers,
 )
 from app.question_responses import load_question_records
-from app.routers.quizzes import (
-    owned_quiz_session,
-    session_response,
-)
-from app.routers.student_auth import current_student
+from app.quiz_lookup import owned_quiz_session
 from app.schemas import (
     QuizAnswerGrade,
     QuizAnswerReview,
@@ -71,6 +67,7 @@ from app.services.question_assignments import (
     session_question_ids,
 )
 from app.services.results import finished_session_responses, stream_results_csv
+from app.session_responses import session_response
 from app.session_retention import retained_exam_result
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])

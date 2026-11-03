@@ -7,8 +7,6 @@ load them through their participation (app/routers/student_sessions.py).
 """
 
 import json
-from base64 import b64decode
-from binascii import Error as Base64Error
 
 from fastapi import (
     APIRouter,
@@ -49,16 +47,18 @@ from app.models import (
     QuizSessionQuestion,
     QuizSessionStudentQuestion,
 )
-from app.question_responses import load_question_responses, question_response
-from app.routers.question_banks import (
+from app.question_records import (
+    MAX_IMPORT_IMAGE_BYTES,
+    add_question,
+    choice_points,
+    decode_image_payload,
     discard_training_sessions_using_questions,
     owned_question_bank,
 )
+from app.question_responses import load_question_responses, question_response
 from app.schemas import (
     MAX_QUESTIONS_PER_BANK,
-    QuestionChoiceCreate,
     QuestionCreate,
-    QuestionImportImage,
     QuestionResponse,
     QuestionUpdate,
 )
@@ -66,7 +66,6 @@ from app.services.grading import compute_final_scores
 from app.stored_images import store_image, stored_image_sizes
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
-MAX_IMPORT_IMAGE_BYTES = 64 * 1024 * 1024
 
 
 def normalized_uploaded_image(
@@ -149,83 +148,6 @@ def question_is_in_launched_quiz(question_id: int, session: DbSession) -> bool:
     )
 
 
-def choice_points(
-    choice: QuestionChoiceCreate,
-    choices: list[QuestionChoiceCreate],
-) -> float:
-    """Split a single point evenly across correct choices when none is given."""
-    if choice.points is not None:
-        return choice.points
-    if not choice.is_correct:
-        return 0
-    return 1 / sum(item.is_correct for item in choices)
-
-
-def add_question(
-    question_bank_id: int,
-    payload: QuestionCreate,
-    session: DbSession,
-    *,
-    image_data: bytes | None = None,
-    image_content_type: str | None = None,
-    choice_images: list[tuple[bytes | None, str | None]],
-) -> tuple[Question, list[QuestionChoice], QuestionCode | None]:
-    if any(
-        not choice.label and choice_image_data is None and choice.code_content is None
-        for choice, (choice_image_data, _) in zip(
-            payload.choices, choice_images, strict=True
-        )
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.CHOICE_CONTENT_REQUIRED,
-                "Une proposition nécessite du texte, une image ou du code",
-            ),
-        )
-    question = Question(
-        question_bank_id=question_bank_id,
-        prompt=payload.prompt,
-        difficulty=payload.difficulty,
-        answer_mode=payload.answer_mode,
-        answer_mode_disclosed=payload.answer_mode_disclosed,
-        response_language=payload.response_language,
-        allow_code_execution=payload.allow_code_execution,
-        correction_mode=CorrectionMode.AUTOMATIC,
-        image_sha256=store_image(session, image_data, image_content_type),
-    )
-    session.add(question)
-    session.flush()
-    choices = [
-        QuestionChoice(
-            question_id=question.id,
-            label=choice.label,
-            is_correct=choice.is_correct,
-            points=choice_points(choice, payload.choices),
-            image_sha256=store_image(
-                session, choice_image_data, choice_image_content_type
-            ),
-            code_language=choice.code_language,
-            code_content=choice.code_content,
-            position=position,
-        )
-        for position, (
-            choice,
-            (choice_image_data, choice_image_content_type),
-        ) in enumerate(zip(payload.choices, choice_images, strict=True))
-    ]
-    session.add_all(choices)
-    code = None
-    if payload.code_language is not None and payload.code_content is not None:
-        code = QuestionCode(
-            question_id=question.id,
-            language=payload.code_language,
-            content=payload.code_content,
-        )
-        session.add(code)
-    return question, choices, code
-
-
 @router.get(
     "/{question_bank_id}/questions",
     response_model=list[QuestionResponse],
@@ -245,38 +167,6 @@ def list_questions(
         )
     )
     return load_question_responses(question_ids, session)
-
-
-def decode_image_payload(
-    image: QuestionImportImage | None,
-) -> tuple[bytes | None, str | None]:
-    if image is None:
-        return None, None
-    try:
-        image_data = b64decode(image.data_base64, validate=True)
-    except Base64Error, ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.IMAGE_ENCODING_INVALID,
-                "Une image importée n’est pas encodée correctement",
-            ),
-        ) from None
-    if not image_data or len(image_data) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.IMAGE_INVALID,
-                "Une image importée est vide ou trop volumineuse",
-            ),
-        )
-    try:
-        return normalize_image(image_data, image.content_type)
-    except InvalidImageError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(ErrorCode.IMAGE_INVALID, str(error)),
-        ) from None
 
 
 @router.post(
