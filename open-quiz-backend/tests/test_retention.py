@@ -5,7 +5,7 @@ from pathlib import Path
 from time import time
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 import main
 from app.models import (
@@ -318,3 +318,58 @@ def test_retention_runs_as_of_the_instant_it_is_given(tmp_path: Path) -> None:
         main.enforce_data_retention(factory, settings, now=later)
         with factory() as session:
             assert session.get(QuizSession, recent_id) is None
+
+
+def test_results_hide_expired_exams_without_deleting_them(tmp_path: Path) -> None:
+    """Reading results never writes: maintenance alone deletes expired ones."""
+    settings = settings_for(
+        tmp_path / "results-retention",
+        quiz_result_retention_days=30,
+    )
+    with make_client(settings) as client:
+        professor, headers = create_professor(client, login_admin(client))
+        student_class = client.post(
+            "/api/classes",
+            headers=headers,
+            json={"name": "5e B", "grade_level": "5e"},
+        ).json()
+        with client.app.state.session_factory() as session:
+            session_ids = {
+                join_code: seeded_exam_session(
+                    session,
+                    professor["id"],
+                    join_code=join_code,
+                    status_value="finished",
+                    created_at=datetime.now(UTC) - timedelta(days=age),
+                    with_answer=True,
+                )
+                for join_code, age in (("OLD001", 45), ("NEW001", 5))
+            }
+            session.execute(
+                update(QuizSession)
+                .where(QuizSession.id.in_(session_ids.values()))
+                .values(class_id=student_class["id"])
+            )
+            session.commit()
+
+        listed = client.get("/api/quizzes/sessions/results", headers=headers)
+        assert listed.status_code == 200
+        assert [item["id"] for item in listed.json()] == [session_ids["NEW001"]]
+        assert listed.headers["X-Total-Count"] == "1"
+
+        exported = client.get(
+            "/api/quizzes/sessions/results/export",
+            headers=headers,
+            params={"class_id": student_class["id"]},
+        )
+        assert exported.status_code == 200
+        assert "Quiz NEW001" in exported.text
+        assert "Quiz OLD001" not in exported.text
+
+        with client.app.state.session_factory() as session:
+            assert session.get(QuizSession, session_ids["OLD001"]) is not None
+
+        main.enforce_data_retention(client.app.state.session_factory, settings)
+        with client.app.state.session_factory() as session:
+            assert session.get(QuizSession, session_ids["OLD001"]) is None
+            assert session.get(QuizSession, session_ids["NEW001"]) is not None

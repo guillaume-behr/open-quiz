@@ -27,8 +27,6 @@ from app.models import (
     AuthenticationChallenge,
     LoginRateLimit,
     ProblemReport,
-    Quiz,
-    QuizSession,
     RefreshSession,
     RefreshSessionFamily,
     SecurityState,
@@ -68,6 +66,7 @@ from app.services.question_draws import InsufficientQuestionsError
 from app.services.session_lifecycle import expire_due_quiz_sessions
 from app.session_retention import (
     close_abandoned_sessions,
+    expired_exam_result_ids,
     expired_training_session_ids,
 )
 from app.stored_images import delete_unreferenced_images
@@ -244,18 +243,7 @@ def enforce_data_retention(
         closed_count, discarded_count = close_abandoned_sessions(
             abandoned_cutoff, session
         )
-        expired_quiz_session_ids = list(
-            session.scalars(
-                select(QuizSession.id)
-                .join(Quiz, Quiz.id == QuizSession.quiz_id)
-                .where(
-                    Quiz.mode == "exam",
-                    QuizSession.status == "finished",
-                    QuizSession.started_at.is_not(None),
-                    QuizSession.started_at <= quiz_cutoff,
-                )
-            )
-        )
+        expired_quiz_session_ids = expired_exam_result_ids(quiz_cutoff, session)
         delete_quiz_session_records(expired_quiz_session_ids, session)
 
         expired_training_ids = expired_training_session_ids(training_cutoff, session)

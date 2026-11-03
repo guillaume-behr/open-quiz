@@ -6,7 +6,7 @@ list the results of their own finished exams, provisional until published.
 """
 
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, cast
 
 from fastapi import (
@@ -48,7 +48,6 @@ from app.pagination import (
 from app.question_responses import load_question_records
 from app.routers.quizzes import (
     owned_quiz_session,
-    purge_expired_quiz_results,
     session_response,
 )
 from app.routers.student_auth import current_student
@@ -71,8 +70,15 @@ from app.services.question_assignments import (
     session_question_ids,
 )
 from app.services.results import finished_session_responses, stream_results_csv
+from app.session_retention import retained_exam_result
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
+
+
+def exam_result_cutoff(request: Request) -> datetime:
+    """Start time before which a finished exam is past its result retention."""
+    retention_days = request.app.state.settings.quiz_result_retention_days
+    return datetime.now(UTC) - timedelta(days=retention_days)
 
 
 @router.get("/sessions/results", response_model=list[QuizSessionResponse])
@@ -86,11 +92,11 @@ def list_quiz_results(
     quiz_search: Annotated[str, Query(max_length=160)] = "",
     class_search: Annotated[str, Query(max_length=120)] = "",
 ) -> list[QuizSessionResponse]:
-    purge_expired_quiz_results(professor, request, session)
     filters = [
         Quiz.owner_id == professor.id,
         Quiz.mode == "exam",
         QuizSession.status == "finished",
+        retained_exam_result(exam_result_cutoff(request)),
     ]
     if quiz_search:
         filters.append(
@@ -139,7 +145,6 @@ def export_quiz_results(
     class_id: Annotated[int, Query(ge=1)],
     quiz_id: Annotated[int | None, Query(ge=1)] = None,
 ) -> StreamingResponse:
-    purge_expired_quiz_results(professor, request, session)
     student_class = session.scalar(
         select(StudentClass).where(
             StudentClass.id == class_id,
@@ -166,7 +171,11 @@ def export_quiz_results(
     filename = f"resultats-classe-{safe_class_id}{safe_quiz}.csv"
     return StreamingResponse(
         stream_results_csv(
-            request.app.state.session_factory, professor.id, class_id, quiz_id
+            request.app.state.session_factory,
+            professor.id,
+            class_id,
+            quiz_id,
+            retained_after=exam_result_cutoff(request),
         ),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
