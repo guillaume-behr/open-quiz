@@ -1,7 +1,6 @@
 from time import time
-from typing import Annotated
 
-from fastapi import APIRouter, Query, Request, Response, status
+from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -20,10 +19,7 @@ from app.models import (
     User,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
-    set_pagination_headers,
+    Paging,
 )
 from app.schemas import (
     UserCreate,
@@ -69,19 +65,17 @@ def revoke_user_sessions(user_id: int, session: DbSession) -> None:
 def list_users(
     _: AdminUser,
     session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    paging: Paging,
 ) -> list[User]:
     """Return one page of users to an authenticated administrator."""
     total = session.scalar(select(func.count()).select_from(User)) or 0
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     return list(
         session.scalars(
             select(User)
             .order_by(User.display_name, User.username, User.id)
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(paging.offset)
+            .limit(paging.page_size)
         )
     )
 

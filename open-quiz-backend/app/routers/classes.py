@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -25,12 +25,9 @@ from app.models import (
     StudentClass,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
+    Paging,
     contains_pattern,
-    set_pagination_headers,
 )
 from app.schemas import (
     StudentClassCreate,
@@ -165,9 +162,7 @@ def class_response_from_details(
 def list_classes(
     professor: ProfessorUser,
     session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    paging: Paging,
     search: Annotated[str, Query(max_length=120)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
 ) -> list[StudentClassResponse]:
@@ -184,7 +179,7 @@ def list_classes(
         session.scalar(select(func.count()).select_from(StudentClass).where(*filters))
         or 0
     )
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     classes = list(
         session.scalars(
             select(StudentClass)
@@ -195,8 +190,8 @@ def list_classes(
                 StudentClass.name,
                 StudentClass.id,
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(paging.offset)
+            .limit(paging.page_size)
         )
     )
     if not classes:

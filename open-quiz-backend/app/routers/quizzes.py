@@ -6,7 +6,6 @@ from fastapi import (
     APIRouter,
     Query,
     Request,
-    Response,
     status,
 )
 from sqlalchemy import delete, func, select, update
@@ -37,13 +36,10 @@ from app.models import (
     TrainingQuizProfile,
 )
 from app.pagination import (
-    DEFAULT_PAGE_SIZE,
     LIKE_ESCAPE_CHARACTER,
-    MAX_PAGE,
-    MAX_PAGE_SIZE,
+    Paging,
     contains_pattern,
     focused_page,
-    set_pagination_headers,
 )
 from app.participants import (
     generate_join_code,
@@ -115,9 +111,7 @@ def quiz_response(quiz: Quiz, session: DbSession) -> QuizResponse:
 def list_quizzes(
     professor: ProfessorUser,
     session: DbSession,
-    response: Response,
-    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    paging: Paging,
     search: Annotated[str, Query(max_length=160)] = "",
     grade_level: Annotated[str, Query(max_length=80)] = "",
     mode: Annotated[str, Query(pattern="^exam$")] = QuizMode.EXAM,
@@ -141,16 +135,19 @@ def list_quizzes(
         )
     order = (Quiz.title, Quiz.id)
     if focus is not None:
-        page = focused_page(session, Quiz, filters, order, focus, page_size) or page
+        paging.page = (
+            focused_page(session, Quiz, filters, order, focus, paging.page_size)
+            or paging.page
+        )
     total = session.scalar(select(func.count()).select_from(Quiz).where(*filters)) or 0
-    set_pagination_headers(response, page=page, page_size=page_size, total=total)
+    paging.set_total(total)
     quizzes = list(
         session.scalars(
             select(Quiz)
             .where(*filters)
             .order_by(*order)
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .offset(paging.offset)
+            .limit(paging.page_size)
         )
     )
     return quiz_responses(quizzes, session)
