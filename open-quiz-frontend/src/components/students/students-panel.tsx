@@ -1,41 +1,22 @@
 import {
-    createStudentAccount,
     deleteStudentAccount,
     exportStudentCredentials,
     getStudents,
-    updateStudentAccount,
 } from "@/api/students"
-import { ApiError } from "@/api/client"
-import {
-    assignStudentAccount,
-    getAllStudentClasses,
-    unassignStudentAccount,
-} from "@/api/classes"
+import { getAllStudentClasses } from "@/api/classes"
 import type { StudentAccount, StudentClass } from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
-import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-} from "@/components/ui/field"
+import { StudentFormDialog } from "@/components/students/student-form-dialog"
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { PasswordInput } from "@/components/ui/password-input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import { formatClassName, saveBlob } from "@/lib/utils"
-import {
-    LoaderCircle,
-    Download,
-    Pencil,
-    Trash2,
-    UserRound,
-    UserRoundPlus,
-} from "lucide-react"
+import { LoaderCircle, Download, Pencil, Trash2, UserRound } from "lucide-react"
 import { usePagedList } from "@/hooks/use-paged-list"
 import { useResource } from "@/hooks/use-resource"
-import { type FormEvent, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
 
@@ -81,16 +62,6 @@ export function StudentsPanel({
         : (classList.data ?? [])
     const [editing, setEditing] = useState<StudentAccount | null>(null)
     const [deleting, setDeleting] = useState<StudentAccount | null>(null)
-    const [displayName, setDisplayName] = useState("")
-    const [firstName, setFirstName] = useState("")
-    const [lastName, setLastName] = useState("")
-    const [identifier, setIdentifier] = useState("")
-    const [password, setPassword] = useState("")
-    const [selectedClassId, setSelectedClassId] = useState("")
-    const [pendingCreatedAccountId, setPendingCreatedAccountId] = useState<
-        number | null
-    >(null)
-    const [isActive, setIsActive] = useState(true)
     const [isBusy, setIsBusy] = useState(false)
     const [formError, setFormError] = useState<string | null>(null)
     const [exportError, setExportError] = useState<string | null>(null)
@@ -103,102 +74,11 @@ export function StudentsPanel({
     function closeForm() {
         onCreateDialogOpenChange(false)
         setEditing(null)
-        setDisplayName("")
-        setFirstName("")
-        setLastName("")
-        setIdentifier("")
-        setPassword("")
-        setSelectedClassId("")
-        setPendingCreatedAccountId(null)
-        setIsActive(true)
-        setFormError(null)
     }
 
     function edit(student: StudentAccount) {
+        setFormError(null)
         setEditing(student)
-        setDisplayName(student.display_name)
-        setIdentifier(student.identifier)
-        setPassword("")
-        setSelectedClassId(
-            student.class_id === null ? "" : String(student.class_id)
-        )
-        setIsActive(student.is_active)
-        setFormError(null)
-    }
-
-    async function submit(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault()
-        setIsBusy(true)
-        setFormError(null)
-        let classAssignmentFailed = false
-        try {
-            if (editing) {
-                await updateStudentAccount(editing.id, {
-                    display_name: displayName.trim(),
-                    identifier: identifier.trim(),
-                    ...(password ? { password } : {}),
-                    is_active: isActive,
-                })
-                const nextClassId = selectedClassId
-                    ? Number(selectedClassId)
-                    : null
-                if (nextClassId !== editing.class_id) {
-                    try {
-                        if (nextClassId !== null) {
-                            await assignStudentAccount(nextClassId, editing.id)
-                        } else if (editing.class_id !== null) {
-                            await unassignStudentAccount(
-                                editing.class_id,
-                                editing.id
-                            )
-                        }
-                    } catch (error) {
-                        classAssignmentFailed = true
-                        throw error
-                    }
-                }
-            } else {
-                let accountId = pendingCreatedAccountId
-                if (accountId === null) {
-                    const created = await createStudentAccount({
-                        first_name: firstName.trim(),
-                        last_name: lastName.trim(),
-                    })
-                    accountId = created.id
-                    setPendingCreatedAccountId(accountId)
-                }
-                if (selectedClassId) {
-                    try {
-                        await assignStudentAccount(
-                            Number(selectedClassId),
-                            accountId
-                        )
-                    } catch (error) {
-                        classAssignmentFailed = true
-                        throw error
-                    }
-                }
-            }
-            closeForm()
-            reloadLists()
-        } catch (error) {
-            if (classAssignmentFailed && !editing) {
-                reloadLists()
-            }
-            setFormError(
-                apiErrorMessage(
-                    error,
-                    t,
-                    classAssignmentFailed
-                        ? t("student-assignment-error")
-                        : error instanceof ApiError && error.status === 409
-                          ? t("student-account-duplicate")
-                          : t("student-account-save-error")
-                )
-            )
-        } finally {
-            setIsBusy(false)
-        }
     }
 
     async function confirmDelete() {
@@ -440,204 +320,27 @@ export function StudentsPanel({
                 </div>
             </div>
 
-            <Dialog
-                open={isCreateDialogOpen || editing !== null}
-                onOpenChange={(open) => !open && !isBusy && closeForm()}
-                title={t(
-                    editing ? "edit-student-account" : "create-student-account"
-                )}
-                description={t(
-                    editing
-                        ? "student-account-form-help"
-                        : "student-id-generated-help"
-                )}
-                size="md"
-            >
-                <form onSubmit={submit}>
-                    <FieldGroup>
-                        <div className="grid items-start gap-4 sm:grid-cols-2">
-                            {editing ? (
-                                <>
-                                    <Field>
-                                        <FieldLabel htmlFor="account-name">
-                                            {t("student-name")}
-                                        </FieldLabel>
-                                        <Input
-                                            id="account-name"
-                                            value={displayName}
-                                            onChange={(event) =>
-                                                setDisplayName(
-                                                    event.target.value
-                                                )
-                                            }
-                                            required
-                                        />
-                                    </Field>
-                                    <Field>
-                                        <FieldLabel htmlFor="account-id">
-                                            {t("student-id")}
-                                        </FieldLabel>
-                                        <Input
-                                            id="account-id"
-                                            value={identifier}
-                                            onChange={(event) =>
-                                                setIdentifier(
-                                                    event.target.value.toLowerCase()
-                                                )
-                                            }
-                                            pattern="[a-zA-Z0-9._-]+"
-                                            autoComplete="off"
-                                            required
-                                        />
-                                    </Field>
-                                </>
-                            ) : (
-                                <>
-                                    <Field>
-                                        <FieldLabel htmlFor="account-first-name">
-                                            {t("first-name")}
-                                        </FieldLabel>
-                                        <Input
-                                            id="account-first-name"
-                                            value={firstName}
-                                            onChange={(event) =>
-                                                setFirstName(event.target.value)
-                                            }
-                                            required
-                                        />
-                                    </Field>
-                                    <Field>
-                                        <FieldLabel htmlFor="account-last-name">
-                                            {t("last-name")}
-                                        </FieldLabel>
-                                        <Input
-                                            id="account-last-name"
-                                            value={lastName}
-                                            onChange={(event) =>
-                                                setLastName(event.target.value)
-                                            }
-                                            required
-                                        />
-                                    </Field>
-                                </>
-                            )}
-                            <Field>
-                                <FieldLabel htmlFor="account-class">
-                                    {t("student-class")}
-                                </FieldLabel>
-                                <select
-                                    id="account-class"
-                                    className={NATIVE_SELECT_CLASS_NAME}
-                                    value={selectedClassId}
-                                    onChange={(event) =>
-                                        setSelectedClassId(event.target.value)
-                                    }
-                                    disabled={isBusy}
-                                >
-                                    <option value="">{t("no-class")}</option>
-                                    {classes.map((studentClass) => (
-                                        <option
-                                            key={studentClass.id}
-                                            value={studentClass.id}
-                                        >
-                                            {formatClassName(
-                                                studentClass.grade_level,
-                                                studentClass.name
-                                            )}
-                                        </option>
-                                    ))}
-                                </select>
-                                {editing && (
-                                    <p className="text-xs text-muted-foreground">
-                                        {t("student-class-help")}
-                                    </p>
-                                )}
-                            </Field>
-                            {editing && (
-                                <Field>
-                                    <FieldLabel htmlFor="account-password">
-                                        {t("new-password-optional")}
-                                    </FieldLabel>
-                                    <PasswordInput
-                                        id="account-password"
-                                        value={password}
-                                        onChange={(event) =>
-                                            setPassword(event.target.value)
-                                        }
-                                        minLength={8}
-                                        autoComplete="new-password"
-                                    />
-                                </Field>
-                            )}
-                        </div>
-                        {editing && (
-                            <label className="flex items-center gap-2 text-sm">
-                                <input
-                                    type="checkbox"
-                                    className="accent-primary"
-                                    checked={isActive}
-                                    onChange={(event) =>
-                                        setIsActive(event.target.checked)
-                                    }
-                                />
-                                {t("student-account-active")}
-                            </label>
-                        )}
-                        {formError && <FieldError>{formError}</FieldError>}
-                        <div className="flex justify-end gap-2 border-t pt-4">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={closeForm}
-                                disabled={isBusy}
-                            >
-                                {t("cancel")}
-                            </Button>
-                            <Button type="submit" disabled={isBusy}>
-                                {isBusy ? (
-                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                                ) : editing ? (
-                                    <Pencil />
-                                ) : (
-                                    <UserRoundPlus />
-                                )}
-                                {t("save-student")}
-                            </Button>
-                        </div>
-                    </FieldGroup>
-                </form>
-            </Dialog>
+            {(isCreateDialogOpen || editing !== null) && (
+                <StudentFormDialog
+                    key={editing?.id ?? "new"}
+                    student={editing}
+                    classes={classes}
+                    onClose={closeForm}
+                    onListsChanged={reloadLists}
+                />
+            )}
 
-            <Dialog
+            <ConfirmDeleteDialog
                 open={deleting !== null}
-                onOpenChange={(open) => !open && !isBusy && setDeleting(null)}
                 title={t("delete-student")}
                 description={t("delete-student-account-help", {
                     name: deleting?.display_name,
                 })}
-                size="sm"
-            >
-                {formError && <FieldError>{formError}</FieldError>}
-                <div className="mt-4 flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={() => setDeleting(null)}
-                        disabled={isBusy}
-                    >
-                        {t("cancel")}
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        onClick={() => void confirmDelete()}
-                        disabled={isBusy}
-                    >
-                        {isBusy && (
-                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                        )}
-                        {t("delete")}
-                    </Button>
-                </div>
-            </Dialog>
+                isBusy={isBusy}
+                error={formError}
+                onClose={() => setDeleting(null)}
+                onConfirm={() => void confirmDelete()}
+            />
         </div>
     )
 }
