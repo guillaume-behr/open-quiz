@@ -78,9 +78,25 @@ step 'Stopping the API and the interface'
 compose stop open-quiz-backend open-quiz-frontend
 
 step 'Restoring the backup'
-if ! compose exec -T open-quiz-database \
-    pg_restore --username=open_quiz --dbname=open_quiz \
-    --clean --if-exists --no-owner --single-transaction <"$backup_file"; then
+# The database must become the backup, not the backup laid over what is
+# there: pg_restore --clean only drops what the backup contains, so a table a
+# later migration created would survive next to an older alembic_version,
+# and the API would refuse to start. The backup is first turned into SQL;
+# then the public schema is recreated as PostgreSQL creates it and the SQL
+# replayed, all in one transaction: any failure leaves the data unchanged.
+if ! compose exec -T open-quiz-database sh -c '
+    set -eu
+    sql_file=$(mktemp)
+    trap "rm -f \"$sql_file\"" EXIT
+    pg_restore --no-owner --file="$sql_file"
+    psql --no-psqlrc --quiet --set=ON_ERROR_STOP=1 --single-transaction \
+        --username=open_quiz --dbname=open_quiz \
+        --command="DROP SCHEMA public CASCADE" \
+        --command="CREATE SCHEMA public AUTHORIZATION pg_database_owner" \
+        --command="GRANT USAGE ON SCHEMA public TO PUBLIC" \
+        --command="COMMENT ON SCHEMA public IS '"'"'standard public schema'"'"'" \
+        --file="$sql_file" >/dev/null
+' <"$backup_file"; then
     compose up --detach --wait --wait-timeout 120
     fail "the restore failed and was rolled back; the previous data is unchanged"
 fi

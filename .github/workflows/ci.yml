@@ -171,6 +171,24 @@ jobs:
             echo "::error::a deployment file is not ignored by Git; update.sh would refuse to update"
             exit 1
           fi
+      - name: Back up and restore the database
+        run: |
+          sh ./backup.sh --directory "$RUNNER_TEMP/backups"
+          backup_file=$(ls "$RUNNER_TEMP"/backups/*.dump)
+          # A table the backup does not hold, as a later migration would add:
+          # the restore must not leave it behind.
+          docker compose exec -T open-quiz-database psql --username=open_quiz \
+            --dbname=open_quiz --command="CREATE TABLE created_after_backup (id integer)"
+          sh ./restore.sh --yes "$backup_file"
+          leftover=$(docker compose exec -T open-quiz-database psql \
+            --username=open_quiz --dbname=open_quiz --tuples-only --no-align \
+            --command="SELECT count(*) FROM pg_tables WHERE tablename = 'created_after_backup'")
+          if [ "$leftover" != 0 ]; then
+            echo "::error::restore.sh left a table the backup does not contain"
+            exit 1
+          fi
+          docker compose exec -T open-quiz-backend \
+            /app/.venv/bin/python scripts/container_network_smoke.py
       - name: Stop smoke-test containers
         if: always()
         run: docker compose down --volumes
