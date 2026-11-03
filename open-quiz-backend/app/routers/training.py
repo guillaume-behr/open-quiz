@@ -20,6 +20,7 @@ from sqlalchemy import delete, func, select
 
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import SessionStatus
 from app.errors import ErrorCode, api_error
 from app.models import (
     ClassTrainingQuestionBank,
@@ -252,7 +253,7 @@ def list_student_training_history(
             )
             .where(
                 QuizSession.training_question_bank_id == question_bank_id,
-                QuizSession.status == "finished",
+                QuizSession.status == SessionStatus.FINISHED,
                 QuizParticipant.student_id == membership.id,
                 QuizSession.started_at.is_not(None),
             )
@@ -348,7 +349,7 @@ def start_training_quiz(
         class_id=student_class.id,
         class_name=format_class_name(student_class.grade_level, student_class.name),
         join_code=generate_join_code(session),
-        status="in_progress",
+        status=SessionStatus.IN_PROGRESS,
         started_at=now,
         training_question_bank_id=bank.id,
     )

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import QuizMode
 from app.errors import ErrorCode, api_error
 from app.models import (
     Quiz,
@@ -388,7 +389,7 @@ def delete_student_account(
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
                 QuizSession.class_id == membership.class_id,
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
                 QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
             )
         )

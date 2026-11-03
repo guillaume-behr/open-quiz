@@ -26,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.database import affected_rows
 from app.dependencies import DbSession
+from app.enums import AnswerMode, QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
 from app.models import (
     Question,
@@ -93,7 +94,7 @@ def join_quiz(
     row = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(QuizSession.join_code == payload.join_code, Quiz.mode == "exam")
+        .where(QuizSession.join_code == payload.join_code, Quiz.mode == QuizMode.EXAM)
     ).first()
     if row is None:
         reject_quiz_join(request, f"join:unknown:{account.id}")
@@ -136,9 +137,9 @@ def join_quiz(
     )
     if existing is not None:
         if existing.left_at is None or quiz_session.status not in {
-            "waiting",
-            "in_progress",
-            "paused",
+            SessionStatus.WAITING,
+            SessionStatus.IN_PROGRESS,
+            SessionStatus.PAUSED,
         }:
             reject_quiz_join(request, join_subject)
         participant_token = token_urlsafe(32)
@@ -161,7 +162,7 @@ def join_quiz(
         resume_position = existing.current_position
         if (
             resume_position is None
-            and quiz_session.status != "waiting"
+            and quiz_session.status != SessionStatus.WAITING
             and existing.submitted_at is None
             and session.scalar(
                 select(QuizAnswer.id)
@@ -199,15 +200,15 @@ def join_quiz(
         return StudentQuizJoinResponse(
             **state.model_dump(), participant_token=participant_token
         )
-    if quiz_session.status != "waiting":
+    if quiz_session.status != SessionStatus.WAITING:
         reject_quiz_join(request, join_subject)
     waiting = session.execute(
         update(QuizSession)
         .where(
             QuizSession.id == quiz_session.id,
-            QuizSession.status == "waiting",
+            QuizSession.status == SessionStatus.WAITING,
         )
-        .values(status="waiting")
+        .values(status=SessionStatus.WAITING)
         .execution_options(synchronize_session=False)
     )
     if affected_rows(waiting) != 1:
@@ -308,7 +309,7 @@ def submit_student_answer(
     # runs in the same transaction as the winning submission, so a losing
     # duplicate can reach here after that transition already committed. Any
     # other non-"in_progress" status (paused included) still rejects outright.
-    if quiz_session.status not in ("in_progress", "finished"):
+    if quiz_session.status not in (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_error(
@@ -361,7 +362,7 @@ def submit_student_answer(
     choices_by_id = {choice.id: choice for choice in choices}
 
     feedback: TrainingFeedback | None = None
-    if question.answer_mode == "written":
+    if question.answer_mode == AnswerMode.WRITTEN:
         written_answer = (payload.written_answer or "").strip()
         if not written_answer or payload.selected_choice_ids is not None:
             raise HTTPException(
@@ -376,7 +377,7 @@ def submit_student_answer(
             (choice.label for choice in choices if choice.is_correct),
             "",
         )
-        if quiz.mode == "training":
+        if quiz.mode == QuizMode.TRAINING:
             feedback = TrainingFeedback(
                 question_id=question.id,
                 is_correct=None,
@@ -396,7 +397,7 @@ def submit_student_answer(
             )
         selected_ids = list(dict.fromkeys(payload.selected_choice_ids or []))
         if payload.written_answer is not None or (
-            question.answer_mode == "single"
+            question.answer_mode == AnswerMode.SINGLE
             and question.answer_mode_disclosed
             and len(selected_ids) != 1
         ):
@@ -416,7 +417,7 @@ def submit_student_answer(
                 ),
             )
         answer_data = {"selected_choice_ids": selected_ids}
-        if quiz.mode == "training":
+        if quiz.mode == QuizMode.TRAINING:
             correct_ids = [choice.id for choice in choices if choice.is_correct]
             feedback = TrainingFeedback(
                 question_id=question.id,
@@ -524,7 +525,7 @@ def require_reviewable_participant(
     The session must still be running and every assigned question must already
     have an answer.
     """
-    if quiz_session.status != "in_progress":
+    if quiz_session.status != SessionStatus.IN_PROGRESS:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_error(
@@ -669,7 +670,7 @@ def navigate_student_quiz(
         and set(question_ids).issubset(answered_question_ids)
     )
     if (
-        quiz_session.status != "in_progress"
+        quiz_session.status != SessionStatus.IN_PROGRESS
         or not allow_previous_questions
         or (participant.current_position is None and not reviewing)
         or target_position not in accessible_positions
@@ -713,7 +714,10 @@ def report_student_violation(
         f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
-    if quiz_session.status != "in_progress" or participant.current_position is None:
+    if (
+        quiz_session.status != SessionStatus.IN_PROGRESS
+        or participant.current_position is None
+    ):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     now = datetime.now(UTC)
     last_violation_at = participant.last_violation_at
@@ -754,7 +758,9 @@ def active_participant_for_image(
     )
     # A read: a session past its deadline is refused like a finished one,
     # and left for the expiry loop to finish.
-    if quiz_session.status != "in_progress" or quiz_session_is_due(quiz_session, quiz):
+    if quiz_session.status != SessionStatus.IN_PROGRESS or quiz_session_is_due(
+        quiz_session, quiz
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
@@ -818,7 +824,7 @@ def get_student_choice_image(
         .where(
             QuestionChoice.id == choice_id,
             QuestionChoice.question_id == question_id,
-            Question.answer_mode != "written",
+            Question.answer_mode != AnswerMode.WRITTEN,
         )
     )
     if choice is None or choice.image is None:

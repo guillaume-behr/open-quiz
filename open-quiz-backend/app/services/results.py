@@ -17,6 +17,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.class_names import format_class_name
+from app.enums import QuizMode, SessionStatus
 from app.models import (
     Quiz,
     QuizAnswer,
@@ -277,9 +278,9 @@ def stream_results_csv(
     with session_factory() as export_session:
         export_filters = [
             Quiz.owner_id == owner_id,
-            Quiz.mode == "exam",
+            Quiz.mode == QuizMode.EXAM,
             QuizSession.class_id == class_id,
-            QuizSession.status == "finished",
+            QuizSession.status == SessionStatus.FINISHED,
             retained_exam_result(retained_after),
         ]
         if quiz_id is not None:

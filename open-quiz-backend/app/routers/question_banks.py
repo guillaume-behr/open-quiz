@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import QuizMode
 from app.errors import ErrorCode, api_error
 from app.grade_levels import ensure_grade_level
 from app.models import (
@@ -278,7 +279,7 @@ def discard_training_sessions_using_questions(
             select(QuizSession.id)
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
-                Quiz.mode == "training",
+                Quiz.mode == QuizMode.TRAINING,
                 QuizSession.id.in_(common_session_ids.union(personalized_session_ids)),
             )
         )

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.database import EXPIRY_LOCK_KEY, affected_rows
+from app.enums import QuizMode, SessionStatus
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -46,7 +47,10 @@ def quiz_ends_at(
     if started_at is None:
         return None
     paused_duration = quiz_session.paused_duration_seconds or 0
-    if quiz_session.status == "paused" and quiz_session.paused_at is not None:
+    if (
+        quiz_session.status == SessionStatus.PAUSED
+        and quiz_session.paused_at is not None
+    ):
         paused_duration += ceil(
             max(
                 0, ((now or datetime.now(UTC)) - quiz_session.paused_at).total_seconds()
@@ -64,7 +68,7 @@ def answer_review_enabled(quiz_session: QuizSession, quiz: Quiz) -> bool:
     Only exams offer the final review step, and a running session keeps the
     option it was launched with even if the quiz is edited afterwards.
     """
-    if quiz.mode != "exam":
+    if quiz.mode != QuizMode.EXAM:
         return False
     if quiz_session.allow_answer_review is not None:
         return quiz_session.allow_answer_review
@@ -78,7 +82,9 @@ def quiz_session_is_due(
     now = now or datetime.now(UTC)
     ends_at = quiz_ends_at(quiz_session, quiz, now)
     return (
-        quiz_session.status == "in_progress" and ends_at is not None and now >= ends_at
+        quiz_session.status == SessionStatus.IN_PROGRESS
+        and ends_at is not None
+        and now >= ends_at
     )
 
 
@@ -96,9 +102,9 @@ def finish_expired_session(
         update(QuizSession)
         .where(
             QuizSession.id == quiz_session.id,
-            QuizSession.status == "in_progress",
+            QuizSession.status == SessionStatus.IN_PROGRESS,
         )
-        .values(status="finished")
+        .values(status=SessionStatus.FINISHED)
         .execution_options(synchronize_session=False)
     )
     if affected_rows(transition) != 1:
@@ -108,7 +114,7 @@ def finish_expired_session(
         select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
     ):
         participant.current_position = None
-    if quiz.mode == "exam":
+    if quiz.mode == QuizMode.EXAM:
         compute_final_scores(quiz_session, session)
     return True
 
@@ -151,7 +157,7 @@ def expire_due_quiz_sessions(
         for quiz_session, quiz in session.execute(
             select(QuizSession, Quiz)
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(QuizSession.status == "in_progress")
+            .where(QuizSession.status == SessionStatus.IN_PROGRESS)
         ).all()
         if quiz_session_is_due(quiz_session, quiz, now)
         and finish_expired_session(quiz_session, quiz, session)
@@ -176,7 +182,7 @@ def finish_when_nobody_can_answer(
     A session where nobody ever answered is left running: there is nothing to
     grade, and finishing it would deny the rejoin its students still need.
     """
-    if quiz_session.status != "in_progress":
+    if quiz_session.status != SessionStatus.IN_PROGRESS:
         return
     answered = session.scalar(
         select(QuizAnswer.id).where(QuizAnswer.session_id == quiz_session.id).limit(1)
@@ -201,14 +207,14 @@ def finish_when_nobody_can_answer(
         update(QuizSession)
         .where(
             QuizSession.id == quiz_session.id,
-            QuizSession.status == "in_progress",
+            QuizSession.status == SessionStatus.IN_PROGRESS,
         )
-        .values(status="finished")
+        .values(status=SessionStatus.FINISHED)
         .execution_options(synchronize_session=False)
     )
     if affected_rows(transition) == 1:
-        quiz_session.status = "finished"
-        if quiz.mode == "exam":
+        quiz_session.status = SessionStatus.FINISHED
+        if quiz.mode == QuizMode.EXAM:
             compute_final_scores(quiz_session, session)
 
 
@@ -256,8 +262,8 @@ def discard_previous_training_sessions(
             )
             .where(
                 Quiz.owner_id == student.owner_id,
-                Quiz.mode == "training",
-                QuizSession.status != "finished",
+                Quiz.mode == QuizMode.TRAINING,
+                QuizSession.status != SessionStatus.FINISHED,
                 or_(
                     QuizParticipant.student_id == membership.id,
                     QuizParticipant.student_identifier == student.identifier,

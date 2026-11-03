@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import Difficulty
 from app.errors import ErrorCode, api_error
 from app.grade_levels import ensure_grade_level, grade_level_import_context
 from app.models import (
@@ -275,13 +276,16 @@ def import_question_bank(
             update={
                 "question_count": len(questions),
                 "easy_question_count": sum(
-                    question.difficulty == "easy" for question in payload.questions
+                    question.difficulty == Difficulty.EASY
+                    for question in payload.questions
                 ),
                 "medium_question_count": sum(
-                    question.difficulty == "medium" for question in payload.questions
+                    question.difficulty == Difficulty.MEDIUM
+                    for question in payload.questions
                 ),
                 "hard_question_count": sum(
-                    question.difficulty == "hard" for question in payload.questions
+                    question.difficulty == Difficulty.HARD
+                    for question in payload.questions
                 ),
             }
         ),

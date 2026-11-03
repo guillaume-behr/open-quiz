@@ -26,6 +26,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.class_names import format_class_name
 from app.database import affected_rows
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import QuizMode, SessionStatus
 from app.errors import ErrorCode, api_error
 from app.models import (
     MakeupSession,
@@ -166,7 +167,7 @@ def list_makeup_sessions(
         session.scalars(
             select(MakeupSession.id).where(
                 MakeupSession.owner_id == professor.id,
-                MakeupSession.status == "cancelled",
+                MakeupSession.status == SessionStatus.CANCELLED,
                 ~MakeupSession.id.in_(
                     select(QuizSession.makeup_session_id)
                     .join(QuizAnswer, QuizAnswer.session_id == QuizSession.id)
@@ -184,7 +185,7 @@ def list_makeup_sessions(
             select(MakeupSession)
             .where(
                 MakeupSession.owner_id == professor.id,
-                MakeupSession.status != "cancelled",
+                MakeupSession.status != SessionStatus.CANCELLED,
             )
             .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
         )
@@ -203,7 +204,7 @@ def class_finished_quiz_ids(
             .where(
                 Quiz.owner_id == professor.id,
                 QuizSession.class_id == student_class_id,
-                QuizSession.status == "finished",
+                QuizSession.status == SessionStatus.FINISHED,
             )
         )
     )
@@ -233,7 +234,7 @@ def makeup_quiz_options(
             select(Quiz)
             .where(
                 Quiz.owner_id == professor.id,
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
                 Quiz.id.in_(finished_ids),
             )
             .order_by(Quiz.title, Quiz.id)
@@ -265,7 +266,7 @@ def create_makeup_session(
             select(Quiz).where(
                 Quiz.id.in_(quiz_ids),
                 Quiz.owner_id == professor.id,
-                Quiz.mode == "exam",
+                Quiz.mode == QuizMode.EXAM,
             )
         )
     )
@@ -290,7 +291,7 @@ def create_makeup_session(
         class_id=student_class.id,
         class_name=format_class_name(student_class.grade_level, student_class.name),
         join_code=generate_join_code(session),
-        status="waiting",
+        status=SessionStatus.WAITING,
     )
     session.add(makeup)
     session.flush()
@@ -315,11 +316,11 @@ def control_makeup_session(
 ) -> MakeupSessionResponse | Response:
     makeup = owned_makeup_session(session_id, professor, session)
     allowed = {
-        "start": ("waiting", "in_progress"),
-        "pause": ("in_progress", "paused"),
-        "resume": ("paused", "in_progress"),
-        "finish": ("in_progress", "finished"),
-        "cancel": ("waiting", "cancelled"),
+        "start": (SessionStatus.WAITING, SessionStatus.IN_PROGRESS),
+        "pause": (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
+        "resume": (SessionStatus.PAUSED, SessionStatus.IN_PROGRESS),
+        "finish": (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED),
+        "cancel": (SessionStatus.WAITING, SessionStatus.CANCELLED),
     }
     if action not in allowed:
         raise HTTPException(status_code=404)
@@ -403,31 +404,31 @@ def control_makeup_session(
     now = datetime.now(UTC)
     for child in children:
         if action == "start":
-            if child.status != "waiting":
+            if child.status != SessionStatus.WAITING:
                 continue
-            child.status = "in_progress"
+            child.status = SessionStatus.IN_PROGRESS
             child.started_at = now
             for participant in session.scalars(
                 select(QuizParticipant).where(QuizParticipant.session_id == child.id)
             ):
                 participant.current_position = 0
         elif action == "pause":
-            if child.status != "in_progress":
+            if child.status != SessionStatus.IN_PROGRESS:
                 continue
-            child.status = "paused"
+            child.status = SessionStatus.PAUSED
             child.paused_at = now
         elif action == "resume":
-            if child.status != "paused" or child.paused_at is None:
+            if child.status != SessionStatus.PAUSED or child.paused_at is None:
                 continue
             child.paused_duration_seconds = (child.paused_duration_seconds or 0) + ceil(
                 max(0, (now - child.paused_at).total_seconds())
             )
             child.paused_at = None
-            child.status = "in_progress"
+            child.status = SessionStatus.IN_PROGRESS
         else:  # finish
-            if child.status not in {"in_progress", "paused"}:
+            if child.status not in {SessionStatus.IN_PROGRESS, SessionStatus.PAUSED}:
                 continue
-            child.status = "finished"
+            child.status = SessionStatus.FINISHED
             compute_final_scores(child, session)
             for participant in session.scalars(
                 select(QuizParticipant).where(QuizParticipant.session_id == child.id)
@@ -453,7 +454,7 @@ def join_makeup_session(
     makeup = session.scalar(
         select(MakeupSession).where(
             MakeupSession.join_code == payload.join_code,
-            MakeupSession.status == "waiting",
+            MakeupSession.status == SessionStatus.WAITING,
         )
     )
     if makeup is None:
@@ -495,7 +496,7 @@ def join_makeup_session(
     return MakeupSessionJoinResponse(
         join_code=makeup.join_code,
         class_name=makeup.class_name,
-        status="waiting",
+        status=SessionStatus.WAITING,
         quizzes=[
             MakeupQuizOption(
                 id=quiz.id,
@@ -522,7 +523,7 @@ def select_makeup_quiz(
     makeup = session.scalar(
         select(MakeupSession).where(
             MakeupSession.join_code == join_code.strip().upper(),
-            MakeupSession.status == "waiting",
+            MakeupSession.status == SessionStatus.WAITING,
         )
     )
     if makeup is None:
@@ -571,9 +572,9 @@ def select_makeup_quiz(
         update(MakeupSession)
         .where(
             MakeupSession.id == makeup.id,
-            MakeupSession.status == "waiting",
+            MakeupSession.status == SessionStatus.WAITING,
         )
-        .values(status="waiting")
+        .values(status=SessionStatus.WAITING)
         .execution_options(synchronize_session=False)
     )
     if affected_rows(waiting) != 1:
@@ -618,7 +619,7 @@ def select_makeup_quiz(
         class_id=makeup.class_id,
         class_name=makeup.class_name,
         join_code=generate_join_code(session),
-        status="waiting",
+        status=SessionStatus.WAITING,
         makeup_session_id=makeup.id,
     )
     session.add(child)
