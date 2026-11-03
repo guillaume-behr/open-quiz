@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import QuizMode, SessionStatus
@@ -158,6 +159,83 @@ def class_response_from_details(
     )
 
 
+def class_students(class_ids: list[int], session: Session) -> dict[int, list[Student]]:
+    """The students with an account in each class, in alphabetical order."""
+    students_by_class: dict[int, list[Student]] = {
+        class_id: [] for class_id in class_ids
+    }
+    for student in session.scalars(
+        select(Student)
+        .where(
+            Student.class_id.in_(class_ids),
+            Student.account_id.is_not(None),
+        )
+        .order_by(Student.display_name, Student.identifier, Student.id)
+    ):
+        students_by_class[student.class_id].append(student)
+    return students_by_class
+
+
+def completed_exam_counts(class_ids: list[int], session: Session) -> dict[int, int]:
+    return {
+        class_id: count
+        for class_id, count in session.execute(
+            select(QuizSession.class_id, func.count(QuizSession.id))
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                QuizSession.class_id.in_(class_ids),
+                QuizSession.status == SessionStatus.FINISHED,
+                Quiz.mode == QuizMode.EXAM,
+            )
+            .group_by(QuizSession.class_id)
+        )
+        if class_id is not None
+    }
+
+
+def latest_exams(
+    class_ids: list[int], session: Session
+) -> dict[int, tuple[str, datetime]]:
+    """Title and date of each class's most recent finished exam."""
+    latest_ranked = (
+        select(
+            QuizSession.class_id.label("class_id"),
+            func.coalesce(QuizSession.quiz_title, Quiz.title).label("title"),
+            func.coalesce(QuizSession.started_at, QuizSession.created_at).label(
+                "occurred_at"
+            ),
+            func.row_number()
+            .over(
+                partition_by=QuizSession.class_id,
+                order_by=(
+                    QuizSession.started_at.desc(),
+                    QuizSession.created_at.desc(),
+                    QuizSession.id.desc(),
+                ),
+            )
+            .label("position"),
+        )
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(
+            QuizSession.class_id.in_(class_ids),
+            QuizSession.status == SessionStatus.FINISHED,
+            Quiz.mode == QuizMode.EXAM,
+        )
+        .subquery()
+    )
+    return {
+        class_id: (title, occurred_at)
+        for class_id, title, occurred_at in session.execute(
+            select(
+                latest_ranked.c.class_id,
+                latest_ranked.c.title,
+                latest_ranked.c.occurred_at,
+            ).where(latest_ranked.c.position == 1)
+        )
+        if class_id is not None
+    }
+
+
 @router.get("", response_model=list[StudentClassResponse])
 def list_classes(
     professor: ProfessorUser,
@@ -198,70 +276,9 @@ def list_classes(
         return []
 
     class_ids = [student_class.id for student_class in classes]
-    students_by_class: dict[int, list[Student]] = {
-        class_id: [] for class_id in class_ids
-    }
-    for student in session.scalars(
-        select(Student)
-        .where(
-            Student.class_id.in_(class_ids),
-            Student.account_id.is_not(None),
-        )
-        .order_by(Student.display_name, Student.identifier, Student.id)
-    ):
-        students_by_class[student.class_id].append(student)
-
-    completed_counts = {
-        class_id: count
-        for class_id, count in session.execute(
-            select(QuizSession.class_id, func.count(QuizSession.id))
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                QuizSession.class_id.in_(class_ids),
-                QuizSession.status == SessionStatus.FINISHED,
-                Quiz.mode == QuizMode.EXAM,
-            )
-            .group_by(QuizSession.class_id)
-        )
-        if class_id is not None
-    }
-    latest_ranked = (
-        select(
-            QuizSession.class_id.label("class_id"),
-            func.coalesce(QuizSession.quiz_title, Quiz.title).label("title"),
-            func.coalesce(QuizSession.started_at, QuizSession.created_at).label(
-                "occurred_at"
-            ),
-            func.row_number()
-            .over(
-                partition_by=QuizSession.class_id,
-                order_by=(
-                    QuizSession.started_at.desc(),
-                    QuizSession.created_at.desc(),
-                    QuizSession.id.desc(),
-                ),
-            )
-            .label("position"),
-        )
-        .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(
-            QuizSession.class_id.in_(class_ids),
-            QuizSession.status == SessionStatus.FINISHED,
-            Quiz.mode == QuizMode.EXAM,
-        )
-        .subquery()
-    )
-    latest_quizzes = {
-        class_id: (title, occurred_at)
-        for class_id, title, occurred_at in session.execute(
-            select(
-                latest_ranked.c.class_id,
-                latest_ranked.c.title,
-                latest_ranked.c.occurred_at,
-            ).where(latest_ranked.c.position == 1)
-        )
-        if class_id is not None
-    }
+    students_by_class = class_students(class_ids, session)
+    completed_counts = completed_exam_counts(class_ids, session)
+    latest_quizzes = latest_exams(class_ids, session)
     return [
         class_response_from_details(
             student_class,
