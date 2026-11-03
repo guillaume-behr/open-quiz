@@ -5,6 +5,7 @@ import importlib
 import json
 import logging
 import runpy
+from dataclasses import Field, fields
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -19,7 +20,9 @@ from sqlalchemy import select
 import app.audit
 import app.config
 from app.config import (
+    BOUNDS,
     Settings,
+    environment_variable,
     get_settings,
     reject_predictable_secret,
     secure_private_file,
@@ -128,6 +131,28 @@ def test_settings_reject_invalid_values(overrides: dict[str, Any], message) -> N
         ValueError, match=message.replace("(", r"\(").replace(")", r"\)")
     ):
         make_settings(**overrides)
+
+
+BOUNDED_SETTINGS = [
+    setting for setting in fields(Settings) if BOUNDS in setting.metadata
+]
+
+
+@pytest.mark.parametrize(
+    "setting", BOUNDED_SETTINGS, ids=[setting.name for setting in BOUNDED_SETTINGS]
+)
+def test_bounded_settings_accept_their_edges_only(setting: Field[Any]) -> None:
+    minimum, maximum = setting.metadata[BOUNDS]
+    assert minimum <= setting.default
+    assert maximum is None or setting.default <= maximum
+    variable = environment_variable(setting)
+    make_settings(**{setting.name: minimum})
+    with pytest.raises(ValueError, match=f"{variable} must be"):
+        make_settings(**{setting.name: minimum - 1})
+    if maximum is not None:
+        make_settings(**{setting.name: maximum})
+        with pytest.raises(ValueError, match=f"{variable} must be between"):
+            make_settings(**{setting.name: maximum + 1})
 
 
 @pytest.mark.parametrize(
