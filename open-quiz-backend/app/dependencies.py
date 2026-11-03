@@ -3,12 +3,12 @@ from hmac import compare_digest
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import StudentAccount, TwoFactorCredential, User
 from app.security import (
     access_token_version,
@@ -65,11 +65,10 @@ def get_current_user(
     credentials: BearerCredentials,
     session: DbSession,
 ) -> User:
-    unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=api_error(
-            ErrorCode.AUTH_TOKEN_INVALID, "Jeton d’authentification invalide ou expiré"
-        ),
+    unauthorized = ApiError(
+        status.HTTP_401_UNAUTHORIZED,
+        ErrorCode.AUTH_TOKEN_INVALID,
+        "Jeton d’authentification invalide ou expiré",
         headers={"WWW-Authenticate": "Bearer"},
     )
     if credentials is None:
@@ -86,11 +85,10 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 def require_admin(user: CurrentUser) -> User:
     if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_ADMIN_ACCOUNT_REQUIRED, "Accès administrateur requis"
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_ADMIN_ACCOUNT_REQUIRED,
+            "Accès administrateur requis",
         )
     return user
 
@@ -100,11 +98,10 @@ AdminUser = Annotated[User, Depends(require_admin)]
 
 def require_professor(user: CurrentUser) -> User:
     if user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED, "Accès enseignant requis"
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
+            "Accès enseignant requis",
         )
     return user
 
@@ -152,11 +149,10 @@ def current_student(
         else None
     )
     if account is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=api_error(
-                ErrorCode.STUDENT_SESSION_INVALID, "Session élève invalide ou expirée"
-            ),
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.STUDENT_SESSION_INVALID,
+            "Session élève invalide ou expirée",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return account

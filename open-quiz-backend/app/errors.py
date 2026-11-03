@@ -8,6 +8,8 @@ open-quiz-frontend/src/lib/errors.ts: `pnpm test` fails otherwise.
 
 from enum import StrEnum
 
+from fastapi import HTTPException
+
 
 class ErrorCode(StrEnum):
     AUTH_ORIGIN_REJECTED = "AUTH_ORIGIN_REJECTED"
@@ -123,3 +125,26 @@ class ErrorCode(StrEnum):
 
 def api_error(code: ErrorCode, message: str) -> dict[str, str]:
     return {"code": code.value, "message": message}
+
+
+class ApiError(HTTPException):
+    """An error the API answers as ``{"detail": {"code": ..., "message": ...}}``.
+
+    It is an HTTPException, so FastAPI renders it as before and handlers that
+    catch HTTPException, such as the live sockets', still see it.
+    """
+
+    def __init__(
+        self,
+        status_code: int,
+        code: ErrorCode,
+        message: str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(
+            status_code=status_code,
+            detail=api_error(code, message),
+            headers=headers,
+        )
+        self.code = code

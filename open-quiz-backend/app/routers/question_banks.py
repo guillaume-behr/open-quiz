@@ -2,7 +2,6 @@ from typing import Annotated
 
 from fastapi import (
     APIRouter,
-    HTTPException,
     Query,
     Response,
     status,
@@ -11,7 +10,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.grade_levels import ensure_grade_level
 from app.models import (
     ClassTrainingQuestionBank,
@@ -131,12 +130,10 @@ def create_question_bank(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NAME_TAKEN,
-                "Une banque existe déjà pour ce niveau et ce titre",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_NAME_TAKEN,
+            "Une banque existe déjà pour ce niveau et ce titre",
         ) from None
     session.refresh(question_bank)
     return question_bank
@@ -173,12 +170,10 @@ def update_question_bank(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NAME_TAKEN,
-                "Une banque existe déjà pour ce niveau et ce titre",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_NAME_TAKEN,
+            "Une banque existe déjà pour ce niveau et ce titre",
         ) from None
     session.refresh(question_bank)
     row = session.execute(
@@ -208,11 +203,10 @@ def delete_question_bank(
         )
         is not None
     ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_IN_USE, "Cette banque est utilisée par un quiz"
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_IN_USE,
+            "Cette banque est utilisée par un quiz",
         )
     question_ids = list(
         session.scalars(

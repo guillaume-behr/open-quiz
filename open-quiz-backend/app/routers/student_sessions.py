@@ -15,7 +15,6 @@ from fastapi import (
     APIRouter,
     Depends,
     Header,
-    HTTPException,
     Request,
     Response,
     status,
@@ -27,7 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from app.database import affected_rows
 from app.dependencies import DbSession, current_student
 from app.enums import AnswerMode, QuizMode, SessionStatus
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.live_updates import publish_quiz_update
 from app.models import (
     Question,
@@ -309,17 +308,16 @@ def submit_student_answer(
     # duplicate can reach here after that transition already committed. Any
     # other non-"in_progress" status (paused included) still rejects outright.
     if quiz_session.status not in (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_NOT_ACCEPTING_ANSWERS,
-                "Le quiz n’accepte pas de réponses actuellement",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_NOT_ACCEPTING_ANSWERS,
+            "Le quiz n’accepte pas de réponses actuellement",
         )
     if participant.student_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(ErrorCode.QUIZ_STUDENT_REMOVED, "L’élève n’existe plus"),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_STUDENT_REMOVED,
+            "L’élève n’existe plus",
         )
     if (
         quiz_session.training_question_bank_id is not None
@@ -329,33 +327,28 @@ def submit_student_answer(
     ):
         # Opening an exam discards these trainings; this also covers one
         # started concurrently, which must not give feedback during the exam.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.TRAINING_BLOCKED_BY_EXAM,
-                "Cet entraînement est indisponible pendant un examen",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.TRAINING_BLOCKED_BY_EXAM,
+            "Cet entraînement est indisponible pendant un examen",
         )
     question_id = current_question_id(quiz_session, participant, session)
     retargeting_finished_answer = question_id is None
     if retargeting_finished_answer:
         question_id = last_answered_question_id(quiz_session, participant, session)
     if question_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_NO_CURRENT_QUESTION, "Aucune question en cours"
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_NO_CURRENT_QUESTION,
+            "Aucune question en cours",
         )
     questions_by_id, choices_by_question = load_question_records([question_id], session)
     question = questions_by_id.get(question_id)
     if question is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_QUESTION_UNAVAILABLE,
-                "La question actuelle n’est pas disponible",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_QUESTION_UNAVAILABLE,
+            "La question actuelle n’est pas disponible",
         )
     choices = choices_by_question.get(question_id, [])
     choices_by_id = {choice.id: choice for choice in choices}
@@ -364,12 +357,10 @@ def submit_student_answer(
     if question.answer_mode == AnswerMode.WRITTEN:
         written_answer = (payload.written_answer or "").strip()
         if not written_answer or payload.selected_choice_ids is not None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=api_error(
-                    ErrorCode.ANSWER_WRITTEN_REQUIRED,
-                    "Une réponse rédactionnelle est requise",
-                ),
+            raise ApiError(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                ErrorCode.ANSWER_WRITTEN_REQUIRED,
+                "Une réponse rédactionnelle est requise",
             )
         answer_data: dict[str, object] = {"written_answer": written_answer}
         expected_answer = next(
@@ -387,12 +378,10 @@ def submit_student_answer(
             )
     else:
         if payload.selected_choice_ids is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=api_error(
-                    ErrorCode.ANSWER_CHOICE_REQUIRED,
-                    "Au moins une proposition doit être sélectionnée",
-                ),
+            raise ApiError(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                ErrorCode.ANSWER_CHOICE_REQUIRED,
+                "Au moins une proposition doit être sélectionnée",
             )
         selected_ids = list(dict.fromkeys(payload.selected_choice_ids or []))
         if payload.written_answer is not None or (
@@ -400,20 +389,16 @@ def submit_student_answer(
             and question.answer_mode_disclosed
             and len(selected_ids) != 1
         ):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=api_error(
-                    ErrorCode.ANSWER_MODE_MISMATCH,
-                    "La réponse envoyée ne correspond pas au type de la question",
-                ),
+            raise ApiError(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                ErrorCode.ANSWER_MODE_MISMATCH,
+                "La réponse envoyée ne correspond pas au type de la question",
             )
         if any(choice_id not in choices_by_id for choice_id in selected_ids):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=api_error(
-                    ErrorCode.ANSWER_CHOICE_INVALID,
-                    "Une proposition sélectionnée est invalide",
-                ),
+            raise ApiError(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                ErrorCode.ANSWER_CHOICE_INVALID,
+                "Une proposition sélectionnée est invalide",
             )
         answer_data = {"selected_choice_ids": selected_ids}
         if quiz.mode == QuizMode.TRAINING:
@@ -439,11 +424,10 @@ def submit_student_answer(
             existing_answer is None
             or decoded_answer_data(existing_answer) != answer_data
         ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=api_error(
-                    ErrorCode.QUIZ_NO_CURRENT_QUESTION, "Aucune question en cours"
-                ),
+            raise ApiError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.QUIZ_NO_CURRENT_QUESTION,
+                "Aucune question en cours",
             )
 
     # Atomic upsert: concurrent submissions for the same question can never
@@ -505,12 +489,10 @@ def submit_student_answer(
 def require_answer_review_offered(quiz_session: QuizSession, quiz: Quiz) -> None:
     """Reject a review request on a quiz that has no final submission step."""
     if not answer_review_enabled(quiz_session, quiz):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
-                "La relecture des réponses n’est pas disponible",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
+            "La relecture des réponses n’est pas disponible",
         )
 
 
@@ -525,12 +507,10 @@ def require_reviewable_participant(
     have an answer.
     """
     if quiz_session.status != SessionStatus.IN_PROGRESS:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
-                "La relecture des réponses n’est pas disponible",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
+            "La relecture des réponses n’est pas disponible",
         )
     question_ids = session_question_ids(quiz_session, session, participant)
     answered_question_ids = set(
@@ -542,12 +522,10 @@ def require_reviewable_participant(
         )
     )
     if not question_ids or not set(question_ids).issubset(answered_question_ids):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_ANSWERS_INCOMPLETE,
-                "Toutes les questions doivent être répondues",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_ANSWERS_INCOMPLETE,
+            "Toutes les questions doivent être répondues",
         )
 
 
@@ -674,12 +652,10 @@ def navigate_student_quiz(
         or (participant.current_position is None and not reviewing)
         or target_position not in accessible_positions
     ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_PREVIOUS_QUESTION_LOCKED,
-                "Le retour à cette question n’est pas autorisé",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_PREVIOUS_QUESTION_LOCKED,
+            "Le retour à cette question n’est pas autorisé",
         )
     participant.current_position = target_position
     session.commit()
@@ -760,9 +736,8 @@ def active_participant_for_image(
     if quiz_session.status != SessionStatus.IN_PROGRESS or quiz_session_is_due(
         quiz_session, quiz
     ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     return quiz_session, participant
 
@@ -784,15 +759,13 @@ def get_student_question_image(
         missing_detail,
     )
     if current_question_id(quiz_session, participant, session) != question_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     question = session.get(Question, question_id)
     if question is None or question.image is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     return Response(
         content=question.image.data,
@@ -827,9 +800,8 @@ def get_student_choice_image(
         )
     )
     if choice is None or choice.image is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.IMAGE_NOT_FOUND, missing_detail),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     return Response(
         content=choice.image.data,

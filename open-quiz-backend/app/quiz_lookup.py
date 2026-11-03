@@ -1,7 +1,6 @@
 """Load a teacher's quizzes and sessions, refusing those of anyone else."""
 
 from fastapi import (
-    HTTPException,
     status,
 )
 from sqlalchemy import select
@@ -9,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import QuizMode
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import (
     Quiz,
     QuizSession,
@@ -22,9 +21,8 @@ def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Qu
         select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
     )
     if quiz is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"
         )
     return quiz
 
@@ -88,10 +86,9 @@ def owned_quiz_session(
         )
     ).first()
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.QUIZ_SESSION_NOT_FOUND, "Session de quiz introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.QUIZ_SESSION_NOT_FOUND,
+            "Session de quiz introuvable",
         )
     return row

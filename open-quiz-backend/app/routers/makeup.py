@@ -27,7 +27,7 @@ from app.class_names import format_class_name
 from app.database import affected_rows
 from app.dependencies import DbSession, ProfessorUser, current_student
 from app.enums import QuizMode, SessionStatus
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.live_updates import (
     publish_active_quiz_sessions_update,
     publish_makeup_update,
@@ -80,6 +80,7 @@ from app.session_responses import (
     quiz_responses,
     student_state_response,
 )
+from app.student_accounts import owned_class
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
@@ -94,11 +95,8 @@ def owned_makeup_session(
         )
     )
     if makeup is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(
-                ErrorCode.MAKEUP_NOT_FOUND, "Session de rattrapage introuvable"
-            ),
+        raise ApiError(
+            404, ErrorCode.MAKEUP_NOT_FOUND, "Session de rattrapage introuvable"
         )
     return makeup
 
@@ -134,17 +132,7 @@ def makeup_quiz_options(
     session: DbSession,
 ) -> list[QuizResponse]:
     """Quizzes a class may make up: only those the class has already taken."""
-    student_class = session.scalar(
-        select(StudentClass).where(
-            StudentClass.id == class_id,
-            StudentClass.owner_id == professor.id,
-        )
-    )
-    if student_class is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error(ErrorCode.CLASS_NOT_FOUND, "Classe introuvable"),
-        )
+    student_class = owned_class(class_id, professor, session)
     finished_ids = class_finished_quiz_ids(student_class.id, professor, session)
     quizzes = list(
         session.scalars(
@@ -188,20 +176,13 @@ def create_makeup_session(
         )
     )
     if student_class is None or len(quizzes) != len(quiz_ids):
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                ErrorCode.MAKEUP_QUIZZES_INVALID, "Classe ou quiz invalide"
-            ),
-        )
+        raise ApiError(422, ErrorCode.MAKEUP_QUIZZES_INVALID, "Classe ou quiz invalide")
     eligible = class_finished_quiz_ids(student_class.id, professor, session)
     if not quiz_ids.issubset(eligible):
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                ErrorCode.MAKEUP_QUIZ_NOT_TAKEN,
-                "Seuls les quiz déjà passés par la classe peuvent être rattrapés",
-            ),
+        raise ApiError(
+            422,
+            ErrorCode.MAKEUP_QUIZ_NOT_TAKEN,
+            "Seuls les quiz déjà passés par la classe peuvent être rattrapés",
         )
     makeup = MakeupSession(
         owner_id=professor.id,
@@ -243,12 +224,10 @@ def control_makeup_session(
         raise HTTPException(status_code=404)
     expected, target = allowed[action]
     if makeup.status != expected:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
-                "Action impossible pour cette session",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
+            "Action impossible pour cette session",
         )
     child_topics = list(
         session.execute(
@@ -268,15 +247,11 @@ def control_makeup_session(
             is not None
         )
         if has_answers:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    api_error(
-                        ErrorCode.MAKEUP_HAS_ANSWERS,
-                        "Impossible d’annuler ce rattrapage car des réponses ont déjà "
-                        "été enregistrées",
-                    )
-                ),
+            raise ApiError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.MAKEUP_HAS_ANSWERS,
+                "Impossible d’annuler ce rattrapage car des réponses ont déjà "
+                "été enregistrées",
             )
         delete_makeup_session_records(makeup.id, session)
         session.commit()
@@ -296,12 +271,10 @@ def control_makeup_session(
     )
     if affected_rows(transition) != 1:
         session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
-                "Action impossible pour cette session",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
+            "Action impossible pour cette session",
         )
     makeup.status = target
     children = list(
@@ -311,12 +284,10 @@ def control_makeup_session(
     )
     if action == "start" and not children:
         session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_NO_SELECTION,
-                "Au moins un élève doit choisir un quiz avant le démarrage",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_NO_SELECTION,
+            "Au moins un élève doit choisir un quiz avant le démarrage",
         )
     now = datetime.now(UTC)
     for child in children:
@@ -381,11 +352,8 @@ def join_makeup_session(
             "quiz_join_rate_limiter",
             f"makeup-join:account:{account.id}",
         )
-        raise HTTPException(
-            status_code=403,
-            detail=api_error(
-                ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
-            ),
+        raise ApiError(
+            403, ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
         )
     membership = session.scalar(
         select(Student).where(
@@ -394,11 +362,8 @@ def join_makeup_session(
         )
     )
     if membership is None:
-        raise HTTPException(
-            status_code=403,
-            detail=api_error(
-                ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
-            ),
+        raise ApiError(
+            403, ErrorCode.MAKEUP_JOIN_REJECTED, "Impossible de rejoindre ce rattrapage"
         )
     eligible = list(
         session.scalars(
@@ -449,12 +414,10 @@ def select_makeup_quiz(
             "quiz_join_rate_limiter",
             f"makeup-join:account:{account.id}",
         )
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_SELECTION_CLOSED,
-                "Ce rattrapage n’accepte plus de choix",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_SELECTION_CLOSED,
+            "Ce rattrapage n’accepte plus de choix",
         )
     membership = session.scalar(
         select(Student).where(
@@ -479,11 +442,8 @@ def select_makeup_quiz(
         )
     )
     if membership is None or quiz is None or existing is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
-            ),
+        raise ApiError(
+            409, ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
         )
     waiting = session.execute(
         update(MakeupSession)
@@ -496,12 +456,10 @@ def select_makeup_quiz(
     )
     if affected_rows(waiting) != 1:
         session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_SELECTION_CLOSED,
-                "Ce rattrapage n’accepte plus de choix",
-            ),
+        raise ApiError(
+            409,
+            ErrorCode.MAKEUP_SELECTION_CLOSED,
+            "Ce rattrapage n’accepte plus de choix",
         )
     claimed_student_id = session.scalar(
         insert(MakeupSessionSelection)
@@ -515,11 +473,8 @@ def select_makeup_quiz(
         .returning(MakeupSessionSelection.student_id)
     )
     if claimed_student_id is None:
-        raise HTTPException(
-            status_code=409,
-            detail=api_error(
-                ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
-            ),
+        raise ApiError(
+            409, ErrorCode.MAKEUP_SELECTION_INVALID, "Sélection de quiz invalide"
         )
     discard_active_training_sessions(
         [membership.id], quiz_bank_ids(quiz.id, session), session

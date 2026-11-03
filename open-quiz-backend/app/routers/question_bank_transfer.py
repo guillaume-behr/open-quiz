@@ -13,7 +13,6 @@ from pathlib import Path
 
 from fastapi import (
     APIRouter,
-    HTTPException,
     Request,
     Response,
     status,
@@ -24,7 +23,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import Difficulty
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.grade_levels import ensure_grade_level, grade_level_import_context
 from app.models import (
     Question,
@@ -219,12 +218,10 @@ def import_question_bank(
             len(choice_image[0] or b"") for choice_image in choice_images
         )
         if total_image_bytes > MAX_IMPORT_IMAGE_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=api_error(
-                    ErrorCode.IMPORT_IMAGES_TOO_LARGE,
-                    "Le volume total des images importées est trop important",
-                ),
+            raise ApiError(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                ErrorCode.IMPORT_IMAGES_TOO_LARGE,
+                "Le volume total des images importées est trop important",
             )
         decoded_images.append(decoded_image)
         decoded_choice_images.append(choice_images)
@@ -239,12 +236,10 @@ def import_question_bank(
         session.flush()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_NAME_TAKEN,
-                "Une banque existe déjà pour ce niveau et ce titre",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_NAME_TAKEN,
+            "Une banque existe déjà pour ce niveau et ce titre",
         ) from None
 
     created = [

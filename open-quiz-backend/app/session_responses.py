@@ -4,7 +4,6 @@ from hashlib import sha256
 from statistics import median
 
 from fastapi import (
-    HTTPException,
     status,
 )
 from sqlalchemy import case, func, select
@@ -13,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.class_names import format_class_name
 from app.dependencies import DbSession
 from app.enums import AnswerMode, Difficulty, QuizMode, SessionStatus
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -369,12 +368,10 @@ def student_question_response(
     questions_by_id, choices_by_question = load_question_records([question_id], session)
     question = questions_by_id.get(question_id)
     if question is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUIZ_QUESTION_UNAVAILABLE,
-                "La question actuelle n’est pas disponible",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_QUESTION_UNAVAILABLE,
+            "La question actuelle n’est pas disponible",
         )
     choices = (
         []

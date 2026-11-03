@@ -12,7 +12,6 @@ from fastapi import (
     APIRouter,
     File,
     Form,
-    HTTPException,
     Request,
     Response,
     UploadFile,
@@ -23,7 +22,7 @@ from sqlalchemy import delete, func, select, union
 
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import CorrectionMode, QuizMode, SessionStatus
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 from app.images import (
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
@@ -75,26 +74,25 @@ def normalized_uploaded_image(
     if image is None:
         return None, None
     if image.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=api_error(
-                ErrorCode.IMAGE_TYPE_UNSUPPORTED, "Format d’image non pris en charge"
-            ),
+        raise ApiError(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            ErrorCode.IMAGE_TYPE_UNSUPPORTED,
+            "Format d’image non pris en charge",
         )
     image_data = image.file.read(MAX_IMAGE_BYTES + 1)
     if len(image_data) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=api_error(ErrorCode.IMAGE_TOO_LARGE, "L’image est trop volumineuse"),
+        raise ApiError(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            ErrorCode.IMAGE_TOO_LARGE,
+            "L’image est trop volumineuse",
         )
     if not image_data:
         return None, None
     try:
         return normalize_image(image_data, image.content_type)
     except InvalidImageError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(ErrorCode.IMAGE_INVALID, str(error)),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, ErrorCode.IMAGE_INVALID, str(error)
         ) from None
 
 
@@ -112,9 +110,10 @@ def owned_question(
         )
     )
     if question is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(ErrorCode.QUESTION_NOT_FOUND, "Question introuvable"),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.QUESTION_NOT_FOUND,
+            "Question introuvable",
         )
     return question
 
@@ -189,19 +188,18 @@ def create_question(
         .where(Question.question_bank_id == question_bank_id)
     )
     if (question_count or 0) >= MAX_QUESTIONS_PER_BANK:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_BANK_FULL,
-                "Cette banque a atteint le nombre maximal de questions",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_FULL,
+            "Cette banque a atteint le nombre maximal de questions",
         )
     try:
         question_payload = QuestionCreate.model_validate(json.loads(payload))
     except json.JSONDecodeError, ValidationError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(ErrorCode.QUESTION_INVALID, "Question invalide"),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.QUESTION_INVALID,
+            "Question invalide",
         ) from None
 
     image_data, image_content_type = normalized_uploaded_image(image)
@@ -214,12 +212,10 @@ def create_question(
         + sum(len(choice_image[0] or b"") for choice_image in choice_images)
         > MAX_IMPORT_IMAGE_BYTES
     ):
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=api_error(
-                ErrorCode.QUESTION_IMAGES_TOO_LARGE,
-                "Le volume total des images de la question est trop important",
-            ),
+        raise ApiError(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            ErrorCode.QUESTION_IMAGES_TOO_LARGE,
+            "Le volume total des images de la question est trop important",
         )
     question, choices, code = add_question(
         question_bank_id,
@@ -302,9 +298,10 @@ def update_question(
     try:
         question_payload = QuestionUpdate.model_validate(json.loads(payload))
     except json.JSONDecodeError, ValidationError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(ErrorCode.QUESTION_INVALID, "Question invalide"),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.QUESTION_INVALID,
+            "Question invalide",
         ) from None
 
     image_data, image_content_type = normalized_uploaded_image(image)
@@ -340,11 +337,10 @@ def update_question(
         choice.id for choice in question_payload.choices if choice.id is not None
     }
     if not submitted_choice_ids.issubset(existing_choices_by_id):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.CHOICE_INVALID, "Proposition de réponse invalide"
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.CHOICE_INVALID,
+            "Proposition de réponse invalide",
         )
     # Each choice keeps its image (by key), replaces it (with new bytes) or
     # loses it.
@@ -378,12 +374,10 @@ def update_question(
             strict=True,
         )
     ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=api_error(
-                ErrorCode.CHOICE_CONTENT_REQUIRED,
-                "Une proposition nécessite du texte, une image ou du code",
-            ),
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.CHOICE_CONTENT_REQUIRED,
+            "Une proposition nécessite du texte, une image ou du code",
         )
 
     # question.image_sha256 already reflects the replacement or the removal
@@ -407,12 +401,10 @@ def update_question(
         )
         > MAX_IMPORT_IMAGE_BYTES
     ):
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=api_error(
-                ErrorCode.QUESTION_IMAGES_TOO_LARGE,
-                "Le volume total des images de la question est trop important",
-            ),
+        raise ApiError(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            ErrorCode.QUESTION_IMAGES_TOO_LARGE,
+            "Le volume total des images de la question est trop important",
         )
 
     session.execute(delete(QuestionCode).where(QuestionCode.question_id == question.id))
@@ -479,12 +471,10 @@ def delete_question(
     """Delete one question owned by the authenticated professor."""
     owned_question(question_id, professor, session)
     if question_is_in_launched_quiz(question_id, session):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                ErrorCode.QUESTION_IN_LAUNCHED_QUIZ,
-                "Cette question est utilisée par un quiz déjà lancé",
-            ),
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_IN_LAUNCHED_QUIZ,
+            "Cette question est utilisée par un quiz déjà lancé",
         )
     discard_training_sessions_using_questions([question_id], session)
     session.execute(
@@ -511,11 +501,10 @@ def get_question_image(
         )
     )
     if question is None or question.image is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.IMAGE_NOT_FOUND, "Image de la question introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.IMAGE_NOT_FOUND,
+            "Image de la question introuvable",
         )
     return Response(
         content=question.image.data,
@@ -540,11 +529,10 @@ def get_choice_image(
         )
     )
     if choice is None or choice.image is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_error(
-                ErrorCode.IMAGE_NOT_FOUND, "Image de la réponse introuvable"
-            ),
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.IMAGE_NOT_FOUND,
+            "Image de la réponse introuvable",
         )
     return Response(
         content=choice.image.data,

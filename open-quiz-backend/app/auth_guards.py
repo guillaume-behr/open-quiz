@@ -2,10 +2,10 @@
 
 from urllib.parse import urlparse
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 
 from app.audit import audit_event
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode
 
 
 def validate_origin(request: Request) -> None:
@@ -31,11 +31,10 @@ def validate_origin(request: Request) -> None:
             "auth.origin_rejected",
             origin=origin or "<missing>",
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_error(
-                ErrorCode.AUTH_ORIGIN_REJECTED, "Origine de la requête refusée"
-            ),
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.AUTH_ORIGIN_REJECTED,
+            "Origine de la requête refusée",
         )
 
 
@@ -74,11 +73,10 @@ def enforce_global_auth_limit(
     if known_identity:
         audit_event("auth.global_budget_floor_used")
         return
-    raise HTTPException(
-        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail=api_error(
-            ErrorCode.AUTH_RATE_LIMITED, "Trop de tentatives de connexion"
-        ),
+    raise ApiError(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        ErrorCode.AUTH_RATE_LIMITED,
+        "Trop de tentatives de connexion",
         headers={"Retry-After": str(retry_after)},
     )
 
