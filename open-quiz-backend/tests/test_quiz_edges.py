@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select, text, update
 from starlette.websockets import WebSocketDisconnect
 
+from app import session_responses
 from app.models import (
     QuizAnswer,
     QuizParticipant,
@@ -17,7 +18,7 @@ from app.models import (
     QuizSessionStudentQuestion,
     TrainingQuizProfile,
 )
-from app.routers import live, quizzes, results, student_sessions
+from app.routers import live, results, student_sessions
 from app.services import session_lifecycle
 
 from support import (
@@ -81,7 +82,10 @@ def test_helpers_read_legacy_session_settings() -> None:
 
     missing_class = SimpleNamespace(class_id=1, class_name="Archived class")
     session = SimpleNamespace(get=lambda *_: None)
-    assert quizzes.quiz_session_class_name(missing_class, session) == "Archived class"
+    assert (
+        session_responses.quiz_session_class_name(missing_class, session)
+        == "Archived class"
+    )
 
 
 class _Answers:
@@ -101,14 +105,14 @@ def test_summaries_skip_missing_questions(
     )
     answers = [SimpleNamespace(question_id=2, answer_data="{}")]
     monkeypatch.setattr(
-        quizzes,
+        session_responses,
         "load_question_records",
         lambda *_: ({1: written, 2: choice}, {1: [], 2: []}),
     )
     quiz_session = SimpleNamespace(id=1)
     participant = SimpleNamespace(id=1)
 
-    summaries = quizzes.student_answer_summaries(
+    summaries = session_responses.student_answer_summaries(
         quiz_session, participant, [3, 1, 2], _Answers(answers)
     )
     assert [summary.question_id for summary in summaries] == [2]
@@ -119,7 +123,7 @@ def test_missing_questions_are_reported_instead_of_crashing(
 ) -> None:
     client = environment["client"]
     _, headers, url = start(client, environment)
-    for module in (quizzes, student_sessions):
+    for module in (session_responses, student_sessions):
         monkeypatch.setattr(module, "load_question_records", lambda *_: ({}, {}))
     assert client.get(url, headers=headers).status_code == 409
     assert answer(client, environment, url, headers).status_code == 409
