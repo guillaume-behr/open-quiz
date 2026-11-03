@@ -299,15 +299,8 @@ def revoke_refresh_family(
     return True
 
 
-@router.post("/login", response_model=LoginResponse | LoginSessionResponse)
-def login(
-    payload: LoginRequest,
-    request: Request,
-    response: Response,
-    session: DbSession,
-) -> LoginResponse | LoginSessionResponse:
-    """Verify a password, then begin 2FA or, on a trusted browser, sign in."""
-    validate_origin(request)
+def password_user(payload: LoginRequest, request: Request, session: Session) -> User:
+    """The active account whose password this is, within the attempt limits."""
     user = session.scalar(select(User).where(User.username == payload.username))
     # Resolving the account before the budget check is what lets a real
     # teacher still sign in while an anonymous flood holds the budget open.
@@ -336,59 +329,87 @@ def login(
             "Identifiants invalides",
         )
     limiter.clear_subject(rate_subject)
-    if payload.audience == "professor" and user.is_admin:
+    return user
+
+
+def require_audience(user: User, audience: str | None) -> None:
+    """Refuse a teacher account on the admin sign-in, and the reverse."""
+    if audience == "professor" and user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
             user_id=user.id,
-            audience=payload.audience,
+            audience=audience,
         )
         raise ApiError(
             status.HTTP_403_FORBIDDEN,
             ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
             "Ce compte n’est pas un compte enseignant",
         )
-    if payload.audience == "admin" and not user.is_admin:
+    if audience == "admin" and not user.is_admin:
         audit_event(
             "auth.login_wrong_audience",
             user_id=user.id,
-            audience=payload.audience,
+            audience=audience,
         )
         raise ApiError(
             status.HTTP_403_FORBIDDEN,
             ErrorCode.AUTH_ADMIN_ACCOUNT_REQUIRED,
             "Ce compte n’est pas un compte administrateur",
         )
+
+
+def begin_two_factor_setup(
+    user: User,
+    two_factor: TwoFactorCredential | None,
+    request: Request,
+    session: Session,
+) -> LoginResponse:
+    """Store a fresh authenticator secret and challenge its enrollment."""
     settings = request.app.state.settings
+    secret = generate_totp_secret()
+    encrypted_secret = encrypt_totp_secret(
+        secret,
+        settings.totp_encryption_key,
+    )
+    if two_factor is None:
+        two_factor = TwoFactorCredential(
+            user_id=user.id,
+            encrypted_secret=encrypted_secret,
+        )
+        session.add(two_factor)
+    else:
+        two_factor.encrypted_secret = encrypted_secret
+        two_factor.last_counter = None
+    challenge_token = issue_two_factor_challenge(
+        user.id,
+        "two_factor_setup",
+        request,
+        session,
+    )
+    session.commit()
+    audit_event("auth.two_factor_setup_started", user_id=user.id)
+    return LoginResponse(
+        status="setup_required",
+        challenge_token=challenge_token,
+        secret=secret,
+        provisioning_uri=provisioning_uri(secret, user.username),
+    )
+
+
+@router.post("/login", response_model=LoginResponse | LoginSessionResponse)
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    session: DbSession,
+) -> LoginResponse | LoginSessionResponse:
+    """Verify a password, then begin 2FA or, on a trusted browser, sign in."""
+    validate_origin(request)
+    user = password_user(payload, request, session)
+    require_audience(user, payload.audience)
     two_factor = session.get(TwoFactorCredential, user.id)
     if two_factor is None or not two_factor.confirmed:
-        secret = generate_totp_secret()
-        encrypted_secret = encrypt_totp_secret(
-            secret,
-            settings.totp_encryption_key,
-        )
-        if two_factor is None:
-            two_factor = TwoFactorCredential(
-                user_id=user.id,
-                encrypted_secret=encrypted_secret,
-            )
-            session.add(two_factor)
-        else:
-            two_factor.encrypted_secret = encrypted_secret
-            two_factor.last_counter = None
-        challenge_token = issue_two_factor_challenge(
-            user.id,
-            "two_factor_setup",
-            request,
-            session,
-        )
-        session.commit()
-        audit_event("auth.two_factor_setup_started", user_id=user.id)
-        return LoginResponse(
-            status="setup_required",
-            challenge_token=challenge_token,
-            secret=secret,
-            provisioning_uri=provisioning_uri(secret, user.username),
-        )
+        return begin_two_factor_setup(user, two_factor, request, session)
 
     if browser_is_trusted(request, user, two_factor):
         audit_event("auth.two_factor_trusted_browser", user_id=user.id)
@@ -409,25 +430,19 @@ def login(
     )
 
 
-@router.post("/2fa/verify", response_model=TokenResponse)
-def verify_two_factor(
-    payload: TwoFactorVerifyRequest,
-    request: Request,
-    response: Response,
-    session: DbSession,
-) -> TokenResponse:
-    """Complete 2FA setup or verify a login challenge."""
-    validate_origin(request)
+def challenged_user(
+    challenge_token: str, request: Request, session: Session, now: int
+) -> tuple[User, TwoFactorCredential, str]:
+    """The account a live two-factor challenge belongs to, and the challenge id."""
     settings = request.app.state.settings
     try:
         decoded = decode_two_factor_token(
-            payload.challenge_token,
+            challenge_token,
             settings.jwt_secret,
         )
     except jwt.PyJWTError, ValueError, KeyError:
         decoded = None
 
-    now = int(time())
     challenge = (
         session.get(AuthenticationChallenge, decoded[2])
         if decoded is not None
@@ -474,7 +489,11 @@ def verify_two_factor(
             ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
             "Vérification en deux étapes expirée ou invalide",
         )
+    return user, two_factor, token_id_hash
 
+
+def reserve_two_factor_attempt(request: Request, user: User) -> str:
+    """Count one code attempt in both windows, and return its rate subject."""
     limiter = request.app.state.login_rate_limiter
     rate_subject = two_factor_rate_subject(user.id)
     retry_after = limiter.reserve(rate_subject)
@@ -500,7 +519,14 @@ def verify_two_factor(
             "Trop de codes de vérification essayés",
             headers={"Retry-After": str(daily_retry_after)},
         )
+    return rate_subject
 
+
+def matched_totp_counter(
+    two_factor: TwoFactorCredential, user: User, code: str, request: Request
+) -> int:
+    """The time step the submitted code matches, never one already used."""
+    settings = request.app.state.settings
     try:
         secret = decrypt_totp_secret(
             two_factor.encrypted_secret,
@@ -516,7 +542,7 @@ def verify_two_factor(
 
     matched_counter = verify_totp_code(
         secret,
-        payload.code,
+        code,
         two_factor.last_counter,
     )
     if matched_counter is None:
@@ -526,7 +552,13 @@ def verify_two_factor(
             ErrorCode.AUTH_2FA_CODE_INVALID,
             "Code de vérification invalide",
         )
+    return matched_counter
 
+
+def consume_code_and_challenge(
+    user: User, matched_counter: int, token_id_hash: str, now: int, session: Session
+) -> None:
+    """Record the code and the challenge as used, so neither works twice."""
     counter_result = session.execute(
         update(TwoFactorCredential)
         .where(
@@ -562,21 +594,39 @@ def verify_two_factor(
             ErrorCode.AUTH_2FA_CHALLENGE_INVALID,
             "Vérification en deux étapes expirée ou invalide",
         )
-    limiter.clear_subject(rate_subject)
+
+
+@router.post("/2fa/verify", response_model=TokenResponse)
+def verify_two_factor(
+    payload: TwoFactorVerifyRequest,
+    request: Request,
+    response: Response,
+    session: DbSession,
+) -> TokenResponse:
+    """Complete 2FA setup or verify a login challenge."""
+    validate_origin(request)
+    now = int(time())
+    user, two_factor, token_id_hash = challenged_user(
+        payload.challenge_token, request, session, now
+    )
+    rate_subject = reserve_two_factor_attempt(request, user)
+    matched_counter = matched_totp_counter(two_factor, user, payload.code, request)
+    consume_code_and_challenge(user, matched_counter, token_id_hash, now, session)
+    request.app.state.login_rate_limiter.clear_subject(rate_subject)
     audit_event("auth.two_factor_succeeded", user_id=user.id)
     tokens = issue_session(user, request, response, session)
     set_two_factor_trust_cookie(response, request, user, two_factor, payload.timezone)
     return tokens
 
 
-@router.post("/refresh", response_model=TokenResponse)
-def refresh(
-    request: Request,
-    response: Response,
-    session: DbSession,
-) -> TokenResponse:
-    """Rotate a valid refresh session and return a new access token."""
-    validate_origin(request)
+def presented_refresh_session(
+    request: Request, session: Session, now: int
+) -> RefreshSession:
+    """The live refresh session the cookie names, proved by this window.
+
+    Presenting one that was already rotated means the cookie leaked: its
+    whole family is revoked.
+    """
     raw_token = request.cookies.get(REFRESH_COOKIE)
     if raw_token is None:
         raise ApiError(
@@ -596,7 +646,6 @@ def refresh(
             RefreshSession.token_hash == hash_refresh_token(raw_token)
         )
     )
-    now = int(time())
     if stored_session is None or stored_session.expires_at <= now:
         audit_event("auth.refresh_rejected")
         raise ApiError(
@@ -616,7 +665,13 @@ def refresh(
             ErrorCode.AUTH_REFRESH_SESSION_INVALID,
             "Session de connexion invalide",
         )
+    return stored_session
 
+
+def retire_refresh_session(
+    stored_session: RefreshSession, session: Session, now: int
+) -> RefreshSessionFamily:
+    """Revoke the session being rotated, and return the family it belongs to."""
     family = session.get(RefreshSessionFamily, stored_session.id)
     if family is None:
         family = RefreshSessionFamily(
@@ -646,7 +701,13 @@ def refresh(
             ErrorCode.AUTH_REFRESH_SESSION_INVALID,
             "Session de connexion invalide",
         )
+    return family
 
+
+def refreshable_user(
+    stored_session: RefreshSession, session: Session, now: int
+) -> User:
+    """The account, unless it was disabled or lost its authenticator meanwhile."""
     user = session.get(User, stored_session.user_id)
     two_factor = session.get(TwoFactorCredential, stored_session.user_id)
     if (
@@ -669,6 +730,23 @@ def refresh(
             ErrorCode.AUTH_REFRESH_SESSION_INVALID,
             "Session de connexion invalide",
         )
+    return user
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(
+    request: Request,
+    response: Response,
+    session: DbSession,
+) -> TokenResponse:
+    """Rotate a valid refresh session and return a new access token."""
+    validate_origin(request)
+    now = int(time())
+    stored_session = presented_refresh_session(request, session, now)
+
+    family = retire_refresh_session(stored_session, session, now)
+
+    user = refreshable_user(stored_session, session, now)
 
     audit_event("auth.refresh_succeeded", user_id=user.id)
     return issue_session(

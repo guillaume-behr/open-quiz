@@ -6,6 +6,7 @@ list the results of their own finished exams, provisional until published.
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, cast
 
@@ -18,6 +19,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.audit import audit_event
 from app.class_names import format_class_name
@@ -296,21 +298,31 @@ def list_participant_answers(
     ]
 
 
-@router.get(
-    "/student/results",
-    response_model=list[StudentQuizHistoryItem],
-)
-def list_student_quiz_history(
-    student: Annotated[StudentAccount, Depends(current_student)],
-    session: DbSession,
-) -> list[StudentQuizHistoryItem]:
+@dataclass(frozen=True)
+class HistoryRecords:
+    """Everything a student's exam history reads, loaded once for all exams."""
+
+    question_ids_by_participant: dict[int, list[int]]
+    questions_by_id: dict[int, Question]
+    choices_by_question: dict[int, list[QuestionChoice]]
+    answers_by_participant_question: dict[tuple[int, int], QuizAnswer]
+    question_points: dict[int, float]
+    classes_by_id: dict[int, StudentClass]
+    codes_by_question: dict[int, QuestionCode]
+
+
+def student_exam_participations(
+    account_id: int, session: Session
+) -> list[tuple[QuizSession, QuizParticipant]]:
+    """A student account's finished exams, most recent first."""
     membership_ids = list(
-        session.scalars(select(Student.id).where(Student.account_id == student.id))
+        session.scalars(select(Student.id).where(Student.account_id == account_id))
     )
     if not membership_ids:
         return []
-    rows = list(
-        session.execute(
+    return [
+        (quiz_session, participant)
+        for quiz_session, participant in session.execute(
             select(QuizSession, QuizParticipant)
             .join(
                 QuizParticipant,
@@ -325,7 +337,12 @@ def list_student_quiz_history(
             )
             .order_by(QuizSession.started_at.desc(), QuizSession.id.desc())
         )
-    )
+    ]
+
+
+def history_records(
+    rows: list[tuple[QuizSession, QuizParticipant]], session: Session
+) -> HistoryRecords:
     session_ids = [quiz_session.id for quiz_session, _ in rows]
     participant_ids = [participant.id for _, participant in rows]
     (
@@ -349,131 +366,164 @@ def list_student_quiz_history(
     questions_by_id, choices_by_question = load_question_records(
         all_question_ids, session
     )
-    answers_by_participant_question = {
-        (answer.participant_id, answer.question_id): answer
-        for answer in session.scalars(
-            select(QuizAnswer).where(QuizAnswer.participant_id.in_(participant_ids))
-        )
-    }
-    question_points = question_maximum_scores(list(all_question_ids), session)
     class_ids = {
         quiz_session.class_id
         for quiz_session, _ in rows
         if quiz_session.class_id is not None
     }
-    classes_by_id = {
-        student_class.id: student_class
-        for student_class in session.scalars(
-            select(StudentClass).where(StudentClass.id.in_(class_ids))
-        )
-    }
-
-    codes_by_question = {
-        code.question_id: code
-        for code in session.scalars(
-            select(QuestionCode).where(QuestionCode.question_id.in_(all_question_ids))
-        )
-    }
-
-    history: list[StudentQuizHistoryItem] = []
-    for quiz_session, participant in rows:
-        question_ids = question_ids_by_participant[participant.id]
-        answers_by_question = {
-            question_id: answers_by_participant_question.get(
-                (participant.id, question_id)
+    return HistoryRecords(
+        question_ids_by_participant=question_ids_by_participant,
+        questions_by_id=questions_by_id,
+        choices_by_question=choices_by_question,
+        answers_by_participant_question={
+            (answer.participant_id, answer.question_id): answer
+            for answer in session.scalars(
+                select(QuizAnswer).where(QuizAnswer.participant_id.in_(participant_ids))
             )
-            for question_id in question_ids
-        }
-        answers = []
-        for position, question_id in enumerate(question_ids):
-            question = questions_by_id.get(question_id)
-            if question is None:
-                continue
-            question_choices = choices_by_question[question.id]
-            q_code = codes_by_question.get(question.id)
-            answer = answers_by_question.get(question.id)
-            review = None
-            if answer is not None:
-                review = answer_review(
-                    answer,
-                    question,
-                    position,
-                    question_choices,
-                    question_points.get(question.id, 0),
-                    q_code,
-                )
-                submitted_answers = review.submitted_answers
-                score = review.score
-                max_score = review.max_score
-                if question.answer_mode == AnswerMode.WRITTEN:
-                    is_correct = (
-                        (answer.score >= review.max_score)
-                        if answer.is_graded and review.max_score > 0
-                        else None
-                    )
-                else:
-                    correct_ids = {
-                        choice.id for choice in question_choices if choice.is_correct
-                    }
-                    is_correct = selected_choice_ids(answer) == correct_ids
-            else:
-                submitted_answers = []
-                score = 0.0
-                max_score = float(question_points.get(question.id, 0))
-                is_correct = False
-            answers.append(
-                StudentQuizHistoryAnswer(
-                    question_id=question.id,
-                    position=position + 1,
-                    prompt=question.prompt,
-                    difficulty=question.difficulty,
-                    answer_mode=question.answer_mode,
-                    code_content=q_code.content if q_code else None,
-                    code_language=q_code.language if q_code else None,
-                    response_language=question.response_language,
-                    submitted_answers=submitted_answers,
-                    expected_answers=[
-                        choice.label for choice in question_choices if choice.is_correct
-                    ],
-                    score=score,
-                    max_score=max_score,
-                    is_correct=is_correct,
-                    feedback=review.feedback if review else None,
+        },
+        question_points=question_maximum_scores(list(all_question_ids), session),
+        classes_by_id={
+            student_class.id: student_class
+            for student_class in session.scalars(
+                select(StudentClass).where(StudentClass.id.in_(class_ids))
+            )
+        },
+        codes_by_question={
+            code.question_id: code
+            for code in session.scalars(
+                select(QuestionCode).where(
+                    QuestionCode.question_id.in_(all_question_ids)
                 )
             )
-        history.append(
-            StudentQuizHistoryItem(
-                session_id=quiz_session.id,
-                quiz_title=quiz_session.quiz_title or "Quiz",
-                class_name=(
-                    format_class_name(
-                        classes_by_id[quiz_session.class_id].grade_level,
-                        classes_by_id[quiz_session.class_id].name,
-                    )
-                    if quiz_session.class_id in classes_by_id
-                    else quiz_session.class_name
-                ),
-                started_at=quiz_session.started_at,
-                grades_published=quiz_session.grades_published_at is not None,
-                score=round(
-                    sum(
-                        answer.score
-                        for answer in answers_by_question.values()
-                        if answer is not None
-                    ),
-                    2,
-                ),
-                maximum_score=round(
-                    sum(
-                        question_points.get(question_id, 0)
-                        for question_id in question_ids
-                    ),
-                    2,
-                ),
-                answers=answers,
-            )
+        },
+    )
+
+
+def history_answer(
+    question: Question,
+    position: int,
+    answer: QuizAnswer | None,
+    records: HistoryRecords,
+) -> StudentQuizHistoryAnswer:
+    """How a student answered one question of a finished exam."""
+    question_choices = records.choices_by_question[question.id]
+    q_code = records.codes_by_question.get(question.id)
+    review = None
+    if answer is not None:
+        review = answer_review(
+            answer,
+            question,
+            position,
+            question_choices,
+            records.question_points.get(question.id, 0),
+            q_code,
         )
-    return history
+        submitted_answers = review.submitted_answers
+        score = review.score
+        max_score = review.max_score
+        if question.answer_mode == AnswerMode.WRITTEN:
+            is_correct = (
+                (answer.score >= review.max_score)
+                if answer.is_graded and review.max_score > 0
+                else None
+            )
+        else:
+            correct_ids = {
+                choice.id for choice in question_choices if choice.is_correct
+            }
+            is_correct = selected_choice_ids(answer) == correct_ids
+    else:
+        submitted_answers = []
+        score = 0.0
+        max_score = float(records.question_points.get(question.id, 0))
+        is_correct = False
+    return StudentQuizHistoryAnswer(
+        question_id=question.id,
+        position=position + 1,
+        prompt=question.prompt,
+        difficulty=question.difficulty,
+        answer_mode=question.answer_mode,
+        code_content=q_code.content if q_code else None,
+        code_language=q_code.language if q_code else None,
+        response_language=question.response_language,
+        submitted_answers=submitted_answers,
+        expected_answers=[
+            choice.label for choice in question_choices if choice.is_correct
+        ],
+        score=score,
+        max_score=max_score,
+        is_correct=is_correct,
+        feedback=review.feedback if review else None,
+    )
+
+
+def history_item(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    records: HistoryRecords,
+) -> StudentQuizHistoryItem:
+    question_ids = records.question_ids_by_participant[participant.id]
+    answers_by_question = {
+        question_id: records.answers_by_participant_question.get(
+            (participant.id, question_id)
+        )
+        for question_id in question_ids
+    }
+    answers = [
+        history_answer(
+            question, position, answers_by_question.get(question.id), records
+        )
+        for position, question_id in enumerate(question_ids)
+        if (question := records.questions_by_id.get(question_id)) is not None
+    ]
+    return StudentQuizHistoryItem(
+        session_id=quiz_session.id,
+        quiz_title=quiz_session.quiz_title or "Quiz",
+        class_name=(
+            format_class_name(
+                records.classes_by_id[quiz_session.class_id].grade_level,
+                records.classes_by_id[quiz_session.class_id].name,
+            )
+            if quiz_session.class_id in records.classes_by_id
+            else quiz_session.class_name
+        ),
+        started_at=quiz_session.started_at,
+        grades_published=quiz_session.grades_published_at is not None,
+        score=round(
+            sum(
+                answer.score
+                for answer in answers_by_question.values()
+                if answer is not None
+            ),
+            2,
+        ),
+        maximum_score=round(
+            sum(
+                records.question_points.get(question_id, 0)
+                for question_id in question_ids
+            ),
+            2,
+        ),
+        answers=answers,
+    )
+
+
+@router.get(
+    "/student/results",
+    response_model=list[StudentQuizHistoryItem],
+)
+def list_student_quiz_history(
+    student: Annotated[StudentAccount, Depends(current_student)],
+    session: DbSession,
+) -> list[StudentQuizHistoryItem]:
+    rows = student_exam_participations(student.id, session)
+    if not rows:
+        return []
+    records = history_records(rows, session)
+    return [
+        history_item(quiz_session, participant, records)
+        for quiz_session, participant in rows
+    ]
 
 
 @router.post(

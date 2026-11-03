@@ -125,11 +125,17 @@ def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse
     ]
 
 
-def session_response(
-    quiz_session: QuizSession,
-    quiz: Quiz,
-    session: DbSession,
-) -> QuizSessionResponse:
+LiveAnswerCounts = dict[int, tuple[int, float, int]]
+
+
+def session_participants(
+    quiz_session: QuizSession, session: Session
+) -> tuple[list[QuizParticipant], LiveAnswerCounts]:
+    """Who a session lists, and per participant answers, score and pending.
+
+    A running session lists those present; a closed one also lists those who
+    left, except anyone who left the waiting room without ever answering.
+    """
     participant_query = select(QuizParticipant).where(
         QuizParticipant.session_id == quiz_session.id
     )
@@ -169,41 +175,115 @@ def session_response(
                 and answers_by_student.get(p.id, (0, 0, 0))[0] == 0
             )
         ]
+    return participants, answers_by_student
+
+
+def current_students(
+    participants: list[QuizParticipant], session: Session
+) -> dict[int, Student]:
+    student_ids = [
+        participant.student_id
+        for participant in participants
+        if participant.student_id is not None
+    ]
+    if not student_ids:
+        return {}
+    return {
+        student.id: student
+        for student in session.scalars(
+            select(Student).where(Student.id.in_(student_ids))
+        )
+    }
+
+
+def participant_has_finished(
+    participant: QuizParticipant,
+    answered_count: int,
+    review_enabled: bool,
+    total_questions: int,
+) -> bool:
+    if participant.submitted_at is not None:
+        return True
+    # Sessions launched before the final submission existed, and quizzes
+    # without the review step, are done as soon as every answer is in.
+    return (
+        not review_enabled
+        and participant.current_position is None
+        and answered_count > 0
+        and answered_count >= total_questions
+    )
+
+
+def live_participant_response(
+    participant: QuizParticipant,
+    quiz_session: QuizSession,
+    counts: tuple[int, float, int],
+    has_finished: bool,
+    maximum_score: float,
+    students_by_id: dict[int, Student],
+) -> QuizParticipantResponse:
+    answered_count, score, pending = counts
+    finished_session = quiz_session.status == SessionStatus.FINISHED
+    return QuizParticipantResponse(
+        id=participant.id,
+        student_identifier=participant.student_identifier,
+        student_display_name=(
+            students_by_id[participant.student_id].display_name
+            if participant.student_id in students_by_id
+            else participant.student_display_name
+        ),
+        answered_count=answered_count,
+        has_finished=has_finished,
+        score=score if finished_session else 0,
+        maximum_score=maximum_score,
+        pending_manual_grading_count=pending if finished_session else 0,
+        violation_count=(
+            0
+            if participant.last_violation_type == "paste_attempt"
+            else participant.violation_count
+        ),
+        last_violation_type=(
+            None
+            if participant.last_violation_type == "paste_attempt"
+            else participant.last_violation_type
+        ),
+        last_violation_at=(
+            None
+            if participant.last_violation_type == "paste_attempt"
+            else participant.last_violation_at
+        ),
+        joined_at=participant.joined_at,
+    )
+
+
+def session_response(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    session: DbSession,
+) -> QuizSessionResponse:
+    participants, answers_by_student = session_participants(quiz_session, session)
     maximum_scores = participant_maximum_scores(quiz_session, participants, session)
     median_maximum_score = (
         float(median(maximum_scores.values())) if maximum_scores else 0
     )
     total_questions = session_question_count(quiz_session, session)
     review_enabled = answer_review_enabled(quiz_session, quiz)
-
-    def has_finished(participant: QuizParticipant) -> bool:
-        if participant.submitted_at is not None:
-            return True
-        # Sessions launched before the final submission existed, and quizzes
-        # without the review step, are done as soon as every answer is in.
-        answered_count = answers_by_student.get(participant.id, (0, 0, 0))[0]
-        return (
-            not review_enabled
-            and participant.current_position is None
-            and answered_count > 0
-            and answered_count >= total_questions
-        )
-
-    student_ids = [
-        participant.student_id
-        for participant in participants
-        if participant.student_id is not None
-    ]
-    students_by_id = (
-        {
-            student.id: student
-            for student in session.scalars(
-                select(Student).where(Student.id.in_(student_ids))
+    students_by_id = current_students(participants, session)
+    participant_responses = []
+    for participant in participants:
+        counts = answers_by_student.get(participant.id, (0, 0, 0))
+        participant_responses.append(
+            live_participant_response(
+                participant,
+                quiz_session,
+                counts,
+                participant_has_finished(
+                    participant, counts[0], review_enabled, total_questions
+                ),
+                maximum_scores.get(participant.id, 0.0),
+                students_by_id,
             )
-        }
-        if student_ids
-        else {}
-    )
+        )
     return QuizSessionResponse(
         id=quiz_session.id,
         quiz_id=quiz.id,
@@ -214,47 +294,7 @@ def session_response(
         status=quiz_session.status,
         participant_count=len(participants),
         median_maximum_score=median_maximum_score,
-        participants=[
-            QuizParticipantResponse(
-                id=participant.id,
-                student_identifier=participant.student_identifier,
-                student_display_name=(
-                    students_by_id[participant.student_id].display_name
-                    if participant.student_id in students_by_id
-                    else participant.student_display_name
-                ),
-                answered_count=answers_by_student.get(participant.id, (0, 0, 0))[0],
-                has_finished=has_finished(participant),
-                score=(
-                    answers_by_student.get(participant.id, (0, 0, 0))[1]
-                    if quiz_session.status == SessionStatus.FINISHED
-                    else 0
-                ),
-                maximum_score=maximum_scores.get(participant.id, 0.0),
-                pending_manual_grading_count=(
-                    answers_by_student.get(participant.id, (0, 0, 0))[2]
-                    if quiz_session.status == SessionStatus.FINISHED
-                    else 0
-                ),
-                violation_count=(
-                    0
-                    if participant.last_violation_type == "paste_attempt"
-                    else participant.violation_count
-                ),
-                last_violation_type=(
-                    None
-                    if participant.last_violation_type == "paste_attempt"
-                    else participant.last_violation_type
-                ),
-                last_violation_at=(
-                    None
-                    if participant.last_violation_type == "paste_attempt"
-                    else participant.last_violation_at
-                ),
-                joined_at=participant.joined_at,
-            )
-            for participant in participants
-        ],
+        participants=participant_responses,
         total_questions=total_questions,
         created_at=quiz_session.created_at,
         started_at=quiz_session.started_at,

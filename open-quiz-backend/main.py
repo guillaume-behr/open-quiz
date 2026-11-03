@@ -14,6 +14,7 @@ from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.access_log import AccessLogMiddleware
 from app.audit import audit_event
@@ -91,6 +92,150 @@ VERSION = tomllib.loads((Path(__file__).parent / "pyproject.toml").read_text())[
 ]["version"]
 
 
+def revoke_sessions_on_jwt_rotation(
+    session: Session, settings: Settings, now: int
+) -> None:
+    """Revoke every long session once JWT_SECRET has changed."""
+    fingerprint = hmac_new(
+        settings.totp_encryption_key.encode(),
+        settings.jwt_secret.encode(),
+        sha256,
+    ).hexdigest()
+    fingerprint_state = session.get(SecurityState, JWT_FINGERPRINT_KEY)
+    if fingerprint_state is None:
+        unmapped_session = session.scalar(
+            select(RefreshSession.id)
+            .outerjoin(
+                RefreshSessionFamily,
+                RefreshSessionFamily.session_id == RefreshSession.id,
+            )
+            .where(
+                RefreshSession.revoked_at.is_(None),
+                RefreshSessionFamily.session_id.is_(None),
+            )
+            .limit(1)
+        )
+        if unmapped_session is not None:
+            session.execute(
+                update(RefreshSession)
+                .where(RefreshSession.revoked_at.is_(None))
+                .values(revoked_at=now)
+            )
+            audit_event("security.legacy_sessions_revoked")
+        session.add(SecurityState(key=JWT_FINGERPRINT_KEY, value=fingerprint))
+    elif fingerprint_state.value != fingerprint:
+        session.execute(
+            update(RefreshSession)
+            .where(RefreshSession.revoked_at.is_(None))
+            .values(revoked_at=now)
+        )
+        fingerprint_state.value = fingerprint
+        audit_event("security.jwt_secret_rotated_sessions_revoked")
+
+
+def managed_administrator(session: Session, settings: Settings, now: int) -> User:
+    """The one administrator ADMIN_USERNAME and ADMIN_PASSWORD manage.
+
+    At the first start it adopts or creates that account and disables any
+    other administrator; afterwards it follows ADMIN_USERNAME renames.
+    """
+    managed_state = session.get(SecurityState, MANAGED_ADMIN_KEY)
+    configured_user = session.scalar(
+        select(User).where(User.username == settings.admin_username)
+    )
+    if managed_state is None:
+        administrators = list(
+            session.scalars(select(User).where(User.is_admin.is_(True)))
+        )
+        if configured_user is not None:
+            admin_user = configured_user
+        elif len(administrators) == 1:
+            admin_user = administrators[0]
+            admin_user.username = settings.admin_username
+        elif administrators:
+            raise RuntimeError(
+                "Multiple unmanaged administrators exist; resolve them "
+                "before starting the application"
+            )
+        else:
+            admin_user = User(
+                username=settings.admin_username,
+                display_name="Administrator",
+                password_hash=hash_password(settings.admin_password),
+                is_admin=True,
+            )
+            session.add(admin_user)
+            session.flush()
+
+        for stale_admin in administrators:
+            if stale_admin.id != admin_user.id:
+                stale_admin.is_admin = False
+                stale_admin.is_active = False
+                session.execute(
+                    update(RefreshSession)
+                    .where(
+                        RefreshSession.user_id == stale_admin.id,
+                        RefreshSession.revoked_at.is_(None),
+                    )
+                    .values(revoked_at=now)
+                )
+                audit_event(
+                    "security.stale_administrator_disabled",
+                    user_id=stale_admin.id,
+                )
+        session.add(
+            SecurityState(
+                key=MANAGED_ADMIN_KEY,
+                value=str(admin_user.id),
+            )
+        )
+    else:
+        try:
+            managed_user_id = int(managed_state.value)
+        except ValueError as error:
+            raise RuntimeError("Managed administrator state is invalid") from error
+        managed_user = session.get(User, managed_user_id)
+        if managed_user is None:
+            raise RuntimeError("The managed administrator account is missing")
+        admin_user = managed_user
+        if configured_user is not None and configured_user.id != admin_user.id:
+            raise RuntimeError(
+                "ADMIN_USERNAME belongs to a different account; choose a "
+                "unique username before starting the application"
+            )
+        if admin_user.username != settings.admin_username:
+            previous_username = admin_user.username
+            admin_user.username = settings.admin_username
+            audit_event(
+                "security.managed_administrator_renamed",
+                user_id=admin_user.id,
+                previous_username=previous_username,
+            )
+    return admin_user
+
+
+def apply_administrator_settings(
+    admin_user: User, session: Session, settings: Settings, now: int
+) -> None:
+    """Keep the managed account active, and on ADMIN_PASSWORD."""
+    admin_user.is_admin = True
+    admin_user.is_active = True
+    if not verify_password(settings.admin_password, admin_user.password_hash):
+        admin_user.password_hash = hash_password(settings.admin_password)
+        session.execute(
+            update(RefreshSession)
+            .where(
+                RefreshSession.user_id == admin_user.id,
+                RefreshSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+        audit_event(
+            "security.administrator_password_rotated_sessions_revoked",
+            user_id=admin_user.id,
+        )
+
+
 def synchronize_security_state(
     session_factory,
     settings: Settings,
@@ -99,130 +244,9 @@ def synchronize_security_state(
     with session_factory() as session:
         # Every worker runs this at startup: one at a time.
         session.execute(select(func.pg_advisory_xact_lock(MAINTENANCE_LOCK_KEY)))
-        fingerprint = hmac_new(
-            settings.totp_encryption_key.encode(),
-            settings.jwt_secret.encode(),
-            sha256,
-        ).hexdigest()
-        fingerprint_state = session.get(SecurityState, JWT_FINGERPRINT_KEY)
-        if fingerprint_state is None:
-            unmapped_session = session.scalar(
-                select(RefreshSession.id)
-                .outerjoin(
-                    RefreshSessionFamily,
-                    RefreshSessionFamily.session_id == RefreshSession.id,
-                )
-                .where(
-                    RefreshSession.revoked_at.is_(None),
-                    RefreshSessionFamily.session_id.is_(None),
-                )
-                .limit(1)
-            )
-            if unmapped_session is not None:
-                session.execute(
-                    update(RefreshSession)
-                    .where(RefreshSession.revoked_at.is_(None))
-                    .values(revoked_at=now)
-                )
-                audit_event("security.legacy_sessions_revoked")
-            session.add(SecurityState(key=JWT_FINGERPRINT_KEY, value=fingerprint))
-        elif fingerprint_state.value != fingerprint:
-            session.execute(
-                update(RefreshSession)
-                .where(RefreshSession.revoked_at.is_(None))
-                .values(revoked_at=now)
-            )
-            fingerprint_state.value = fingerprint
-            audit_event("security.jwt_secret_rotated_sessions_revoked")
-
-        managed_state = session.get(SecurityState, MANAGED_ADMIN_KEY)
-        configured_user = session.scalar(
-            select(User).where(User.username == settings.admin_username)
-        )
-        if managed_state is None:
-            administrators = list(
-                session.scalars(select(User).where(User.is_admin.is_(True)))
-            )
-            if configured_user is not None:
-                admin_user = configured_user
-            elif len(administrators) == 1:
-                admin_user = administrators[0]
-                admin_user.username = settings.admin_username
-            elif administrators:
-                raise RuntimeError(
-                    "Multiple unmanaged administrators exist; resolve them "
-                    "before starting the application"
-                )
-            else:
-                admin_user = User(
-                    username=settings.admin_username,
-                    display_name="Administrator",
-                    password_hash=hash_password(settings.admin_password),
-                    is_admin=True,
-                )
-                session.add(admin_user)
-                session.flush()
-
-            for stale_admin in administrators:
-                if stale_admin.id != admin_user.id:
-                    stale_admin.is_admin = False
-                    stale_admin.is_active = False
-                    session.execute(
-                        update(RefreshSession)
-                        .where(
-                            RefreshSession.user_id == stale_admin.id,
-                            RefreshSession.revoked_at.is_(None),
-                        )
-                        .values(revoked_at=now)
-                    )
-                    audit_event(
-                        "security.stale_administrator_disabled",
-                        user_id=stale_admin.id,
-                    )
-            session.add(
-                SecurityState(
-                    key=MANAGED_ADMIN_KEY,
-                    value=str(admin_user.id),
-                )
-            )
-        else:
-            try:
-                managed_user_id = int(managed_state.value)
-            except ValueError as error:
-                raise RuntimeError("Managed administrator state is invalid") from error
-            admin_user = session.get(User, managed_user_id)
-            if admin_user is None:
-                raise RuntimeError("The managed administrator account is missing")
-            if configured_user is not None and configured_user.id != admin_user.id:
-                raise RuntimeError(
-                    "ADMIN_USERNAME belongs to a different account; choose a "
-                    "unique username before starting the application"
-                )
-            if admin_user.username != settings.admin_username:
-                previous_username = admin_user.username
-                admin_user.username = settings.admin_username
-                audit_event(
-                    "security.managed_administrator_renamed",
-                    user_id=admin_user.id,
-                    previous_username=previous_username,
-                )
-
-        admin_user.is_admin = True
-        admin_user.is_active = True
-        if not verify_password(settings.admin_password, admin_user.password_hash):
-            admin_user.password_hash = hash_password(settings.admin_password)
-            session.execute(
-                update(RefreshSession)
-                .where(
-                    RefreshSession.user_id == admin_user.id,
-                    RefreshSession.revoked_at.is_(None),
-                )
-                .values(revoked_at=now)
-            )
-            audit_event(
-                "security.administrator_password_rotated_sessions_revoked",
-                user_id=admin_user.id,
-            )
+        revoke_sessions_on_jwt_rotation(session, settings, now)
+        admin_user = managed_administrator(session, settings, now)
+        apply_administrator_settings(admin_user, session, settings, now)
         session.commit()
 
 
@@ -373,52 +397,8 @@ async def maintain_data_retention_periodically(
             logger.exception("Data retention maintenance failed")
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    settings = settings or get_settings()
-    session_factory = build_session_factory(settings.database_url)
-
-    @asynccontextmanager
-    async def lifespan(_: FastAPI):
-        synchronize_security_state(session_factory, settings)
-        warn_missing_public_information(settings)
-        enforce_data_retention(session_factory, settings)
-
-        live_relay.start()
-        maintenance_task = create_task(
-            maintain_data_retention_periodically(session_factory, settings)
-        )
-        expiry_task = create_task(
-            expire_sessions_periodically(session_factory, app.state.live_quiz_hub)
-        )
-        try:
-            yield
-        finally:
-            live_relay.stop()
-            for task in (maintenance_task, expiry_task):
-                task.cancel()
-                with suppress(CancelledError):
-                    await task
-
-    production = settings.environment == "production"
-    app = FastAPI(
-        title="Open Quiz API",
-        version=VERSION,
-        lifespan=lifespan,
-        docs_url=None if production else "/docs",
-        redoc_url=None if production else "/redoc",
-        openapi_url=None if production else "/openapi.json",
-    )
-    app.state.settings = settings
-    app.state.session_factory = session_factory
-    app.state.live_quiz_hub = LiveQuizHub()
-    # Carries live notifications to the other Uvicorn workers (WEB_CONCURRENCY).
-    live_relay = PostgresLiveRelay(
-        postgres_url(settings.database_url)
-        .set(drivername="postgresql")
-        .render_as_string(hide_password=False),
-        app.state.live_quiz_hub.publish_local,
-    )
-    app.state.live_quiz_hub.attach_relay(live_relay.send)
+def attach_rate_limiters(app: FastAPI, settings: Settings) -> None:
+    """Give the app its limiters, which count attempts in a pool of their own."""
     limiter_sessions = build_rate_limiter_session_factory(settings.database_url)
     app.state.login_rate_limiter = LoginRateLimiter(
         limiter_sessions,
@@ -465,6 +445,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.problem_report_window_seconds,
         "problem-report",
     )
+
+
+def add_security_middleware(
+    app: FastAPI, settings: Settings, session_factory: sessionmaker[Session]
+) -> None:
+    """Body limits, CORS, HTTPS and security headers, in this wrapping order."""
+    production = settings.environment == "production"
     app.add_middleware(
         RequestBodyLimitMiddleware,
         default_limit=settings.max_request_body_bytes,
@@ -507,19 +494,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         return response
 
-    @app.exception_handler(InsufficientQuestionsError)
-    async def insufficient_questions(
-        _request: Request, error: InsufficientQuestionsError
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            content={
-                "detail": api_error(ErrorCode.QUIZ_QUESTIONS_INSUFFICIENT, str(error))
-            },
-        )
 
-    app.add_middleware(AccessLogMiddleware)
-
+def include_routers(app: FastAPI) -> None:
     app.include_router(health.router)
     app.include_router(problem_reports.router)
     app.include_router(auth.router)
@@ -540,6 +516,71 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(question_banks.router)
     app.include_router(questions.router)
     app.include_router(question_bank_transfer.router)
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
+    session_factory = build_session_factory(settings.database_url)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        synchronize_security_state(session_factory, settings)
+        warn_missing_public_information(settings)
+        enforce_data_retention(session_factory, settings)
+
+        live_relay.start()
+        maintenance_task = create_task(
+            maintain_data_retention_periodically(session_factory, settings)
+        )
+        expiry_task = create_task(
+            expire_sessions_periodically(session_factory, app.state.live_quiz_hub)
+        )
+        try:
+            yield
+        finally:
+            live_relay.stop()
+            for task in (maintenance_task, expiry_task):
+                task.cancel()
+                with suppress(CancelledError):
+                    await task
+
+    production = settings.environment == "production"
+    app = FastAPI(
+        title="Open Quiz API",
+        version=VERSION,
+        lifespan=lifespan,
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
+    )
+    app.state.settings = settings
+    app.state.session_factory = session_factory
+    app.state.live_quiz_hub = LiveQuizHub()
+    # Carries live notifications to the other Uvicorn workers (WEB_CONCURRENCY).
+    live_relay = PostgresLiveRelay(
+        postgres_url(settings.database_url)
+        .set(drivername="postgresql")
+        .render_as_string(hide_password=False),
+        app.state.live_quiz_hub.publish_local,
+    )
+    app.state.live_quiz_hub.attach_relay(live_relay.send)
+    attach_rate_limiters(app, settings)
+    add_security_middleware(app, settings, session_factory)
+
+    @app.exception_handler(InsufficientQuestionsError)
+    async def insufficient_questions(
+        _request: Request, error: InsufficientQuestionsError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={
+                "detail": api_error(ErrorCode.QUIZ_QUESTIONS_INSUFFICIENT, str(error))
+            },
+        )
+
+    app.add_middleware(AccessLogMiddleware)
+
+    include_routers(app)
     return app
 
 

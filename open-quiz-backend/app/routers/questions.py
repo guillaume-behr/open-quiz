@@ -19,6 +19,7 @@ from fastapi import (
 )
 from pydantic import ValidationError
 from sqlalchemy import delete, func, select, union
+from sqlalchemy.orm import Session
 
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import CorrectionMode, QuizMode, SessionStatus
@@ -281,22 +282,13 @@ def regrade_affected_sessions(
         live_hub.publish(makeup_sessions_topic(professor_id))
 
 
-@router.post(
-    "/questions/{question_id}/update",
-    response_model=QuestionResponse,
-)
-def update_question(
-    question_id: int,
-    request: Request,
-    professor: ProfessorUser,
-    session: DbSession,
-    payload: str = Form(),
-    image: UploadFile | None = File(default=None),
-) -> QuestionResponse:
-    """Update a professor's question and replace its answer configuration."""
-    question = owned_question(question_id, professor, session)
+# Per submitted choice: new image bytes and type, or the key of the image kept.
+ChoiceImagePlan = tuple[bytes | None, str | None, str | None]
+
+
+def parsed_question_update(payload: str) -> QuestionUpdate:
     try:
-        question_payload = QuestionUpdate.model_validate(json.loads(payload))
+        return QuestionUpdate.model_validate(json.loads(payload))
     except json.JSONDecodeError, ValidationError:
         raise ApiError(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -304,8 +296,14 @@ def update_question(
             "Question invalide",
         ) from None
 
-    image_data, image_content_type = normalized_uploaded_image(image)
 
+def apply_question_fields(
+    question: Question,
+    question_payload: QuestionUpdate,
+    image: tuple[bytes | None, str | None],
+    session: Session,
+) -> None:
+    image_data, image_content_type = image
     question.prompt = question_payload.prompt
     question.difficulty = question_payload.difficulty
     question.answer_mode = question_payload.answer_mode
@@ -318,6 +316,9 @@ def update_question(
     elif question_payload.remove_image:
         question.image_sha256 = None
 
+
+def parked_choices(question: Question, session: Session) -> dict[int, QuestionChoice]:
+    """The question's current choices, moved out of the positions to reuse."""
     existing_choices = list(
         session.scalars(
             select(QuestionChoice).where(QuestionChoice.question_id == question.id)
@@ -332,7 +333,13 @@ def update_question(
     for offset, choice in enumerate(existing_choices):
         choice.position = temporary_position + offset
     session.flush()
-    existing_choices_by_id = {choice.id: choice for choice in existing_choices}
+    return {choice.id: choice for choice in existing_choices}
+
+
+def choice_image_plans(
+    question_payload: QuestionUpdate,
+    existing_choices_by_id: dict[int, QuestionChoice],
+) -> list[ChoiceImagePlan]:
     submitted_choice_ids = {
         choice.id for choice in question_payload.choices if choice.id is not None
     }
@@ -344,7 +351,7 @@ def update_question(
         )
     # Each choice keeps its image (by key), replaces it (with new bytes) or
     # loses it.
-    replacement_choice_images: list[tuple[bytes | None, str | None, str | None]] = []
+    replacement_choice_images: list[ChoiceImagePlan] = []
     for submitted in question_payload.choices:
         new_image_data, new_image_content_type = decode_image_payload(submitted.image)
         existing_choice = (
@@ -362,7 +369,12 @@ def update_question(
         replacement_choice_images.append(
             (new_image_data, new_image_content_type, kept_image)
         )
+    return replacement_choice_images
 
+
+def require_choice_content(
+    question_payload: QuestionUpdate, plans: list[ChoiceImagePlan]
+) -> None:
     if any(
         not choice.label
         and choice_image_data is None
@@ -370,7 +382,7 @@ def update_question(
         and choice.code_content is None
         for choice, (choice_image_data, _, kept_image) in zip(
             question_payload.choices,
-            replacement_choice_images,
+            plans,
             strict=True,
         )
     ):
@@ -380,6 +392,10 @@ def update_question(
             "Une proposition nécessite du texte, une image ou du code",
         )
 
+
+def require_image_budget(
+    question: Question, plans: list[ChoiceImagePlan], session: Session
+) -> None:
     # question.image_sha256 already reflects the replacement or the removal
     # applied above, so it is the image this question will actually keep.
     kept_sizes = stored_image_sizes(
@@ -388,7 +404,7 @@ def update_question(
             digest
             for digest in [
                 question.image_sha256,
-                *(kept for _, _, kept in replacement_choice_images),
+                *(kept for _, _, kept in plans),
             ]
             if digest is not None
         ],
@@ -397,7 +413,7 @@ def update_question(
         kept_sizes.get(question.image_sha256 or "", 0)
         + sum(
             len(choice_image_data or b"") + kept_sizes.get(kept_image or "", 0)
-            for choice_image_data, _, kept_image in replacement_choice_images
+            for choice_image_data, _, kept_image in plans
         )
         > MAX_IMPORT_IMAGE_BYTES
     ):
@@ -407,6 +423,14 @@ def update_question(
             "Le volume total des images de la question est trop important",
         )
 
+
+def write_choices_and_code(
+    question: Question,
+    question_payload: QuestionUpdate,
+    plans: list[ChoiceImagePlan],
+    existing_choices_by_id: dict[int, QuestionChoice],
+    session: Session,
+) -> tuple[list[QuestionChoice], QuestionCode | None]:
     session.execute(delete(QuestionCode).where(QuestionCode.question_id == question.id))
     choices = []
     for position, (
@@ -415,7 +439,7 @@ def update_question(
     ) in enumerate(
         zip(
             question_payload.choices,
-            replacement_choice_images,
+            plans,
             strict=True,
         )
     ):
@@ -437,6 +461,9 @@ def update_question(
         choice.position = position
         choices.append(choice)
         session.add(choice)
+    submitted_choice_ids = {
+        choice.id for choice in question_payload.choices if choice.id is not None
+    }
     removed_choice_ids = set(existing_choices_by_id) - submitted_choice_ids
     if removed_choice_ids:
         session.execute(
@@ -453,6 +480,33 @@ def update_question(
             content=question_payload.code_content,
         )
         session.add(code)
+    return choices, code
+
+
+@router.post(
+    "/questions/{question_id}/update",
+    response_model=QuestionResponse,
+)
+def update_question(
+    question_id: int,
+    request: Request,
+    professor: ProfessorUser,
+    session: DbSession,
+    payload: str = Form(),
+    image: UploadFile | None = File(default=None),
+) -> QuestionResponse:
+    """Update a professor's question and replace its answer configuration."""
+    question = owned_question(question_id, professor, session)
+    question_payload = parsed_question_update(payload)
+    uploaded_image = normalized_uploaded_image(image)
+    apply_question_fields(question, question_payload, uploaded_image, session)
+    existing_choices_by_id = parked_choices(question, session)
+    plans = choice_image_plans(question_payload, existing_choices_by_id)
+    require_choice_content(question_payload, plans)
+    require_image_budget(question, plans, session)
+    choices, code = write_choices_and_code(
+        question, question_payload, plans, existing_choices_by_id, session
+    )
     session.flush()
     regrade_affected_sessions(question.id, professor.id, request, session)
     session.refresh(question)
