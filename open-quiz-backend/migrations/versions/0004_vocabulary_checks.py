@@ -7,7 +7,9 @@ here rather than imported, so this revision keeps meaning what it meant when
 it was written.
 
 A database holding an unknown value makes the upgrade fail as a whole; the
-schema then stays at 0003 and the error names the constraint concerned.
+schema then stays at 0003 and the error names the constraint concerned. Like
+the baseline, it skips a constraint that already exists, as on a database
+whose tables were created from the current models.
 
 Revision ID: 0004
 Revises: 0003
@@ -16,6 +18,7 @@ Create Date: 2026-11-03 13:00:00.000000
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0004"
@@ -45,7 +48,17 @@ CONSTRAINTS = (
 
 
 def upgrade() -> None:
+    existing = set(
+        op.get_bind().scalars(
+            sa.text(
+                "SELECT conname FROM pg_constraint WHERE contype = 'c' "
+                "AND connamespace = current_schema()::regnamespace"
+            )
+        )
+    )
     for name, table, column, values in CONSTRAINTS:
+        if name in existing:
+            continue
         allowed = ", ".join(f"'{value}'" for value in values)
         op.create_check_constraint(name, table, f"{column} IN ({allowed})")
 
