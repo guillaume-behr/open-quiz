@@ -359,8 +359,11 @@ Le script vérifie que le fichier est une sauvegarde lisible, puis demande de
 taper `restore`. `--yes` permet de s’en passer dans un script. Il
 sauvegarde d’abord les données actuelles dans `backups/`, arrête l’API et
 l’interface, puis restaure la sauvegarde en une seule transaction : en cas
-d’échec, la base reste dans son état précédent. Il rend ensuite au rôle
-`open_quiz_app` les objets restaurés, puis redémarre les conteneurs.
+d’échec, la base reste dans son état précédent. La base devient exactement la
+sauvegarde : une table qu’elle ne contient pas, comme celle d’une migration
+plus récente, disparaît, et l’API migre au démarrage une sauvegarde prise par
+une version antérieure. Le script rend ensuite au rôle `open_quiz_app` les
+objets restaurés, puis redémarre les conteneurs.
 
 Utilisez le fichier `.env` correspondant à la sauvegarde, puis vérifiez
 `/api/health`, les connexions et un échantillon de résultats. Une restauration
