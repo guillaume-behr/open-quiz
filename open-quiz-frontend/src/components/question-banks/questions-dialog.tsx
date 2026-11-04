@@ -1,3 +1,5 @@
+import { richTextToPlainText } from "@/lib/rich-text"
+import { RichText } from "@/components/ui/rich-text"
 import {
     ANSWER_MODES,
     QUESTION_DIFFICULTIES,
@@ -357,8 +359,8 @@ function QuestionCard({
             <div className="flex flex-col gap-1 p-2 sm:flex-row sm:items-stretch">
                 <CollapsiblePrimitive.Trigger className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-start font-semibold break-words transition-colors select-none hover:bg-muted/70 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset data-panel-open:bg-muted/40">
                     <ChevronDown className="size-4 shrink-0 transition-transform duration-200 ease-out group-data-panel-open:rotate-180 motion-reduce:transition-none" />
-                    <span className="min-w-0 flex-1">
-                        {index + 1}. {question.prompt}
+                    <span className="min-w-0 flex-1 font-medium">
+                        {index + 1}. <RichText text={question.prompt} />
                     </span>
                     <span className="rounded-full bg-muted px-2 py-1 text-xs font-normal whitespace-nowrap">
                         {t(`difficulty-${question.difficulty}`)}
@@ -408,7 +410,7 @@ function QuestionCard({
                             </div>
                             <QuestionImage
                                 questionId={question.id}
-                                alt={question.prompt}
+                                alt={richTextToPlainText(question.prompt)}
                             />
                         </>
                     )}

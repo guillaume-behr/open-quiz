@@ -1,3 +1,4 @@
+import { RichText } from "@/components/ui/rich-text"
 import type { FormEvent } from "react"
 import type { Question, Quiz, StudentClass } from "@/api/types"
 import { formatClassName } from "@/lib/utils"
@@ -77,8 +78,9 @@ export function QuizPreviewDialog({
                     {questions.map((question, index) => (
                         <li key={question.id} className="rounded-xl border p-4">
                             <div className="flex items-start justify-between gap-3">
-                                <p className="font-semibold whitespace-pre-wrap">
-                                    {index + 1}. {question.prompt}
+                                <p className="font-medium">
+                                    {index + 1}.{" "}
+                                    <RichText text={question.prompt} />
                                 </p>
                                 <span className="rounded-full bg-muted px-2 py-1 text-xs">
                                     {t(`difficulty-${question.difficulty}`)}

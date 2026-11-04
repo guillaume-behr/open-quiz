@@ -1,3 +1,4 @@
+import { richTextToPlainText } from "@/lib/rich-text"
 import {
     createQuestionBank,
     deleteQuestionBank,
@@ -382,7 +383,9 @@ export function QuestionBanksPanel({
                             questionToDelete !== null
                         }
                         kind="question"
-                        title={questionToDelete?.prompt ?? ""}
+                        title={richTextToPlainText(
+                            questionToDelete?.prompt ?? ""
+                        )}
                         isBusy={deletingQuestion.isPending}
                         error={deletingQuestion.error}
                         onClose={() => {

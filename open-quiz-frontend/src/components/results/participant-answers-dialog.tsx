@@ -1,3 +1,4 @@
+import { RichText } from "@/components/ui/rich-text"
 import type {
     CodeLanguage,
     QuizAnswerReview,
@@ -147,8 +148,8 @@ function AnswerReview({
                         {t("question-number", { number: answer.position })} ·{" "}
                         {t(`difficulty-${answer.difficulty}`)}
                     </p>
-                    <h3 className="mt-1 font-semibold whitespace-pre-wrap">
-                        {answer.prompt}
+                    <h3 className="mt-1 font-medium">
+                        <RichText text={answer.prompt} />
                     </h3>
                     {answer.code_content && answer.code_language && (
                         <div className="mt-3">
