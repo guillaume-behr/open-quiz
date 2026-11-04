@@ -31,3 +31,11 @@ export function gradeOnScale(
     if (maximumScore <= 0) return null
     return (score / maximumScore) * GRADE_SCALE
 }
+
+export type ScoreTone = "success" | "warning" | "destructive"
+
+/** Tone of one question's score: full marks, partial credit or nothing. */
+export function scoreTone(score: number, maxScore: number): ScoreTone {
+    if (maxScore > 0 && score >= maxScore) return "success"
+    return score > 0 ? "warning" : "destructive"
+}
