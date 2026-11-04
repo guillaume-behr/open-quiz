@@ -40,7 +40,7 @@ function QuestionScorePill({
     return (
         <span
             className={cn(
-                "rounded-full px-2 py-0.5 font-semibold whitespace-nowrap tabular-nums",
+                "rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap tabular-nums",
                 graded
                     ? SCORE_TONE_CLASS_NAMES[scoreTone(score, maxScore)]
                     : "bg-muted text-muted-foreground"
@@ -188,7 +188,19 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                         key={answer.question_id}
                                         className="rounded-lg border p-3"
                                     >
-                                        <p className="flex flex-wrap items-center gap-2 text-xs font-semibold text-muted-foreground">
+                                        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-semibold text-muted-foreground">
+                                                    {t("question-number", {
+                                                        number: answer.position,
+                                                    })}
+                                                </p>
+                                                <h3 className="mt-1 font-medium">
+                                                    <RichText
+                                                        text={answer.prompt}
+                                                    />
+                                                </h3>
+                                            </div>
                                             <QuestionScorePill
                                                 score={answer.score}
                                                 maxScore={answer.max_score}
@@ -197,13 +209,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                 }
                                                 locale={i18n.language}
                                             />
-                                            {t("question-number", {
-                                                number: answer.position,
-                                            })}
-                                        </p>
-                                        <h3 className="mt-1 font-medium">
-                                            <RichText text={answer.prompt} />
-                                        </h3>
+                                        </div>
                                         {answer.code_content &&
                                             answer.code_language && (
                                                 <div className="mt-2">
