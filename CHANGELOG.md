@@ -27,7 +27,7 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   preview in the question editor. Formatting shows to students, in results and
   on printed copies; prompts stay plain text, so existing questions and JSON
   imports are unchanged.
-- In their results, students see each question's points next to its number,
+- In their results, students see each question's points at the top right of it,
   in a green, orange or red pill for full, partial or no credit.
 
 ### Changed
