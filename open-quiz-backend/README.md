@@ -148,8 +148,7 @@ schémas de requête et de réponse.
 | `/api/admin`              | administration des comptes enseignants                       |
 | `/api/users`              | profil et opérations sur le compte courant                   |
 | `/api/students`           | comptes élèves et export des identifiants                    |
-| `/api/classes`            | classes, affectations et import groupé                       |
-| `/api/grade-levels`       | niveaux utilisés par les classes et banques                  |
+| `/api/classes`            | classes, niveaux, affectations et import groupé              |
 | `/api/question-banks`     | banques, questions, images et import/export                  |
 | `/api/quizzes`            | examens, entraînements, rattrapages et résultats             |
 | `/api/problem-reports`    | création publique et gestion administrative des signalements |

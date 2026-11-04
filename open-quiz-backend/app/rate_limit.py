@@ -3,19 +3,22 @@ from hashlib import sha256
 from hmac import new as hmac_new
 from time import time
 
+from fastapi import FastAPI
 from sqlalchemy import case, delete, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.config import Settings
+from app.database import build_rate_limiter_session_factory
 from app.models import LoginRateLimit
 
-# The second, longer window on two-factor codes (see main.create_app).
+# The second, longer window on two-factor codes (see attach_rate_limiters).
 TWO_FACTOR_DAILY_WINDOW_SECONDS = 86400
 TWO_FACTOR_DAILY_NAMESPACE = "two-factor-daily"
 
 # Limiters write in transactions of their own, through their own sessions:
 # they must neither commit the work a route has pending nor lose a counted
-# attempt when that route rolls back. main.create_app() gives them a small
+# attempt when that route rolls back. attach_rate_limiters() gives them a small
 # engine apart from the request pool, so a request holding a connection never
 # waits on that same pool to count an attempt.
 LimiterSessions = Callable[[], Session]
@@ -164,3 +167,53 @@ class FixedWindowRateLimiter:
     def _key(self, subject: str) -> str:
         digest = sha256(subject.encode()).hexdigest()
         return f"{self.namespace}:{digest}"
+
+
+def attach_rate_limiters(app: FastAPI, settings: Settings) -> None:
+    """Give the app its limiters, which count attempts in a pool of their own."""
+    limiter_sessions = build_rate_limiter_session_factory(settings.database_url)
+    app.state.login_rate_limiter = LoginRateLimiter(
+        limiter_sessions,
+        settings.login_attempts,
+        settings.login_window_seconds,
+        settings.jwt_secret,
+    )
+    # Caps how many codes one account may try per day, so that someone who
+    # holds the password cannot keep guessing at the short window's pace.
+    app.state.two_factor_daily_rate_limiter = LoginRateLimiter(
+        limiter_sessions,
+        settings.two_factor_daily_attempts,
+        TWO_FACTOR_DAILY_WINDOW_SECONDS,
+        settings.jwt_secret,
+        namespace=TWO_FACTOR_DAILY_NAMESPACE,
+    )
+    app.state.auth_global_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
+        settings.global_login_attempts,
+        settings.global_login_window_seconds,
+        "auth",
+    )
+    app.state.quiz_join_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
+        settings.quiz_join_attempts,
+        settings.quiz_rate_window_seconds,
+        "quiz-join",
+    )
+    app.state.quiz_participant_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
+        settings.quiz_participant_attempts,
+        settings.quiz_rate_window_seconds,
+        "quiz-participant",
+    )
+    app.state.quiz_violation_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
+        settings.quiz_violation_attempts,
+        settings.quiz_rate_window_seconds,
+        "quiz-violation",
+    )
+    app.state.problem_report_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
+        settings.problem_report_attempts,
+        settings.problem_report_window_seconds,
+        "problem-report",
+    )

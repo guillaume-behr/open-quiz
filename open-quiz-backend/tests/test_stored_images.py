@@ -7,7 +7,7 @@ from time import sleep
 
 from sqlalchemy import event, func, select, update
 
-import main
+from app import maintenance
 from app.models import Question, StoredImage
 from app.stored_images import delete_unreferenced_images
 
@@ -59,7 +59,7 @@ def test_an_image_used_twice_is_stored_once_and_purged_when_unused(
         client.delete(
             f"/api/question-banks/questions/{created[0]['id']}", headers=headers
         )
-        main.enforce_data_retention(session_factory, settings)
+        maintenance.enforce_data_retention(session_factory, settings)
         assert stored_image_count(client) == 1
         image = client.get(
             f"/api/question-banks/questions/{created[1]['id']}/image", headers=headers
@@ -70,7 +70,7 @@ def test_an_image_used_twice_is_stored_once_and_purged_when_unused(
         client.delete(
             f"/api/question-banks/questions/{created[1]['id']}", headers=headers
         )
-        main.enforce_data_retention(session_factory, settings)
+        maintenance.enforce_data_retention(session_factory, settings)
         assert stored_image_count(client) == 0
 
 

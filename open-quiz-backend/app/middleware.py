@@ -1,11 +1,16 @@
 from asyncio import to_thread
 from collections.abc import Callable
 
-from fastapi import Request
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from sqlalchemy.orm import Session, sessionmaker
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.access_log import AccessLogMiddleware
+from app.config import Settings
 from app.dependencies import authenticated_user_from_token
 from app.errors import ErrorCode, api_error
 from app.models import User
@@ -172,3 +177,57 @@ class RequestBodyLimitMiddleware:
                 ErrorCode.REQUEST_BODY_TOO_LARGE,
                 "Request body is too large",
             )
+
+
+def add_middleware(
+    app: FastAPI, settings: Settings, session_factory: sessionmaker[Session]
+) -> None:
+    """Body limits, CORS, HTTPS, security headers and access log.
+
+    Each middleware added wraps the previous ones, so the access log, added
+    last, sees every response, including the rejections of the others.
+    """
+    production = settings.environment == "production"
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        default_limit=settings.max_request_body_bytes,
+        session_factory=session_factory,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[settings.frontend_origin],
+        allow_origin_regex=(
+            r"https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?"
+            if settings.environment == "development"
+            else None
+        ),
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Quiz-Token",
+            "X-Refresh-Proof",
+        ],
+        expose_headers=["X-Page", "X-Page-Size", "X-Total-Count"],
+    )
+    if production:
+        app.add_middleware(HTTPSRedirectMiddleware)
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+        )
+        if request.url.path.startswith("/api"):
+            response.headers["Cache-Control"] = "no-store"
+        if production:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+        return response
+
+    app.add_middleware(AccessLogMiddleware)

@@ -9,9 +9,6 @@ from app.errors import ApiError, ErrorCode, api_error
 
 BACKEND = Path(__file__).resolve().parents[1]
 
-# An unknown makeup action answers like an unknown route: a bare 404.
-BARE_ERRORS = {("app/routers/makeup.py", "control_makeup_session")}
-
 
 def error_calls(name: str) -> list[tuple[str, str, ast.Call]]:
     found = []
@@ -33,11 +30,10 @@ def error_calls(name: str) -> list[tuple[str, str, ast.Call]]:
 
 
 def test_every_error_is_raised_with_a_code() -> None:
-    """ApiError always carries a code; a bare HTTPException must be listed."""
+    """ApiError always carries a code: no route raises a bare HTTPException."""
     uncoded = [
         f"{path}:{call.lineno} in {function}"
         for path, function, call in error_calls("HTTPException")
-        if (path, function) not in BARE_ERRORS
     ]
     assert uncoded == []
 

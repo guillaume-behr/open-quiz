@@ -52,7 +52,7 @@ async function mockArabicTeacher(page: Page) {
                 json: { access_token: "t", refresh_proof: "r" },
             })
         if (path === "/api/users/me") return route.fulfill({ json: teacher })
-        if (path === "/api/grade-levels")
+        if (path === "/api/classes/grade-levels")
             return route.fulfill({ json: [{ id: 1, name: "Grade 8" }] })
         if (path === "/api/question-banks") return route.fulfill(pageOf([bank]))
         if (path === "/api/quizzes")

@@ -182,7 +182,7 @@ async function mockTeacherApi(page: Page) {
         if (url.pathname === "/api/users/me") {
             return route.fulfill({ json: teacher })
         }
-        if (url.pathname === "/api/grade-levels") {
+        if (url.pathname === "/api/classes/grade-levels") {
             if (request.method() === "POST") {
                 const body = request.postDataJSON() as { name: string }
                 return route.fulfill({
@@ -740,7 +740,7 @@ test("restores a teacher session and displays their classes", async ({
             () =>
                 requests
                     .find((request) =>
-                        request.url().includes("/api/grade-levels")
+                        request.url().includes("/api/classes/grade-levels")
                     )
                     ?.headers()["authorization"]
         )

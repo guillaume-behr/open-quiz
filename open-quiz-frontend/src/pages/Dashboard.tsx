@@ -3,7 +3,7 @@ import {
     createGradeLevel,
     deleteGradeLevel,
     getGradeLevels,
-} from "@/api/grade-levels"
+} from "@/api/classes"
 import type { GradeLevel, TwoFactorChallenge, User } from "@/api/types"
 import { DashboardAuthentication } from "@/components/forms/dashboard-authentication"
 import {

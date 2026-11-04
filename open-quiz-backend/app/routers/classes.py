@@ -10,11 +10,15 @@ from app.dependencies import DbSession, ProfessorUser
 from app.enums import QuizMode, SessionStatus
 from app.errors import ApiError, ErrorCode
 from app.grade_levels import (
+    create_grade_level,
+    delete_grade_level,
     ensure_grade_level,
     grade_level_order,
+    list_grade_levels,
 )
 from app.models import (
     ClassTrainingQuestionBank,
+    GradeLevel,
     MakeupSession,
     MakeupSessionSelection,
     QuestionBank,
@@ -31,6 +35,8 @@ from app.pagination import (
     contains_pattern,
 )
 from app.schemas import (
+    GradeLevelCreate,
+    GradeLevelResponse,
     StudentClassCreate,
     StudentClassResponse,
     StudentResponse,
@@ -234,6 +240,36 @@ def latest_exams(
         )
         if class_id is not None
     }
+
+
+@router.get("/grade-levels", response_model=list[GradeLevelResponse])
+def get_grade_levels(
+    professor: ProfessorUser,
+    session: DbSession,
+) -> list[GradeLevel]:
+    return list_grade_levels(professor.id, session)
+
+
+@router.post(
+    "/grade-levels",
+    response_model=GradeLevelResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_grade_level(
+    payload: GradeLevelCreate,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> GradeLevel:
+    return create_grade_level(professor.id, payload.name, session)
+
+
+@router.delete("/grade-levels/{grade_level_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_grade_level(
+    grade_level_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> None:
+    delete_grade_level(professor.id, grade_level_id, session)
 
 
 @router.get("", response_model=list[StudentClassResponse])

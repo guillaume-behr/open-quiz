@@ -16,7 +16,8 @@ import pyotp
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection, create_engine, event
 
-import main
+from app import maintenance
+from app.application import create_app
 from app.config import Settings
 from app.database import postgres_url
 from app.models import (
@@ -34,7 +35,6 @@ from app.routers.auth import (
     TWO_FACTOR_TRUST_COOKIE,
 )
 from app.security import refresh_request_proof
-from main import create_app
 
 JWT_SECRET = "test-secret-that-is-at-least-32-bytes-long"
 
@@ -487,6 +487,6 @@ def seeded_exam_session(
 
 def expire_due_sessions(client: TestClient) -> int:
     """Run one tick of the expiry loop, which tests drive explicitly."""
-    return main.expire_due_sessions(
+    return maintenance.expire_due_sessions(
         client.app.state.session_factory, client.app.state.live_quiz_hub
     )

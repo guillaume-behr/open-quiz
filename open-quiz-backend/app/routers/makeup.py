@@ -7,6 +7,7 @@ of their own.
 
 from collections import defaultdict
 from datetime import UTC, datetime
+from enum import StrEnum
 from math import ceil
 from secrets import token_urlsafe
 from typing import Annotated
@@ -14,7 +15,6 @@ from typing import Annotated
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -84,6 +84,24 @@ from app.session_responses import (
 from app.student_accounts import owned_class
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
+
+
+class MakeupAction(StrEnum):
+    START = "start"
+    PAUSE = "pause"
+    RESUME = "resume"
+    FINISH = "finish"
+    CANCEL = "cancel"
+
+
+# The status each action requires, and the one it leads to.
+MAKEUP_TRANSITIONS: dict[MakeupAction, tuple[SessionStatus, SessionStatus]] = {
+    MakeupAction.START: (SessionStatus.WAITING, SessionStatus.IN_PROGRESS),
+    MakeupAction.PAUSE: (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
+    MakeupAction.RESUME: (SessionStatus.PAUSED, SessionStatus.IN_PROGRESS),
+    MakeupAction.FINISH: (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED),
+    MakeupAction.CANCEL: (SessionStatus.WAITING, SessionStatus.CANCELLED),
+}
 
 
 def owned_makeup_session(
@@ -236,10 +254,10 @@ def cancel_makeup_session(
 
 
 def apply_makeup_action(
-    child: QuizSession, action: str, now: datetime, session: Session
+    child: QuizSession, action: MakeupAction, now: datetime, session: Session
 ) -> None:
     """Carry a makeup action over to one student's quiz session."""
-    if action == "start":
+    if action == MakeupAction.START:
         if child.status != SessionStatus.WAITING:
             return
         child.status = SessionStatus.IN_PROGRESS
@@ -248,12 +266,12 @@ def apply_makeup_action(
             select(QuizParticipant).where(QuizParticipant.session_id == child.id)
         ):
             participant.current_position = 0
-    elif action == "pause":
+    elif action == MakeupAction.PAUSE:
         if child.status != SessionStatus.IN_PROGRESS:
             return
         child.status = SessionStatus.PAUSED
         child.paused_at = now
-    elif action == "resume":
+    elif action == MakeupAction.RESUME:
         if child.status != SessionStatus.PAUSED or child.paused_at is None:
             return
         child.paused_duration_seconds = (child.paused_duration_seconds or 0) + ceil(
@@ -278,22 +296,13 @@ def apply_makeup_action(
 )
 def control_makeup_session(
     session_id: int,
-    action: str,
+    action: MakeupAction,
     request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> MakeupSessionResponse | Response:
     makeup = owned_makeup_session(session_id, professor, session)
-    allowed = {
-        "start": (SessionStatus.WAITING, SessionStatus.IN_PROGRESS),
-        "pause": (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
-        "resume": (SessionStatus.PAUSED, SessionStatus.IN_PROGRESS),
-        "finish": (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED),
-        "cancel": (SessionStatus.WAITING, SessionStatus.CANCELLED),
-    }
-    if action not in allowed:
-        raise HTTPException(status_code=404)
-    expected, target = allowed[action]
+    expected, target = MAKEUP_TRANSITIONS[action]
     if makeup.status != expected:
         raise ApiError(
             409,
@@ -308,7 +317,7 @@ def control_makeup_session(
             )
         )
     ]
-    if action == "cancel":
+    if action == MakeupAction.CANCEL:
         return cancel_makeup_session(
             makeup, child_topics, request, professor.id, session
         )
@@ -334,7 +343,7 @@ def control_makeup_session(
             select(QuizSession).where(QuizSession.makeup_session_id == makeup.id)
         )
     )
-    if action == "start" and not children:
+    if action == MakeupAction.START and not children:
         session.rollback()
         raise ApiError(
             409,

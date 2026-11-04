@@ -1,4 +1,5 @@
 import os
+import tomllib
 from dataclasses import Field, dataclass, fields
 from dataclasses import field as dataclass_field
 from pathlib import Path
@@ -10,8 +11,17 @@ from pydantic import Field as PydanticField
 from pydantic import create_model
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.audit import audit_event
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / ".env"
+
+# The image installs dependencies without the project itself, so there is no
+# package metadata to read: pyproject.toml, copied next to the app package, is
+# the single source of the backend version.
+VERSION: str = tomllib.loads((BASE_DIR / "pyproject.toml").read_text())["project"][
+    "version"
+]
 
 
 def secure_private_file(path: Path) -> None:
@@ -295,3 +305,39 @@ def get_settings() -> Settings:
                 f"{environment_variable(field)} must be set in {ENV_FILE}"
             )
     return Settings(**values)
+
+
+PUBLIC_INFORMATION_VARIABLES = (
+    ("LEGAL_HOST_NAME", "legal_host_name"),
+    ("LEGAL_HOST_ADDRESS", "legal_host_address"),
+    # The legal notice flags the host as incomplete without its phone number,
+    # so the startup warning has to consider it required too.
+    ("LEGAL_HOST_PHONE", "legal_host_phone"),
+    ("PRIVACY_CONTROLLER_NAME", "privacy_controller_name"),
+    ("PRIVACY_CONTROLLER_CONTACT", "privacy_controller_contact"),
+    ("PRIVACY_LEGAL_BASIS", "privacy_legal_basis"),
+    ("PRIVACY_RECIPIENTS", "privacy_recipients"),
+    ("PRIVACY_TEACHER_DATA_RETENTION", "privacy_teacher_data_retention"),
+    ("PRIVACY_STUDENT_DATA_RETENTION", "privacy_student_data_retention"),
+    ("PRIVACY_SECURITY_LOG_RETENTION", "privacy_security_log_retention"),
+)
+
+
+def warn_missing_public_information(settings: Settings) -> list[str]:
+    """Name the legal mentions a production instance still has to publish.
+
+    An empty value never blocks the start: an instance may legitimately run
+    before its operator has settled who the controller is. It must not do so
+    silently, because the public pages then carry no identity to address a
+    rights request to.
+    """
+    if settings.environment != "production":
+        return []
+    missing = [
+        name
+        for name, attribute in PUBLIC_INFORMATION_VARIABLES
+        if not getattr(settings, attribute).strip()
+    ]
+    if missing:
+        audit_event("security.public_information_incomplete", variables=missing)
+    return missing

@@ -14,11 +14,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect
 
 import main
-from app.config import secure_private_file, write_private_file
+from app.application import create_app
+from app.config import (
+    secure_private_file,
+    warn_missing_public_information,
+    write_private_file,
+)
 from app.database import postgres_url
 from app.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
 from app.pagination import MAX_PAGE, MAX_PAGE_SIZE
-from main import create_app
 
 from support import (
     FRONTEND_ORIGIN,
@@ -124,7 +128,7 @@ def test_production_allows_missing_public_information(tmp_path: Path) -> None:
 
     assert settings.legal_host_name == ""
     assert settings.privacy_controller_name == ""
-    missing = main.warn_missing_public_information(settings)
+    missing = warn_missing_public_information(settings)
     assert "PRIVACY_CONTROLLER_NAME" in missing
     assert "LEGAL_HOST_NAME" in missing
     # The legal notice calls the host incomplete without a phone number.
@@ -137,7 +141,7 @@ def test_production_allows_missing_public_information(tmp_path: Path) -> None:
 def test_development_does_not_warn_about_public_information(tmp_path: Path) -> None:
     settings = settings_for(tmp_path / "development-public-information.db")
 
-    assert main.warn_missing_public_information(settings) == []
+    assert warn_missing_public_information(settings) == []
 
 
 def test_request_size_and_authenticated_cache_controls(tmp_path: Path) -> None:

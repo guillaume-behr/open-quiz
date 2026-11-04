@@ -1,7 +1,7 @@
 import { PAGE_SIZE } from "@/lib/utils"
 
 import { request, requestBlob, requestPage } from "./client"
-import type { Page, StudentClass } from "./types"
+import type { GradeLevel, Page, StudentClass } from "./types"
 
 export function getStudentClasses(
     page = 1,
@@ -81,6 +81,23 @@ export function unassignStudentAccount(
     accountId: number
 ): Promise<void> {
     return request<void>(`/api/classes/${classId}/accounts/${accountId}`, {
+        method: "DELETE",
+    })
+}
+
+export function getGradeLevels(): Promise<GradeLevel[]> {
+    return request<GradeLevel[]>("/api/classes/grade-levels")
+}
+
+export function createGradeLevel(name: string): Promise<GradeLevel> {
+    return request<GradeLevel>("/api/classes/grade-levels", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+    })
+}
+
+export function deleteGradeLevel(id: number): Promise<void> {
+    return request<void>(`/api/classes/grade-levels/${id}`, {
         method: "DELETE",
     })
 }

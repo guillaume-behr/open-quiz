@@ -11,7 +11,8 @@ import pytest
 from fastapi import HTTPException, status
 from sqlalchemy import event, select, update
 
-import main
+from app import maintenance
+from app.application import create_app
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -38,7 +39,6 @@ from app.services.grading import (
 from app.services.results import (
     safe_spreadsheet_cell,
 )
-from main import create_app
 
 from support import (
     complete_first_login,
@@ -1041,7 +1041,7 @@ def test_an_expired_quiz_is_finished_by_the_expiry_loop_once(
 
         def tick() -> int:
             barrier.wait()
-            return main.expire_due_sessions(
+            return maintenance.expire_due_sessions(
                 client.app.state.session_factory, client.app.state.live_quiz_hub
             )
 
