@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Grade } from "@/components/ui/grade"
 import { StaticCodeBlock } from "@/components/question-banks/code-block"
-import { scoreGradientStyle } from "@/lib/utils"
+import { formatScore, scoreTone, type ScoreTone } from "@/lib/grades"
+import { cn, scoreGradientStyle } from "@/lib/utils"
 import { Accordion } from "@base-ui/react/accordion"
 import {
     BookOpenCheck,
@@ -15,6 +16,41 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+
+const SCORE_TONE_CLASS_NAMES: Record<ScoreTone, string> = {
+    success: "bg-success/10 text-success",
+    warning: "bg-warning/10 text-warning",
+    destructive: "bg-destructive/10 text-destructive",
+}
+
+/** One question's points out of its maximum, colored by how much it earned.
+ * An answer still waiting for the teacher's grading shows no score yet. */
+function QuestionScorePill({
+    score,
+    maxScore,
+    graded,
+    locale,
+}: {
+    score: number
+    maxScore: number
+    graded: boolean
+    locale: string
+}) {
+    const { t } = useTranslation()
+    return (
+        <span
+            className={cn(
+                "rounded-full px-2 py-0.5 font-semibold whitespace-nowrap tabular-nums",
+                graded
+                    ? SCORE_TONE_CLASS_NAMES[scoreTone(score, maxScore)]
+                    : "bg-muted text-muted-foreground"
+            )}
+        >
+            {graded ? formatScore(score, locale) : "–"} /{" "}
+            {formatScore(maxScore, locale)} {t("points-short")}
+        </span>
+    )
+}
 
 export function StudentQuizHistory({ token }: { token: string }) {
     const { t, i18n } = useTranslation()
@@ -152,7 +188,15 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                         key={answer.question_id}
                                         className="rounded-lg border p-3"
                                     >
-                                        <p className="text-xs font-semibold text-muted-foreground">
+                                        <p className="flex flex-wrap items-center gap-2 text-xs font-semibold text-muted-foreground">
+                                            <QuestionScorePill
+                                                score={answer.score}
+                                                maxScore={answer.max_score}
+                                                graded={
+                                                    answer.is_correct !== null
+                                                }
+                                                locale={i18n.language}
+                                            />
                                             {t("question-number", {
                                                 number: answer.position,
                                             })}
