@@ -1,3 +1,4 @@
+import { RichText } from "@/components/ui/rich-text"
 import { getStudentQuizSession, submitStudentQuizAnswer } from "@/api/quizzes"
 import { apiErrorMessage } from "@/lib/errors"
 import type {
@@ -333,7 +334,7 @@ function TrainingCorrection({
                 </h2>
             </div>
             <p className="mt-4 font-medium" dir={contentDirection}>
-                {question.prompt}
+                <RichText text={question.prompt} />
             </p>
             {feedback.submitted_answer && (
                 <div className="mt-4 rounded-lg bg-background/80 p-4">

@@ -1,3 +1,4 @@
+import { RichText } from "@/components/ui/rich-text"
 import { getStudentQuizHistory } from "@/api/student-auth"
 import type { StudentQuizHistoryItem } from "@/api/types"
 import { Button } from "@/components/ui/button"
@@ -156,8 +157,8 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                 number: answer.position,
                                             })}
                                         </p>
-                                        <h3 className="mt-1 font-semibold whitespace-pre-wrap">
-                                            {answer.prompt}
+                                        <h3 className="mt-1 font-medium">
+                                            <RichText text={answer.prompt} />
                                         </h3>
                                         {answer.code_content &&
                                             answer.code_language && (

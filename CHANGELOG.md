@@ -20,6 +20,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   database holding a value the application never writes makes it fail as a
   whole: the schema stays as it was, and the backend log names the constraint.
 
+### Added
+
+- Teachers can format question prompts: `**bold**`, `*italic*`, `` `code` ``
+  and line breaks, with a toolbar, Ctrl+B / Ctrl+I shortcuts and a live
+  preview in the question editor. Formatting shows to students, in results and
+  on printed copies; prompts stay plain text, so existing questions and JSON
+  imports are unchanged.
+
 ### Changed
 
 - The grade-level routes moved under the classes: `/api/grade-levels` is now

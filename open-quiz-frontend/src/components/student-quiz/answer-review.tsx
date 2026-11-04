@@ -1,3 +1,4 @@
+import { RichText } from "@/components/ui/rich-text"
 import type { StudentQuizSession } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
@@ -58,7 +59,7 @@ export function AnswerReview({
                                     className="mt-1 font-medium"
                                     dir={contentDirection}
                                 >
-                                    {summary.prompt}
+                                    <RichText text={summary.prompt} />
                                 </p>
                             </div>
                             {canEdit && (

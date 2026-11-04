@@ -1,3 +1,5 @@
+import { richTextToPlainText } from "@/lib/rich-text"
+import { RichText } from "@/components/ui/rich-text"
 import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
 import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
 import {
@@ -78,10 +80,10 @@ export function StudentQuestionForm({
                 </div>
             </div>
             <h2
-                className="w-full text-2xl leading-relaxed font-bold text-balance"
+                className="w-full text-2xl leading-relaxed font-medium text-balance"
                 dir={contentDirection}
             >
-                {question.prompt}
+                <RichText text={question.prompt} />
             </h2>
             {question.has_image && (
                 <ProtectedQuizImage
@@ -89,7 +91,7 @@ export function StudentQuestionForm({
                     id={question.id}
                     joinCode={session.join_code}
                     token={participantToken}
-                    alt={question.prompt}
+                    alt={richTextToPlainText(question.prompt)}
                 />
             )}
             {question.code_content && question.code_language && (

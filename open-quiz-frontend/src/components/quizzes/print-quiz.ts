@@ -5,9 +5,35 @@ import {
 } from "@/api/question-banks"
 import type { Quiz, StudentClass } from "@/api/types"
 import { difficultyKeys } from "@/components/quizzes/quiz-form-state"
+import { parseRichText, type RichTextNode } from "@/lib/rich-text"
 import type { TFunction } from "i18next"
 
 const PRINT_IMAGE_LOAD_CONCURRENCY = 6
+
+/** Appends a formatted prompt as DOM nodes: text never becomes HTML. */
+function appendRichText(
+    doc: Document,
+    parent: HTMLElement,
+    nodes: RichTextNode[]
+): void {
+    for (const node of nodes) {
+        if (node.type === "text") {
+            parent.append(doc.createTextNode(node.text))
+            continue
+        }
+        if (node.type === "code") {
+            const code = doc.createElement("code")
+            code.textContent = node.text
+            parent.append(code)
+            continue
+        }
+        const element = doc.createElement(
+            node.type === "bold" ? "strong" : "em"
+        )
+        appendRichText(doc, element, node.children)
+        parent.append(element)
+    }
+}
 
 /**
  * Writes one paper copy of the exam per student of the class into
@@ -138,7 +164,7 @@ export async function printExamSubjects(
     doc.documentElement.lang = language
     doc.title = quiz.title
     const style = doc.createElement("style")
-    style.textContent = `@page{size:A4;margin:0}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.subject{width:210mm;min-height:297mm;padding:15mm;break-after:page}.subject:last-child{break-after:auto}header{position:relative;min-height:27mm;border-bottom:2px solid #111;margin-bottom:8mm;padding:1mm 0 4mm 75mm}h1{font-size:20pt;margin:0 0 3mm}.class-name{font-size:10pt;margin:0}.identity{position:absolute;top:0;left:0;width:68mm;border:1.5px solid #111;padding:3mm;font-size:10pt}.identity-line{display:flex;align-items:flex-end;gap:2mm;height:8mm}.identity-blank{flex:1;border-bottom:1px solid #111}.question{break-inside:avoid;margin:0 0 8mm}.question h2{font-size:12pt;margin:0 0 3mm}.question-image{display:block;max-width:100%;max-height:65mm;object-fit:contain;margin:3mm 0}.choice{margin:2mm 0}.choice-content{display:inline}.choice-image{display:block;max-width:85%;max-height:45mm;object-fit:contain;margin:2mm 0 3mm 6mm}.box{display:inline-block;width:4mm;height:4mm;border:1px solid;margin-right:2mm;vertical-align:middle}pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #bbb;border-radius:2mm;background:#f5f5f5;padding:3mm;margin:3mm 0;font:9pt/1.35 monospace}.code-language{display:block;color:#555;font:8pt Arial,sans-serif;margin-bottom:1mm}.writing{height:35mm;border-bottom:1px dotted #777;background:repeating-linear-gradient(transparent,transparent 8mm,#ddd 8.2mm)}@media print{button,nav{display:none!important}}`
+    style.textContent = `@page{size:A4;margin:0}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.subject{width:210mm;min-height:297mm;padding:15mm;break-after:page}.subject:last-child{break-after:auto}header{position:relative;min-height:27mm;border-bottom:2px solid #111;margin-bottom:8mm;padding:1mm 0 4mm 75mm}h1{font-size:20pt;margin:0 0 3mm}.class-name{font-size:10pt;margin:0}.identity{position:absolute;top:0;left:0;width:68mm;border:1.5px solid #111;padding:3mm;font-size:10pt}.identity-line{display:flex;align-items:flex-end;gap:2mm;height:8mm}.identity-blank{flex:1;border-bottom:1px solid #111}.question{break-inside:avoid;margin:0 0 8mm}.question h2{font-size:12pt;font-weight:normal;white-space:pre-wrap;margin:0 0 3mm}.question h2 strong{font-weight:bold}.question h2 code{font:10pt monospace;background:#f0f0f0;padding:0 1mm}.question-image{display:block;max-width:100%;max-height:65mm;object-fit:contain;margin:3mm 0}.choice{margin:2mm 0}.choice-content{display:inline}.choice-image{display:block;max-width:85%;max-height:45mm;object-fit:contain;margin:2mm 0 3mm 6mm}.box{display:inline-block;width:4mm;height:4mm;border:1px solid;margin-right:2mm;vertical-align:middle}pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #bbb;border-radius:2mm;background:#f5f5f5;padding:3mm;margin:3mm 0;font:9pt/1.35 monospace}.code-language{display:block;color:#555;font:8pt Arial,sans-serif;margin-bottom:1mm}.writing{height:35mm;border-bottom:1px dotted #777;background:repeating-linear-gradient(transparent,transparent 8mm,#ddd 8.2mm)}@media print{button,nav{display:none!important}}`
     doc.head.append(style)
     const appendCode = (
         parent: HTMLElement,
@@ -187,7 +213,8 @@ export async function printExamSubjects(
             const article = doc.createElement("article")
             article.className = "question"
             const heading = doc.createElement("h2")
-            heading.textContent = `${index + 1}. ${question.prompt}`
+            heading.append(doc.createTextNode(`${index + 1}. `))
+            appendRichText(doc, heading, parseRichText(question.prompt))
             article.append(heading)
             const questionImageUrl = questionImages.get(question.id)
             if (questionImageUrl) {
