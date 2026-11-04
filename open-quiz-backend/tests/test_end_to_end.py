@@ -5,7 +5,7 @@ import json
 from base64 import b64encode
 from pathlib import Path
 
-import main
+from app import maintenance
 
 from support import (
     ADMIN_PASSWORD,
@@ -107,7 +107,9 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert student_class["completed_quiz_count"] == 0
         assert student_class["latest_quiz_title"] is None
         assert student_class["latest_quiz_at"] is None
-        grade_levels = client.get("/api/grade-levels", headers=teacher_headers).json()
+        grade_levels = client.get(
+            "/api/classes/grade-levels", headers=teacher_headers
+        ).json()
         assert [level["name"] for level in grade_levels] == [
             "2nd",
             "1ere",
@@ -127,7 +129,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         )
         assert example_class["grade_level"] == "2nd"
         duplicate_grade_level = client.post(
-            "/api/grade-levels",
+            "/api/classes/grade-levels",
             headers=teacher_headers,
             json={"name": " 5E "},
         )
@@ -136,13 +138,13 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert duplicate_grade_level.json()["id"] == fifth_grade["id"]
         assert (
             client.delete(
-                f"/api/grade-levels/{fifth_grade['id']}",
+                f"/api/classes/grade-levels/{fifth_grade['id']}",
                 headers=teacher_headers,
             ).status_code
             == 409
         )
         unused_level = client.post(
-            "/api/grade-levels",
+            "/api/classes/grade-levels",
             headers=teacher_headers,
             json={"name": " 4e "},
         )
@@ -150,7 +152,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         assert unused_level.json()["name"] == "4e"
         assert (
             client.delete(
-                f"/api/grade-levels/{unused_level.json()['id']}",
+                f"/api/classes/grade-levels/{unused_level.json()['id']}",
                 headers=teacher_headers,
             ).status_code
             == 204
@@ -1518,7 +1520,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             result["id"] for result in results_after_expiry.json()
         }
         # Results past retention are only hidden: maintenance deletes them.
-        main.enforce_data_retention(
+        maintenance.enforce_data_retention(
             client.app.state.session_factory, client.app.state.settings
         )
         assert (

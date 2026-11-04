@@ -4,32 +4,24 @@ A quiz asks for a number of questions per difficulty from its banks; every
 participant draws that many at random, distinct from the other participants'
 draws while unused combinations remain. Training draws a shuffled bank.
 
-The functions take a SQLAlchemy session and raise InsufficientQuestionsError
-rather than an HTTP error, so they can be used and tested without FastAPI.
+The functions take a SQLAlchemy session; a quiz asking for more questions
+than its banks hold is refused with QUIZ_QUESTIONS_INSUFFICIENT.
 """
 
 from math import comb
 from random import SystemRandom
 
+from fastapi import status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.enums import Difficulty
+from app.errors import ApiError, ErrorCode
 from app.models import Question, Quiz, QuizQuestionBank
 from app.schemas import QuizCreate
 
 randomizer = SystemRandom()
 MAX_TRAINING_QUESTIONS = 200
-
-
-class InsufficientQuestionsError(Exception):
-    """The banks hold fewer questions of a difficulty than the quiz requests."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            "Nombre de questions insuffisant pour une ou plusieurs difficultés "
-            "dans les banques sélectionnées"
-        )
 
 
 def difficulty_counts(payload: Quiz | QuizCreate) -> dict[str, int]:
@@ -76,7 +68,12 @@ def difficulty_counts_for_banks(
         if count > available.get(difficulty, 0)
     ]
     if unavailable:
-        raise InsufficientQuestionsError()
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.QUIZ_QUESTIONS_INSUFFICIENT,
+            "Nombre de questions insuffisant pour une ou plusieurs difficultés "
+            "dans les banques sélectionnées",
+        )
     return requested
 
 

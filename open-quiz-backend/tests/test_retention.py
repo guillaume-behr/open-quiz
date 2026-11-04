@@ -7,7 +7,8 @@ from time import time
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
-import main
+from app import maintenance
+from app.application import create_app
 from app.models import (
     AuthenticationChallenge,
     ProblemReport,
@@ -20,7 +21,6 @@ from app.models import (
     RefreshSessionFamily,
     User,
 )
-from main import create_app
 
 from support import (
     FRONTEND_ORIGIN,
@@ -165,7 +165,7 @@ def test_retention_settles_sessions_their_teacher_never_closed(
         )
         session.commit()
 
-    main.enforce_data_retention(app.state.session_factory, settings)
+    maintenance.enforce_data_retention(app.state.session_factory, settings)
 
     with app.state.session_factory() as session:
         graded = session.get(QuizSession, graded_id)
@@ -243,7 +243,7 @@ def test_retention_purges_finished_training_attempts(tmp_path: Path) -> None:
         expired_id, kept_id = expired.id, kept.id
         session.commit()
 
-    main.enforce_data_retention(app.state.session_factory, settings)
+    maintenance.enforce_data_retention(app.state.session_factory, settings)
 
     with app.state.session_factory() as session:
         assert session.get(QuizSession, expired_id) is None
@@ -310,12 +310,12 @@ def test_retention_runs_as_of_the_instant_it_is_given(tmp_path: Path) -> None:
             session.commit()
 
         factory = client.app.state.session_factory
-        main.enforce_data_retention(factory, settings)
+        maintenance.enforce_data_retention(factory, settings)
         with factory() as session:
             assert session.get(QuizSession, recent_id) is not None
 
         later = datetime.now(UTC) + timedelta(days=30)
-        main.enforce_data_retention(factory, settings, now=later)
+        maintenance.enforce_data_retention(factory, settings, now=later)
         with factory() as session:
             assert session.get(QuizSession, recent_id) is None
 
@@ -369,7 +369,7 @@ def test_results_hide_expired_exams_without_deleting_them(tmp_path: Path) -> Non
         with client.app.state.session_factory() as session:
             assert session.get(QuizSession, session_ids["OLD001"]) is not None
 
-        main.enforce_data_retention(client.app.state.session_factory, settings)
+        maintenance.enforce_data_retention(client.app.state.session_factory, settings)
         with client.app.state.session_factory() as session:
             assert session.get(QuizSession, session_ids["OLD001"]) is None
             assert session.get(QuizSession, session_ids["NEW001"]) is not None

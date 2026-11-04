@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 
-import main
+from app import maintenance
 from app.database import EXPIRY_LOCK_KEY
 from app.models import QuizSession
 
@@ -43,9 +43,9 @@ def test_a_tick_skips_while_another_worker_holds_the_lock(tmp_path: Path) -> Non
             assert other_worker.scalar(
                 select(func.pg_try_advisory_xact_lock(EXPIRY_LOCK_KEY))
             )
-            assert main.expire_due_sessions(session_factory, hub) == 0
-        assert main.expire_due_sessions(session_factory, hub) == 1
-        assert main.expire_due_sessions(session_factory, hub) == 0
+            assert maintenance.expire_due_sessions(session_factory, hub) == 0
+        assert maintenance.expire_due_sessions(session_factory, hub) == 1
+        assert maintenance.expire_due_sessions(session_factory, hub) == 0
 
 
 def test_the_loop_retries_after_a_database_error(
@@ -64,11 +64,11 @@ def test_the_loop_retries_after_a_database_error(
         return 0
 
     logged: list[str] = []
-    monkeypatch.setattr(main, "sleep", short_sleep)
-    monkeypatch.setattr(main, "expire_due_sessions", expire)
-    monkeypatch.setattr(main.logger, "exception", logged.append)
+    monkeypatch.setattr(maintenance, "sleep", short_sleep)
+    monkeypatch.setattr(maintenance, "expire_due_sessions", expire)
+    monkeypatch.setattr(maintenance.logger, "exception", logged.append)
     with pytest.raises(asyncio.CancelledError):
-        asyncio.run(main.expire_sessions_periodically(None, None))
+        asyncio.run(maintenance.expire_sessions_periodically(None, None))
     assert ticks == ["tick", "tick"]
     assert logged == ["Session expiry failed"]
 
@@ -121,10 +121,10 @@ def test_retention_maintenance_retries_after_a_database_error(
             raise OperationalError("SELECT 1", {}, Exception("database is down"))
 
     logged: list[str] = []
-    monkeypatch.setattr(main, "sleep", short_sleep)
-    monkeypatch.setattr(main, "enforce_data_retention", enforce)
-    monkeypatch.setattr(main.logger, "exception", logged.append)
+    monkeypatch.setattr(maintenance, "sleep", short_sleep)
+    monkeypatch.setattr(maintenance, "enforce_data_retention", enforce)
+    monkeypatch.setattr(maintenance.logger, "exception", logged.append)
     with pytest.raises(asyncio.CancelledError):
-        asyncio.run(main.maintain_data_retention_periodically(None, None))
+        asyncio.run(maintenance.maintain_data_retention_periodically(None, None))
     assert runs == ["run", "run"]
     assert logged == ["Data retention maintenance failed"]

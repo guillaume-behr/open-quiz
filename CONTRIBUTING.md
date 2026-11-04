@@ -134,9 +134,12 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
   (`open-quiz-backend/app/errors.py`) et ajoutez la traduction du code dans
   `open-quiz-frontend/src/lib/errors.ts` et les huit catalogues : un test
   backend et `pnpm test` refusent sinon l’erreur ;
-- placez la logique métier réutilisable dans `open-quiz-backend/app/services/`,
-  sans dépendance à FastAPI : un service lève une exception métier, que
-  `main.py` traduit en réponse HTTP ;
+- placez la logique métier réutilisable dans `open-quiz-backend/app/services/`
+  ou un module de `open-quiz-backend/app/`, et gardez les routeurs minces ;
+  un refus s’y lève lui aussi par `ApiError`, sans gestionnaire d’exception
+  dédié dans l’application ;
+- `main.py` ne fait que créer l’application : son assemblage (middlewares,
+  routeurs, tâches de fond) vit dans `open-quiz-backend/app/application.py` ;
 - accompagnez toute évolution du schéma PostgreSQL d’une migration Alembic
   qui préserve les données des instances en service, et des tests
   correspondants (voir

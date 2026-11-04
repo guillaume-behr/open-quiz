@@ -149,7 +149,7 @@ def test_class_writes_lose_concurrent_races_gracefully(tmp_path: Path) -> None:
         professor, headers = create_professor(client, admin_headers)
         assert (
             client.post(
-                "/api/grade-levels", headers=headers, json={"name": "5e"}
+                "/api/classes/grade-levels", headers=headers, json={"name": "5e"}
             ).status_code
             == 201
         )
@@ -617,7 +617,7 @@ def test_class_import_creates_accounts_and_rejects_conflicts(tmp_path: Path) -> 
         teacher_headers, _ = complete_first_login(
             client, "import.teacher", "a-secure-teacher-password"
         )
-        levels = client.get("/api/grade-levels", headers=teacher_headers).json()
+        levels = client.get("/api/classes/grade-levels", headers=teacher_headers).json()
         level = levels[0]["name"]
 
         example = client.get("/api/classes/example", headers=teacher_headers)
@@ -735,7 +735,9 @@ def test_class_import_creates_accounts_and_rejects_conflicts(tmp_path: Path) -> 
         other_headers, _ = complete_first_login(
             client, "other.import.teacher", "another-secure-teacher-password"
         )
-        other_level = client.get("/api/grade-levels", headers=other_headers).json()[0]
+        other_level = client.get(
+            "/api/classes/grade-levels", headers=other_headers
+        ).json()[0]
         taken_identifier = client.post(
             "/api/classes/import",
             headers=other_headers,
@@ -775,7 +777,7 @@ def test_grade_level_deletion_is_blocked_while_in_use(tmp_path: Path) -> None:
             client, "level.teacher", "a-secure-teacher-password"
         )
         level = client.post(
-            "/api/grade-levels",
+            "/api/classes/grade-levels",
             headers=teacher_headers,
             json={"name": "Niveau supprimable"},
         ).json()
@@ -787,7 +789,7 @@ def test_grade_level_deletion_is_blocked_while_in_use(tmp_path: Path) -> None:
         )
         assert bank.status_code == 201
         blocked_by_bank = client.delete(
-            f"/api/grade-levels/{level['id']}", headers=teacher_headers
+            f"/api/classes/grade-levels/{level['id']}", headers=teacher_headers
         )
         assert blocked_by_bank.status_code == 409
 
@@ -804,7 +806,7 @@ def test_grade_level_deletion_is_blocked_while_in_use(tmp_path: Path) -> None:
         )
         assert student_class.status_code == 201
         blocked_by_class = client.delete(
-            f"/api/grade-levels/{level['id']}", headers=teacher_headers
+            f"/api/classes/grade-levels/{level['id']}", headers=teacher_headers
         )
         assert blocked_by_class.status_code == 409
 
@@ -827,7 +829,7 @@ def test_grade_level_deletion_is_blocked_while_in_use(tmp_path: Path) -> None:
         )
         assert (
             client.delete(
-                f"/api/grade-levels/{level['id']}", headers=other_headers
+                f"/api/classes/grade-levels/{level['id']}", headers=other_headers
             ).status_code
             == 404
         )
@@ -840,7 +842,7 @@ def test_grade_level_deletion_is_blocked_while_in_use(tmp_path: Path) -> None:
         )
         assert (
             client.delete(
-                f"/api/grade-levels/{level['id']}", headers=teacher_headers
+                f"/api/classes/grade-levels/{level['id']}", headers=teacher_headers
             ).status_code
             == 204
         )

@@ -125,7 +125,7 @@ def test_makeup_control_rejects_unknown_actions_and_states(environment) -> None:
     assert (
         client.post("/api/quizzes/makeup/sessions/999999/start", headers=headers)
     ).status_code == 404
-    assert client.post(f"{url}/explode", headers=headers).status_code == 404
+    assert client.post(f"{url}/explode", headers=headers).status_code == 422
     assert client.post(f"{url}/pause", headers=headers).status_code == 409
     no_children = client.post(f"{url}/start", headers=headers)
     assert no_children.status_code == 409

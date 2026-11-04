@@ -22,6 +22,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- The grade-level routes moved under the classes: `/api/grade-levels` is now
+  `/api/classes/grade-levels`.
+- An unknown makeup session action now answers 422 instead of 404.
 - PostgreSQL now refuses session statuses, quiz modes, difficulties and answer
   modes outside the values the application uses.
 - Listing or exporting results no longer deletes expired exam results: they
