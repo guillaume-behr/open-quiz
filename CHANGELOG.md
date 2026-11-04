@@ -20,6 +20,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   database holding a value the application never writes makes it fail as a
   whole: the schema stays as it was, and the backend log names the constraint.
 
+### Added
+
+- In their results, students see each question's points next to its number,
+  in a green, orange or red pill for full, partial or no credit.
+
 ### Changed
 
 - The grade-level routes moved under the classes: `/api/grade-levels` is now
