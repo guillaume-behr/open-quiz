@@ -33,9 +33,7 @@ def image_pixel_count(data: bytes) -> int:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", Image.DecompressionBombWarning)
-            with Image.open(
-                BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS
-            ) as candidate:
+            with Image.open(BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS) as candidate:
                 return candidate.width * candidate.height
     except (
         Image.DecompressionBombError,
@@ -57,13 +55,9 @@ def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
     try:
         with image_decoding, warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(
-                BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS
-            ) as candidate:
+            with Image.open(BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS) as candidate:
                 candidate.verify()
-            with Image.open(
-                BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS
-            ) as candidate:
+            with Image.open(BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS) as candidate:
                 candidate.load()
                 if (
                     candidate.width > MAX_IMAGE_DIMENSION
