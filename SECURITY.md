@@ -96,9 +96,15 @@ Elles ne constituent pas une preuve d’intégrité et ne doivent pas déclenche
 seules une sanction ou une décision automatique.
 
 Les extraits Python s’exécutent localement dans un Web Worker. Après le
-chargement de Pyodide, les API réseau et la création d’autres Workers sont
-désactivées. Cette restriction limite les capacités du code, mais ne transforme
-pas le navigateur en frontière de sécurité équivalente à une isolation système.
+chargement de Pyodide, les API réseau, de stockage et de création d’autres
+Workers sont remplacées, sur l’objet global comme sur ses prototypes. Cette
+liste d’interdictions limite les capacités du code, mais ne transforme pas le
+navigateur en frontière de sécurité équivalente à une isolation système : un
+navigateur peut exposer demain une API qu’elle ne nomme pas. Les deux
+protections qui ne dépendent pas d’elle sont la politique CSP, qui ne laisse le
+Worker joindre que l’origine de l’instance, et la preuve de renouvellement
+décrite ci-dessous, sans laquelle une requête émise par le Worker n’ouvre
+aucune session.
 
 Les sessions privilégiées exigent une preuve de renouvellement conservée dans
 la fenêtre principale et inaccessible au Worker Python. Les autorisations et la
@@ -111,6 +117,19 @@ mot de passe ne donne rien. Sur un poste partagé, une simple déconnexion le
 conserve : effacez les données de l’appareil depuis `/cookie-settings`, ou
 désactivez la fonction avec `TWO_FACTOR_BROWSER_TRUST=false`.
 
+Les tentatives de connexion sont comptées par identifiant, jamais par adresse
+IP : n’importe qui peut donc épuiser celles d’un compte dont il connaît
+l’identifiant. Un navigateur qui a validé la double authentification du compte
+le jour même dispose de son propre compteur et reste utilisable ; sans lui, le
+compte attend la fin de la fenêtre. Pour un élève, l’enseignant débloque le
+compte en l’enregistrant de nouveau. Borner ce qu’une même adresse peut envoyer
+relève du reverse proxy (voir le
+[guide de déploiement](docs/deployment.md#-publier-lapplication-en-https)).
+
+Les identifiants élèves sont uniques pour toute l’instance, puisqu’ils servent
+à se connecter : un enseignant qui en crée ou en importe un déjà pris apprend
+qu’il existe, sans rien savoir de son propriétaire.
+
 Les mots de passe élèves sont volontairement réversibles : l’enseignant doit
 pouvoir réimprimer une carte d’identifiants sans réinitialiser le compte. Ils
 sont donc stockés deux fois, sous forme de condensat Argon2 pour la
@@ -120,6 +139,12 @@ protège une base seule — une sauvegarde égarée, un export de table — mais
 un hôte compromis, car dans le déploiement Compose par défaut la clé et
 `DATABASE_URL` résident dans le même fichier `.env`, sur la même machine. Qui
 lit la base peut donc, en pratique, lire aussi la clé.
+
+Ces mots de passe sont aussi lisibles par l’enseignant connecté, sans nouvelle
+saisie du code de double authentification : un jeton d’accès enseignant volé
+suffit, pendant sa durée de vie (`ACCESS_TOKEN_MINUTES`), à les obtenir tous.
+Chaque consultation et chaque export sont journalisés
+(`students.credentials_viewed`, `students.credentials_exported`).
 
 Deux conséquences en découlent. Les élèves réutilisant fréquemment leurs mots
 de passe ailleurs, la portée d’une compromission dépasse cette application :

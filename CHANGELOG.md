@@ -15,7 +15,18 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
-- None. At startup the backend applies migration 0004, which adds CHECK
+- In production the API now answers 400 to a request whose `Host` header is
+  neither the name in `FRONTEND_ORIGIN` nor an internal one. Check that your
+  reverse proxy forwards the name the browser asked for (`proxy_set_header
+  Host $host` with Nginx; Caddy does by default). If the API is published
+  under another name than the interface (`VITE_API_URL`), list it in
+  `TRUSTED_HOSTS` in `open-quiz-backend/.env`.
+- The API container is limited to 2 GB of memory and the proxy to 512 MB.
+  With several workers, or if large imports fail, raise `OPEN_QUIZ_API_MEMORY`
+  in the root `.env` (docs/deployment.md).
+- Optional: the Nginx example gained per-address limits and moved its proxy
+  headers to the server block. Compare it with your virtual host.
+- At startup the backend applies migration 0004, which adds CHECK
   constraints on session statuses, quiz modes and question settings. A
   database holding a value the application never writes makes it fail as a
   whole: the schema stays as it was, and the backend log names the constraint.
@@ -46,6 +57,23 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   and Starlette 1.7.0.
 - The Python runner loads the Pyodide loader from `/pyodide/` with the rest of
   the runtime instead of bundling it, which shrinks its worker to about 1 kB.
+
+### Security
+
+- Wrong passwords sent from elsewhere no longer lock an account out of a
+  browser it trusts: a browser holding the account's two-factor trust cookie
+  has an attempt limit of its own. Before, ten wrong passwords every fifteen
+  minutes kept any teacher, or the administrator, from signing in.
+- Python snippets can no longer reach `fetch`, `importScripts` or `indexedDB`
+  through `WorkerGlobalScope.prototype`, nor `WebSocketStream` and the
+  navigator's storage, locks and device APIs.
+- Uploaded images are only read by the JPEG, PNG, WebP and GIF decoders,
+  whatever type the upload declares.
+- One account may hold four live sockets on a feed; a fifth is closed with
+  code 1013.
+- The API decodes two images and computes four password hashes at a time, and
+  a question bank import may decode at most a billion pixels.
+- The proxy no longer doubles the security headers the API already sets.
 
 ## [1.0.0] — 2026-11-03
 
