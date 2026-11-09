@@ -249,6 +249,16 @@ Nginx est le point d’entrée public direct. Si un CDN ou un autre load balance
 précède Nginx, configurez explicitement ses plages de confiance au lieu de
 reprendre cette règle telle quelle.
 
+L’exemple Nginx limite enfin, par adresse IP, le rythme des connexions aux
+comptes (`limit_req`) et le nombre de connexions simultanées (`limit_conn`).
+Open Quiz ne le fait volontairement pas lui-même, pour ne conserver aucune
+adresse : ses propres limites portent sur les comptes et sur l’instance
+entière. Le reverse proxy est donc le seul endroit où borner ce qu’une adresse
+peut envoyer. Un établissement partage souvent une seule adresse publique : les
+valeurs fournies laissent une classe entière se connecter en même temps ;
+ajustez-les à la taille de l’établissement. Avec Caddy, le module
+[`caddy-ratelimit`](https://github.com/mholt/caddy-ratelimit) joue ce rôle.
+
 Le nom de domaine doit correspondre exactement à `FRONTEND_ORIGIN`. En
 production, l’API redirige les requêtes qu’elle considère comme HTTP ; conservez
 donc les en-têtes de protocole transmis par les reverse proxies.
@@ -375,9 +385,22 @@ garde quatorze, ajoutez une ligne à la crontab de l’utilisateur du déploieme
 `update.sh` sauvegarde aussi la base avant chaque mise à jour, sauf avec
 `--no-backup` ou lorsque la base ne tourne pas encore.
 
-Copiez ensuite les sauvegardes, avec `open-quiz-backend/.env`, vers un stockage
-distinct, chiffré et protégé, et testez régulièrement une restauration dans une
-instance isolée.
+Copiez ensuite les sauvegardes vers un stockage distinct et protégé, et testez
+régulièrement une restauration dans une instance isolée.
+
+Une sauvegarde n’est pas chiffrée. Les secrets TOTP et les mots de passe élèves
+qu’elle contient le sont, mais par des clés rangées dans
+`open-quiz-backend/.env` : copier ce fichier au même endroit que les
+sauvegardes revient à les livrer en clair à qui les trouve. Conservez donc les
+deux séparément — le `.env` dans un gestionnaire de secrets ou un coffre, les
+sauvegardes ailleurs — ou chiffrez les sauvegardes avant de les sortir de
+l’hôte, par exemple avec [age](https://age-encryption.org/) :
+
+```shell
+age --recipient age1… --output sauvegarde.dump.age backups/open-quiz-2026-10-29T180000Z.dump
+```
+
+`restore.sh` attend le fichier déchiffré.
 
 ### Restaurer avec `restore.sh`
 
