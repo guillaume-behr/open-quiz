@@ -560,6 +560,17 @@ def test_one_account_may_only_hold_so_many_sockets_on_a_feed() -> None:
 
     asyncio.run(scenario())
 
+    several = LiveQuizHub(max_sockets_per_feed=2)
+
+    async def two_tabs() -> None:
+        async with several.subscribe("topic", "teacher"):
+            async with several.subscribe("topic", "teacher"):
+                pass
+            # One tab closed: the other still counts.
+            assert several._sockets == {("topic", "teacher"): 1}
+
+    asyncio.run(two_tabs())
+
 
 def test_live_feeds_turn_away_sockets_over_the_limit(
     environment, monkeypatch: pytest.MonkeyPatch
