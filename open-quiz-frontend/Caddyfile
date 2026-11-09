@@ -15,11 +15,14 @@
 		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' {env.API_ORIGIN}; manifest-src 'self'"
 		Cross-Origin-Opener-Policy "same-origin"
 		Cross-Origin-Resource-Policy "same-origin"
-		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
-		Referrer-Policy "strict-origin-when-cross-origin"
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
+
+		# The API sets these four itself: a default leaves its answer with
+		# one value each instead of two, and still covers the static files.
+		?Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+		?Referrer-Policy "strict-origin-when-cross-origin"
+		?Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		?X-Content-Type-Options "nosniff"
 	}
 
 	respond /healthz 200
