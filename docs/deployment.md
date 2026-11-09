@@ -253,6 +253,17 @@ Le nom de domaine doit correspondre exactement à `FRONTEND_ORIGIN`. En
 production, l’API redirige les requêtes qu’elle considère comme HTTP ; conservez
 donc les en-têtes de protocole transmis par les reverse proxies.
 
+L’API refuse aussi, par une réponse 400, toute requête dont l’en-tête `Host`
+n’est ni le nom de `FRONTEND_ORIGIN` ni un nom interne du déploiement : le
+reverse proxy doit donc transmettre le nom demandé par le navigateur
+(`proxy_set_header Host $host` pour Nginx ; Caddy le fait par défaut). Si
+l’API est publiée sous un autre nom que l’interface, ajoutez-le à
+`open-quiz-backend/.env` :
+
+```shell
+TRUSTED_HOSTS=api.example.com
+```
+
 Par défaut, le frontend et l’API partagent la même origine. Si l’API est servie
 sur une autre origine, définissez `VITE_API_URL` lors de la construction :
 
