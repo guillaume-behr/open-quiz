@@ -173,6 +173,25 @@ Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes, 5 po
 les limites de débit et 2 pour le relais. Restez sous `max_connections` (100
 par défaut) : au-delà de 4 workers, augmentez-le ou réduisez leur nombre.
 
+### Mémoire des conteneurs
+
+Le backend est limité à 2 Go de mémoire et le frontend à 512 Mo, sans swap :
+une rafale d’imports d’images ou de tentatives de connexion ne peut ainsi pas
+priver PostgreSQL et l’hôte de mémoire. Le backend ne décode par ailleurs que
+deux images et ne calcule que quatre condensats de mots de passe à la fois ;
+les demandes suivantes attendent leur tour.
+
+Avec plusieurs workers, ou si des imports volumineux échouent faute de
+mémoire, ajustez ces limites dans le même fichier `.env` racine :
+
+```shell
+OPEN_QUIZ_API_MEMORY=4g
+OPEN_QUIZ_PROXY_MEMORY=512m
+```
+
+La base de données n’a volontairement aucune limite : l’interrompre en plein
+travail coûterait plus cher que la mémoire qu’elle prend.
+
 ### Changer le sous-réseau interne
 
 Les trois services communiquent sur le réseau interne `open-quiz`, en

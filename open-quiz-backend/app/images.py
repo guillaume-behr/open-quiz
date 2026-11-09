@@ -1,5 +1,6 @@
 import warnings
 from io import BytesIO
+from threading import BoundedSemaphore
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -7,12 +8,43 @@ MAX_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_IMAGE_PIXELS = 20_000_000
 MAX_IMAGE_DIMENSION = 8192
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+# The decoders an upload may reach. Pillow otherwise tries every format it
+# knows, whatever type the upload declares: some forty parsers, most of them
+# for formats no browser would ever send here.
+ACCEPTED_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP", "GIF")
+# Decoding holds an image's pixels in memory several times over, up to a few
+# hundred megabytes for the largest accepted. Without a bound, a burst of
+# uploads multiplies that by the size of the request thread pool.
+MAX_CONCURRENT_IMAGE_DECODES = 2
+image_decoding = BoundedSemaphore(MAX_CONCURRENT_IMAGE_DECODES)
 
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 
 class InvalidImageError(ValueError):
     pass
+
+
+def image_pixel_count(data: bytes) -> int:
+    """Pixels an image would decode to, read from its header alone.
+
+    Zero for data that is not an accepted image: normalize_image() refuses it.
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            with Image.open(
+                BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS
+            ) as candidate:
+                return candidate.width * candidate.height
+    except (
+        Image.DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        SyntaxError,
+        ValueError,
+    ):
+        return 0
 
 
 def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
@@ -23,11 +55,15 @@ def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
         raise InvalidImageError("L’image est vide ou trop volumineuse")
 
     try:
-        with warnings.catch_warnings():
+        with image_decoding, warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(BytesIO(data)) as candidate:
+            with Image.open(
+                BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS
+            ) as candidate:
                 candidate.verify()
-            with Image.open(BytesIO(data)) as candidate:
+            with Image.open(
+                BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS
+            ) as candidate:
                 candidate.load()
                 if (
                     candidate.width > MAX_IMAGE_DIMENSION

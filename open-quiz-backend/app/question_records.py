@@ -14,6 +14,7 @@ from app.errors import ApiError, ErrorCode
 from app.images import (
     MAX_IMAGE_BYTES,
     InvalidImageError,
+    image_pixel_count,
     normalize_image,
 )
 from app.models import (
@@ -84,6 +85,27 @@ def discard_training_sessions_using_questions(
 
 
 MAX_IMPORT_IMAGE_BYTES = 64 * 1024 * 1024
+# The stored size alone does not bound the work of an import: an image of one
+# flat colour is a few kilobytes on disk and twenty million pixels to decode,
+# and a single request has room for thousands of them.
+MAX_IMPORT_IMAGE_PIXELS = 1_000_000_000
+
+
+class ImagePixelBudget:
+    """The pixels one import may still decode."""
+
+    def __init__(self) -> None:
+        self.remaining = MAX_IMPORT_IMAGE_PIXELS
+
+    def spend(self, image_data: bytes) -> None:
+        """Count an image before it is decoded, refusing the one too many."""
+        self.remaining -= image_pixel_count(image_data)
+        if self.remaining < 0:
+            raise ApiError(
+                status.HTTP_413_CONTENT_TOO_LARGE,
+                ErrorCode.IMPORT_IMAGES_TOO_LARGE,
+                "Le volume total des images importées est trop important",
+            )
 
 
 def choice_points(
@@ -163,6 +185,7 @@ def add_question(
 
 def decode_image_payload(
     image: QuestionImportImage | None,
+    budget: ImagePixelBudget | None = None,
 ) -> tuple[bytes | None, str | None]:
     if image is None:
         return None, None
@@ -180,6 +203,8 @@ def decode_image_payload(
             ErrorCode.IMAGE_INVALID,
             "Une image importée est vide ou trop volumineuse",
         )
+    if budget is not None:
+        budget.spend(image_data)
     try:
         return normalize_image(image_data, image.content_type)
     except InvalidImageError as error:

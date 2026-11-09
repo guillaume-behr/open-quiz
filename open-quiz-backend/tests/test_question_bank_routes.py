@@ -15,6 +15,7 @@ from app.images import (
     MAX_IMAGE_BYTES,
     MAX_IMAGE_DIMENSION,
     InvalidImageError,
+    image_pixel_count,
     normalize_image,
 )
 from app.models import (
@@ -513,6 +514,62 @@ def test_normalize_image_rejects_unsupported_or_invalid_data(
     """Only decodable bytes in an allowed format may ever reach the database."""
     with pytest.raises(InvalidImageError):
         normalize_image(data, declared_type)
+
+
+@pytest.mark.parametrize("disguise", ["BMP", "TIFF", "ICO"])
+def test_normalize_image_only_decodes_the_accepted_formats(disguise: str) -> None:
+    """A declared type never widens the decoders an upload can reach.
+
+    Pillow reads dozens of formats and picks one from the bytes alone: left
+    to itself it would decode this file whatever type the upload claims.
+    """
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), (10, 20, 30)).save(buffer, format=disguise)
+
+    with pytest.raises(InvalidImageError):
+        normalize_image(buffer.getvalue(), "image/png")
+    assert image_pixel_count(buffer.getvalue()) == 0
+
+
+def test_image_pixel_count_reads_the_size_without_decoding() -> None:
+    buffer = io.BytesIO()
+    Image.new("RGB", (7, 3), (0, 0, 0)).save(buffer, format="PNG")
+
+    assert image_pixel_count(buffer.getvalue()) == 21
+    assert image_pixel_count(b"not an image at all") == 0
+
+
+def test_an_import_may_only_decode_so_many_pixels(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stored bytes do not bound the decoding work of an import."""
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    pixels = image_pixel_count(VALID_PNG)
+    batch = {
+        "version": 1,
+        "question_bank": {"grade_level": "5e", "chapter": "Pixels"},
+        "questions": [
+            {
+                **question_payload(
+                    choices=[
+                        {"label": "Four", "is_correct": True, "image": png_image()},
+                        {"label": "Five", "is_correct": False},
+                    ]
+                ),
+                "image": png_image(),
+            }
+        ],
+    }
+
+    monkeypatch.setattr(question_records, "MAX_IMPORT_IMAGE_PIXELS", 2 * pixels - 1)
+    refused = client.post("/api/question-banks/import", headers=headers, json=batch)
+    assert refused.status_code == 413
+    assert refused.json()["detail"]["code"] == "IMPORT_IMAGES_TOO_LARGE"
+
+    monkeypatch.setattr(question_records, "MAX_IMPORT_IMAGE_PIXELS", 2 * pixels)
+    accepted = client.post("/api/question-banks/import", headers=headers, json=batch)
+    assert accepted.status_code == 201
 
 
 def test_normalize_image_rejects_oversized_payloads() -> None:
