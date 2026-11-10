@@ -173,6 +173,7 @@ def create_quiz(
         duration_seconds=payload.duration_seconds,
         allow_previous_questions=payload.allow_previous_questions,
         allow_answer_review=payload.allow_answer_review,
+        show_provisional_grades=payload.show_provisional_grades,
         allow_negative_points=payload.allow_negative_points,
         same_questions_for_all=payload.same_questions_for_all,
         easy_question_count=payload.easy_question_count,
@@ -572,6 +573,7 @@ def update_quiz(
     quiz.duration_seconds = payload.duration_seconds
     quiz.allow_previous_questions = payload.allow_previous_questions
     quiz.allow_answer_review = payload.allow_answer_review
+    quiz.show_provisional_grades = payload.show_provisional_grades
     quiz.allow_negative_points = payload.allow_negative_points
     quiz.same_questions_for_all = payload.same_questions_for_all
     quiz.easy_question_count = payload.easy_question_count
@@ -647,6 +649,7 @@ def launch_quiz(
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
         allow_answer_review=quiz.allow_answer_review,
+        show_provisional_grades=quiz.show_provisional_grades,
         allow_negative_points=quiz.allow_negative_points,
         same_questions_for_all=quiz.same_questions_for_all,
         class_id=student_class.id,

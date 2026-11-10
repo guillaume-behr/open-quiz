@@ -582,6 +582,7 @@ class QuizCreate(BaseModel):
     duration_seconds: int = Field(default=900, ge=60, le=28800)
     allow_previous_questions: bool = False
     allow_answer_review: bool = True
+    show_provisional_grades: bool = True
     allow_negative_points: bool = False
     same_questions_for_all: bool = False
     easy_question_count: int = Field(ge=0, le=200)
@@ -636,6 +637,7 @@ class QuizResponse(BaseModel):
     duration_seconds: int
     allow_previous_questions: bool
     allow_answer_review: bool
+    show_provisional_grades: bool
     allow_negative_points: bool
     same_questions_for_all: bool
     easy_question_count: int
@@ -833,8 +835,10 @@ class StudentQuizHistoryAnswer(BaseModel):
     code_language: str | None = None
     response_language: str | None = None
     submitted_answers: list[str]
+    # Until the grades are published, nothing that reveals the key: no
+    # expected answers, score, correctness or feedback.
     expected_answers: list[str]
-    score: float
+    score: float | None
     max_score: float
     is_correct: bool | None
     feedback: str | None = None
@@ -846,6 +850,9 @@ class StudentQuizHistoryItem(BaseModel):
     class_name: str
     started_at: datetime
     grades_published: bool
+    # False while the grades are unpublished and the quiz does not show a
+    # provisional correction: the answers then carry no correction at all.
+    correction_available: bool
     score: float | None = None
     maximum_score: float | None = None
     answers: list[StudentQuizHistoryAnswer]

@@ -64,7 +64,7 @@ from app.services.session_lifecycle import (
     delete_makeup_session_records,
     quiz_ends_at,
 )
-from app.session_status import ACTIVE_SESSION_STATUSES
+from app.session_status import ACTIVE_SESSION_STATUSES, took_part
 
 # Monitoring events no longer reported as alerts; one still stored is hidden.
 RETIRED_VIOLATION_TYPES = frozenset({"paste_attempt", "copy_attempt"})
@@ -118,6 +118,7 @@ def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse
             duration_seconds=quiz.duration_seconds,
             allow_previous_questions=quiz.allow_previous_questions,
             allow_answer_review=quiz.allow_answer_review,
+            show_provisional_grades=quiz.show_provisional_grades,
             allow_negative_points=quiz.allow_negative_points,
             same_questions_for_all=quiz.same_questions_for_all,
             easy_question_count=quiz.easy_question_count,
@@ -171,14 +172,7 @@ def session_participants(
         participants = [
             p
             for p in participants
-            if not (
-                p.left_at is not None
-                and (
-                    quiz_session.started_at is None
-                    or p.left_at <= quiz_session.started_at
-                )
-                and answers_by_student.get(p.id, (0, 0, 0))[0] == 0
-            )
+            if took_part(p, quiz_session, answers_by_student.get(p.id, (0, 0, 0))[0])
         ]
     return participants, answers_by_student
 

@@ -67,6 +67,7 @@ from app.services.question_assignments import (
 from app.services.results import finished_session_responses, stream_results_csv
 from app.session_responses import session_response
 from app.session_retention import retained_exam_result
+from app.session_status import took_part
 from app.student_accounts import owned_class
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
@@ -310,18 +311,19 @@ class HistoryRecords:
     question_points: dict[int, float]
     classes_by_id: dict[int, StudentClass]
     codes_by_question: dict[int, QuestionCode]
+    provisional_grades_by_quiz: dict[int, bool]
 
 
 def student_exam_participations(
     account_id: int, session: Session
 ) -> list[tuple[QuizSession, QuizParticipant]]:
-    """A student account's finished exams, most recent first."""
+    """A student account's finished exams they took part in, most recent first."""
     membership_ids = list(
         session.scalars(select(Student.id).where(Student.account_id == account_id))
     )
     if not membership_ids:
         return []
-    return [
+    rows = [
         (quiz_session, participant)
         for quiz_session, participant in session.execute(
             select(QuizSession, QuizParticipant)
@@ -338,6 +340,22 @@ def student_exam_participations(
             )
             .order_by(QuizSession.started_at.desc(), QuizSession.id.desc())
         )
+    ]
+    answered_counts: dict[int, int] = dict(
+        session.execute(
+            select(QuizAnswer.participant_id, func.count(QuizAnswer.id))
+            .where(
+                QuizAnswer.participant_id.in_(
+                    [participant.id for _, participant in rows]
+                )
+            )
+            .group_by(QuizAnswer.participant_id)
+        ).all()
+    )
+    return [
+        (quiz_session, participant)
+        for quiz_session, participant in rows
+        if took_part(participant, quiz_session, answered_counts.get(participant.id, 0))
     ]
 
 
@@ -373,6 +391,13 @@ def history_records(
         if quiz_session.class_id is not None
     }
     return HistoryRecords(
+        provisional_grades_by_quiz=dict(
+            session.execute(
+                select(Quiz.id, Quiz.show_provisional_grades).where(
+                    Quiz.id.in_({quiz_session.quiz_id for quiz_session, _ in rows})
+                )
+            ).all()
+        ),
         question_ids_by_participant=question_ids_by_participant,
         questions_by_id=questions_by_id,
         choices_by_question=choices_by_question,
@@ -405,8 +430,14 @@ def history_answer(
     position: int,
     answer: QuizAnswer | None,
     records: HistoryRecords,
+    *,
+    correction_available: bool,
 ) -> StudentQuizHistoryAnswer:
-    """How a student answered one question of a finished exam."""
+    """How a student answered one question of a finished exam.
+
+    Without the correction (grades unpublished, and the quiz shows no
+    provisional grades), only the student's own answer.
+    """
     question_choices = records.choices_by_question[question.id]
     q_code = records.codes_by_question.get(question.id)
     review = None
@@ -448,13 +479,15 @@ def history_answer(
         code_language=q_code.language if q_code else None,
         response_language=question.response_language,
         submitted_answers=submitted_answers,
-        expected_answers=[
-            choice.label for choice in question_choices if choice.is_correct
-        ],
-        score=score,
+        expected_answers=(
+            [choice.label for choice in question_choices if choice.is_correct]
+            if correction_available
+            else []
+        ),
+        score=score if correction_available else None,
         max_score=max_score,
-        is_correct=is_correct,
-        feedback=review.feedback if review else None,
+        is_correct=is_correct if correction_available else None,
+        feedback=review.feedback if review and correction_available else None,
     )
 
 
@@ -463,6 +496,14 @@ def history_item(
     participant: QuizParticipant,
     records: HistoryRecords,
 ) -> StudentQuizHistoryItem:
+    published = quiz_session.grades_published_at is not None
+    # Before publication, the correction shows only as provisional, and only
+    # when the quiz offers it; a session keeps the choice it was launched with.
+    correction_available = published or (
+        quiz_session.show_provisional_grades
+        if quiz_session.show_provisional_grades is not None
+        else records.provisional_grades_by_quiz.get(quiz_session.quiz_id, True)
+    )
     question_ids = records.question_ids_by_participant[participant.id]
     answers_by_question = {
         question_id: records.answers_by_participant_question.get(
@@ -472,7 +513,11 @@ def history_item(
     }
     answers = [
         history_answer(
-            question, position, answers_by_question.get(question.id), records
+            question,
+            position,
+            answers_by_question.get(question.id),
+            records,
+            correction_available=correction_available,
         )
         for position, question_id in enumerate(question_ids)
         if (question := records.questions_by_id.get(question_id)) is not None
@@ -489,21 +534,30 @@ def history_item(
             else quiz_session.class_name
         ),
         started_at=quiz_session.started_at,
-        grades_published=quiz_session.grades_published_at is not None,
-        score=round(
-            sum(
-                answer.score
-                for answer in answers_by_question.values()
-                if answer is not None
-            ),
-            2,
+        grades_published=published,
+        correction_available=correction_available,
+        score=(
+            round(
+                sum(
+                    answer.score
+                    for answer in answers_by_question.values()
+                    if answer is not None
+                ),
+                2,
+            )
+            if correction_available
+            else None
         ),
-        maximum_score=round(
-            sum(
-                records.question_points.get(question_id, 0)
-                for question_id in question_ids
-            ),
-            2,
+        maximum_score=(
+            round(
+                sum(
+                    records.question_points.get(question_id, 0)
+                    for question_id in question_ids
+                ),
+                2,
+            )
+            if correction_available
+            else None
         ),
         answers=answers,
     )

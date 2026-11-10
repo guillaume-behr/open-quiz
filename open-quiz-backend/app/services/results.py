@@ -42,6 +42,7 @@ from app.services.session_lifecycle import (
     quiz_ends_at,
 )
 from app.session_retention import retained_exam_result
+from app.session_status import took_part
 
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
@@ -97,12 +98,7 @@ def counted_participants(
         answered_count = statistics.get(
             (participant.session_id, participant.id), (0, 0, 0)
         )[0]
-        if (
-            participant.left_at is not None
-            and qs is not None
-            and (qs.started_at is None or participant.left_at <= qs.started_at)
-            and answered_count == 0
-        ):
+        if qs is not None and not took_part(participant, qs, answered_count):
             continue
         participants_by_session[participant.session_id].append(participant)
     return participants_by_session

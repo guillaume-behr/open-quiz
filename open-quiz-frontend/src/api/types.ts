@@ -185,6 +185,7 @@ export type Quiz = {
     duration_seconds: number
     allow_previous_questions: boolean
     allow_answer_review: boolean
+    show_provisional_grades: boolean
     allow_negative_points: boolean
     same_questions_for_all: boolean
     easy_question_count: number
@@ -210,6 +211,7 @@ export type NewQuiz = {
     duration_seconds: number
     allow_previous_questions: boolean
     allow_answer_review: boolean
+    show_provisional_grades: boolean
     allow_negative_points: boolean
     same_questions_for_all: boolean
     easy_question_count: number
@@ -251,7 +253,12 @@ export type QuizAnswerReview = {
     feedback?: string | null
 }
 
-type StudentQuizHistoryAnswer = Omit<QuizAnswerReview, "id" | "is_graded">
+// Until the grades are published, the API sends no expected answers, score,
+// correctness or feedback: only the student's own answer.
+type StudentQuizHistoryAnswer = Omit<
+    QuizAnswerReview,
+    "id" | "is_graded" | "score"
+> & { score: number | null }
 
 export type StudentQuizHistoryItem = {
     session_id: number
@@ -259,6 +266,9 @@ export type StudentQuizHistoryItem = {
     class_name: string
     started_at: string
     grades_published: boolean
+    // False while the grades are unpublished and the quiz shows no
+    // provisional correction: the answers then carry none.
+    correction_available: boolean
     score: number | null
     maximum_score: number | null
     answers: StudentQuizHistoryAnswer[]
