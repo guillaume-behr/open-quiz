@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.choice_tokens import ChoiceTokens
 from app.database import affected_rows
 from app.dependencies import DbSession, current_student
 from app.enums import AnswerMode, QuizMode, SessionStatus
@@ -404,8 +405,13 @@ def validated_answer(
     question: Question,
     choices: list[QuestionChoice],
     quiz: Quiz,
+    tokens: ChoiceTokens,
 ) -> tuple[dict[str, object], TrainingFeedback | None]:
-    """The answer to store, and the immediate feedback a training gives."""
+    """The answer to store, and the immediate feedback a training gives.
+
+    The student names choices by their tokens; the stored answer holds the
+    real choice ids.
+    """
     feedback: TrainingFeedback | None = None
     if question.answer_mode == AnswerMode.WRITTEN:
         written_answer = (payload.written_answer or "").strip()
@@ -436,19 +442,19 @@ def validated_answer(
             ErrorCode.ANSWER_CHOICE_REQUIRED,
             "Au moins une proposition doit être sélectionnée",
         )
-    selected_ids = list(dict.fromkeys(payload.selected_choice_ids or []))
+    selected_tokens = list(dict.fromkeys(payload.selected_choice_ids or []))
     if payload.written_answer is not None or (
         question.answer_mode == AnswerMode.SINGLE
         and question.answer_mode_disclosed
-        and len(selected_ids) != 1
+        and len(selected_tokens) != 1
     ):
         raise ApiError(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.ANSWER_MODE_MISMATCH,
             "La réponse envoyée ne correspond pas au type de la question",
         )
-    choices_by_id = {choice.id: choice for choice in choices}
-    if any(choice_id not in choices_by_id for choice_id in selected_ids):
+    selected_ids = tokens.choice_ids(selected_tokens, choices)
+    if selected_ids is None:
         raise ApiError(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.ANSWER_CHOICE_INVALID,
@@ -459,7 +465,7 @@ def validated_answer(
         feedback = TrainingFeedback(
             question_id=question.id,
             is_correct=set(selected_ids) == set(correct_ids),
-            correct_choice_ids=correct_ids,
+            correct_choice_ids=[tokens.token(choice_id) for choice_id in correct_ids],
         )
     return {"selected_choice_ids": selected_ids}, feedback
 
@@ -574,7 +580,13 @@ def submit_student_answer(
     question, choices, retargeting = answered_question(
         quiz_session, participant, session
     )
-    answer_data, feedback = validated_answer(payload, question, choices, quiz)
+    answer_data, feedback = validated_answer(
+        payload,
+        question,
+        choices,
+        quiz,
+        ChoiceTokens(session, quiz_session, participant),
+    )
     if retargeting:
         require_same_finished_answer(
             quiz_session, participant, question.id, answer_data, session
@@ -894,10 +906,10 @@ def get_student_question_image(
     )
 
 
-@router.get("/student/sessions/{join_code}/choices/{choice_id}/image")
+@router.get("/student/sessions/{join_code}/choices/{choice_token}/image")
 def get_student_choice_image(
     join_code: str,
-    choice_id: int,
+    choice_token: str,
     request: Request,
     session: DbSession,
     quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
@@ -911,14 +923,20 @@ def get_student_choice_image(
         missing_detail,
     )
     question_id = current_question_id(quiz_session, participant, session)
-    choice = session.scalar(
-        select(QuestionChoice)
-        .join(Question, Question.id == QuestionChoice.question_id)
-        .where(
-            QuestionChoice.id == choice_id,
-            QuestionChoice.question_id == question_id,
-            Question.answer_mode != AnswerMode.WRITTEN,
+    choices = list(
+        session.scalars(
+            select(QuestionChoice)
+            .join(Question, Question.id == QuestionChoice.question_id)
+            .where(
+                QuestionChoice.question_id == question_id,
+                Question.answer_mode != AnswerMode.WRITTEN,
+            )
         )
+    )
+    tokens = ChoiceTokens(session, quiz_session, participant)
+    choice = next(
+        (choice for choice in choices if tokens.token(choice.id) == choice_token),
+        None,
     )
     if choice is None or choice.image is None:
         raise ApiError(

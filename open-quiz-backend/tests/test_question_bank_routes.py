@@ -34,6 +34,7 @@ from app.schemas import (
 
 from support import (
     VALID_PNG,
+    choice_answer,
     correct_choice_id,
     exam_environment,
     hand_in_quiz,
@@ -656,7 +657,7 @@ def test_update_question_in_used_bank_regrades_affected_sessions(
         answer_response = client.post(
             f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [wrong_choice["id"]]},
+            json=choice_answer(client, participant_headers, wrong_choice["id"]),
         )
         assert answer_response.status_code == 200
 
@@ -833,7 +834,9 @@ def finished_exam_with_a_wrong_answer(environment: dict[str, Any]) -> dict[str, 
         client.post(
             f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [wrong_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, wrong_choice_id(environment["question"])
+            ),
         ).status_code
         == 200
     )
@@ -953,7 +956,7 @@ def test_editing_a_question_an_active_exam_uses_is_refused(environment) -> None:
         client.post(
             f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [wrong_choice_id(question)]},
+            json=choice_answer(client, participant_headers, wrong_choice_id(question)),
         ).status_code
         == 200
     )

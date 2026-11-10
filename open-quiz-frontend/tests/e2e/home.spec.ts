@@ -283,7 +283,7 @@ test("a student launches training and sees the correct answer", async ({
         code_content: null,
         choices: [
             {
-                id: 101,
+                id: "choice-101",
                 label: "Mars",
                 position: 0,
                 has_image: false,
@@ -291,7 +291,7 @@ test("a student launches training and sees the correct answer", async ({
                 code_content: null,
             },
             {
-                id: 102,
+                id: "choice-102",
                 label: "Venus",
                 position: 1,
                 has_image: false,
@@ -327,7 +327,7 @@ test("a student launches training and sees the correct answer", async ({
         "**/api/quizzes/student/sessions/TRAIN1/answer",
         async (route) => {
             expect(route.request().postDataJSON()).toEqual({
-                selected_choice_ids: [101],
+                selected_choice_ids: ["choice-101"],
             })
             await route.fulfill({
                 json: {
@@ -338,7 +338,7 @@ test("a student launches training and sees the correct answer", async ({
                     training_feedback: {
                         question_id: 41,
                         is_correct: true,
-                        correct_choice_ids: [101],
+                        correct_choice_ids: ["choice-101"],
                         expected_answer: null,
                     },
                     potential_score: 3,

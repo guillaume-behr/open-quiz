@@ -4,7 +4,8 @@ import { useCallback } from "react"
 
 type ProtectedQuizImageProps = {
     path: "questions" | "choices"
-    id: number
+    // A question id, or a choice token of this participation.
+    id: number | string
     joinCode: string
     token: string
     alt: string

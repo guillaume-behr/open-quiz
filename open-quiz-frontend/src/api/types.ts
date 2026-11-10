@@ -311,7 +311,8 @@ export type MakeupJoin = {
 }
 
 type StudentQuizChoice = {
-    id: number
+    // An opaque token of this participation, never the choice's real id.
+    id: string
     label: string
     position: number
     has_image: boolean
@@ -350,7 +351,7 @@ export type StudentQuizSession = {
     awaiting_final_submission: boolean
     answer_summaries: StudentAnswerSummary[]
     accessible_question_numbers: number[]
-    selected_choice_ids: number[] | null
+    selected_choice_ids: string[] | null
     written_answer: string | null
     question: StudentQuizQuestion | null
     training_feedback: TrainingFeedback | null
@@ -370,7 +371,7 @@ export type StudentAnswerSummary = {
 export type TrainingFeedback = {
     question_id: number
     is_correct: boolean | null
-    correct_choice_ids: number[]
+    correct_choice_ids: string[]
     expected_answer: string | null
     submitted_answer: string | null
     requires_manual_review: boolean
@@ -390,7 +391,7 @@ export type StudentQuizJoin = StudentQuizSession & {
 }
 
 export type StudentQuizAnswer = {
-    selected_choice_ids?: number[]
+    selected_choice_ids?: string[]
     written_answer?: string
 }
 

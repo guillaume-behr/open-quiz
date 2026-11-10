@@ -100,14 +100,13 @@ def test_totals_never_carry_float_noise(tmp_path: Path) -> None:
             == 200
         )
         student_url = f"/api/quizzes/student/sessions/{quiz_session['join_code']}"
-        by_prompt = {question["prompt"]: question for question in questions}
         for _ in questions:
             state = client.get(student_url, headers=participant_headers).json()
-            prompt = state["question"]["prompt"]
+            # Every question's right answer is labelled "Yes".
             correct = next(
                 choice["id"]
-                for choice in by_prompt[prompt]["choices"]
-                if choice["is_correct"]
+                for choice in state["question"]["choices"]
+                if choice["label"] == "Yes"
             )
             assert (
                 client.post(

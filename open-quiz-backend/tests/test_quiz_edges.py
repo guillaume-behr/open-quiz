@@ -23,6 +23,7 @@ from app.services import session_lifecycle
 
 from support import (
     FRONTEND_ORIGIN,
+    choice_answer,
     concurrent_writes,
     correct_choice_id,
     exam_environment,
@@ -59,7 +60,7 @@ def answer(client, environment, url: str, headers: dict[str, str]):
     return client.post(
         f"{url}/answer",
         headers=headers,
-        json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        json=choice_answer(client, headers, correct_choice_id(environment["question"])),
     )
 
 

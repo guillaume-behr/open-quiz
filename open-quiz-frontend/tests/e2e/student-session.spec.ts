@@ -193,7 +193,7 @@ test("student uses the numbered progress bar to revisit a question", async ({
         code_content: null,
         choices: [
             {
-                id: 203,
+                id: "choice-203",
                 label: "Second answer",
                 position: 0,
                 has_image: false,
@@ -254,12 +254,12 @@ test("student uses the numbered progress bar to revisit a question", async ({
                     allow_previous_questions: true,
                     accessible_question_numbers: [1, 2],
                     has_answered: true,
-                    selected_choice_ids: [201],
+                    selected_choice_ids: ["choice-201"],
                     question: {
                         ...question,
                         id: 200,
                         prompt: "First question",
-                        choices: [{ ...question.choices[0], id: 201 }],
+                        choices: [{ ...question.choices[0], id: "choice-201" }],
                     },
                 },
             })
@@ -365,7 +365,7 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
         code_content: null,
         choices: [
             {
-                id: 101,
+                id: "choice-101",
                 label: "Mars",
                 position: 1,
                 has_image: false,
@@ -373,7 +373,7 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
                 code_content: null,
             },
             {
-                id: 102,
+                id: "choice-102",
                 label: "Venus",
                 position: 2,
                 has_image: false,
@@ -407,7 +407,7 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
         "**/api/quizzes/student/sessions/ABCD/answer",
         async (route) => {
             expect(route.request().postDataJSON()).toEqual({
-                selected_choice_ids: [101],
+                selected_choice_ids: ["choice-101"],
             })
             expect(route.request().headers()["x-quiz-token"]).toBe(
                 "participant-token"
@@ -539,7 +539,7 @@ test("hidden choice mode uses a generic multi-select control", async ({
         code_content: null,
         choices: [
             {
-                id: 103,
+                id: "choice-103",
                 label: "First option",
                 position: 0,
                 has_image: false,
@@ -547,7 +547,7 @@ test("hidden choice mode uses a generic multi-select control", async ({
                 code_content: null,
             },
             {
-                id: 104,
+                id: "choice-104",
                 label: "Second option",
                 position: 1,
                 has_image: false,
@@ -631,7 +631,7 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
         code_content: null,
         choices: [
             {
-                id: 201,
+                id: "choice-201",
                 label: "Mars",
                 position: 0,
                 has_image: false,
@@ -639,7 +639,7 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
                 code_content: null,
             },
             {
-                id: 202,
+                id: "choice-202",
                 label: "Vénus",
                 position: 1,
                 has_image: false,
@@ -728,7 +728,7 @@ test("student session state is updated through its live socket", async ({
         code_content: null,
         choices: [
             {
-                id: 103,
+                id: "choice-103",
                 label: "The completed state",
                 position: 0,
                 has_image: false,
@@ -736,7 +736,7 @@ test("student session state is updated through its live socket", async ({
                 code_content: null,
             },
             {
-                id: 104,
+                id: "choice-104",
                 label: "The stale question",
                 position: 1,
                 has_image: false,

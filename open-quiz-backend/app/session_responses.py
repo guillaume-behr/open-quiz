@@ -9,6 +9,7 @@ from fastapi import (
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
+from app.choice_tokens import ChoiceTokens
 from app.class_names import format_class_name
 from app.dependencies import DbSession
 from app.enums import AnswerMode, Difficulty, QuizMode, SessionStatus
@@ -427,6 +428,7 @@ def student_question_response(
             (f"{quiz_session.id}:{participant.id}:{question.id}:{choice.id}").encode()
         ).digest()
     )
+    tokens = ChoiceTokens(session, quiz_session, participant)
     code = session.get(QuestionCode, question.id)
     return StudentQuizQuestionResponse(
         id=question.id,
@@ -441,7 +443,7 @@ def student_question_response(
         code_content=code.content if code else None,
         choices=[
             StudentQuizChoiceResponse(
-                id=choice.id,
+                id=tokens.token(choice.id),
                 label=choice.label,
                 position=position,
                 has_image=choice.image_sha256 is not None,
@@ -492,6 +494,8 @@ def student_state_response(
     saved_answer = (
         decoded_answer_data(existing_answer) if existing_answer is not None else {}
     )
+    saved_choice_ids = saved_answer.get("selected_choice_ids")
+    tokens = ChoiceTokens(session, quiz_session, participant)
     answered_count = len(answered_question_ids)
     review_enabled = answer_review_enabled(quiz_session, quiz)
     # A participant who answered everything but has not confirmed yet keeps
@@ -538,7 +542,15 @@ def student_state_response(
         accessible_question_numbers=[
             position + 1 for position in sorted(accessible_positions)
         ],
-        selected_choice_ids=saved_answer.get("selected_choice_ids"),
+        selected_choice_ids=(
+            [
+                tokens.token(choice_id)
+                for choice_id in saved_choice_ids
+                if type(choice_id) is int
+            ]
+            if isinstance(saved_choice_ids, list)
+            else None
+        ),
         written_answer=saved_answer.get("written_answer"),
         question=(
             student_question_response(

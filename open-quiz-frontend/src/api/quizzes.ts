@@ -402,12 +402,12 @@ export function reportStudentQuizViolation(
 
 export function getStudentQuizImage(
     path: "questions" | "choices",
-    id: number,
+    id: number | string,
     joinCode: string,
     participantToken: string
 ): Promise<Blob> {
     return requestBlob(
-        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/${path}/${id}/image`,
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/${path}/${encodeURIComponent(id)}/image`,
         { headers: { "X-Quiz-Token": participantToken } },
         false,
         false

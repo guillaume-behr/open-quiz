@@ -19,6 +19,7 @@ from app.models import (
 )
 
 from support import (
+    choice_answer,
     concurrent_writes,
     correct_choice_id,
     database_connection,
@@ -63,7 +64,9 @@ def environment(tmp_path: Path):
         client.post(
             f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, correct_choice_id(environment["question"])
+            ),
         )
         hand_in_quiz(client, launched["join_code"], participant_headers)
         yield environment
@@ -365,7 +368,9 @@ def test_makeup_finish_completes_paused_child_sessions(
         answered = client.post(
             f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, correct_choice_id(environment["question"])
+            ),
         )
         assert answered.status_code == 200
         handed_in = hand_in_quiz(client, quiz_session["join_code"], participant_headers)
@@ -519,7 +524,9 @@ def test_makeup_session_requires_quizzes_taken_by_the_class(
         answered = client.post(
             f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, correct_choice_id(environment["question"])
+            ),
         )
         assert answered.status_code == 200
         handed_in = hand_in_quiz(client, quiz_session["join_code"], participant_headers)
@@ -578,9 +585,11 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
             answered = client.post(
                 f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
                 headers=participant_headers,
-                json={
-                    "selected_choice_ids": [correct_choice_id(environment["question"])]
-                },
+                json=choice_answer(
+                    client,
+                    participant_headers,
+                    correct_choice_id(environment["question"]),
+                ),
             )
             assert answered.status_code == 200
             handed_in = hand_in_quiz(
@@ -625,7 +634,9 @@ def test_makeup_pause_resume_leaves_finished_child_alone(
         answered = client.post(
             f"/api/quizzes/student/sessions/{selected.json()['join_code']}/answer",
             headers=child_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, child_headers, correct_choice_id(environment["question"])
+            ),
         )
         assert answered.status_code == 200
         handed_in = hand_in_quiz(client, selected.json()["join_code"], child_headers)
@@ -713,9 +724,11 @@ def test_makeup_session_allows_absent_student_to_take_quiz(
             client.post(
                 f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
                 headers={"X-Quiz-Token": present_token},
-                json={
-                    "selected_choice_ids": [correct_choice_id(environment["question"])]
-                },
+                json=choice_answer(
+                    client,
+                    {"X-Quiz-Token": present_token},
+                    correct_choice_id(environment["question"]),
+                ),
             ).status_code
             == 200
         )
@@ -777,9 +790,11 @@ def test_makeup_session_allows_absent_student_to_take_quiz(
             client.post(
                 f"/api/quizzes/student/sessions/{makeup_selected.json()['join_code']}/answer",
                 headers={"X-Quiz-Token": absent_token},
-                json={
-                    "selected_choice_ids": [correct_choice_id(environment["question"])]
-                },
+                json=choice_answer(
+                    client,
+                    {"X-Quiz-Token": absent_token},
+                    correct_choice_id(environment["question"]),
+                ),
             ).status_code
             == 200
         )
@@ -832,7 +847,9 @@ def start_makeup_with_open_training(
         client.post(
             f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, correct_choice_id(environment["question"])
+            ),
         ).status_code
         == 200
     )
@@ -884,7 +901,8 @@ def test_makeup_discards_trainings_open_on_its_question_banks(
         answered = client.post(
             f"/api/quizzes/student/sessions/{training_code}/answer",
             headers=training_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            # The training is gone, so it has no tokens: the body never matters.
+            json={"selected_choice_ids": ["unknown"]},
         )
         assert answered.status_code == 401
 
@@ -908,7 +926,9 @@ def test_training_gives_no_feedback_while_an_exam_uses_its_bank(
         answered = client.post(
             f"/api/quizzes/student/sessions/{training_code}/answer",
             headers=training_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, training_headers, correct_choice_id(environment["question"])
+            ),
         )
         assert answered.status_code == 409
         assert "training_feedback" not in answered.text
@@ -1046,7 +1066,9 @@ def test_a_paused_makeup_can_be_finished_directly(environment) -> None:
         client.post(
             f"{child_url}/answer",
             headers=child_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, child_headers, correct_choice_id(environment["question"])
+            ),
         ).status_code
         == 200
     )

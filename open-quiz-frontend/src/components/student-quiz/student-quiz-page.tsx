@@ -18,13 +18,13 @@ type StudentQuizPageProps = {
     participantToken: string
     title: string
     contentDirection: "ltr" | "rtl"
-    selectedChoiceIds: number[]
+    selectedChoiceIds: string[]
     writtenAnswer: string
     isBusy: boolean
     error: string | null
     translation: TranslationViewState
     onToggleTranslation: () => void
-    onSelectedChoiceIdsChange: (choiceIds: number[]) => void
+    onSelectedChoiceIdsChange: (choiceIds: string[]) => void
     onWrittenAnswerChange: (answer: string) => void
     onNavigate: (questionNumber: number) => void
     onSubmitAnswer: (event: FormEvent<HTMLFormElement>) => void

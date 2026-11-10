@@ -35,6 +35,8 @@ from app.stored_images import store_image
 from support import (
     VALID_PNG,
     assert_student_exam_payload_hides_answers,
+    choice_answer,
+    choice_tokens,
     complete_first_login,
     concurrent_writes,
     correct_choice_id,
@@ -387,7 +389,7 @@ def test_answering_requires_a_current_question_and_a_student(environment) -> Non
     beyond = client.post(
         f"{url}/answer",
         headers=headers,
-        json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        json=choice_answer(client, headers, correct_choice_id(environment["question"])),
     )
     assert beyond.status_code == 409
     assert beyond.json()["detail"]["code"] == "QUIZ_NO_CURRENT_QUESTION"
@@ -402,7 +404,7 @@ def test_answering_requires_a_current_question_and_a_student(environment) -> Non
     orphaned = client.post(
         f"{url}/answer",
         headers=headers,
-        json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        json=choice_answer(client, headers, correct_choice_id(environment["question"])),
     )
     assert orphaned.status_code == 401
 
@@ -423,7 +425,7 @@ def test_an_orphaned_participant_cannot_answer(environment, monkeypatch) -> None
     response = client.post(
         f"{url}/answer",
         headers=headers,
-        json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        json=choice_answer(client, headers, correct_choice_id(environment["question"])),
     )
     assert response.status_code == 409
     assert response.json()["detail"] == {
@@ -910,7 +912,9 @@ def test_a_repeated_last_training_answer_returns_the_same_feedback(
     assert training.status_code == 201
     token_headers = {"X-Quiz-Token": training.json()["participant_token"]}
     url = f"/api/quizzes/student/sessions/{training.json()['join_code']}"
-    payload = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
+    payload = choice_answer(
+        client, token_headers, correct_choice_id(environment["question"])
+    )
 
     answered = client.post(f"{url}/answer", headers=token_headers, json=payload)
     assert answered.status_code == 200
@@ -1281,7 +1285,8 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         replaced_attempt = client.post(
             f"/api/quizzes/student/sessions/{started.json()['join_code']}/answer",
             headers={"X-Quiz-Token": started.json()["participant_token"]},
-            json={"selected_choice_ids": [correct_choice_id]},
+            # The attempt is gone, so it has no tokens: the body never matters.
+            json={"selected_choice_ids": ["unknown"]},
         )
         assert replaced_attempt.status_code == 401
         updated_question = client.post(
@@ -1310,14 +1315,22 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
         redrawn_answered = client.post(
             f"/api/quizzes/student/sessions/{redrawn.json()['join_code']}/answer",
             headers={"X-Quiz-Token": redrawn.json()["participant_token"]},
-            json={"selected_choice_ids": [correct_choice_id]},
+            json=choice_answer(
+                client,
+                {"X-Quiz-Token": redrawn.json()["participant_token"]},
+                correct_choice_id,
+            ),
         )
         assert redrawn_answered.status_code == 200
         assert redrawn_answered.json()["status"] == "finished"
         assert redrawn_answered.json()["training_feedback"] == {
             "question_id": question["id"],
             "is_correct": True,
-            "correct_choice_ids": [correct_choice_id],
+            "correct_choice_ids": choice_tokens(
+                client,
+                {"X-Quiz-Token": redrawn.json()["participant_token"]},
+                correct_choice_id,
+            ),
             "expected_answer": None,
             "submitted_answer": None,
             "requires_manual_review": False,
@@ -1589,7 +1602,9 @@ def test_answer_review_precedes_the_final_submission(tmp_path: Path) -> None:
         answered = client.post(
             f"{student_url}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [wrong_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, wrong_choice_id(environment["question"])
+            ),
         )
         assert answered.status_code == 200
         assert answered.json()["status"] == "in_progress"
@@ -1626,7 +1641,9 @@ def test_answer_review_precedes_the_final_submission(tmp_path: Path) -> None:
         corrected = client.post(
             f"{student_url}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, correct_choice_id(environment["question"])
+            ),
         )
         assert corrected.status_code == 200
         assert corrected.json()["answer_summaries"][0]["submitted_answers"] == ["Two"]
@@ -1698,7 +1715,9 @@ def test_quiz_without_answer_review_finishes_on_the_last_answer(
         answered = client.post(
             f"{student_url}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, correct_choice_id(environment["question"])
+            ),
         )
         assert answered.status_code == 200
         assert answered.json()["status"] == "finished"
@@ -1829,7 +1848,11 @@ def test_completed_student_waits_for_classmates_without_a_blank_state(
         completed = client.post(
             f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
             headers=first_participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client,
+                first_participant_headers,
+                correct_choice_id(environment["question"]),
+            ),
         )
         assert completed.status_code == 200
         assert completed.json()["status"] == "in_progress"
@@ -1869,7 +1892,9 @@ def test_concurrent_answer_submissions_keep_a_single_answer(
         )
         barrier = Barrier(4)
         answer_url = f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer"
-        payload = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
+        payload = choice_answer(
+            client, participant_headers, correct_choice_id(environment["question"])
+        )
 
         def submit() -> int:
             barrier.wait()
@@ -1947,10 +1972,15 @@ def test_the_last_two_participants_handing_in_together_finish_the_session(
     launched, url, headers, classmate_headers = two_participants_started(
         client, environment
     )
-    payload = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
     for participant_headers in (headers, classmate_headers):
         answered = client.post(
-            f"{url}/answer", headers=participant_headers, json=payload
+            f"{url}/answer",
+            headers=participant_headers,
+            json=choice_answer(
+                client,
+                participant_headers,
+                correct_choice_id(environment["question"]),
+            ),
         )
         assert answered.status_code == 200
 
@@ -1999,9 +2029,14 @@ def test_an_answer_racing_the_expiry_is_refused_and_grades_stay_publishable(
     launched, url, headers, classmate_headers = two_participants_started(
         client, environment
     )
-    payload = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
+    correct = correct_choice_id(environment["question"])
     assert (
-        client.post(f"{url}/answer", headers=headers, json=payload).status_code == 200
+        client.post(
+            f"{url}/answer",
+            headers=headers,
+            json=choice_answer(client, headers, correct),
+        ).status_code
+        == 200
     )
     hand_in_quiz(client, launched["join_code"], headers)
 
@@ -2021,7 +2056,11 @@ def test_an_answer_racing_the_expiry_is_refused_and_grades_stay_publishable(
     with concurrent_writes(
         client, ("SELECT student_accounts.is_active", expire_now)
     ) as fired:
-        late = client.post(f"{url}/answer", headers=classmate_headers, json=payload)
+        late = client.post(
+            f"{url}/answer",
+            headers=classmate_headers,
+            json=choice_answer(client, classmate_headers, correct),
+        )
     assert fired
     assert late.status_code == 409
 
@@ -2156,7 +2195,6 @@ def test_student_images_are_scoped_to_the_current_question(tmp_path: Path) -> No
             headers={"X-Quiz-Token": quiz_token},
         ).json()
         current_question_id = state["question"]["id"]
-        current_choice_ids = {choice["id"] for choice in state["question"]["choices"]}
 
         all_questions = client.get(
             f"/api/question-banks/{bank['id']}/questions", headers=teacher_headers
@@ -2166,11 +2204,16 @@ def test_student_images_are_scoped_to_the_current_question(tmp_path: Path) -> No
             for question in all_questions
             if question["id"] != current_question_id
         )
-        other_choice_id = next(
-            choice["id"]
-            for choice in other_question["choices"]
-            if choice["id"] not in current_choice_ids and choice["has_image"]
-        )
+        # The token this participant would use for that question's choice.
+        other_choice_token = choice_tokens(
+            client,
+            {"X-Quiz-Token": quiz_token},
+            next(
+                choice["id"]
+                for choice in other_question["choices"]
+                if choice["has_image"]
+            ),
+        )[0]
 
         image_url = (
             f"/api/quizzes/student/sessions/{join_code}"
@@ -2205,7 +2248,7 @@ def test_student_images_are_scoped_to_the_current_question(tmp_path: Path) -> No
         assert (
             client.get(
                 f"/api/quizzes/student/sessions/{join_code}"
-                f"/choices/{other_choice_id}/image",
+                f"/choices/{other_choice_token}/image",
                 headers={"X-Quiz-Token": quiz_token},
             ).status_code
             == 404
@@ -2354,9 +2397,7 @@ def test_departed_participant_does_not_hold_the_session_open(tmp_path: Path) -> 
         answered = client.post(
             f"/api/quizzes/student/sessions/{join_code}/answer",
             headers={"X-Quiz-Token": quiz_tokens[1]},
-            json={
-                "selected_choice_ids": [state["question"]["choices"][0]["id"]],
-            },
+            json={"selected_choice_ids": [state["question"]["choices"][0]["id"]]},
         )
         assert answered.status_code == 200
         hand_in_quiz(client, join_code, {"X-Quiz-Token": quiz_tokens[1]})
@@ -2493,9 +2534,7 @@ def test_last_participant_leaving_finishes_the_session(tmp_path: Path) -> None:
             client.post(
                 f"/api/quizzes/student/sessions/{join_code}/answer",
                 headers={"X-Quiz-Token": quiz_tokens[0]},
-                json={
-                    "selected_choice_ids": [state["question"]["choices"][0]["id"]],
-                },
+                json={"selected_choice_ids": [state["question"]["choices"][0]["id"]]},
             ).status_code
             == 200
         )
