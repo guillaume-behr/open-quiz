@@ -156,3 +156,25 @@ def test_two_resumes_at_once_hand_out_a_single_token(tmp_path: Path) -> None:
         assert fired
         assert late.status_code == 403
         assert late.json()["detail"]["code"] == "QUIZ_JOIN_REJECTED"
+
+
+def test_a_finished_exam_cannot_be_resumed(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "resume-finished")) as client:
+        environment = exam_environment(client)
+        quiz_session, headers = started_exam(client, environment)
+        url = f"/api/quizzes/student/sessions/{quiz_session['join_code']}"
+        assert (
+            client.post(
+                f"{url}/answer",
+                headers=headers,
+                json=choice_answer(
+                    client, headers, correct_choice_id(environment["question"])
+                ),
+            ).status_code
+            == 200
+        )
+        hand_in_quiz(client, quiz_session["join_code"], headers)
+
+        refused = rejoin(client, environment, quiz_session["join_code"])
+        assert refused.status_code == 403
+        assert refused.json()["detail"]["code"] == "QUIZ_JOIN_REJECTED"
