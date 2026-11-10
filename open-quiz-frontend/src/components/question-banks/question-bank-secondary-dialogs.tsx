@@ -146,7 +146,7 @@ export function QuestionFormDialog({
     question: Question | null
     open: boolean
     onClose: () => void
-    onSaved: (question: Question) => void
+    onSaved: (question: Question, publishedSessionsKept: number) => void
 }) {
     const { t } = useTranslation()
     return (

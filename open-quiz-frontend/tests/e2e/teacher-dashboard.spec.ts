@@ -408,7 +408,9 @@ async function mockTeacherApi(page: Page) {
                 prompt: "Which kind of energy is stored?",
             }
             questions = [updated]
-            return route.fulfill({ json: updated })
+            return route.fulfill({
+                json: { ...updated, published_sessions_not_regraded: 2 },
+            })
         }
         if (
             url.pathname === "/api/question-banks/questions/61" &&
@@ -1019,6 +1021,12 @@ test("teacher creates, edits, and deletes a scored question", async ({
     await editDialog.getByRole("button", { name: "Save changes" }).click()
     await expect(
         questionsDialog.getByText("1. Which kind of energy is stored?")
+    ).toBeVisible()
+    await expect(
+        questionsDialog.getByRole("status").filter({
+            hasText:
+                "The grades already published for 2 sessions were left unchanged.",
+        })
     ).toBeVisible()
 
     await questionsDialog

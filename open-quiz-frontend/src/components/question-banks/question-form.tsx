@@ -22,7 +22,8 @@ import { apiErrorMessage } from "@/lib/errors"
 type QuestionFormProps = {
     questionBankId: number
     question?: Question
-    onSaved: (question: Question) => void
+    /** The second argument counts the published sessions an edit spared. */
+    onSaved: (question: Question, publishedSessionsKept: number) => void
     onCancel: () => void
 }
 
@@ -251,14 +252,19 @@ export function QuestionForm({
                 code_content: hasCode ? codeContent : null,
                 choices: encodedChoices,
             }
-            const savedQuestion = question
-                ? await updateQuestion(
-                      question.id,
-                      { ...payload, remove_image: removeImage },
-                      image
-                  )
-                : await createQuestion(questionBankId, payload, image)
-            onSaved(savedQuestion)
+            if (question) {
+                const updatedQuestion = await updateQuestion(
+                    question.id,
+                    { ...payload, remove_image: removeImage },
+                    image
+                )
+                onSaved(
+                    updatedQuestion,
+                    updatedQuestion.published_sessions_not_regraded
+                )
+            } else {
+                onSaved(await createQuestion(questionBankId, payload, image), 0)
+            }
         } catch (caughtError) {
             setError(
                 apiErrorMessage(

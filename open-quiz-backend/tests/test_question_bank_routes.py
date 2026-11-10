@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from PIL import Image
 from pydantic import ValidationError
+from sqlalchemy import event
 
 from app import question_records
 from app.images import (
@@ -20,6 +21,7 @@ from app.images import (
 )
 from app.models import (
     MakeupSession,
+    QuizAnswer,
     QuizSession,
     QuizSessionQuestion,
 )
@@ -32,11 +34,14 @@ from app.schemas import (
 
 from support import (
     VALID_PNG,
+    correct_choice_id,
     exam_environment,
     hand_in_quiz,
     launch_and_join,
     make_client,
     settings_for,
+    training_banks,
+    wrong_choice_id,
 )
 
 
@@ -792,3 +797,322 @@ def test_listings_return_the_page_holding_a_focused_item(environment) -> None:
     assert quiz_ids[3] in [quiz["id"] for quiz in focused_quizzes.json()]
     missing_quiz = client.get("/api/quizzes", headers=headers, params={"focus": 999999})
     assert missing_quiz.headers["X-Page"] == "1"
+
+
+def swapped_key_payload(question: dict[str, Any]) -> dict[str, Any]:
+    """Make the wrong choice of the exam question the right one, worth 3."""
+    return question_payload(
+        choices=[
+            {
+                "id": correct_choice_id(question),
+                "label": "Two",
+                "is_correct": False,
+                "points": 0,
+            },
+            {
+                "id": wrong_choice_id(question),
+                "label": "Three",
+                "is_correct": True,
+                "points": 3,
+            },
+        ]
+    )
+
+
+def finished_exam_with_a_wrong_answer(environment: dict[str, Any]) -> dict[str, Any]:
+    client = environment["client"]
+    quiz_session, participant_headers = launch_and_join(client, environment)
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/start",
+            headers=environment["teacher_headers"],
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [wrong_choice_id(environment["question"])]},
+        ).status_code
+        == 200
+    )
+    hand_in_quiz(client, quiz_session["join_code"], participant_headers)
+    return quiz_session
+
+
+def stored_scores(client: Any, session_id: int) -> list[tuple[float, bool]]:
+    with client.app.state.session_factory() as session:
+        return [
+            (answer.score, answer.is_graded)
+            for answer in session.query(QuizAnswer).filter_by(session_id=session_id)
+        ]
+
+
+def test_editing_a_question_leaves_published_grades_alone(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    published = finished_exam_with_a_wrong_answer(environment)
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{published['id']}/publish-grades",
+            headers=headers,
+        ).status_code
+        == 200
+    )
+    unpublished = finished_exam_with_a_wrong_answer(environment)
+    assert stored_scores(client, published["id"]) == [(0.0, True)]
+    assert stored_scores(client, unpublished["id"]) == [(0.0, True)]
+    audit_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        questions,
+        "audit_event",
+        lambda event, **details: audit_events.append((event, details)),
+    )
+
+    updated = client.post(
+        f"/api/question-banks/questions/{question['id']}/update",
+        headers=headers,
+        data={"payload": json.dumps(swapped_key_payload(question))},
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["published_sessions_not_regraded"] == 1
+    assert stored_scores(client, published["id"]) == [(0.0, True)]
+    assert stored_scores(client, unpublished["id"]) == [(3.0, True)]
+    teacher_id = client.get("/api/users/me", headers=headers).json()["id"]
+    assert audit_events == [
+        (
+            "question.published_sessions_not_regraded",
+            {
+                "professor_id": teacher_id,
+                "question_id": question["id"],
+                "session_ids": [published["id"]],
+            },
+        )
+    ]
+
+
+def test_an_edit_without_published_sessions_writes_no_audit_event(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = environment["client"]
+    question = environment["question"]
+    finished = finished_exam_with_a_wrong_answer(environment)
+    audit_events: list[str] = []
+    monkeypatch.setattr(
+        questions, "audit_event", lambda event, **_: audit_events.append(event)
+    )
+
+    updated = client.post(
+        f"/api/question-banks/questions/{question['id']}/update",
+        headers=environment["teacher_headers"],
+        data={"payload": json.dumps(swapped_key_payload(question))},
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["published_sessions_not_regraded"] == 0
+    assert stored_scores(client, finished["id"]) == [(3.0, True)]
+    assert audit_events == []
+
+
+def test_editing_a_question_an_active_exam_uses_is_refused(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    url = f"/api/question-banks/questions/{question['id']}/update"
+    quiz_session, participant_headers = launch_and_join(client, environment)
+    session_url = f"/api/quizzes/sessions/{quiz_session['id']}"
+
+    for step in (None, "start", "pause"):
+        if step is not None:
+            started = client.post(f"{session_url}/{step}", headers=headers)
+            assert started.status_code == 200
+        refused = client.post(
+            url,
+            headers=headers,
+            data={"payload": json.dumps(swapped_key_payload(question))},
+        )
+        assert refused.status_code == 409, step
+        assert refused.json()["detail"]["code"] == "QUESTION_IN_ACTIVE_SESSION"
+
+    # Nothing changed under the students.
+    choices = client.get(
+        f"/api/question-banks/{environment['bank_id']}/questions", headers=headers
+    ).json()[0]["choices"]
+    assert [(choice["label"], choice["is_correct"]) for choice in choices] == [
+        ("Two", True),
+        ("Three", False),
+    ]
+
+    assert client.post(f"{session_url}/resume", headers=headers).status_code == 200
+    assert (
+        client.post(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [wrong_choice_id(question)]},
+        ).status_code
+        == 200
+    )
+    hand_in_quiz(client, quiz_session["join_code"], participant_headers)
+    assert (
+        client.post(
+            url,
+            headers=headers,
+            data={"payload": json.dumps(swapped_key_payload(question))},
+        ).status_code
+        == 200
+    )
+
+
+def test_an_active_makeup_child_also_blocks_question_edits(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    student_class = environment["student_class"]
+    owner_id = client.get("/api/users/me", headers=headers).json()["id"]
+    with client.app.state.session_factory() as session:
+        makeup = MakeupSession(
+            owner_id=owner_id,
+            class_id=student_class["id"],
+            class_name=student_class["name"],
+            join_code="MAKEUP03",
+            status="in_progress",
+        )
+        session.add(makeup)
+        session.flush()
+        child = QuizSession(
+            quiz_id=environment["quiz"]["id"],
+            class_id=student_class["id"],
+            class_name=student_class["name"],
+            join_code="CHILD003",
+            status="in_progress",
+            makeup_session_id=makeup.id,
+        )
+        session.add(child)
+        session.flush()
+        session.add(
+            QuizSessionQuestion(
+                session_id=child.id, question_id=question["id"], position=0
+            )
+        )
+        session.commit()
+
+    refused = client.post(
+        f"/api/question-banks/questions/{question['id']}/update",
+        headers=headers,
+        data={"payload": json.dumps(swapped_key_payload(question))},
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "QUESTION_IN_ACTIVE_SESSION"
+
+
+def test_a_running_training_does_not_block_question_edits(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    assert (
+        client.put(
+            f"/api/quizzes/training/classes/{environment['student_class']['id']}"
+            "/question-banks",
+            headers=headers,
+            json=training_banks(environment["bank_id"]),
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/quizzes/training/{environment['bank_id']}/start",
+            headers=environment["student_headers"],
+        ).status_code
+        == 201
+    )
+
+    updated = client.post(
+        f"/api/question-banks/questions/{question['id']}/update",
+        headers=headers,
+        data={"payload": json.dumps(swapped_key_payload(question))},
+    )
+    assert updated.status_code == 200
+
+
+def test_regrading_an_edit_uses_a_constant_query_count(environment) -> None:
+    """The regrade touches every affected answer in a fixed number of queries."""
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    engine = client.app.state.session_factory.kw["bind"]
+    url = f"/api/question-banks/questions/{question['id']}/update"
+    payload = {"payload": json.dumps(swapped_key_payload(question))}
+    # Apply the edit once first, so the measured edits write the same choices.
+    finished_exam_with_a_wrong_answer(environment)
+    assert client.post(url, headers=headers, data=payload).status_code == 200
+    query_counts: list[int] = []
+    for session_count in (1, 4):
+        while len(stored_sessions(client)) < session_count:
+            finished_exam_with_a_wrong_answer(environment)
+        statements = 0
+
+        def count_statement(*_arguments: Any) -> None:
+            nonlocal statements
+            statements += 1
+
+        event.listen(engine, "before_cursor_execute", count_statement)
+        try:
+            updated = client.post(url, headers=headers, data=payload)
+        finally:
+            event.remove(engine, "before_cursor_execute", count_statement)
+        assert updated.status_code == 200
+        assert all(
+            stored_scores(client, session_id) == [(3.0, True)]
+            for session_id in stored_sessions(client)
+        )
+        query_counts.append(statements)
+
+    assert query_counts[0] == query_counts[1], (
+        f"regrade queries grow with the number of sessions: {query_counts}"
+    )
+
+
+def stored_sessions(client: Any) -> list[int]:
+    with client.app.state.session_factory() as session:
+        return [quiz_session.id for quiz_session in session.query(QuizSession)]
+
+
+def test_turning_a_question_written_keeps_teacher_marks_and_zeroes_pending_ones(
+    environment,
+) -> None:
+    """Rescoring a written question follows compute_final_scores' rule."""
+    client = environment["client"]
+    question = environment["question"]
+    graded = finished_exam_with_a_wrong_answer(environment)
+    pending = finished_exam_with_a_wrong_answer(environment)
+    with client.app.state.session_factory() as session:
+        for session_id, score, is_graded in (
+            (graded["id"], 1.5, True),
+            (pending["id"], 1.5, False),
+        ):
+            answer = session.query(QuizAnswer).filter_by(session_id=session_id).one()
+            answer.score = score
+            answer.is_graded = is_graded
+        session.commit()
+
+    updated = client.post(
+        f"/api/question-banks/questions/{question['id']}/update",
+        headers=environment["teacher_headers"],
+        data={
+            "payload": json.dumps(
+                question_payload(
+                    answer_mode="written",
+                    choices=[{"label": "Two", "is_correct": True, "points": 2}],
+                )
+            )
+        },
+    )
+
+    assert updated.status_code == 200
+    assert stored_scores(client, graded["id"]) == [(1.5, True)]
+    assert stored_scores(client, pending["id"]) == [(0.0, False)]
