@@ -478,7 +478,7 @@ export function AccessibilityPage() {
                 </dl>
             </section>
 
-            <section id="contact" tabIndex={-1}>
+            <section id="contact" tabIndex={-1} className="outline-none">
                 <h2>{t("accessibility-contact-title")}</h2>
                 <p>{t("accessibility-contact-text")}</p>
                 <p className="mt-3 font-semibold">
