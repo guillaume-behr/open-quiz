@@ -295,6 +295,21 @@ def hash_refresh_token(token: str) -> str:
     return sha256(token.encode()).hexdigest()
 
 
+def choice_token_key(secret: str) -> bytes:
+    """A key of its own for student choice tokens (app/choice_tokens.py)."""
+    return hmac_new(secret.encode(), b"student-choice-token-key", sha256).digest()
+
+
+def student_choice_token(
+    key: bytes, session_id: int, participant_id: int, choice_id: int
+) -> str:
+    """16 URL-safe characters naming one choice for one participant."""
+    digest = hmac_new(
+        key, f"{session_id}:{participant_id}:{choice_id}".encode(), sha256
+    ).digest()
+    return urlsafe_b64encode(digest[:12]).decode()
+
+
 def refresh_request_proof(token: str, secret: str) -> str:
     """Bind refresh-cookie use to a value unavailable to same-origin workers."""
     return hmac_new(

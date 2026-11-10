@@ -14,6 +14,7 @@ from app.models import QuizSession, User
 from app.services import session_lifecycle
 
 from support import (
+    choice_answer,
     concurrent_writes,
     correct_choice_id,
     exam_environment,
@@ -99,7 +100,9 @@ def test_an_answer_after_the_deadline_finishes_the_session_first(
         late = client.post(
             f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, correct_choice_id(environment["question"])
+            ),
         )
         assert late.status_code == 409
         assert late.json()["detail"]["code"] == "QUIZ_NO_CURRENT_QUESTION"

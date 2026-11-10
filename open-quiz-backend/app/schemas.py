@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -731,8 +731,14 @@ class StudentQuizSessionResponse(BaseModel):
     ends_at: datetime | None
 
 
+# A student's choice identifier: an opaque token (app/choice_tokens.py).
+StudentChoiceToken = Annotated[
+    str, Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")
+]
+
+
 class StudentQuizChoiceResponse(BaseModel):
-    id: int
+    id: str
     label: str
     position: int
     has_image: bool
@@ -747,7 +753,7 @@ class StudentQuizQuestionResponse(QuestionContentResponse):
 class TrainingFeedback(BaseModel):
     question_id: int
     is_correct: bool | None
-    correct_choice_ids: list[int]
+    correct_choice_ids: list[str]
     expected_answer: str | None = None
     submitted_answer: str | None = None
     requires_manual_review: bool = False
@@ -771,7 +777,7 @@ class StudentQuizStateResponse(StudentQuizSessionResponse):
     awaiting_final_submission: bool = False
     answer_summaries: list[StudentAnswerSummary] = Field(default_factory=list)
     accessible_question_numbers: list[int] = Field(default_factory=list)
-    selected_choice_ids: list[int] | None = None
+    selected_choice_ids: list[str] | None = None
     written_answer: str | None = None
     question: StudentQuizQuestionResponse | None
     training_feedback: TrainingFeedback | None = None
@@ -787,7 +793,7 @@ class StudentQuizJoinResponse(StudentQuizStateResponse):
 class StudentQuizAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    selected_choice_ids: list[int] | None = Field(
+    selected_choice_ids: list[StudentChoiceToken] | None = Field(
         default=None, min_length=1, max_length=12
     )
     written_answer: str | None = Field(default=None, max_length=20000)

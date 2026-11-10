@@ -102,6 +102,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Security
 
+- Students no longer receive the real ids of answer choices, which follow the
+  order the teacher wrote them in and so could reveal the answer behind the
+  shuffle. Each participant now sees, sends and loads images for choices
+  through opaque tokens of their own (`id`, `selected_choice_ids` and
+  `correct_choice_ids` become strings in the student API, and
+  `/api/quizzes/student/sessions/{code}/choices/{token}/image`). Teacher
+  payloads and stored answers keep the real ids. A page loaded before the
+  update has to be reloaded to answer.
 - Wrong passwords sent from elsewhere no longer lock an account out of a
   browser it trusts: a browser holding the account's two-factor trust cookie
   has an attempt limit of its own. Before, ten wrong passwords every fifteen

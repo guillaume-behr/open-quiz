@@ -20,11 +20,11 @@ type StudentQuestionFormProps = {
     question: StudentQuizQuestion
     participantToken: string
     contentDirection: "ltr" | "rtl"
-    selectedChoiceIds: number[]
+    selectedChoiceIds: string[]
     writtenAnswer: string
     isBusy: boolean
     error: string | null
-    onSelectedChoiceIdsChange: (choiceIds: number[]) => void
+    onSelectedChoiceIdsChange: (choiceIds: string[]) => void
     onWrittenAnswerChange: (answer: string) => void
     onNavigate: (questionNumber: number) => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -254,12 +254,12 @@ function ChoiceAnswers({
     joinCode: string
     participantToken: string
     contentDirection: "ltr" | "rtl"
-    selectedChoiceIds: number[]
-    onSelectedChoiceIdsChange: (choiceIds: number[]) => void
+    selectedChoiceIds: string[]
+    onSelectedChoiceIdsChange: (choiceIds: string[]) => void
 }) {
     const { t } = useTranslation()
 
-    function toggleChoice(choiceId: number) {
+    function toggleChoice(choiceId: string) {
         if (question.answer_mode === "single") {
             onSelectedChoiceIdsChange([choiceId])
             return

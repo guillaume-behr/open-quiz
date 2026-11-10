@@ -31,7 +31,7 @@ import { useQuizMonitoring } from "./use-quiz-monitoring"
 import { useQuizTranslation } from "./use-quiz-translation"
 
 type AnswerDraft = {
-    selectedChoiceIds: number[]
+    selectedChoiceIds: string[]
     writtenAnswer: string
 }
 
@@ -50,7 +50,7 @@ export function StudentQuiz({
         restoredSession?.participantToken ?? null
     )
     const [session, setSession] = useState<StudentQuizSession | null>(null)
-    const [selectedChoiceIds, setSelectedChoiceIds] = useState<number[]>([])
+    const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([])
     const [writtenAnswer, setWrittenAnswer] = useState("")
     const [isBusy, setIsBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)

@@ -41,6 +41,7 @@ from app.services.results import (
 )
 
 from support import (
+    choice_answer,
     complete_first_login,
     concurrent_writes,
     correct_choice_id,
@@ -77,7 +78,9 @@ def start_and_answer(
     answered = client.post(
         f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
         headers=participant_headers,
-        json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        json=choice_answer(
+            client, participant_headers, correct_choice_id(environment["question"])
+        ),
     )
     assert answered.status_code == 200
     return launched, participant_headers
@@ -1097,7 +1100,9 @@ def test_single_choice_maximum_uses_the_best_selectable_option(tmp_path: Path) -
         answered = client.post(
             f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+            json=choice_answer(
+                client, participant_headers, correct_choice_id(environment["question"])
+            ),
         )
         assert answered.status_code == 200
         hand_in_quiz(client, launched["join_code"], participant_headers)
@@ -1136,7 +1141,7 @@ def test_answer_points_are_summed_and_negative_points_follow_quiz_setting(
                 client.post(
                     f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
                     headers=participant_headers,
-                    json={"selected_choice_ids": [wrong_choice_id]},
+                    json=choice_answer(client, participant_headers, wrong_choice_id),
                 ).status_code
                 == 200
             )

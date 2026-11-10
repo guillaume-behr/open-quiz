@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.choice_tokens import CHOICE_HMAC_ENTRY
 from app.config import (
     VERSION,
     Settings,
@@ -42,6 +43,7 @@ from app.routers import (
     training,
     users,
 )
+from app.security import choice_token_key
 from app.security_state import synchronize_security_state
 
 logger = logging.getLogger("open_quiz")
@@ -72,6 +74,9 @@ def include_routers(app: FastAPI) -> None:
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     session_factory = build_session_factory(settings.database_url)
+    session_factory.configure(
+        info={CHOICE_HMAC_ENTRY: choice_token_key(settings.jwt_secret)}
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):

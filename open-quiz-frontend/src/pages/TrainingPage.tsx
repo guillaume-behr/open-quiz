@@ -51,7 +51,7 @@ export function TrainingPage() {
     const [session, setSession] = useState<StudentQuizSession | null>(
         routeState?.session ?? null
     )
-    const [selectedChoiceIds, setSelectedChoiceIds] = useState<number[]>([])
+    const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([])
     const [writtenAnswer, setWrittenAnswer] = useState("")
     const [feedback, setFeedback] = useState<TrainingFeedback | null>(null)
     const [answeredQuestion, setAnsweredQuestion] =
