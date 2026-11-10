@@ -99,6 +99,8 @@ export function QuestionBanksPanel({
         null
     )
     const [bankToDelete, setBankToDelete] = useState<QuestionBank | null>(null)
+    // Published sessions the last question edit left unchanged, if any.
+    const [publishedSessionsKept, setPublishedSessionsKept] = useState(0)
 
     const transfer = useBankTransfer({
         onImported: async (imported) => {
@@ -211,6 +213,7 @@ export function QuestionBanksPanel({
         setGradeLevel(bank.grade_level)
         setTitle(bank.chapter)
         saving.setError(null)
+        setPublishedSessionsKept(0)
         setBankView("questions")
     }
 
@@ -333,11 +336,20 @@ export function QuestionBanksPanel({
                                     ? t("questions-load-error")
                                     : null
                             }
+                            notice={
+                                publishedSessionsKept > 0
+                                    ? t("question-published-sessions-kept", {
+                                          count: publishedSessionsKept,
+                                      })
+                                    : null
+                            }
                             onAdd={() => {
+                                setPublishedSessionsKept(0)
                                 setEditingQuestion(null)
                                 setBankView("question-form")
                             }}
                             onEdit={(question) => {
+                                setPublishedSessionsKept(0)
                                 setEditingQuestion(question)
                                 setBankView("question-form")
                             }}
@@ -404,7 +416,8 @@ export function QuestionBanksPanel({
                             setEditingQuestion(null)
                             setBankView("questions")
                         }}
-                        onSaved={(savedQuestion) => {
+                        onSaved={(savedQuestion, publishedSessionsKept) => {
+                            setPublishedSessionsKept(publishedSessionsKept)
                             if (!editingQuestion)
                                 changeQuestionCount(selectedBank.id, 1)
                             questionList.setData((current = []) =>

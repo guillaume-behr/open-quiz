@@ -31,6 +31,7 @@ type QuestionsManagerProps = {
     questions: Question[]
     isLoading: boolean
     error: string | null
+    notice?: string | null
     onAdd: () => void
     onEdit: (question: Question) => void
     onDelete: (question: Question) => void
@@ -40,6 +41,7 @@ export function QuestionsManager({
     questions,
     isLoading,
     error,
+    notice = null,
     onAdd,
     onEdit,
     onDelete,
@@ -289,6 +291,11 @@ export function QuestionsManager({
                 </fieldset>
             </CollapsibleFilters>
             <div className="mt-5">
+                {notice && (
+                    <p role="status" className="mb-3 text-sm">
+                        {notice}
+                    </p>
+                )}
                 {isLoading ? (
                     <div
                         className="flex min-h-24 items-center justify-center"

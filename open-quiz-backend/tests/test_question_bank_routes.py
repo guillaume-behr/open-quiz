@@ -949,6 +949,14 @@ def test_editing_a_question_an_active_exam_uses_is_refused(environment) -> None:
     ]
 
     assert client.post(f"{session_url}/resume", headers=headers).status_code == 200
+    assert (
+        client.post(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+            headers=participant_headers,
+            json={"selected_choice_ids": [wrong_choice_id(question)]},
+        ).status_code
+        == 200
+    )
     hand_in_quiz(client, quiz_session["join_code"], participant_headers)
     assert (
         client.post(
@@ -1037,6 +1045,11 @@ def test_regrading_an_edit_uses_a_constant_query_count(environment) -> None:
     headers = environment["teacher_headers"]
     question = environment["question"]
     engine = client.app.state.session_factory.kw["bind"]
+    url = f"/api/question-banks/questions/{question['id']}/update"
+    payload = {"payload": json.dumps(swapped_key_payload(question))}
+    # Apply the edit once first, so the measured edits write the same choices.
+    finished_exam_with_a_wrong_answer(environment)
+    assert client.post(url, headers=headers, data=payload).status_code == 200
     query_counts: list[int] = []
     for session_count in (1, 4):
         while len(stored_sessions(client)) < session_count:
@@ -1049,11 +1062,7 @@ def test_regrading_an_edit_uses_a_constant_query_count(environment) -> None:
 
         event.listen(engine, "before_cursor_execute", count_statement)
         try:
-            updated = client.post(
-                f"/api/question-banks/questions/{question['id']}/update",
-                headers=headers,
-                data={"payload": json.dumps(swapped_key_payload(question))},
-            )
+            updated = client.post(url, headers=headers, data=payload)
         finally:
             event.remove(engine, "before_cursor_execute", count_statement)
         assert updated.status_code == 200

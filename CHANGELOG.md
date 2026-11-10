@@ -85,6 +85,16 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   unexpected error: any failed run is logged and retried, instead of only a
   database error. An exam that cannot be finished no longer keeps every
   other due exam from finishing.
+- Editing a question no longer changes grades that were already published:
+  only finished sessions whose grades are not published yet are regraded.
+  The edit response gains `published_sessions_not_regraded`, and the question
+  bank tells the teacher how many published sessions kept their grades.
+- A question can no longer be edited while an exam or make-up session that
+  drew it is waiting, running or paused: the API answers 409
+  `QUESTION_IN_ACTIVE_SESSION`. Training attempts do not block an edit.
+- Regrading after a question edit rescores only that question's answers, in
+  a fixed number of queries, instead of every answer of every session that
+  used it.
 
 ### Security
 

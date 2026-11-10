@@ -9,6 +9,7 @@ import type {
     QuestionBankImportResult,
     QuestionUpdate,
     Page,
+    UpdatedQuestion,
 } from "./types"
 import { readJsonImportFile } from "@/lib/json-import"
 
@@ -102,11 +103,11 @@ export function updateQuestion(
     questionId: number,
     question: QuestionUpdate,
     image?: File
-): Promise<Question> {
+): Promise<UpdatedQuestion> {
     const formData = new FormData()
     formData.set("payload", JSON.stringify(question))
     if (image) formData.set("image", image)
-    return request<Question>(
+    return request<UpdatedQuestion>(
         `/api/question-banks/questions/${questionId}/update`,
         {
             method: "POST",
