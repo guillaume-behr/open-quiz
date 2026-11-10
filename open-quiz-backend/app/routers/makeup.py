@@ -555,6 +555,7 @@ def makeup_child_session(
         duration_seconds=quiz.duration_seconds,
         allow_previous_questions=quiz.allow_previous_questions,
         allow_answer_review=quiz.allow_answer_review,
+        show_provisional_grades=quiz.show_provisional_grades,
         allow_negative_points=quiz.allow_negative_points,
         same_questions_for_all=False,
         class_id=makeup.class_id,

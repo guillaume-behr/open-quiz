@@ -31,6 +31,7 @@ type QuizFormDialogProps = {
     selectedBankIds: number[]
     allowPreviousQuestions: boolean
     allowAnswerReview: boolean
+    showProvisionalGrades: boolean
     allowNegativePoints: boolean
     sameQuestionsForAll: boolean
     difficultyCounts: DifficultyValues
@@ -44,6 +45,7 @@ type QuizFormDialogProps = {
     onSelectedBankIdsChange: (ids: number[]) => void
     onAllowPreviousQuestionsChange: (value: boolean) => void
     onAllowAnswerReviewChange: (value: boolean) => void
+    onShowProvisionalGradesChange: (value: boolean) => void
     onAllowNegativePointsChange: (value: boolean) => void
     onSameQuestionsForAllChange: (value: boolean) => void
     onDifficultyCountsChange: (values: DifficultyValues) => void
@@ -62,6 +64,7 @@ export function QuizFormDialog({
     selectedBankIds,
     allowPreviousQuestions,
     allowAnswerReview,
+    showProvisionalGrades,
     allowNegativePoints,
     sameQuestionsForAll,
     difficultyCounts,
@@ -75,6 +78,7 @@ export function QuizFormDialog({
     onSelectedBankIdsChange,
     onAllowPreviousQuestionsChange,
     onAllowAnswerReviewChange,
+    onShowProvisionalGradesChange,
     onAllowNegativePointsChange,
     onSameQuestionsForAllChange,
     onDifficultyCountsChange,
@@ -203,6 +207,23 @@ export function QuizFormDialog({
                                     checked={allowAnswerReview}
                                     onCheckedChange={onAllowAnswerReviewChange}
                                     aria-label={t("allow-answer-review")}
+                                />
+                            </label>
+                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
+                                <span>
+                                    <span className="block font-medium">
+                                        {t("show-provisional-grades")}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {t("show-provisional-grades-help")}
+                                    </span>
+                                </span>
+                                <Switch
+                                    checked={showProvisionalGrades}
+                                    onCheckedChange={
+                                        onShowProvisionalGradesChange
+                                    }
+                                    aria-label={t("show-provisional-grades")}
                                 />
                             </label>
                             <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">

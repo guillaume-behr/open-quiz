@@ -32,6 +32,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   whole: the schema stays as it was, and the backend log names the constraint.
 - At startup the backend applies migration 0005, which clears the monitoring
   alerts recorded for a copy.
+- At startup the backend applies migration 0006, which adds the “show
+  provisional grades” option to quizzes and sessions. Existing quizzes keep
+  showing provisional grades.
 
 ### Added
 
@@ -102,6 +105,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Security
 
+- A student who left an exam's waiting room without answering no longer
+  finds that exam, and its correction, in their history.
+- A new quiz option, “Show provisional grades” (on by default, and for every
+  existing quiz), decides whether students see the correction and their
+  provisional score in their history before the grades are published. When
+  it is off, the history lists only their own answers until publication. A
+  session keeps the value it was launched with. The student history gains
+  `correction_available`, and its per-answer `score` can be `null`.
 - Students no longer receive the real ids of answer choices, which follow the
   order the teacher wrote them in and so could reveal the answer behind the
   shuffle. Each participant now sees, sends and loads images for choices

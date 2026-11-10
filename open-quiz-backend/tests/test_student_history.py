@@ -3,6 +3,10 @@
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import update
+
+from app.models import Quiz, QuizSession
+
 from support import (
     correct_choice_id,
     exam_environment,
@@ -103,15 +107,44 @@ def test_a_student_who_left_before_the_start_gets_no_correction(
         ] == [quiz_session["id"]]
 
 
-def test_the_correction_waits_for_the_grades_to_be_published(
+def hide_provisional_grades(client: Any, quiz_id: int, hidden: bool) -> None:
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(Quiz)
+            .where(Quiz.id == quiz_id)
+            .values(show_provisional_grades=not hidden)
+        )
+        session.commit()
+
+
+def test_a_quiz_shows_a_provisional_correction_by_default(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "history-provisional")) as client:
+        environment = exam_environment(client)
+        assert environment["quiz"]["show_provisional_grades"] is True
+        finished_exam(client, environment)
+
+        [provisional] = history(client, environment["student_headers"])
+        assert provisional["grades_published"] is False
+        assert provisional["correction_available"] is True
+        assert provisional["score"] == 2.0
+        [answer] = provisional["answers"]
+        assert answer["expected_answers"] == ["Two"]
+        assert answer["is_correct"] is True
+
+
+def test_without_provisional_grades_the_correction_waits_for_publication(
     tmp_path: Path,
 ) -> None:
     with make_client(settings_for(tmp_path / "history-publish")) as client:
         environment = exam_environment(client)
+        hide_provisional_grades(client, environment["quiz"]["id"], hidden=True)
         quiz_session = finished_exam(client, environment)
+        # The session keeps the choice it was launched with.
+        hide_provisional_grades(client, environment["quiz"]["id"], hidden=False)
 
         [unpublished] = history(client, environment["student_headers"])
         assert unpublished["grades_published"] is False
+        assert unpublished["correction_available"] is False
         assert unpublished["score"] is None
         assert unpublished["maximum_score"] is None
         [answer] = unpublished["answers"]
@@ -130,9 +163,54 @@ def test_the_correction_waits_for_the_grades_to_be_published(
         )
         [published] = history(client, environment["student_headers"])
         assert published["grades_published"] is True
+        assert published["correction_available"] is True
         assert published["score"] == 2.0
         assert published["maximum_score"] == 2.0
         [answer] = published["answers"]
         assert answer["expected_answers"] == ["Two"]
         assert answer["score"] == 2.0
         assert answer["is_correct"] is True
+
+
+def test_a_session_launched_before_the_option_follows_its_quiz(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "history-legacy")) as client:
+        environment = exam_environment(client)
+        quiz_session = finished_exam(client, environment)
+        with client.app.state.session_factory() as session:
+            session.execute(
+                update(QuizSession)
+                .where(QuizSession.id == quiz_session["id"])
+                .values(show_provisional_grades=None)
+            )
+            session.commit()
+        hide_provisional_grades(client, environment["quiz"]["id"], hidden=True)
+
+        [item] = history(client, environment["student_headers"])
+        assert item["correction_available"] is False
+
+
+def test_teachers_choose_provisional_grades_per_quiz(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "history-option")) as client:
+        environment = exam_environment(client)
+        headers = environment["teacher_headers"]
+        quiz = environment["quiz"]
+        payload = {
+            "title": quiz["title"],
+            "question_bank_ids": [bank["id"] for bank in quiz["question_banks"]],
+            "easy_question_count": 1,
+            "medium_question_count": 0,
+            "hard_question_count": 0,
+            "show_provisional_grades": False,
+        }
+        created = client.post("/api/quizzes", headers=headers, json=payload)
+        assert created.status_code == 201
+        assert created.json()["show_provisional_grades"] is False
+        updated = client.post(
+            f"/api/quizzes/{created.json()['id']}/update",
+            headers=headers,
+            json={**payload, "show_provisional_grades": True},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["show_provisional_grades"] is True

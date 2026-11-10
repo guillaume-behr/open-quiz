@@ -106,6 +106,14 @@ Worker joindre que l’origine de l’instance, et la preuve de renouvellement
 décrite ci-dessous, sans laquelle une requête émise par le Worker n’ouvre
 aucune session.
 
+La correction d’un examen n’est montrée qu’aux élèves qui y ont pris part. Par
+défaut, chacun la voit à titre provisoire dans son historique dès la fin de la
+session, avant la publication des notes. Une session de rattrapage du même
+quiz peut alors encore avoir lieu, et la correction circuler entre élèves :
+Open Quiz ne la retarde pas d’elle-même. Pour un quiz qui sera rattrapé,
+désactivez l’option « Afficher les notes provisoires » et publiez les notes
+après le rattrapage ; la correction n’est alors visible qu’à la publication.
+
 Les sessions privilégiées exigent une preuve de renouvellement conservée dans
 la fenêtre principale et inaccessible au Worker Python. Les autorisations et la
 notation restent appliquées par le backend.

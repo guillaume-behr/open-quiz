@@ -172,6 +172,7 @@ export function QuizzesPanel({
             duration_seconds: form.durationMinutes * 60,
             allow_previous_questions: form.allowPreviousQuestions,
             allow_answer_review: form.allowAnswerReview,
+            show_provisional_grades: form.showProvisionalGrades,
             allow_negative_points: form.allowNegativePoints,
             same_questions_for_all: form.sameQuestionsForAll,
             easy_question_count: form.difficultyCounts.easy,
@@ -277,6 +278,7 @@ export function QuizzesPanel({
                 selectedBankIds={form.selectedBankIds}
                 allowPreviousQuestions={form.allowPreviousQuestions}
                 allowAnswerReview={form.allowAnswerReview}
+                showProvisionalGrades={form.showProvisionalGrades}
                 allowNegativePoints={form.allowNegativePoints}
                 sameQuestionsForAll={form.sameQuestionsForAll}
                 difficultyCounts={form.difficultyCounts}
@@ -311,6 +313,13 @@ export function QuizzesPanel({
                     dispatchForm({
                         type: "set",
                         field: "allowAnswerReview",
+                        value,
+                    })
+                }
+                onShowProvisionalGradesChange={(value) =>
+                    dispatchForm({
+                        type: "set",
+                        field: "showProvisionalGrades",
                         value,
                     })
                 }

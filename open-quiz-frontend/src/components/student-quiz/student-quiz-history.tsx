@@ -83,7 +83,8 @@ export function StudentQuizHistory({ token }: { token: string }) {
         const newlyOpenedProvisionalItem = items.find(
             (item) =>
                 newlyOpenedIds.includes(item.session_id) &&
-                !item.grades_published
+                !item.grades_published &&
+                item.correction_available
         )
         if (newlyOpenedProvisionalItem) {
             setProvisionalNoticeItem(newlyOpenedProvisionalItem)
@@ -145,6 +146,12 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                             new Date(item.started_at)
                                         )}
                                     </span>
+                                    {!item.correction_available && (
+                                        <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                                            <TriangleAlert className="size-3" />
+                                            {t("grades-not-published")}
+                                        </span>
+                                    )}
                                     {item.score !== null &&
                                         item.maximum_score !== null && (
                                             <span className="mt-2 flex flex-wrap items-center gap-2">
@@ -176,13 +183,22 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                         )}
                                 </span>
                                 <span className="flex shrink-0 items-center gap-2 text-sm font-medium text-primary">
-                                    {t("view-correction")}
+                                    {t(
+                                        item.correction_available
+                                            ? "view-correction"
+                                            : "view-my-answers"
+                                    )}
                                     <ChevronDown className="size-4 transition-transform duration-200 ease-out group-data-panel-open:rotate-180 motion-reduce:transition-none" />
                                 </span>
                             </Accordion.Trigger>
                         </Accordion.Header>
                         <Accordion.Panel className="h-[var(--accordion-panel-height)] overflow-hidden opacity-100 transition-[height,opacity] duration-200 ease-out data-ending-style:h-0 data-ending-style:opacity-0 data-starting-style:h-0 data-starting-style:opacity-0 motion-reduce:transition-none">
                             <div className="grid gap-3 border-t p-4">
+                                {!item.correction_available && (
+                                    <p className="text-sm text-muted-foreground">
+                                        {t("quiz-history-correction-pending")}
+                                    </p>
+                                )}
                                 {item.answers.map((answer) => (
                                     <article
                                         key={answer.question_id}
@@ -201,14 +217,17 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                     />
                                                 </h3>
                                             </div>
-                                            <QuestionScorePill
-                                                score={answer.score}
-                                                maxScore={answer.max_score}
-                                                graded={
-                                                    answer.is_correct !== null
-                                                }
-                                                locale={i18n.language}
-                                            />
+                                            {answer.score !== null && (
+                                                <QuestionScorePill
+                                                    score={answer.score}
+                                                    maxScore={answer.max_score}
+                                                    graded={
+                                                        answer.is_correct !==
+                                                        null
+                                                    }
+                                                    locale={i18n.language}
+                                                />
+                                            )}
                                         </div>
                                         {answer.code_content &&
                                             answer.code_language && (
@@ -231,7 +250,9 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                         : "rounded-lg border p-3"
                                                 }
                                                 style={
-                                                    answer.is_correct === null
+                                                    answer.is_correct ===
+                                                        null ||
+                                                    answer.score === null
                                                         ? undefined
                                                         : scoreGradientStyle(
                                                               answer.score,
@@ -282,46 +303,51 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                             : t("no-answer")}
                                                     </p>
                                                 )}
-                                                {answer.is_correct === null && (
-                                                    <p className="mt-2 text-xs font-medium text-muted-foreground">
-                                                        {t(
-                                                            "training-manual-review"
-                                                        )}
-                                                    </p>
-                                                )}
-                                            </div>
-                                            <div className="rounded-lg bg-success/10 p-3">
-                                                <p className="font-medium text-success">
-                                                    {t("correct-answer")}
-                                                </p>
-                                                {answer.response_language &&
-                                                answer.expected_answers.some(
-                                                    (item) => item.trim() !== ""
-                                                ) ? (
-                                                    <div className="mt-2">
-                                                        <StaticCodeBlock
-                                                            code={answer.expected_answers.join(
-                                                                "\n"
+                                                {item.correction_available &&
+                                                    answer.is_correct ===
+                                                        null && (
+                                                        <p className="mt-2 text-xs font-medium text-muted-foreground">
+                                                            {t(
+                                                                "training-manual-review"
                                                             )}
-                                                            language={
-                                                                answer.response_language
-                                                            }
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <p className="mt-1 whitespace-pre-wrap">
-                                                        {answer.expected_answers.filter(
-                                                            (item) =>
-                                                                item.trim() !==
-                                                                ""
-                                                        ).length > 0
-                                                            ? answer.expected_answers.join(
-                                                                  ", "
-                                                              )
-                                                            : "—"}
-                                                    </p>
-                                                )}
+                                                        </p>
+                                                    )}
                                             </div>
+                                            {item.correction_available && (
+                                                <div className="rounded-lg bg-success/10 p-3">
+                                                    <p className="font-medium text-success">
+                                                        {t("correct-answer")}
+                                                    </p>
+                                                    {answer.response_language &&
+                                                    answer.expected_answers.some(
+                                                        (item) =>
+                                                            item.trim() !== ""
+                                                    ) ? (
+                                                        <div className="mt-2">
+                                                            <StaticCodeBlock
+                                                                code={answer.expected_answers.join(
+                                                                    "\n"
+                                                                )}
+                                                                language={
+                                                                    answer.response_language
+                                                                }
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <p className="mt-1 whitespace-pre-wrap">
+                                                            {answer.expected_answers.filter(
+                                                                (item) =>
+                                                                    item.trim() !==
+                                                                    ""
+                                                            ).length > 0
+                                                                ? answer.expected_answers.join(
+                                                                      ", "
+                                                                  )
+                                                                : "—"}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                         {answer.feedback && (
                                             <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">

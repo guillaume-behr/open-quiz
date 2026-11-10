@@ -252,6 +252,11 @@ class Quiz(Base):
     duration_seconds: Mapped[int] = mapped_column(Integer, default=900)
     allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_answer_review: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Whether students see the correction, as provisional, before the grades
+    # are published (app/routers/results.py, history_item).
+    show_provisional_grades: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true"
+    )
     allow_negative_points: Mapped[bool] = mapped_column(Boolean, default=False)
     same_questions_for_all: Mapped[bool] = mapped_column(Boolean, default=True)
     easy_question_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -300,6 +305,7 @@ class QuizSession(Base):
         Boolean, nullable=True
     )
     allow_answer_review: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    show_provisional_grades: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     allow_negative_points: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     same_questions_for_all: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     class_id: Mapped[int | None] = mapped_column(

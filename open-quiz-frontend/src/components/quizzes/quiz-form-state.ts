@@ -15,6 +15,7 @@ type QuizFormState = {
     durationMinutes: number
     allowPreviousQuestions: boolean
     allowAnswerReview: boolean
+    showProvisionalGrades: boolean
     allowNegativePoints: boolean
     sameQuestionsForAll: boolean
     difficultyCounts: DifficultyCounts
@@ -46,6 +47,7 @@ export const emptyQuizForm: QuizFormState = {
     durationMinutes: 15,
     allowPreviousQuestions: false,
     allowAnswerReview: true,
+    showProvisionalGrades: true,
     allowNegativePoints: false,
     sameQuestionsForAll: false,
     difficultyCounts: NO_QUESTIONS,
@@ -87,6 +89,7 @@ export function quizFormReducer(
                 durationMinutes: quiz.duration_seconds / 60,
                 allowPreviousQuestions: quiz.allow_previous_questions,
                 allowAnswerReview: quiz.allow_answer_review,
+                showProvisionalGrades: quiz.show_provisional_grades,
                 allowNegativePoints: quiz.allow_negative_points,
                 sameQuestionsForAll: quiz.same_questions_for_all,
                 difficultyCounts: {

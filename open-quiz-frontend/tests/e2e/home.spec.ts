@@ -626,6 +626,7 @@ test("a student reviews the correction history", async ({ page }) => {
                     // Without this the panel opens the provisional-grade
                     // dialog, which hides the accordion behind a modal.
                     grades_published: true,
+                    correction_available: true,
                     answers: [
                         {
                             question_id: 93,
@@ -678,6 +679,66 @@ test("a student reviews the correction history", async ({ page }) => {
     await correctionTrigger.click()
     await expect(correctionTrigger).toHaveAttribute("aria-expanded", "false")
     await expect(page.getByText("Which planet is red?")).toBeHidden()
+})
+
+test("a student sees only their answers until the grades are published", async ({
+    page,
+}) => {
+    await page.route("**/api/student-auth/login", async (route) => {
+        await route.fulfill({
+            json: { access_token: "student-token", student },
+        })
+    })
+    await page.route("**/api/quizzes/student/results", async (route) => {
+        await route.fulfill({
+            json: [
+                {
+                    session_id: 91,
+                    quiz_title: "Unpublished checkpoint",
+                    class_name: "Class 8B",
+                    started_at: "2026-01-07T10:01:00Z",
+                    score: null,
+                    maximum_score: null,
+                    grades_published: false,
+                    correction_available: false,
+                    answers: [
+                        {
+                            question_id: 94,
+                            position: 1,
+                            prompt: "Which planet is blue?",
+                            difficulty: "easy",
+                            answer_mode: "single",
+                            submitted_answers: ["Neptune"],
+                            expected_answers: [],
+                            is_correct: null,
+                            score: null,
+                            max_score: 1,
+                        },
+                    ],
+                },
+            ],
+        })
+    })
+
+    await page.goto("/student/login")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
+    await page.getByRole("button", { name: "Sign in" }).click()
+    await page.getByRole("button", { name: "Results", exact: true }).click()
+
+    const trigger = page.getByRole("button", { name: /Unpublished checkpoint/ })
+    await expect(trigger).toContainText("View my answers")
+    await expect(trigger).toContainText("Grades not published")
+    await trigger.click()
+    // No provisional-grade dialog: there is no correction to warn about.
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(
+        page.getByText(
+            "Your teacher hasn't published the grades yet. The correction and your score will appear here once they do."
+        )
+    ).toBeVisible()
+    await expect(page.getByText("Neptune", { exact: true })).toBeVisible()
+    await expect(page.getByText("Correct answer")).toHaveCount(0)
 })
 
 test("teacher area navigation works without a page reload", async ({
