@@ -67,8 +67,8 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
 
     Those releases created tables with create_all() and added late columns at
     startup, so an older instance can lack tables, columns and indexes. The
-    baseline fills them in, keeps every row, and the paste alerts those
-    releases recorded are cleared once. Their images, stored in each question
+    baseline fills them in, keeps every row, and the paste and copy alerts
+    those releases recorded are cleared once. Their images, stored in each question
     and choice row, move once per distinct content to stored_images.
     """
     database = tmp_path / "pre-migrations"
@@ -123,6 +123,15 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
                     last_violation_at=datetime.now(UTC),
                 )
             )
+            session.add(
+                QuizParticipant(
+                    session_id=quiz_session.id,
+                    student_identifier="legacy.copier",
+                    violation_count=2,
+                    last_violation_type="copy_attempt",
+                    last_violation_at=datetime.now(UTC),
+                )
+            )
             session.commit()
         with engine.begin() as connection:
             connection.exec_driver_sql("ALTER TABLE quiz_answers DROP COLUMN feedback")
@@ -163,7 +172,7 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
         assert connection.execute(
             "SELECT violation_count, last_violation_type, last_violation_at"
             " FROM quiz_participants"
-        ).fetchall() == [(0, None, None)]
+        ).fetchall() == [(0, None, None), (0, None, None)]
         stored = connection.execute(
             "SELECT sha256, content_type, data FROM stored_images"
         ).fetchall()

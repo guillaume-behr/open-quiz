@@ -30,6 +30,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   constraints on session statuses, quiz modes and question settings. A
   database holding a value the application never writes makes it fail as a
   whole: the schema stays as it was, and the backend log names the constraint.
+- At startup the backend applies migration 0005, which clears the monitoring
+  alerts recorded for a copy.
 
 ### Added
 
@@ -43,6 +45,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- Copying content during an exam no longer warns the teacher, as pasting
+  already did not: the monitoring notice no longer lists it, the API refuses a
+  `copy_attempt` event with 422, and alerts already recorded for a copy are
+  cleared.
 - The grade-level routes moved under the classes: `/api/grade-levels` is now
   `/api/classes/grade-levels`.
 - An unknown makeup session action now answers 422 instead of 404.

@@ -8,7 +8,6 @@ type ViolationType =
     | "pointer_exit"
     | "window_blur"
     | "page_hidden"
-    | "copy_attempt"
     | "context_menu"
     | "print_attempt"
 
@@ -82,13 +81,11 @@ export function useQuizMonitoring(
         const visibilityChanged = () => {
             if (document.hidden) report("page_hidden")
         }
-        const copied = () => report("copy_attempt")
         const contextMenuOpened = () => report("context_menu")
         const printing = () => report("print_attempt")
         document.documentElement.addEventListener("mouseleave", pointerLeft)
         window.addEventListener("blur", blurred)
         document.addEventListener("visibilitychange", visibilityChanged)
-        document.addEventListener("copy", copied)
         document.addEventListener("contextmenu", contextMenuOpened)
         window.addEventListener("beforeprint", printing)
         return () => {
@@ -98,7 +95,6 @@ export function useQuizMonitoring(
             )
             window.removeEventListener("blur", blurred)
             document.removeEventListener("visibilitychange", visibilityChanged)
-            document.removeEventListener("copy", copied)
             document.removeEventListener("contextmenu", contextMenuOpened)
             window.removeEventListener("beforeprint", printing)
         }
