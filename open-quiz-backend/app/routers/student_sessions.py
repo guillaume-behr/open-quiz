@@ -646,6 +646,14 @@ def submit_student_answer(
     question, choices, retargeting = answered_question(
         quiz_session, participant, session
     )
+    if payload.question_id != question.id:
+        # The page shows another question than the one the server is on: a
+        # stale view must not record its answer against this question.
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.ANSWER_QUESTION_MISMATCH,
+            "La réponse concerne une autre question que la question en cours",
+        )
     answer_data, feedback = validated_answer(
         payload,
         question,

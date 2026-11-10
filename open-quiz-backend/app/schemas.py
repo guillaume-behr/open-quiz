@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -721,6 +721,9 @@ class QuizSessionResponse(BaseModel):
     started_at: datetime | None
     ends_at: datetime | None
     grades_published_at: datetime | None
+    # The server's clock when this state was built, so a client whose own
+    # clock is off can still count down to ends_at correctly.
+    server_now: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class StudentQuizSessionResponse(BaseModel):
@@ -731,6 +734,8 @@ class StudentQuizSessionResponse(BaseModel):
     join_code: str
     status: SessionStatus
     ends_at: datetime | None
+    # See QuizSessionResponse.server_now.
+    server_now: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # A student's choice identifier: an opaque token (app/choice_tokens.py).
@@ -795,6 +800,9 @@ class StudentQuizJoinResponse(StudentQuizStateResponse):
 class StudentQuizAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # The question shown when the student answered: an answer is never
+    # recorded against another one (ANSWER_QUESTION_MISMATCH).
+    question_id: int
     selected_choice_ids: list[StudentChoiceToken] | None = Field(
         default=None, min_length=1, max_length=12
     )

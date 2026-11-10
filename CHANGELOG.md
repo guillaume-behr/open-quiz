@@ -71,6 +71,17 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- A student answer now names the question it was given for (`question_id`,
+  required). An answer from a page that shows another question than the
+  server's current one is refused with 409 `ANSWER_QUESTION_MISMATCH` instead
+  of being recorded against the wrong question; the page then shows the
+  current question and keeps the answer as a draft. A page loaded before the
+  update has to be reloaded to answer.
+- Exam countdowns follow the server's clock: session states carry
+  `server_now`, so a school computer whose clock is off no longer shows the
+  wrong time left, and changing the computer's clock during an exam does not
+  move the timer. The timer no longer flashes `0:00` when it appears, and
+  screen readers announce when 10, 5 and 1 minute are left.
 - A student who lost their exam tab (closed window, crashed browser, another
   device) can join again with the same code and resume where they were, on
   a new participant token. The old tab stops working and is told the exam

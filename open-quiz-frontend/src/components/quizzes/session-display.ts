@@ -16,6 +16,8 @@ export type SessionDisplayPayload = {
     joinCode: string
     status: QuizSession["status"]
     endsAt: string | null
+    // The server's time when the dashboard received the state.
+    serverNow: string | null
     participantCount: number
     finishedCount: number
     updatedAt: number
@@ -124,6 +126,7 @@ export function sessionDisplayPayload(
         joinCode: session.join_code,
         status: session.status,
         endsAt: "ends_at" in session ? session.ends_at : null,
+        serverNow: "server_now" in session ? session.server_now : null,
         participantCount: session.participant_count,
         finishedCount: participants.filter(
             (participant) => participant.has_finished

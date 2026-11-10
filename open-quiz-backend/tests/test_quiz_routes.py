@@ -53,6 +53,7 @@ from support import (
     make_client,
     settings_for,
     training_banks,
+    written_answer,
 )
 
 
@@ -444,7 +445,7 @@ def test_written_answers_cannot_exceed_their_points(environment) -> None:
         client.post(
             f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
             headers=participant_headers,
-            json={"written_answer": "Because"},
+            json=written_answer(client, participant_headers, "Because"),
         ).status_code
         == 200
     )

@@ -902,7 +902,7 @@ def test_makeup_discards_trainings_open_on_its_question_banks(
             f"/api/quizzes/student/sessions/{training_code}/answer",
             headers=training_headers,
             # The training is gone, so it has no tokens: the body never matters.
-            json={"selected_choice_ids": ["unknown"]},
+            json={"question_id": 0, "selected_choice_ids": ["unknown"]},
         )
         assert answered.status_code == 401
 

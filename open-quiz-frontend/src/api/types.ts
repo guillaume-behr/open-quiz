@@ -289,6 +289,8 @@ export type QuizSession = {
     created_at: string
     started_at: string | null
     ends_at: string | null
+    // The server's time when this state was built (QuizTimer).
+    server_now: string
     grades_published_at: string | null
 }
 
@@ -352,6 +354,8 @@ export type StudentQuizSession = {
     join_code: string
     status: "waiting" | "in_progress" | "paused" | "finished" | "cancelled"
     ends_at: string | null
+    // The server's time when this state was built (QuizTimer).
+    server_now: string
     question_number: number | null
     total_questions: number
     has_answered: boolean
@@ -401,6 +405,8 @@ export type StudentQuizJoin = StudentQuizSession & {
 }
 
 export type StudentQuizAnswer = {
+    // The question on screen: the server refuses an answer for another one.
+    question_id: number
     selected_choice_ids?: string[]
     written_answer?: string
 }

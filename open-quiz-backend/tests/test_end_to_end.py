@@ -925,7 +925,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             client.post(
                 f"{student_state_url}/answer",
                 headers=student_headers,
-                json={},
+                # A well-formed answer: a paused exam refuses it as such.
+                json={"question_id": 0, "written_answer": "During the pause"},
             ).status_code
             == 409
         )
@@ -1013,7 +1014,8 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     ensure_ascii=False,
                 )
                 answer_payload = {
-                    "written_answer": "Réponse rédactionnelle très longue. " * 200
+                    "question_id": safe_question["id"],
+                    "written_answer": "Réponse rédactionnelle très longue. " * 200,
                 }
             else:
                 missing_answer = client.post(
@@ -1034,11 +1036,12 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                     if choice["is_correct"]
                 }
                 answer_payload = {
+                    "question_id": safe_question["id"],
                     "selected_choice_ids": [
                         choice["id"]
                         for choice in safe_question["choices"]
                         if choice["label"] in correct_labels
-                    ]
+                    ],
                 }
             submitted = client.post(
                 f"{student_state_url}/answer",
@@ -1393,7 +1396,10 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             "/api/quizzes/sessions/results",
             headers=teacher_headers,
         ).json()
-        assert refreshed_results == graded_results
+        # Only the time each response was built at may differ.
+        assert [{**result, "server_now": None} for result in refreshed_results] == [
+            {**result, "server_now": None} for result in graded_results
+        ]
 
         blocked_delete = client.delete(
             f"/api/question-banks/questions/{regraded_question['id']}",

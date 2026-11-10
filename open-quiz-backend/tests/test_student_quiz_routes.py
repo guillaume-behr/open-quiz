@@ -121,6 +121,7 @@ def answer_current(client, url: str, headers: dict[str, str], **payload: Any):
     question = state["question"]
     if not payload:
         payload = {"selected_choice_ids": [question["choices"][0]["id"]]}
+    payload = {"question_id": question["id"], **payload}
     return client.post(f"{url}/answer", headers=headers, json=payload)
 
 
@@ -347,24 +348,35 @@ def test_answers_are_validated_against_the_question(environment) -> None:
         if question["id"] == written["id"]:
             assert (
                 client.post(
-                    f"{url}/answer", headers=headers, json={"written_answer": "   "}
+                    f"{url}/answer",
+                    headers=headers,
+                    json={"question_id": question["id"], "written_answer": "   "},
                 ).status_code
                 == 422
             )
-            last_payload = {"written_answer": "Because"}
-            changed_payload = {"written_answer": "Something else"}
+            last_payload = {"question_id": question["id"], "written_answer": "Because"}
+            changed_payload = {
+                "question_id": question["id"],
+                "written_answer": "Something else",
+            }
         else:
             choice_ids = [choice["id"] for choice in question["choices"]]
             for payload in (
-                {"written_answer": "text"},
-                {"selected_choice_ids": choice_ids},
-                {"selected_choice_ids": [999999]},
+                {"question_id": question["id"], "written_answer": "text"},
+                {"question_id": question["id"], "selected_choice_ids": choice_ids},
+                {"question_id": question["id"], "selected_choice_ids": [999999]},
             ):
                 assert (
                     client.post(f"{url}/answer", headers=headers, json=payload)
                 ).status_code == 422
-            last_payload = {"selected_choice_ids": [choice_ids[0]]}
-            changed_payload = {"selected_choice_ids": [choice_ids[1]]}
+            last_payload = {
+                "question_id": question["id"],
+                "selected_choice_ids": [choice_ids[0]],
+            }
+            changed_payload = {
+                "question_id": question["id"],
+                "selected_choice_ids": [choice_ids[1]],
+            }
         response = client.post(f"{url}/answer", headers=headers, json=last_payload)
         assert response.status_code == 200
 
@@ -872,7 +884,9 @@ def test_training_feedback_and_results_cover_written_and_empty_banks(
     question = client.get(url, headers=token_headers).json()["question"]
     assert question["answer_mode"] == "written"
     answered = client.post(
-        f"{url}/answer", headers=token_headers, json={"written_answer": "Because"}
+        f"{url}/answer",
+        headers=token_headers,
+        json={"question_id": question["id"], "written_answer": "Because"},
     )
     assert answered.status_code == 200
     assert answered.json()["training_feedback"]["requires_manual_review"] is True
@@ -1288,7 +1302,7 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
             f"/api/quizzes/student/sessions/{started.json()['join_code']}/answer",
             headers={"X-Quiz-Token": started.json()["participant_token"]},
             # The attempt is gone, so it has no tokens: the body never matters.
-            json={"selected_choice_ids": ["unknown"]},
+            json={"question_id": 0, "selected_choice_ids": ["unknown"]},
         )
         assert replaced_attempt.status_code == 401
         updated_question = client.post(
@@ -1510,9 +1524,9 @@ def test_training_quiz_is_self_started_ungraded_and_returns_feedback(
 
 
 def test_written_answers_have_an_application_level_size_limit() -> None:
-    assert StudentQuizAnswer(written_answer="a" * 20000).written_answer
+    assert StudentQuizAnswer(question_id=1, written_answer="a" * 20000).written_answer
     with pytest.raises(ValidationError):
-        StudentQuizAnswer(written_answer="a" * 20001)
+        StudentQuizAnswer(question_id=1, written_answer="a" * 20001)
 
 
 def test_join_and_start_race_never_strands_a_participant(tmp_path: Path) -> None:
@@ -2399,7 +2413,10 @@ def test_departed_participant_does_not_hold_the_session_open(tmp_path: Path) -> 
         answered = client.post(
             f"/api/quizzes/student/sessions/{join_code}/answer",
             headers={"X-Quiz-Token": quiz_tokens[1]},
-            json={"selected_choice_ids": [state["question"]["choices"][0]["id"]]},
+            json={
+                "question_id": state["question"]["id"],
+                "selected_choice_ids": [state["question"]["choices"][0]["id"]],
+            },
         )
         assert answered.status_code == 200
         hand_in_quiz(client, join_code, {"X-Quiz-Token": quiz_tokens[1]})
@@ -2536,7 +2553,10 @@ def test_last_participant_leaving_finishes_the_session(tmp_path: Path) -> None:
             client.post(
                 f"/api/quizzes/student/sessions/{join_code}/answer",
                 headers={"X-Quiz-Token": quiz_tokens[0]},
-                json={"selected_choice_ids": [state["question"]["choices"][0]["id"]]},
+                json={
+                    "question_id": state["question"]["id"],
+                    "selected_choice_ids": [state["question"]["choices"][0]["id"]],
+                },
             ).status_code
             == 200
         )

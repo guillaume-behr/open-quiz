@@ -112,7 +112,10 @@ def test_totals_never_carry_float_noise(tmp_path: Path) -> None:
                 client.post(
                     f"{student_url}/answer",
                     headers=participant_headers,
-                    json={"selected_choice_ids": [correct]},
+                    json={
+                        "question_id": state["question"]["id"],
+                        "selected_choice_ids": [correct],
+                    },
                 ).status_code
                 == 200
             )

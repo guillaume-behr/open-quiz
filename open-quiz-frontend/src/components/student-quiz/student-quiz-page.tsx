@@ -146,7 +146,10 @@ function QuizHeader({
             <p className="text-muted-foreground">{session.class_name}</p>
             {session.status === "in_progress" && (
                 <div className="mt-3">
-                    <QuizTimer endsAt={session.ends_at} />
+                    <QuizTimer
+                        endsAt={session.ends_at}
+                        serverNow={session.server_now}
+                    />
                 </div>
             )}
         </div>
