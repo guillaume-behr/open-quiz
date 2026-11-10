@@ -1293,6 +1293,15 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=teacher_headers,
         )
         assert unpublished.status_code == 409
+        # A mark is stored to two decimals, like every other score.
+        partly_graded = client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/answers/"
+            f"{written_review['id']}/grade",
+            headers=teacher_headers,
+            json={"score": 0.126},
+        )
+        assert partly_graded.status_code == 200
+        assert partly_graded.json()["score"] == 0.13
         manually_graded = client.post(
             f"/api/quizzes/sessions/{quiz_session['id']}/answers/"
             f"{written_review['id']}/grade",
