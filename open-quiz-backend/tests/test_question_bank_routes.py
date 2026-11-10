@@ -1080,3 +1080,39 @@ def test_regrading_an_edit_uses_a_constant_query_count(environment) -> None:
 def stored_sessions(client: Any) -> list[int]:
     with client.app.state.session_factory() as session:
         return [quiz_session.id for quiz_session in session.query(QuizSession)]
+
+
+def test_turning_a_question_written_keeps_teacher_marks_and_zeroes_pending_ones(
+    environment,
+) -> None:
+    """Rescoring a written question follows compute_final_scores' rule."""
+    client = environment["client"]
+    question = environment["question"]
+    graded = finished_exam_with_a_wrong_answer(environment)
+    pending = finished_exam_with_a_wrong_answer(environment)
+    with client.app.state.session_factory() as session:
+        for session_id, score, is_graded in (
+            (graded["id"], 1.5, True),
+            (pending["id"], 1.5, False),
+        ):
+            answer = session.query(QuizAnswer).filter_by(session_id=session_id).one()
+            answer.score = score
+            answer.is_graded = is_graded
+        session.commit()
+
+    updated = client.post(
+        f"/api/question-banks/questions/{question['id']}/update",
+        headers=environment["teacher_headers"],
+        data={
+            "payload": json.dumps(
+                question_payload(
+                    answer_mode="written",
+                    choices=[{"label": "Two", "is_correct": True, "points": 2}],
+                )
+            )
+        },
+    )
+
+    assert updated.status_code == 200
+    assert stored_scores(client, graded["id"]) == [(1.5, True)]
+    assert stored_scores(client, pending["id"]) == [(0.0, False)]
