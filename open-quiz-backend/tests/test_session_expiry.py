@@ -8,15 +8,19 @@ import pytest
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 
-from app import maintenance
+from app import application, maintenance
 from app.database import EXPIRY_LOCK_KEY
-from app.models import QuizSession
+from app.models import QuizSession, User
+from app.services import session_lifecycle
 
 from support import (
+    concurrent_writes,
     correct_choice_id,
     exam_environment,
+    expire_due_sessions,
     launch_and_join,
     make_client,
+    seeded_exam_session,
     settings_for,
 )
 
@@ -128,3 +132,136 @@ def test_retention_maintenance_retries_after_a_database_error(
         asyncio.run(maintenance.maintain_data_retention_periodically(None, None))
     assert runs == ["run", "run"]
     assert logged == ["Data retention maintenance failed"]
+
+
+@pytest.mark.parametrize(
+    ("loop", "work", "message"),
+    [
+        (
+            "expire_sessions_periodically",
+            "expire_due_sessions",
+            "Session expiry failed",
+        ),
+        (
+            "maintain_data_retention_periodically",
+            "enforce_data_retention",
+            "Data retention maintenance failed",
+        ),
+    ],
+)
+def test_the_loops_survive_any_exception(
+    monkeypatch: pytest.MonkeyPatch, loop: str, work: str, message: str
+) -> None:
+    """A bug in one run must not stop expiry or retention until a restart."""
+    runs: list[str] = []
+
+    async def short_sleep(_: float) -> None:
+        if len(runs) == 2:
+            raise asyncio.CancelledError
+
+    def run_once(*_: object) -> int:
+        runs.append("run")
+        if len(runs) == 1:
+            raise RuntimeError("unexpected")
+        return 0
+
+    logged: list[str] = []
+    monkeypatch.setattr(maintenance, "sleep", short_sleep)
+    monkeypatch.setattr(maintenance, work, run_once)
+    monkeypatch.setattr(maintenance.logger, "exception", logged.append)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(getattr(maintenance, loop)(None, None))
+    assert runs == ["run", "run"]
+    assert logged == [message]
+
+
+def test_a_failing_session_does_not_hold_back_the_other_due_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(settings_for(tmp_path / "expiry-isolation")) as client:
+        factory = client.app.state.session_factory
+        long_ago = datetime.now(UTC) - timedelta(hours=2)
+        with factory() as session:
+            admin = session.scalar(select(User).where(User.is_admin.is_(True)))
+            assert admin is not None
+            broken_id, healthy_id = (
+                seeded_exam_session(
+                    session,
+                    admin.id,
+                    join_code=join_code,
+                    status_value="in_progress",
+                    created_at=long_ago,
+                    with_answer=True,
+                )
+                for join_code in ("BROKEN1", "HEALTH1")
+            )
+            session.commit()
+
+        finish_session = session_lifecycle.finish_session
+
+        def finish_unless_broken(quiz_session, quiz, session, *args) -> bool:
+            if quiz_session.id == broken_id:
+                raise RuntimeError("cannot grade this session")
+            return finish_session(quiz_session, quiz, session, *args)
+
+        logged: list[tuple[object, ...]] = []
+        monkeypatch.setattr(session_lifecycle, "finish_session", finish_unless_broken)
+        monkeypatch.setattr(
+            session_lifecycle.logger,
+            "exception",
+            lambda *args, **_: logged.append(args),
+        )
+        assert expire_due_sessions(client) == 1
+
+        with factory() as session:
+            assert session.get(QuizSession, healthy_id).status == "finished"
+            assert session.get(QuizSession, broken_id).status == "in_progress"
+        assert logged == [("Finishing expired session %s failed", broken_id)]
+
+
+def test_shutdown_does_not_raise_what_a_background_task_raised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def crash(*_: object) -> None:
+        raise RuntimeError("background task crashed")
+
+    logged: list[tuple[object, ...]] = []
+    monkeypatch.setattr(application, "expire_sessions_periodically", crash)
+    monkeypatch.setattr(
+        application.logger, "exception", lambda *args, **_: logged.append(args)
+    )
+    with make_client(settings_for(tmp_path / "crashed-task")) as client:
+        # Let the crashed task finish before shutting down.
+        assert client.get("/api/health").status_code == 200
+    assert logged == [("Background task %s failed", "session expiry")]
+
+
+def test_a_tick_skips_a_session_finished_concurrently(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "expiry-race")) as client:
+        factory = client.app.state.session_factory
+        with factory() as session:
+            admin = session.scalar(select(User).where(User.is_admin.is_(True)))
+            assert admin is not None
+            raced_id = seeded_exam_session(
+                session,
+                admin.id,
+                join_code="RACED02",
+                status_value="in_progress",
+                created_at=datetime.now(UTC) - timedelta(hours=2),
+                with_answer=True,
+            )
+            session.commit()
+
+        with concurrent_writes(
+            client,
+            (
+                "UPDATE quiz_sessions SET status",
+                lambda connection: connection.execute(
+                    update(QuizSession)
+                    .where(QuizSession.id == raced_id)
+                    .values(status="finished")
+                ),
+            ),
+        ) as fired:
+            assert expire_due_sessions(client) == 0
+        assert fired
