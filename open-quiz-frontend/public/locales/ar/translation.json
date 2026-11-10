@@ -825,6 +825,7 @@
     "error-quiz-session-not-running": "لا يمكن إيقاف إلا جلسة جارية مؤقتًا.",
     "error-quiz-session-not-paused": "لا يمكن استئناف إلا جلسة متوقفة مؤقتًا.",
     "error-quiz-session-not-cancellable": "لم يعد بالإمكان إلغاء هذه الجلسة.",
+    "error-quiz-session-is-makeup": "هذه الجلسة جزء من جلسة استدراك وتُدار منها.",
     "error-quiz-training-not-launchable": "لا يُطلق التدريب: يبدؤه الطلاب بأنفسهم.",
     "error-quiz-class-invalid": "لم يعد الصف المحدد موجودًا. اختر صفًا آخر.",
     "error-quiz-class-empty": "لا يضم هذا الصف أي طالب. أضف طلابًا قبل إطلاق الاختبار.",

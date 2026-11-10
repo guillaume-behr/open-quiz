@@ -74,6 +74,13 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   finishes instead of running on until its time is up.
 - Pausing or resuming an exam, or a make-up session, at the moment it
   finishes no longer reopens it.
+- Make-up sessions no longer fill the teacher's list of running exams with
+  one entry per student, which could push the class's own exam out of it.
+- A paused make-up session can be finished without resuming it first.
+- The class-session routes (`/api/quizzes/sessions/{id}/start`, `pause`,
+  `resume`, `cancel`) now refuse a make-up student's session with 409
+  `QUIZ_SESSION_IS_MAKEUP`. Cancelling one through them used to keep that
+  student from choosing a quiz again.
 
 ### Security
 

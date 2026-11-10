@@ -773,6 +773,7 @@
     "error-quiz-session-not-running": "Only a session in progress can be paused.",
     "error-quiz-session-not-paused": "Only a paused session can be resumed.",
     "error-quiz-session-not-cancellable": "This session can no longer be cancelled.",
+    "error-quiz-session-is-makeup": "This session belongs to a retake session and is controlled from there.",
     "error-quiz-training-not-launchable": "A training quiz is not launched: students start it themselves.",
     "error-quiz-class-invalid": "The selected class no longer exists. Choose another class.",
     "error-quiz-class-empty": "This class has no students. Add students before launching the quiz.",

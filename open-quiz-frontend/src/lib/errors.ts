@@ -80,6 +80,7 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     QUIZ_SESSION_NOT_RUNNING: "error-quiz-session-not-running",
     QUIZ_SESSION_NOT_PAUSED: "error-quiz-session-not-paused",
     QUIZ_SESSION_NOT_CANCELLABLE: "error-quiz-session-not-cancellable",
+    QUIZ_SESSION_IS_MAKEUP: "error-quiz-session-is-makeup",
     QUIZ_SESSION_HAS_ANSWERS: "quiz-cancel-with-answers-error",
     QUIZ_TRAINING_NOT_LAUNCHABLE: "error-quiz-training-not-launchable",
     QUIZ_CLASS_INVALID: "error-quiz-class-invalid",

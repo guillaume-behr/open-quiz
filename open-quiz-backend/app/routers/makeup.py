@@ -92,13 +92,19 @@ class MakeupAction(StrEnum):
     CANCEL = "cancel"
 
 
-# The status each action requires, and the one it leads to.
-MAKEUP_TRANSITIONS: dict[MakeupAction, tuple[SessionStatus, SessionStatus]] = {
-    MakeupAction.START: (SessionStatus.WAITING, SessionStatus.IN_PROGRESS),
-    MakeupAction.PAUSE: (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
-    MakeupAction.RESUME: (SessionStatus.PAUSED, SessionStatus.IN_PROGRESS),
-    MakeupAction.FINISH: (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED),
-    MakeupAction.CANCEL: (SessionStatus.WAITING, SessionStatus.CANCELLED),
+# The statuses each action accepts, and the one it leads to. A paused make-up
+# can be finished directly: resuming it first would restart every clock.
+MAKEUP_TRANSITIONS: dict[
+    MakeupAction, tuple[tuple[SessionStatus, ...], SessionStatus]
+] = {
+    MakeupAction.START: ((SessionStatus.WAITING,), SessionStatus.IN_PROGRESS),
+    MakeupAction.PAUSE: ((SessionStatus.IN_PROGRESS,), SessionStatus.PAUSED),
+    MakeupAction.RESUME: ((SessionStatus.PAUSED,), SessionStatus.IN_PROGRESS),
+    MakeupAction.FINISH: (
+        (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
+        SessionStatus.FINISHED,
+    ),
+    MakeupAction.CANCEL: ((SessionStatus.WAITING,), SessionStatus.CANCELLED),
 }
 
 
@@ -326,7 +332,7 @@ def control_makeup_session(
 ) -> MakeupSessionResponse | Response:
     makeup = owned_makeup_session(session_id, professor, session)
     expected, target = MAKEUP_TRANSITIONS[action]
-    if makeup.status != expected:
+    if makeup.status not in expected:
         raise ApiError(
             409,
             ErrorCode.MAKEUP_ACTION_NOT_ALLOWED,
@@ -348,7 +354,7 @@ def control_makeup_session(
         update(MakeupSession)
         .where(
             MakeupSession.id == makeup.id,
-            MakeupSession.status == expected,
+            MakeupSession.status.in_(expected),
         )
         .values(status=target)
         .execution_options(synchronize_session=False)

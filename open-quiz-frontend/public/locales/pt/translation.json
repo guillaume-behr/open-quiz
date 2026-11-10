@@ -773,6 +773,7 @@
     "error-quiz-session-not-running": "Só é possível pausar uma sessão em curso.",
     "error-quiz-session-not-paused": "Só é possível retomar uma sessão em pausa.",
     "error-quiz-session-not-cancellable": "Esta sessão já não pode ser cancelada.",
+    "error-quiz-session-is-makeup": "Esta sessão faz parte de uma recuperação e é gerida a partir dela.",
     "error-quiz-training-not-launchable": "Um treino não é lançado: os alunos iniciam-no eles próprios.",
     "error-quiz-class-invalid": "A turma selecionada já não existe. Escolha outra turma.",
     "error-quiz-class-empty": "Esta turma não tem alunos. Adicione alunos antes de lançar o teste.",

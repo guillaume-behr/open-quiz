@@ -193,6 +193,25 @@ def create_quiz(
     return quiz_response(quiz, session)
 
 
+def owned_class_session(
+    session_id: int, professor: ProfessorUser, session: DbSession
+) -> tuple[QuizSession, Quiz]:
+    """A session these routes may control: not one student's make-up quiz.
+
+    A make-up's children follow the make-up session's own state machine;
+    changing one directly would desynchronise it, and cancelling one would
+    strand its student's selection.
+    """
+    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    if quiz_session.makeup_session_id is not None:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_IS_MAKEUP,
+            "Cette session se pilote depuis sa session de rattrapage",
+        )
+    return quiz_session, quiz
+
+
 @router.get("/sessions/active", response_model=list[QuizSessionResponse])
 def list_active_sessions(
     professor: ProfessorUser,
@@ -249,7 +268,7 @@ def start_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    quiz_session, quiz = owned_class_session(session_id, professor, session)
     if quiz_session.status == SessionStatus.WAITING:
         started_at = datetime.now(UTC)
         transition = session.execute(
@@ -379,7 +398,7 @@ def pause_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    quiz_session, quiz = owned_class_session(session_id, professor, session)
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status != SessionStatus.IN_PROGRESS:
         raise ApiError(
@@ -420,7 +439,7 @@ def resume_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    quiz_session, quiz = owned_class_session(session_id, professor, session)
     if quiz_session.status != SessionStatus.PAUSED or quiz_session.paused_at is None:
         raise ApiError(
             status.HTTP_409_CONFLICT,
@@ -468,7 +487,7 @@ def cancel_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    quiz_session, quiz = owned_class_session(session_id, professor, session)
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status not in ACTIVE_SESSION_STATUSES:
         raise ApiError(

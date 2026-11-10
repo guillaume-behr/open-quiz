@@ -773,6 +773,7 @@
     "error-quiz-session-not-running": "Seule une session en cours peut être mise en pause.",
     "error-quiz-session-not-paused": "Seule une session en pause peut être reprise.",
     "error-quiz-session-not-cancellable": "Cette session ne peut plus être annulée.",
+    "error-quiz-session-is-makeup": "Cette session fait partie d’un rattrapage et se pilote depuis celui-ci.",
     "error-quiz-training-not-launchable": "Un entraînement ne se lance pas : les élèves le démarrent eux-mêmes.",
     "error-quiz-class-invalid": "La classe sélectionnée n’existe plus. Choisissez une autre classe.",
     "error-quiz-class-empty": "Cette classe ne contient aucun élève. Ajoutez des élèves avant de lancer le quiz.",
