@@ -17,6 +17,7 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     QUIZ_JOIN_REJECTED: "error-quiz-join-rejected",
     QUIZ_PARTICIPANT_TOKEN_MISSING: "error-quiz-session-expired",
     QUIZ_PARTICIPANT_TOKEN_INVALID: "error-quiz-session-expired",
+    QUIZ_PARTICIPANT_SESSION_RESUMED: "error-quiz-session-resumed",
     QUIZ_QUESTION_UNAVAILABLE: "error-quiz-question-unavailable",
     QUIZ_NO_CURRENT_QUESTION: "error-quiz-question-unavailable",
     QUIZ_NOT_ACCEPTING_ANSWERS: "error-quiz-not-accepting-answers",

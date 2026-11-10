@@ -114,6 +114,14 @@ Open Quiz ne la retarde pas d’elle-même. Pour un quiz qui sera rattrapé,
 désactivez l’option « Afficher les notes provisoires » et publiez les notes
 après le rattrapage ; la correction n’est alors visible qu’à la publication.
 
+Le jeton de participation d’un élève vit dans l’onglet. Si l’élève le perd,
+il rejoint l’examen avec le même code depuis son compte : il retrouve la même
+copie sur un nouveau jeton, et l’ancien cesse aussitôt de fonctionner, si bien
+qu’un compte ne compose jamais à deux endroits à la fois. Une fois l’examen
+commencé, l’enseignant voit cette reprise comme une alerte de surveillance.
+Quiconque connaît le mot de passe de l’élève peut donc lui prendre sa copie en
+cours : c’est l’alerte qui le signale.
+
 Les sessions privilégiées exigent une preuve de renouvellement conservée dans
 la fenêtre principale et inaccessible au Worker Python. Les autorisations et la
 notation restent appliquées par le backend.

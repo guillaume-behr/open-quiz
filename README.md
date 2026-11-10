@@ -52,6 +52,10 @@ session suit toujours le même déroulement :
 - l’enseignant est prévenu si un élève quitte le plein écran, change d’onglet
   ou lance une impression : ces alertes sont informatives et ne
   déclenchent jamais de sanction automatique ;
+- un élève qui perd son onglet (fenêtre fermée, navigateur planté, autre
+  appareil) reprend l’examen en rejoignant avec le même code : ses réponses
+  sont conservées, l’ancien onglet cesse de fonctionner et l’enseignant en
+  est prévenu ;
 - rattrapage : faire repasser à des élèves choisis une sélection d’examens
   déjà passés ;
 - sujets papier nominatifs en A4, au tirage déterministe : un même élève

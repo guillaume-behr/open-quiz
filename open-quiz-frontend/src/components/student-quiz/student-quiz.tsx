@@ -138,15 +138,24 @@ export function StudentQuiz({
             .catch((restoreError: unknown) => {
                 if (!active || requestVersion !== sessionRequestVersion.current)
                     return
+                // The exam was taken back in another window: this tab says
+                // so and stays here, rather than suggest the session is gone.
+                const resumedElsewhere =
+                    restoreError instanceof ApiError &&
+                    restoreError.code === "QUIZ_PARTICIPANT_SESSION_RESUMED"
                 if (
                     restoreError instanceof ApiError &&
                     [401, 403, 404].includes(restoreError.status)
                 ) {
                     clearStoredQuizSession()
                     setParticipantToken(null)
-                    onSessionCleared?.()
+                    if (!resumedElsewhere) onSessionCleared?.()
                 }
-                setError(t("student-session-restore-error"))
+                setError(
+                    resumedElsewhere
+                        ? apiErrorMessage(restoreError, t, "")
+                        : t("student-session-restore-error")
+                )
             })
         return () => {
             active = false

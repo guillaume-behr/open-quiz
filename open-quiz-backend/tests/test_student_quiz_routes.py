@@ -270,8 +270,10 @@ def test_joining_survives_concurrent_session_changes(environment) -> None:
     assert fired
     assert duplicate.status_code == 403
 
+    # The row that won the race is the student's own: joining again resumes
+    # it on a token of its own (#169).
     still_present = client.post("/api/quizzes/join", headers=student_headers, json=join)
-    assert still_present.status_code == 403
+    assert still_present.status_code == 201
 
     with client.app.state.session_factory() as session:
         session.execute(

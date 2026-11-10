@@ -441,6 +441,11 @@ class QuizParticipant(Base):
     access_token_hash: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True
     )
+    # The token a resumed participation replaced, so its tab learns why it
+    # stopped working (QUIZ_PARTICIPANT_SESSION_RESUMED).
+    replaced_token_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     current_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
     violation_count: Mapped[int] = mapped_column(Integer, default=0)
     last_violation_type: Mapped[str | None] = mapped_column(String(40), nullable=True)

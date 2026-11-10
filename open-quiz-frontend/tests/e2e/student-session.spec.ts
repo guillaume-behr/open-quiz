@@ -1100,3 +1100,41 @@ test("a join error without a code keeps the generic message", async ({
         )
     ).toBeVisible()
 })
+
+test("a tab whose exam was resumed elsewhere says so", async ({ page }) => {
+    await page.addInitScript(() => {
+        sessionStorage.setItem(
+            "open-quiz-student-session",
+            JSON.stringify({
+                joinCode: "ABCD",
+                participantToken: "replaced-participant-token",
+            })
+        )
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            status: 401,
+            json: {
+                detail: {
+                    code: "QUIZ_PARTICIPANT_SESSION_RESUMED",
+                    message: "Ce quiz a été repris dans une autre fenêtre",
+                },
+            },
+        })
+    })
+
+    await page.goto("/student/exam")
+
+    await expect(
+        page.getByText(
+            "This exam was resumed in another window or on another device. Continue it there."
+        )
+    ).toBeVisible()
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                sessionStorage.getItem("open-quiz-student-session")
+            )
+        )
+        .toBeNull()
+})

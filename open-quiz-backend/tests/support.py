@@ -318,6 +318,35 @@ def exam_environment(client: TestClient) -> dict[str, Any]:
     }
 
 
+def add_class_student(
+    client: TestClient, environment: dict[str, Any], first_name: str = "Second"
+) -> dict[str, str]:
+    """Add another student to the environment's class; return their headers."""
+    headers = environment["teacher_headers"]
+    account = client.post(
+        "/api/students",
+        headers=headers,
+        json={"first_name": first_name, "last_name": "Student"},
+    ).json()
+    assert (
+        client.post(
+            f"/api/classes/{environment['student_class']['id']}/accounts/"
+            f"{account['id']}",
+            headers=headers,
+        ).status_code
+        == 200
+    )
+    login = client.post(
+        "/api/student-auth/login",
+        json={
+            "identifier": account["identifier"],
+            "password": account["generated_password"],
+        },
+    )
+    assert login.status_code == 200
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
 def launch_and_join(
     client: TestClient,
     environment: dict[str, Any],

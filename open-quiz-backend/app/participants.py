@@ -32,6 +32,9 @@ JOIN_CODE_ALPHABET = ascii_uppercase + digits
 
 
 VIOLATION_DEDUPLICATION_SECONDS = 2
+# Recorded by the server, never reported by a browser: a student took their
+# participation back on a new token (student_sessions.resume_participation).
+SESSION_RESUMED_VIOLATION = "session_resumed"
 
 
 def enforce_public_rate_limit(
@@ -123,6 +126,21 @@ def authenticated_participant(
             "quiz_join_rate_limiter",
             public_session_subject(join_code, "participant-auth", session),
         )
+        replaced = session.scalar(
+            select(QuizParticipant.id)
+            .join(QuizSession, QuizSession.id == QuizParticipant.session_id)
+            .where(
+                QuizSession.join_code == join_code.strip().upper(),
+                QuizParticipant.replaced_token_hash == participant_token_hash(token),
+                QuizParticipant.left_at.is_(None),
+            )
+        )
+        if replaced is not None:
+            raise ApiError(
+                status.HTTP_401_UNAUTHORIZED,
+                ErrorCode.QUIZ_PARTICIPANT_SESSION_RESUMED,
+                "Ce quiz a été repris dans une autre fenêtre",
+            )
         raise ApiError(
             status.HTTP_401_UNAUTHORIZED,
             ErrorCode.QUIZ_PARTICIPANT_TOKEN_INVALID,
