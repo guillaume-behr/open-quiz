@@ -98,7 +98,11 @@ export function SessionDisplayPage() {
                     </p>
                 </div>
                 {session.status === "in_progress" && session.endsAt && (
-                    <QuizTimer endsAt={session.endsAt} variant="display" />
+                    <QuizTimer
+                        endsAt={session.endsAt}
+                        serverNow={session.serverNow}
+                        variant="display"
+                    />
                 )}
                 {session.status === "paused" && (
                     <p className="flex items-center gap-3 text-[clamp(2rem,8vw,6rem)] leading-none font-black text-warning">

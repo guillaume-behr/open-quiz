@@ -140,8 +140,14 @@ export function TrainingPage() {
                 session.join_code,
                 participantToken,
                 question.answer_mode === "written"
-                    ? { written_answer: writtenAnswer }
-                    : { selected_choice_ids: selectedChoiceIds }
+                    ? {
+                          question_id: question.id,
+                          written_answer: writtenAnswer,
+                      }
+                    : {
+                          question_id: question.id,
+                          selected_choice_ids: selectedChoiceIds,
+                      }
             )
             if (!updated.training_feedback) throw new Error("Missing feedback")
             setAnsweredQuestion(question)

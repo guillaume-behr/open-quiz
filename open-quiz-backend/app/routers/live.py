@@ -161,6 +161,24 @@ def live_teacher_session_snapshot(
     }
 
 
+def without_clock(value: object) -> object:
+    """A snapshot without its server_now stamps, to tell whether it changed.
+
+    Every state carries the time it was built at, so two snapshots of an
+    unchanged session always differ by that alone: the feed must not resend
+    them for it.
+    """
+    if isinstance(value, dict):
+        return {
+            key: without_clock(item)
+            for key, item in value.items()
+            if key != "server_now"
+        }
+    if isinstance(value, list):
+        return [without_clock(item) for item in value]
+    return value
+
+
 def live_participant_is_authenticated(
     websocket: WebSocket,
     join_code: str,
@@ -233,7 +251,7 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
                 if sessions is None:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                if sessions != last_sessions:
+                if without_clock(sessions) != without_clock(last_sessions):
                     await websocket.send_json(
                         {
                             "type": "active_sessions",
@@ -291,7 +309,7 @@ async def live_teacher_quiz_session(
                     await websocket.send_json({"type": "deleted"})
                     await websocket.close()
                     return
-                if state != last_state:
+                if without_clock(state) != without_clock(last_state):
                     await websocket.send_json({"type": "session", "data": state})
                     heartbeat.record_send()
                     last_state = state
@@ -351,7 +369,7 @@ async def live_student_quiz_session(
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
                 state, terminal = snapshot
-                if state != last_state:
+                if without_clock(state) != without_clock(last_state):
                     await websocket.send_json({"type": "session", "data": state})
                     heartbeat.record_send()
                     last_state = state
@@ -407,7 +425,7 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
                 if sessions is None:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                if sessions != last_sessions:
+                if without_clock(sessions) != without_clock(last_sessions):
                     await websocket.send_json(
                         {
                             "type": "makeup_sessions",

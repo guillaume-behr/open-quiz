@@ -327,6 +327,7 @@ test("a student launches training and sees the correct answer", async ({
         "**/api/quizzes/student/sessions/TRAIN1/answer",
         async (route) => {
             expect(route.request().postDataJSON()).toEqual({
+                question_id: 41,
                 selected_choice_ids: ["choice-101"],
             })
             await route.fulfill({

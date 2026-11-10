@@ -341,6 +341,7 @@ export function StudentQuiz({
                 session.join_code,
                 participantToken,
                 {
+                    question_id: answeredQuestionId,
                     selected_choice_ids:
                         session.question.answer_mode === "written"
                             ? undefined
@@ -357,6 +358,23 @@ export function StudentQuiz({
             if (liveRevisionRef.current === liveRevision) applySession(updated)
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("student-answer-error")))
+            // The page showed another question than the server's current one:
+            // show the right one. The answer stays a draft of its question.
+            if (
+                caught instanceof ApiError &&
+                caught.code === "ANSWER_QUESTION_MISMATCH"
+            ) {
+                try {
+                    applySession(
+                        await getStudentQuizSession(
+                            session.join_code,
+                            participantToken
+                        )
+                    )
+                } catch {
+                    // The message above already asks to try again.
+                }
+            }
         } finally {
             setIsBusy(false)
         }

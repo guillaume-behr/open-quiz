@@ -407,6 +407,7 @@ test("student can submit a multiple-choice answer", async ({ page }) => {
         "**/api/quizzes/student/sessions/ABCD/answer",
         async (route) => {
             expect(route.request().postDataJSON()).toEqual({
+                question_id: 41,
                 selected_choice_ids: ["choice-101"],
             })
             expect(route.request().headers()["x-quiz-token"]).toBe(
@@ -870,6 +871,7 @@ test("student can submit a written answer", async ({ page }) => {
         "**/api/quizzes/student/sessions/ABCD/answer",
         async (route) => {
             expect(route.request().postDataJSON()).toEqual({
+                question_id: 42,
                 written_answer:
                     "Plants convert light energy into chemical energy.",
             })
@@ -1022,6 +1024,7 @@ test("a submitted written answer replaces the draft kept for its question", asyn
         "**/api/quizzes/student/sessions/ABCD/answer",
         async (route) => {
             expect(route.request().postDataJSON()).toEqual({
+                question_id: 42,
                 written_answer: "Photosynthesis feeds the plant.",
             })
             await route.fulfill({ json: writtenExamState(2, null) })
@@ -1137,4 +1140,38 @@ test("a tab whose exam was resumed elsewhere says so", async ({ page }) => {
             )
         )
         .toBeNull()
+})
+
+test("the countdown follows the server's clock, not the computer's", async ({
+    page,
+}) => {
+    // This computer's clock is 5 minutes ahead of the server's.
+    await page.clock.install({ time: new Date("2026-11-10T10:05:00Z") })
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+        sessionStorage.setItem(
+            "open-quiz-student-session",
+            JSON.stringify({
+                joinCode: "ABCD",
+                participantToken: "participant-token",
+            })
+        )
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            json: {
+                ...writtenExamState(1, null),
+                server_now: "2026-11-10T10:00:00Z",
+                ends_at: "2026-11-10T10:10:00Z",
+            },
+        })
+    })
+
+    await page.goto("/student/exam")
+
+    // 10 minutes left on the server, although the computer would say 5.
+    await expect(page.getByRole("timer")).toHaveText(/^(10:00|9:5\d)$/)
 })

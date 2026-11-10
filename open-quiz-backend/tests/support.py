@@ -37,6 +37,10 @@ from app.routers.auth import (
     TWO_FACTOR_TRUST_COOKIE,
 )
 from app.security import refresh_request_proof, student_choice_token
+from app.services.question_assignments import (
+    current_question_id,
+    last_answered_question_id,
+)
 
 JWT_SECRET = "test-secret-that-is-at-least-32-bytes-long"
 
@@ -403,12 +407,45 @@ def choice_tokens(
         ]
 
 
+def question_on_screen(client: TestClient, participant_headers: dict[str, str]) -> int:
+    """The question a participant's page shows, which an answer must name.
+
+    That is their current question, or their last one once they answered
+    everything (a repeated final answer names it too). 0 when there is none.
+    """
+    with client.app.state.session_factory() as session:
+        participant = session.scalars(
+            select(QuizParticipant).where(
+                QuizParticipant.access_token_hash
+                == participant_token_hash(participant_headers["X-Quiz-Token"])
+            )
+        ).one()
+        quiz_session = session.get(QuizSession, participant.session_id)
+        assert quiz_session is not None
+        return (
+            current_question_id(quiz_session, participant, session)
+            or last_answered_question_id(quiz_session, participant, session)
+            or 0
+        )
+
+
 def choice_answer(
     client: TestClient, participant_headers: dict[str, str], *choice_ids: int
-) -> dict[str, list[str]]:
+) -> dict[str, Any]:
     """The answer body selecting these choices, as that participant sends it."""
     return {
-        "selected_choice_ids": choice_tokens(client, participant_headers, *choice_ids)
+        "question_id": question_on_screen(client, participant_headers),
+        "selected_choice_ids": choice_tokens(client, participant_headers, *choice_ids),
+    }
+
+
+def written_answer(
+    client: TestClient, participant_headers: dict[str, str], text: str
+) -> dict[str, Any]:
+    """The answer body of a written answer, as that participant sends it."""
+    return {
+        "question_id": question_on_screen(client, participant_headers),
+        "written_answer": text,
     }
 
 

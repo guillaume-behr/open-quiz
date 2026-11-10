@@ -494,7 +494,10 @@ def test_hidden_single_choice_mode_is_not_disclosed_or_probeable(
         submitted = client.post(
             f"{student_state_url}/answer",
             headers=participant_headers,
-            json={"selected_choice_ids": all_choice_ids},
+            json={
+                "question_id": state.json()["question"]["id"],
+                "selected_choice_ids": all_choice_ids,
+            },
         )
         assert submitted.status_code == 200
         participant = client.get(

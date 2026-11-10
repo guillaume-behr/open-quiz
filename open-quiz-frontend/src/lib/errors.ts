@@ -94,6 +94,7 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     GRADES_PENDING: "error-grades-pending",
     GRADES_PUBLISHED: "error-grades-published",
     ANSWER_NOT_FOUND: "error-answer-not-found",
+    ANSWER_QUESTION_MISMATCH: "error-answer-question-mismatch",
     ANSWER_QUESTION_NOT_IN_SESSION: "error-answer-question-not-in-session",
     ANSWER_NOT_WRITTEN: "error-answer-not-written",
     GRADE_ABOVE_MAXIMUM: "error-grade-above-maximum",

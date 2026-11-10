@@ -404,9 +404,12 @@ def test_live_teacher_websockets_push_student_progress(tmp_path: Path) -> None:
             ).json()
             question = student_state["question"]
             answer_payload = (
-                {"written_answer": "Student response"}
+                {"question_id": question["id"], "written_answer": "Student response"}
                 if question["answer_mode"] == "written"
-                else {"selected_choice_ids": [question["choices"][0]["id"]]}
+                else {
+                    "question_id": question["id"],
+                    "selected_choice_ids": [question["choices"][0]["id"]],
+                }
             )
             submitted = client.post(
                 f"{student_state_url}/answer",

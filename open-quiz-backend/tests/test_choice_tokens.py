@@ -84,14 +84,20 @@ def test_students_never_see_or_send_real_choice_ids(tmp_path: Path) -> None:
             client.post(
                 f"{url}/answer",
                 headers=first,
-                json={"selected_choice_ids": [correct_choice_id(question)]},
+                json={
+                    "question_id": question["id"],
+                    "selected_choice_ids": [correct_choice_id(question)],
+                },
             ).status_code
             == 422
         )
         borrowed = client.post(
             f"{url}/answer",
             headers=first,
-            json={"selected_choice_ids": [second_choices[correct_label]]},
+            json={
+                "question_id": question["id"],
+                "selected_choice_ids": [second_choices[correct_label]],
+            },
         )
         assert borrowed.status_code == 422
         assert borrowed.json()["detail"]["code"] == "ANSWER_CHOICE_INVALID"
@@ -99,7 +105,10 @@ def test_students_never_see_or_send_real_choice_ids(tmp_path: Path) -> None:
         answered = client.post(
             f"{url}/answer",
             headers=first,
-            json={"selected_choice_ids": [first_choices[correct_label]]},
+            json={
+                "question_id": question["id"],
+                "selected_choice_ids": [first_choices[correct_label]],
+            },
         )
         assert answered.status_code == 200
         assert answered.json()["selected_choice_ids"] in (
