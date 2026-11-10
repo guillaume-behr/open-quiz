@@ -33,6 +33,7 @@ from app.models import (
 )
 from app.question_records import (
     MAX_IMPORT_IMAGE_BYTES,
+    ImagePixelBudget,
     add_question,
     decode_image_payload,
     owned_question_bank,
@@ -191,8 +192,9 @@ def export_questions(
 
 def decode_import_image(
     payload: QuestionImportItem,
+    budget: ImagePixelBudget,
 ) -> tuple[bytes | None, str | None]:
-    return decode_image_payload(payload.image)
+    return decode_image_payload(payload.image, budget)
 
 
 @router.post(
@@ -209,10 +211,12 @@ def import_question_bank(
     decoded_images: list[tuple[bytes | None, str | None]] = []
     decoded_choice_images: list[list[tuple[bytes | None, str | None]]] = []
     total_image_bytes = 0
+    pixel_budget = ImagePixelBudget()
     for question in payload.questions:
-        decoded_image = decode_import_image(question)
+        decoded_image = decode_import_image(question, pixel_budget)
         choice_images = [
-            decode_image_payload(choice.image) for choice in question.choices
+            decode_image_payload(choice.image, pixel_budget)
+            for choice in question.choices
         ]
         total_image_bytes += len(decoded_image[0] or b"") + sum(
             len(choice_image[0] or b"") for choice_image in choice_images

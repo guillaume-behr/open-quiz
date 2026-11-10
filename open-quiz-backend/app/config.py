@@ -1,4 +1,5 @@
 import os
+import re
 import tomllib
 from dataclasses import Field, dataclass, fields
 from dataclasses import field as dataclass_field
@@ -80,6 +81,14 @@ def validate_optional_public_url(name: str, value: str, environment: str) -> Non
         raise ValueError(f"Production {name} must use HTTPS")
 
 
+# Host names the internal network reaches the API by: the Compose health
+# check, and the frontend proxy when something calls it by its service name.
+INTERNAL_HOSTS = ("127.0.0.1", "localhost", "open-quiz-backend", "open-quiz-frontend")
+# A host name, or one with a leading wildcard label such as *.example.com.
+TRUSTED_HOST_PATTERN = re.compile(
+    r"^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$"
+)
+
 BOUNDS = "bounds"
 
 
@@ -134,6 +143,9 @@ class Settings:
     problem_report_window_seconds: int = bounded(900, 60, 86400)
     problem_report_retention_days: int = bounded(90, 1, 365)
     max_request_body_bytes: int = bounded(65536, 1024, 1048576)
+    # Extra Host names the API answers to in production, separated by commas,
+    # for an API published under another name than FRONTEND_ORIGIN.
+    trusted_hosts: str = ""
     environment: str = "development"
     legal_host_name: str = ""
     legal_host_address: str = ""
@@ -153,6 +165,13 @@ class Settings:
     @property
     def cookie_secure(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def allowed_hosts(self) -> list[str]:
+        """The Host names a production API answers to."""
+        extra = [name.strip() for name in self.trusted_hosts.split(",")]
+        frontend_host = urlparse(self.frontend_origin).hostname or ""
+        return [frontend_host, *INTERNAL_HOSTS, *(name for name in extra if name)]
 
     def __post_init__(self) -> None:
         if not 1 <= len(self.admin_username) <= 80:
@@ -209,6 +228,11 @@ class Settings:
             minimum_unique_characters=6,
         )
         check_bounds(self)
+        for name in self.trusted_hosts.split(","):
+            if name.strip() and not TRUSTED_HOST_PATTERN.match(name.strip()):
+                raise ValueError(
+                    "TRUSTED_HOSTS must list host names separated by commas"
+                )
 
         origin = urlparse(self.frontend_origin)
         if origin.scheme not in {"http", "https"} or not origin.netloc:

@@ -255,6 +255,7 @@ def test_production_redirects_to_https_before_body_authentication(
     )
     with TestClient(
         create_app(app_settings),
+        base_url="http://quiz.example.test",
         follow_redirects=False,
         backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     ) as client:
@@ -266,6 +267,44 @@ def test_production_redirects_to_https_before_body_authentication(
     assert response.status_code == 307
     assert response.headers["location"].startswith("https://")
     assert "max-age=31536000" in response.headers["strict-transport-security"]
+
+
+def test_production_only_answers_to_its_own_host_names(tmp_path: Path) -> None:
+    app_settings = settings_for(
+        tmp_path / "trusted-hosts.db",
+        environment="production",
+        frontend_origin="https://quiz.example.test",
+        trusted_hosts="api.example.test, *.intranet.test",
+    )
+    assert app_settings.allowed_hosts == [
+        "quiz.example.test",
+        "127.0.0.1",
+        "localhost",
+        "open-quiz-backend",
+        "open-quiz-frontend",
+        "api.example.test",
+        "*.intranet.test",
+    ]
+    with TestClient(
+        create_app(app_settings),
+        follow_redirects=False,
+        backend_options=TEST_CLIENT_BACKEND_OPTIONS,
+    ) as client:
+        https = {"X-Forwarded-Proto": "https"}
+        for host in ("quiz.example.test", "127.0.0.1:8000", "api.example.test"):
+            answered = client.get("/api/health", headers={**https, "Host": host})
+            assert answered.status_code in {200, 307}, host
+        # A name the instance does not go by never reaches the redirect that
+        # would echo it back.
+        refused = client.get("/api/health", headers={"Host": "evil.example"})
+        assert refused.status_code == 400
+        assert "location" not in refused.headers
+
+
+@pytest.mark.parametrize("hosts", ["quiz example", "https://quiz.example.test", "*"])
+def test_trusted_hosts_must_be_host_names(tmp_path: Path, hosts: str) -> None:
+    with pytest.raises(ValueError, match="TRUSTED_HOSTS"):
+        settings_for(tmp_path / "trusted-hosts.db", trusted_hosts=hosts)
 
 
 def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> None:

@@ -99,6 +99,11 @@ services:
         restart: unless-stopped
         stop_grace_period: 30s
         pids_limit: 128
+        # The API decodes images and hashes passwords on request: bound its
+        # memory so that a burst cannot take the database and the host down
+        # with it. No swap on top: a thrashing API helps nobody.
+        mem_limit: ${OPEN_QUIZ_API_MEMORY:-2g}
+        memswap_limit: ${OPEN_QUIZ_API_MEMORY:-2g}
         logging:
             driver: json-file
             options:
@@ -146,6 +151,8 @@ services:
         restart: unless-stopped
         stop_grace_period: 15s
         pids_limit: 64
+        mem_limit: ${OPEN_QUIZ_PROXY_MEMORY:-512m}
+        memswap_limit: ${OPEN_QUIZ_PROXY_MEMORY:-512m}
         logging:
             driver: json-file
             options:
