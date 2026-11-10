@@ -888,6 +888,40 @@ def test_training_feedback_and_results_cover_written_and_empty_banks(
     assert finished["pending_manual_review_count"] == 1
 
 
+def test_a_repeated_last_training_answer_returns_the_same_feedback(
+    environment,
+) -> None:
+    """A retry after the training finished is answered without being stored."""
+    client = environment["client"]
+    bank_id = environment["question"]["question_bank_id"]
+    assert (
+        client.put(
+            f"/api/quizzes/training/classes/{environment['student_class']['id']}"
+            "/question-banks",
+            headers=environment["teacher_headers"],
+            json=training_banks(bank_id),
+        ).status_code
+        == 200
+    )
+    training = client.post(
+        f"/api/quizzes/training/{bank_id}/start",
+        headers=environment["student_headers"],
+    )
+    assert training.status_code == 201
+    token_headers = {"X-Quiz-Token": training.json()["participant_token"]}
+    url = f"/api/quizzes/student/sessions/{training.json()['join_code']}"
+    payload = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
+
+    answered = client.post(f"{url}/answer", headers=token_headers, json=payload)
+    assert answered.status_code == 200
+    assert answered.json()["status"] == "finished"
+    repeated = client.post(f"{url}/answer", headers=token_headers, json=payload)
+    assert repeated.status_code == 200
+    assert repeated.json()["status"] == "finished"
+    assert repeated.json()["training_feedback"] == answered.json()["training_feedback"]
+    assert repeated.json()["training_feedback"]["is_correct"] is True
+
+
 def test_quiz_join_requires_an_authenticated_student(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "quiz-auth.db")) as client:
         missing_session = client.post(
