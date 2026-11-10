@@ -60,7 +60,7 @@ export function MainLayout() {
             <main
                 id="contenu"
                 tabIndex={-1}
-                className="flex min-h-0 w-full flex-1"
+                className="flex min-h-0 w-full flex-1 outline-none"
             >
                 <PageTransition>
                     <Suspense
