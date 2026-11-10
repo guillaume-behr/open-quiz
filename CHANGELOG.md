@@ -95,6 +95,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 - Regrading after a question edit rescores only that question's answers, in
   a fixed number of queries, instead of every answer of every session that
   used it.
+- Scores, maximum scores and their medians are reported to two decimals in
+  the results, the student history and the CSV export: totals such as
+  `0.6300000000000001` no longer appear. A mark given by hand is stored to two
+  decimals too.
 
 ### Security
 

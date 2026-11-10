@@ -4,7 +4,8 @@ selected_choice_score is the single scoring rule for choice questions;
 question_maximum_scores derives each question's reachable maximum from that
 same rule, compute_final_scores applies it to every answer of a session,
 regrade_question applies it to every unpublished answer to one edited
-question, and training_result totals a training attempt.
+question, and training_result totals a training attempt. rounded_score is the
+one rounding rule for every score or maximum the API reports.
 """
 
 import json
@@ -25,6 +26,16 @@ from app.models import (
 )
 from app.question_responses import load_question_records
 from app.services.question_assignments import session_question_ids
+
+
+def rounded_score(value: float | None) -> float:
+    """A score or maximum as reported: two decimals, never float noise.
+
+    Scores and points are stored as floats, so a sum such as 0.1 + 0.2
+    comes back as 0.30000000000000004 from SQL or Python alike. Every total,
+    maximum and median goes through here before it leaves the API.
+    """
+    return round(float(value or 0), 2)
 
 
 def selected_choice_score(
@@ -230,7 +241,10 @@ def question_maximum_scores(
             .group_by(QuestionChoice.question_id, Question.answer_mode)
         )
     }
-    return {question_id: maximums.get(question_id, 0) for question_id in question_ids}
+    return {
+        question_id: rounded_score(maximums.get(question_id))
+        for question_id in question_ids
+    }
 
 
 def participant_maximum_scores(
