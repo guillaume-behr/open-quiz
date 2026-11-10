@@ -18,7 +18,7 @@ ENV VITE_API_URL=${VITE_API_URL}
 RUN pnpm build
 
 
-FROM caddy:2.11.7@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e
+FROM caddy:2.11.8@sha256:4fcafa98afd1c2e642e353e3c5cf9ddbe892fcee14bc990e7ba2c5b78e51f9cf
 
 ARG VITE_API_URL=""
 ENV API_ORIGIN=${VITE_API_URL}
