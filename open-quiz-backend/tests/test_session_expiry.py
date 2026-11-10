@@ -195,6 +195,15 @@ def test_a_failing_session_does_not_hold_back_the_other_due_ones(
                 )
                 for join_code in ("BROKEN1", "HEALTH1")
             )
+            # Still running and not due yet: a tick leaves it alone.
+            running_id = seeded_exam_session(
+                session,
+                admin.id,
+                join_code="RUNNIN1",
+                status_value="in_progress",
+                created_at=datetime.now(UTC),
+                with_answer=True,
+            )
             session.commit()
 
         finish_session = session_lifecycle.finish_session
@@ -216,6 +225,7 @@ def test_a_failing_session_does_not_hold_back_the_other_due_ones(
         with factory() as session:
             assert session.get(QuizSession, healthy_id).status == "finished"
             assert session.get(QuizSession, broken_id).status == "in_progress"
+            assert session.get(QuizSession, running_id).status == "in_progress"
         assert logged == [("Finishing expired session %s failed", broken_id)]
 
 
