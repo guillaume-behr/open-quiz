@@ -55,6 +55,7 @@ from app.schemas import (
 from app.services.grading import (
     decoded_answer_data,
     question_maximum_scores,
+    rounded_score,
     selected_choice_ids,
     session_question_points,
 )
@@ -639,7 +640,7 @@ def grade_written_answer(
             ErrorCode.GRADE_ABOVE_MAXIMUM,
             f"La note ne peut pas dépasser {max_score:g}",
         )
-    answer.score = payload.score
+    answer.score = rounded_score(payload.score)
     answer.is_graded = True
     answer.feedback = (
         payload.feedback.strip()

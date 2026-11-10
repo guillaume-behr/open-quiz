@@ -32,6 +32,7 @@ from app.schemas import (
 )
 from app.services.grading import (
     question_maximum_scores,
+    rounded_score,
 )
 from app.services.question_assignments import (
     assigned_question_ids,
@@ -62,7 +63,7 @@ def answer_statistics(session_ids: list[int], session: Session) -> AnswerStatist
     return {
         (session_id, participant_id): (
             answered_count,
-            float(score),
+            rounded_score(score),
             pending_count or 0,
         )
         for session_id, participant_id, answered_count, score, pending_count in session.execute(
@@ -258,7 +259,7 @@ def finished_session_responses(
                 status=quiz_session.status,
                 participant_count=len(session_participants),
                 median_maximum_score=(
-                    float(median(participant_maximums.values()))
+                    rounded_score(median(participant_maximums.values()))
                     if participant_maximums
                     else 0
                 ),

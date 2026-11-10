@@ -49,6 +49,7 @@ from app.schemas import (
 from app.services.grading import (
     decoded_answer_data,
     participant_maximum_scores,
+    rounded_score,
     training_result,
 )
 from app.services.question_assignments import (
@@ -162,7 +163,7 @@ def session_participants(
         )
     )
     answers_by_student = {
-        participant_id: (answered_count, float(score), pending_count or 0)
+        participant_id: (answered_count, rounded_score(score), pending_count or 0)
         for participant_id, answered_count, score, pending_count in answer_rows
     }
     if quiz_session.status not in ACTIVE_SESSION_STATUSES:
@@ -267,7 +268,7 @@ def session_response(
     participants, answers_by_student = session_participants(quiz_session, session)
     maximum_scores = participant_maximum_scores(quiz_session, participants, session)
     median_maximum_score = (
-        float(median(maximum_scores.values())) if maximum_scores else 0
+        rounded_score(median(maximum_scores.values())) if maximum_scores else 0
     )
     total_questions = session_question_count(quiz_session, session)
     review_enabled = answer_review_enabled(quiz_session, quiz)
