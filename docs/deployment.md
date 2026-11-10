@@ -173,6 +173,25 @@ Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes, 5 po
 les limites de débit et 2 pour le relais. Restez sous `max_connections` (100
 par défaut) : au-delà de 4 workers, augmentez-le ou réduisez leur nombre.
 
+### Mémoire des conteneurs
+
+Le backend est limité à 2 Go de mémoire et le frontend à 512 Mo, sans swap :
+une rafale d’imports d’images ou de tentatives de connexion ne peut ainsi pas
+priver PostgreSQL et l’hôte de mémoire. Le backend ne décode par ailleurs que
+deux images et ne calcule que quatre condensats de mots de passe à la fois ;
+les demandes suivantes attendent leur tour.
+
+Avec plusieurs workers, ou si des imports volumineux échouent faute de
+mémoire, ajustez ces limites dans le même fichier `.env` racine :
+
+```shell
+OPEN_QUIZ_API_MEMORY=4g
+OPEN_QUIZ_PROXY_MEMORY=512m
+```
+
+La base de données n’a volontairement aucune limite : l’interrompre en plein
+travail coûterait plus cher que la mémoire qu’elle prend.
+
 ### Changer le sous-réseau interne
 
 Les trois services communiquent sur le réseau interne `open-quiz`, en
@@ -230,9 +249,30 @@ Nginx est le point d’entrée public direct. Si un CDN ou un autre load balance
 précède Nginx, configurez explicitement ses plages de confiance au lieu de
 reprendre cette règle telle quelle.
 
+L’exemple Nginx limite enfin, par adresse IP, le rythme des connexions aux
+comptes (`limit_req`) et le nombre de connexions simultanées (`limit_conn`).
+Open Quiz ne le fait volontairement pas lui-même, pour ne conserver aucune
+adresse : ses propres limites portent sur les comptes et sur l’instance
+entière. Le reverse proxy est donc le seul endroit où borner ce qu’une adresse
+peut envoyer. Un établissement partage souvent une seule adresse publique : les
+valeurs fournies laissent une classe entière se connecter en même temps ;
+ajustez-les à la taille de l’établissement. Avec Caddy, le module
+[`caddy-ratelimit`](https://github.com/mholt/caddy-ratelimit) joue ce rôle.
+
 Le nom de domaine doit correspondre exactement à `FRONTEND_ORIGIN`. En
 production, l’API redirige les requêtes qu’elle considère comme HTTP ; conservez
 donc les en-têtes de protocole transmis par les reverse proxies.
+
+L’API refuse aussi, par une réponse 400, toute requête dont l’en-tête `Host`
+n’est ni le nom de `FRONTEND_ORIGIN` ni un nom interne du déploiement : le
+reverse proxy doit donc transmettre le nom demandé par le navigateur
+(`proxy_set_header Host $host` pour Nginx ; Caddy le fait par défaut). Si
+l’API est publiée sous un autre nom que l’interface, ajoutez-le à
+`open-quiz-backend/.env` :
+
+```shell
+TRUSTED_HOSTS=api.example.com
+```
 
 Par défaut, le frontend et l’API partagent la même origine. Si l’API est servie
 sur une autre origine, définissez `VITE_API_URL` lors de la construction :
@@ -345,9 +385,22 @@ garde quatorze, ajoutez une ligne à la crontab de l’utilisateur du déploieme
 `update.sh` sauvegarde aussi la base avant chaque mise à jour, sauf avec
 `--no-backup` ou lorsque la base ne tourne pas encore.
 
-Copiez ensuite les sauvegardes, avec `open-quiz-backend/.env`, vers un stockage
-distinct, chiffré et protégé, et testez régulièrement une restauration dans une
-instance isolée.
+Copiez ensuite les sauvegardes vers un stockage distinct et protégé, et testez
+régulièrement une restauration dans une instance isolée.
+
+Une sauvegarde n’est pas chiffrée. Les secrets TOTP et les mots de passe élèves
+qu’elle contient le sont, mais par des clés rangées dans
+`open-quiz-backend/.env` : copier ce fichier au même endroit que les
+sauvegardes revient à les livrer en clair à qui les trouve. Conservez donc les
+deux séparément — le `.env` dans un gestionnaire de secrets ou un coffre, les
+sauvegardes ailleurs — ou chiffrez les sauvegardes avant de les sortir de
+l’hôte, par exemple avec [age](https://age-encryption.org/) :
+
+```shell
+age --recipient age1… --output sauvegarde.dump.age backups/open-quiz-2026-10-29T180000Z.dump
+```
+
+`restore.sh` attend le fichier déchiffré.
 
 ### Restaurer avec `restore.sh`
 

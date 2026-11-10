@@ -120,6 +120,12 @@ est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` 
 | `PROBLEM_REPORT_RETENTION_DAYS`    | `90`    | 1 à 365 jours     |
 | `MAX_REQUEST_BODY_BYTES`           | `65536` | 1 024 à 1 048 576 |
 
+En production, l’API ne répond qu’aux requêtes dont l’en-tête `Host` porte le
+nom de `FRONTEND_ORIGIN` ou un nom interne du déploiement Compose. Si elle est
+publiée sous un autre nom (`VITE_API_URL`), listez-le dans `TRUSTED_HOSTS`,
+séparé par des virgules ; un premier libellé générique tel que `*.example.com`
+est accepté.
+
 Le modèle de production réduit volontairement
 `PROBLEM_REPORT_ATTEMPTS` à `5`. Ce quota concerne toute l’instance et évite
 d’utiliser l’adresse IP comme identifiant de limitation.

@@ -42,6 +42,18 @@ def password_rate_subject(username: str) -> str:
     return f"password:identity:{username}"
 
 
+def trusted_password_rate_subject(user_id: int) -> str:
+    """The attempt bucket of the browsers an account already trusts.
+
+    The bucket of a username is filled by anyone who types that username, so
+    ten wrong passwords every window would keep its owner out for as long as
+    someone cares to send them. A browser holding the account's two-factor
+    trust cookie proves it signed in there today: its attempts are counted
+    apart, where a stranger's guesses cannot reach them.
+    """
+    return f"password:trusted:{user_id}"
+
+
 def enforce_global_auth_limit(
     request: Request,
     *,

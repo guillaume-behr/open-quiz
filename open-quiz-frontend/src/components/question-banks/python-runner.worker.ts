@@ -38,27 +38,65 @@ function denySandboxCapability(): never {
     throw new Error("This browser capability is disabled for Python execution.")
 }
 
+// Network, storage and worker APIs Python must not reach through Pyodide's
+// `js` module.
+const DENIED_GLOBALS = [
+    "fetch",
+    "XMLHttpRequest",
+    "WebSocket",
+    "WebSocketStream",
+    "EventSource",
+    "WebTransport",
+    "RTCPeerConnection",
+    "Worker",
+    "SharedWorker",
+    "importScripts",
+    "BroadcastChannel",
+    "caches",
+    "indexedDB",
+]
+
+const DENIED_NAVIGATOR_PROPERTIES = [
+    "storage",
+    "locks",
+    "serviceWorker",
+    "usb",
+    "hid",
+    "serial",
+    "bluetooth",
+]
+
+/**
+ * Replaces a capability wherever it is defined, on the object and along its
+ * prototype chain. Shadowing it on the object alone is not enough: `fetch`,
+ * `importScripts` and `indexedDB` live on WorkerGlobalScope.prototype, where
+ * `WorkerGlobalScope.prototype.fetch.call(self, url)` would still find them.
+ */
+function denyCapability(target: object, capability: string) {
+    const denied = {
+        value: denySandboxCapability,
+        configurable: false,
+        writable: false,
+    }
+    for (
+        let owner: object | null = Object.getPrototypeOf(target);
+        owner !== null && owner !== Object.prototype;
+        owner = Object.getPrototypeOf(owner)
+    ) {
+        if (Object.hasOwn(owner, capability)) {
+            Object.defineProperty(owner, capability, denied)
+        }
+    }
+    Object.defineProperty(target, capability, denied)
+}
+
 function restrictSandboxCapabilities() {
     if (sandboxRestricted) return
-    for (const capability of [
-        "fetch",
-        "XMLHttpRequest",
-        "WebSocket",
-        "EventSource",
-        "WebTransport",
-        "RTCPeerConnection",
-        "Worker",
-        "SharedWorker",
-        "importScripts",
-        "BroadcastChannel",
-        "caches",
-        "indexedDB",
-    ]) {
-        Object.defineProperty(self, capability, {
-            value: denySandboxCapability,
-            configurable: false,
-            writable: false,
-        })
+    for (const capability of DENIED_GLOBALS) {
+        denyCapability(self, capability)
+    }
+    for (const property of DENIED_NAVIGATOR_PROPERTIES) {
+        denyCapability(self.navigator, property)
     }
     sandboxRestricted = true
 }

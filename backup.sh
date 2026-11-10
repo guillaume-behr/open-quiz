@@ -14,8 +14,9 @@ usage() {
     printf '  --directory DIR  Write the backup to DIR (default: backups/).\n'
     printf '  --keep N         Then delete all but the N most recent backups.\n'
     printf '  --help, -h       Show this message.\n\n'
-    printf 'Keep a copy of open-quiz-backend/.env with the backups: without its\n'
-    printf 'encryption keys, a restored database cannot be fully used.\n'
+    printf 'A restored database also needs the encryption keys of\n'
+    printf 'open-quiz-backend/.env. Keep a copy of that file, but not next to the\n'
+    printf 'backups: together they give away what the keys protect.\n'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -67,4 +68,5 @@ if [ -n "$keep" ]; then
         done
 fi
 
-note 'Copy it, with open-quiz-backend/.env and .env.database, to separate protected storage.'
+note 'Copy it to separate protected storage. Keep open-quiz-backend/.env and'
+note '.env.database too, but apart from the backups: they hold the keys.'

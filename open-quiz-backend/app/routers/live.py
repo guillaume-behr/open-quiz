@@ -21,6 +21,7 @@ from sqlalchemy import select
 from app.dependencies import authenticated_user_from_token
 from app.enums import SessionStatus
 from app.live_quiz import (
+    LiveSocketLimitError,
     active_quiz_sessions_topic,
     makeup_sessions_topic,
     quiz_session_topic,
@@ -32,7 +33,7 @@ from app.models import (
     QuizSession,
     User,
 )
-from app.participants import authenticated_participant
+from app.participants import authenticated_participant, participant_token_hash
 from app.session_responses import (
     active_session_responses,
     makeup_session_responses,
@@ -69,6 +70,11 @@ async def accept_live_socket(websocket: WebSocket) -> str | None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return None
     return token
+
+
+async def close_over_limit(websocket: WebSocket) -> None:
+    """Turn away a socket beyond what one account may hold on a feed."""
+    await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
 
 
 def authenticated_live_professor_id(websocket: WebSocket, token: str) -> int | None:
@@ -212,7 +218,7 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
     topic = active_quiz_sessions_topic(professor_id)
     hub = websocket.app.state.live_quiz_hub
     try:
-        async with hub.subscribe(topic) as updates:
+        async with hub.subscribe(topic, f"professor:{professor_id}") as updates:
             heartbeat = LiveHeartbeat()
             last_sessions: list[dict[str, object]] | None = None
             while True:
@@ -246,6 +252,8 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
                         return
                     await websocket.send_json({"type": "ping"})
                     heartbeat.record_send()
+    except LiveSocketLimitError:
+        await close_over_limit(websocket)
     except WebSocketDisconnect, RuntimeError:
         return
 
@@ -266,7 +274,7 @@ async def live_teacher_quiz_session(
     topic = quiz_session_topic(session_id)
     hub = websocket.app.state.live_quiz_hub
     try:
-        async with hub.subscribe(topic) as updates:
+        async with hub.subscribe(topic, f"professor:{professor_id}") as updates:
             heartbeat = LiveHeartbeat()
             last_state: dict[str, object] | None = None
             while True:
@@ -300,6 +308,8 @@ async def live_teacher_quiz_session(
                         return
                     await websocket.send_json({"type": "ping"})
                     heartbeat.record_send()
+    except LiveSocketLimitError:
+        await close_over_limit(websocket)
     except WebSocketDisconnect, RuntimeError:
         return
 
@@ -325,7 +335,9 @@ async def live_student_quiz_session(
     topic = student_session_topic(normalized_code)
     hub = websocket.app.state.live_quiz_hub
     try:
-        async with hub.subscribe(topic) as updates:
+        async with hub.subscribe(
+            topic, f"participant:{participant_token_hash(token)}"
+        ) as updates:
             heartbeat = LiveHeartbeat()
             last_state: dict[str, object] | None = None
             while True:
@@ -361,6 +373,8 @@ async def live_student_quiz_session(
                         return
                     await websocket.send_json({"type": "ping"})
                     heartbeat.record_send()
+    except LiveSocketLimitError:
+        await close_over_limit(websocket)
     except WebSocketDisconnect, RuntimeError:
         return
 
@@ -378,7 +392,7 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
     topic = makeup_sessions_topic(professor_id)
     hub = websocket.app.state.live_quiz_hub
     try:
-        async with hub.subscribe(topic) as updates:
+        async with hub.subscribe(topic, f"professor:{professor_id}") as updates:
             heartbeat = LiveHeartbeat()
             last_sessions: list[dict[str, object]] | None = None
             while True:
@@ -412,5 +426,7 @@ async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
                         return
                     await websocket.send_json({"type": "ping"})
                     heartbeat.record_send()
+    except LiveSocketLimitError:
+        await close_over_limit(websocket)
     except WebSocketDisconnect, RuntimeError:
         return

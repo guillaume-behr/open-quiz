@@ -117,6 +117,42 @@ def test_a_wrong_password_is_refused_on_a_trusted_browser(tmp_path: Path) -> Non
         assert refused.status_code == 401
 
 
+def test_wrong_passwords_from_elsewhere_do_not_lock_out_a_trusted_browser(
+    tmp_path: Path,
+) -> None:
+    app_settings = settings_for(tmp_path / "test.db", login_attempts=3)
+    with make_client(app_settings) as owner:
+        complete_first_login(owner, "root-admin", ADMIN_PASSWORD)
+        log_out(owner)
+        with make_client(app_settings) as stranger:
+            for _ in range(3):
+                refused = log_in(stranger, "root-admin", "not-the-admin-password")
+                assert refused.status_code == 401
+            # The username's bucket is full: without the cookie, even the
+            # right password is turned away.
+            assert log_in(stranger, "root-admin", ADMIN_PASSWORD).status_code == 429
+
+        signed_in = log_in(owner, "root-admin", ADMIN_PASSWORD)
+        assert signed_in.status_code == 200
+        assert signed_in.json()["status"] == "authenticated"
+
+
+def test_a_trusted_browser_has_an_attempt_limit_of_its_own(tmp_path: Path) -> None:
+    app_settings = settings_for(tmp_path / "test.db", login_attempts=3)
+    with make_client(app_settings) as client:
+        complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        for _ in range(3):
+            refused = log_in(client, "root-admin", "not-the-admin-password")
+            assert refused.status_code == 401
+        assert log_in(client, "root-admin", ADMIN_PASSWORD).status_code == 429
+
+        # Those guesses were counted against the trusted browser alone.
+        with make_client(app_settings) as other_browser:
+            challenged = log_in(other_browser, "root-admin", ADMIN_PASSWORD)
+            assert challenged.status_code == 200
+            assert challenged.json()["status"] == "verification_required"
+
+
 def test_another_browser_or_account_still_needs_the_code(tmp_path: Path) -> None:
     app_settings = settings_for(tmp_path / "test.db")
     with make_client(app_settings) as client:
