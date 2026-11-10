@@ -12,6 +12,7 @@ from sqlalchemy import select, text, update
 
 from app.models import (
     MakeupSession,
+    Quiz,
     QuizAnswer,
     QuizParticipant,
     QuizSession,
@@ -911,3 +912,156 @@ def test_training_gives_no_feedback_while_an_exam_uses_its_bank(
         )
         assert answered.status_code == 409
         assert "training_feedback" not in answered.text
+
+
+def started_makeup_child(
+    client, environment: dict[str, Any], *, start: bool = True
+) -> tuple[dict, dict[str, Any], dict[str, str]]:
+    """A make-up with the student's child session, started unless asked not to."""
+    makeup = create_makeup(client, environment)
+    assert (
+        client.post(
+            "/api/quizzes/makeup/join",
+            headers=environment["student_headers"],
+            json={"join_code": makeup["join_code"]},
+        ).status_code
+        == 200
+    )
+    selected = select_quiz(client, environment, makeup, environment["student_headers"])
+    assert selected.status_code == 201
+    if start:
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/start",
+                headers=environment["teacher_headers"],
+            ).status_code
+            == 200
+        )
+    child_headers = {"X-Quiz-Token": selected.json()["participant_token"]}
+    return makeup, selected.json(), child_headers
+
+
+def child_session(client, join_code: str) -> QuizSession:
+    with client.app.state.session_factory() as session:
+        child = session.scalar(
+            select(QuizSession).where(QuizSession.join_code == join_code)
+        )
+        assert child is not None
+        return child
+
+
+def test_makeup_children_stay_out_of_the_active_session_list(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    _, child, _ = started_makeup_child(client, environment, start=False)
+
+    active_ids = [
+        listed["id"]
+        for listed in client.get("/api/quizzes/sessions/active", headers=headers).json()
+    ]
+    assert child_session(client, child["join_code"]).id not in active_ids
+    assert active_ids == []
+
+
+def test_many_makeup_children_do_not_push_a_class_exam_out_of_the_list(
+    environment,
+) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    launched = client.post(
+        f"/api/quizzes/{environment['quiz']['id']}/launch",
+        headers=headers,
+        json={"class_id": environment["student_class"]["id"]},
+    )
+    assert launched.status_code == 201
+    # A make-up taken by 25 students, all newer than the class exam: the list
+    # shows at most 20 sessions, newest first.
+    with client.app.state.session_factory() as session:
+        class_exam = session.get(QuizSession, launched.json()["id"])
+        assert class_exam is not None
+        quiz = session.get(Quiz, class_exam.quiz_id)
+        assert quiz is not None
+        makeup = MakeupSession(
+            owner_id=quiz.owner_id,
+            class_id=environment["student_class"]["id"],
+            class_name=class_exam.class_name,
+            join_code="MKP0001",
+            status="in_progress",
+        )
+        session.add(makeup)
+        session.flush()
+        for index in range(25):
+            session.add(
+                QuizSession(
+                    quiz_id=class_exam.quiz_id,
+                    class_id=class_exam.class_id,
+                    class_name=class_exam.class_name,
+                    join_code=f"CHD{index:04d}",
+                    status="in_progress",
+                    makeup_session_id=makeup.id,
+                    created_at=datetime.now(UTC),
+                )
+            )
+        session.commit()
+
+    active = client.get("/api/quizzes/sessions/active", headers=headers).json()
+    assert [listed["id"] for listed in active] == [launched.json()["id"]]
+
+
+@pytest.mark.parametrize("action", ["start", "pause", "resume", "cancel"])
+def test_class_session_controls_refuse_a_makeup_child(environment, action: str) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    makeup, child, _ = started_makeup_child(
+        client, environment, start=action != "start"
+    )
+    if action == "resume":
+        assert (
+            client.post(
+                f"/api/quizzes/makeup/sessions/{makeup['id']}/pause", headers=headers
+            ).status_code
+            == 200
+        )
+    before = child_session(client, child["join_code"])
+
+    refused = client.post(
+        f"/api/quizzes/sessions/{before.id}/{action}", headers=headers
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "QUIZ_SESSION_IS_MAKEUP"
+    after = child_session(client, child["join_code"])
+    assert (after.status, after.paused_at, after.started_at) == (
+        before.status,
+        before.paused_at,
+        before.started_at,
+    )
+
+
+def test_a_paused_makeup_can_be_finished_directly(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    makeup, child, child_headers = started_makeup_child(client, environment)
+    child_url = f"/api/quizzes/student/sessions/{child['join_code']}"
+    assert (
+        client.post(
+            f"{child_url}/answer",
+            headers=child_headers,
+            json={"selected_choice_ids": [correct_choice_id(environment["question"])]},
+        ).status_code
+        == 200
+    )
+    url = f"/api/quizzes/makeup/sessions/{makeup['id']}"
+    assert client.post(f"{url}/pause", headers=headers).json()["status"] == "paused"
+
+    finished = client.post(f"{url}/finish", headers=headers)
+    assert finished.status_code == 200
+    assert finished.json()["status"] == "finished"
+    assert child_session(client, child["join_code"]).status == "finished"
+    with client.app.state.session_factory() as session:
+        answer = session.scalar(
+            select(QuizAnswer)
+            .join(QuizSession, QuizSession.id == QuizAnswer.session_id)
+            .where(QuizSession.join_code == child["join_code"])
+        )
+        assert answer is not None
+        assert (answer.score, answer.is_graded) == (2.0, True)

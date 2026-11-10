@@ -799,6 +799,7 @@
     "error-quiz-session-not-running": "Призупинити можна лише сесію, що триває.",
     "error-quiz-session-not-paused": "Відновити можна лише призупинену сесію.",
     "error-quiz-session-not-cancellable": "Цю сесію вже не можна скасувати.",
+    "error-quiz-session-is-makeup": "Ця сесія належить до перездачі й керується з неї.",
     "error-quiz-training-not-launchable": "Тренування не запускають: учні починають його самостійно.",
     "error-quiz-class-invalid": "Вибраний клас більше не існує. Виберіть інший клас.",
     "error-quiz-class-empty": "У цьому класі немає учнів. Додайте учнів, перш ніж запускати тест.",

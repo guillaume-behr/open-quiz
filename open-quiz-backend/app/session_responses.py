@@ -584,6 +584,8 @@ def active_session_responses(
             Quiz.owner_id == professor.id,
             Quiz.mode == QuizMode.EXAM,
             QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
+            # A make-up's children are supervised from the make-up session.
+            QuizSession.makeup_session_id.is_(None),
         )
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
         .limit(20)

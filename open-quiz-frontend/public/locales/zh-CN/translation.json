@@ -773,6 +773,7 @@
     "error-quiz-session-not-running": "只能暂停正在进行的场次。",
     "error-quiz-session-not-paused": "只能继续已暂停的场次。",
     "error-quiz-session-not-cancellable": "此场次已无法取消。",
+    "error-quiz-session-is-makeup": "此场次属于补考场次，请在补考场次中管理。",
     "error-quiz-training-not-launchable": "练习无需发起，由学生自行开始。",
     "error-quiz-class-invalid": "所选班级已不存在，请选择其他班级。",
     "error-quiz-class-empty": "此班级没有学生。请先添加学生，再发起测验。",
