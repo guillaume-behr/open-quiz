@@ -328,8 +328,9 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
                                     </span>
                                 )}
                                 {participant.violation_count > 0 &&
-                                    participant.last_violation_type !==
-                                        "paste_attempt" &&
+                                    !["paste_attempt", "copy_attempt"].includes(
+                                        participant.last_violation_type ?? ""
+                                    ) &&
                                     participant.last_violation_type && (
                                         <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
                                             <AlertTriangle className="size-3" />

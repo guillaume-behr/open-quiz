@@ -95,7 +95,7 @@ test("joining a waiting quiz immediately requests full screen", async ({
     // The monitored events are named before the exam hides the footer.
     await expect(
         page.getByText(
-            /switch window or tab, move the pointer out of the page, copy content/
+            /switch window or tab, move the pointer out of the page, open the right-click menu/
         )
     ).toBeVisible()
     await expect(
@@ -695,15 +695,14 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
         .poll(() => violations)
         .toEqual([{ event_type: "pointer_exit" }])
 
-    // Clipboard and context-menu signals are reported, and different signals
-    // do not suppress one another.
+    // A copy is not reported; a context menu is, and different signals do
+    // not suppress one another.
     await page.locator("body").dispatchEvent("copy")
     await page.locator("body").dispatchEvent("contextmenu")
     await expect
         .poll(() => violations)
         .toEqual([
             { event_type: "pointer_exit" },
-            { event_type: "copy_attempt" },
             { event_type: "context_menu" },
         ])
 })

@@ -862,7 +862,6 @@ class StudentQuizViolation(BaseModel):
         "pointer_exit",
         "window_blur",
         "page_hidden",
-        "copy_attempt",
         "context_menu",
         "print_attempt",
     ]

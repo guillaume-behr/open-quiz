@@ -64,6 +64,9 @@ from app.services.session_lifecycle import (
 )
 from app.session_status import ACTIVE_SESSION_STATUSES
 
+# Monitoring events no longer reported as alerts; one still stored is hidden.
+RETIRED_VIOLATION_TYPES = frozenset({"paste_attempt", "copy_attempt"})
+
 
 def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:
     if not quizzes:
@@ -239,17 +242,17 @@ def live_participant_response(
         pending_manual_grading_count=pending if finished_session else 0,
         violation_count=(
             0
-            if participant.last_violation_type == "paste_attempt"
+            if participant.last_violation_type in RETIRED_VIOLATION_TYPES
             else participant.violation_count
         ),
         last_violation_type=(
             None
-            if participant.last_violation_type == "paste_attempt"
+            if participant.last_violation_type in RETIRED_VIOLATION_TYPES
             else participant.last_violation_type
         ),
         last_violation_at=(
             None
-            if participant.last_violation_type == "paste_attempt"
+            if participant.last_violation_type in RETIRED_VIOLATION_TYPES
             else participant.last_violation_at
         ),
         joined_at=participant.joined_at,

@@ -52,8 +52,8 @@ follows the same course:
 - waiting room, timer, pause and resume for the whole class;
 - the same draw for everyone, or an individual paper drawn per student;
 - optional review of the paper before final hand-in;
-- the teacher is warned when a student leaves full screen, switches tabs,
-  copies or starts printing: these alerts are informative and never trigger an
+- the teacher is warned when a student leaves full screen, switches tabs
+  or starts printing: these alerts are informative and never trigger an
   automatic penalty;
 - make-up sessions: let chosen students retake a selection of past exams;
 - named A4 paper copies with a deterministic draw: a student always gets the

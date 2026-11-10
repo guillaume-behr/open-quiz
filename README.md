@@ -49,8 +49,8 @@ session suit toujours le même déroulement :
 - salle d’attente, minuteur, pause et reprise pour toute la classe ;
 - même tirage pour tout le monde, ou sujet individuel tiré par élève ;
 - relecture facultative de la copie avant la remise définitive ;
-- l’enseignant est prévenu si un élève quitte le plein écran, change d’onglet,
-  copie ou lance une impression : ces alertes sont informatives et ne
+- l’enseignant est prévenu si un élève quitte le plein écran, change d’onglet
+  ou lance une impression : ces alertes sont informatives et ne
   déclenchent jamais de sanction automatique ;
 - rattrapage : faire repasser à des élèves choisis une sélection d’examens
   déjà passés ;

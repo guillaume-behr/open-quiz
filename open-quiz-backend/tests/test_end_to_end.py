@@ -853,7 +853,16 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             client.post(
                 f"{student_state_url}/violation",
                 headers=student_headers,
-                json={"event_type": "copy_attempt", "forged_count": 100},
+                json={"event_type": "context_menu", "forged_count": 100},
+            ).status_code
+            == 422
+        )
+        # A copy is no longer an exam monitoring alert.
+        assert (
+            client.post(
+                f"{student_state_url}/violation",
+                headers=student_headers,
+                json={"event_type": "copy_attempt"},
             ).status_code
             == 422
         )
