@@ -8,6 +8,7 @@ from sqlalchemy import update
 from app.models import Quiz, QuizSession
 
 from support import (
+    choice_answer,
     correct_choice_id,
     exam_environment,
     hand_in_quiz,
@@ -67,7 +68,9 @@ def finished_exam(client: Any, environment: dict[str, Any]) -> dict[str, Any]:
         ).status_code
         == 200
     )
-    answer = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
+    answer = choice_answer(
+        client, participant_headers, correct_choice_id(environment["question"])
+    )
     assert (
         client.post(f"{url}/answer", headers=participant_headers, json=answer)
     ).status_code == 200
