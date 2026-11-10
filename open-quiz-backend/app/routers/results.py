@@ -350,9 +350,7 @@ def student_exam_participations(
                 )
             )
             .group_by(QuizAnswer.participant_id)
-        )
-        .tuples()
-        .all()
+        ).all()
     )
     return [
         (quiz_session, participant)
@@ -398,9 +396,7 @@ def history_records(
                 select(Quiz.id, Quiz.show_provisional_grades).where(
                     Quiz.id.in_({quiz_session.quiz_id for quiz_session, _ in rows})
                 )
-            )
-            .tuples()
-            .all()
+            ).all()
         ),
         question_ids_by_participant=question_ids_by_participant,
         questions_by_id=questions_by_id,
