@@ -3,15 +3,17 @@
 import json
 from base64 import b64encode
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from threading import Barrier
+from threading import Barrier, BrokenBarrierError
 from typing import Any
 
 import pytest
 from fastapi import status
 from pydantic import ValidationError
-from sqlalchemy import create_engine, inspect, select, text, update
+from sqlalchemy import create_engine, event, inspect, select, text, update
+from sqlalchemy.orm import Session
 
 from app.database import postgres_url
 from app.models import (
@@ -27,6 +29,7 @@ from app.schemas import (
     StudentQuizAnswer,
 )
 from app.services import question_draws
+from app.services.session_lifecycle import expire_due_quiz_sessions
 from app.stored_images import store_image
 
 from support import (
@@ -1848,12 +1851,156 @@ def test_concurrent_answer_submissions_keep_a_single_answer(
             ]
 
         assert statuses == [200, 200, 200, 200]
-        with database_connection(database_path) as connection:
-            answer_count = connection.execute(
-                "SELECT COUNT(*) FROM quiz_answers WHERE session_id = %s",
-                (quiz_session["id"],),
-            ).fetchone()[0]
-        assert answer_count == 1
+
+        def graded_answers() -> list[tuple[float, bool]]:
+            with database_connection(database_path) as connection:
+                return [
+                    (float(score), is_graded)
+                    for score, is_graded in connection.execute(
+                        "SELECT score, is_graded FROM quiz_answers "
+                        "WHERE session_id = %s",
+                        (quiz_session["id"],),
+                    ).fetchall()
+                ]
+
+        assert graded_answers() == [(0.0, False)]
+        # Handing in the only paper finishes and grades the session.
+        hand_in_quiz(client, quiz_session["join_code"], participant_headers)
+        assert graded_answers() == [(2.0, True)]
+
+        # A retry of the final answer after the session finished is still
+        # recognised, and still leaves the grade alone.
+        retry = client.post(answer_url, headers=participant_headers, json=payload)
+        assert retry.status_code == 200
+        assert retry.json()["status"] == "finished"
+        assert graded_answers() == [(2.0, True)]
+        published = client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/publish-grades",
+            headers=environment["teacher_headers"],
+        )
+        assert published.status_code == 200
+        assert published.json()["grades_published_at"] is not None
+
+
+def two_participants_started(
+    client, environment: dict[str, Any]
+) -> tuple[dict, str, dict[str, str], dict[str, str]]:
+    """A running one-question exam with the student and a classmate in it."""
+    account_headers = add_classmate(client, environment)
+    launched, headers = launch_and_join(client, environment)
+    code = launched["join_code"]
+    classmate_headers = participant_headers_of(join(client, account_headers, code))
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{launched['id']}/start",
+            headers=environment["teacher_headers"],
+        ).status_code
+        == 200
+    )
+    return (
+        launched,
+        f"/api/quizzes/student/sessions/{code}",
+        headers,
+        classmate_headers,
+    )
+
+
+def test_the_last_two_participants_handing_in_together_finish_the_session(
+    environment,
+) -> None:
+    """Each hand-in must see the other one, or neither finishes the session."""
+    client = environment["client"]
+    launched, url, headers, classmate_headers = two_participants_started(
+        client, environment
+    )
+    payload = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
+    for participant_headers in (headers, classmate_headers):
+        answered = client.post(
+            f"{url}/answer", headers=participant_headers, json=payload
+        )
+        assert answered.status_code == 200
+
+    # Both requests are held right before counting who is still working, so
+    # that without serialisation each counts the other as unfinished. With
+    # the session row locked the second one waits instead, and the barrier
+    # times out.
+    engine = client.app.state.session_factory.kw["bind"]
+    barrier = Barrier(2, timeout=2)
+    held: list[str] = []
+
+    def hold_before_counting(connection, cursor, statement, *_: object) -> None:
+        statement = " ".join(statement.split())
+        if len(held) == 2 or not statement.startswith(
+            "SELECT count(quiz_participants.id)"
+        ):
+            return
+        held.append(statement)
+        with suppress(BrokenBarrierError):
+            barrier.wait()
+
+    event.listen(engine, "before_cursor_execute", hold_before_counting)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            submissions = [
+                pool.submit(client.post, f"{url}/submit", headers=participant_headers)
+                for participant_headers in (headers, classmate_headers)
+            ]
+            statuses = [submission.result().status_code for submission in submissions]
+    finally:
+        event.remove(engine, "before_cursor_execute", hold_before_counting)
+
+    assert statuses == [200, 200]
+    assert len(held) == 2
+    teacher_view = client.get(
+        f"/api/quizzes/sessions/{launched['id']}",
+        headers=environment["teacher_headers"],
+    ).json()
+    assert teacher_view["status"] == "finished"
+
+
+def test_an_answer_racing_the_expiry_is_refused_and_grades_stay_publishable(
+    environment,
+) -> None:
+    client = environment["client"]
+    launched, url, headers, classmate_headers = two_participants_started(
+        client, environment
+    )
+    payload = {"selected_choice_ids": [correct_choice_id(environment["question"])]}
+    assert (
+        client.post(f"{url}/answer", headers=headers, json=payload).status_code == 200
+    )
+    hand_in_quiz(client, launched["join_code"], headers)
+
+    def expire_now(connection) -> None:
+        # The time runs out and the expiry loop finishes the session, after
+        # the classmate's request read it as running.
+        connection.execute(
+            update(QuizSession)
+            .where(QuizSession.id == launched["id"])
+            .values(started_at=datetime.now(UTC) - timedelta(hours=2))
+        )
+        with Session(bind=connection) as other:
+            assert [finished.id for finished in expire_due_quiz_sessions(other)] == [
+                launched["id"]
+            ]
+
+    with concurrent_writes(
+        client, ("SELECT student_accounts.is_active", expire_now)
+    ) as fired:
+        late = client.post(f"{url}/answer", headers=classmate_headers, json=payload)
+    assert fired
+    assert late.status_code == 409
+
+    with client.app.state.session_factory() as session:
+        answers = session.scalars(
+            select(QuizAnswer).where(QuizAnswer.session_id == launched["id"])
+        ).all()
+        assert [(answer.score, answer.is_graded) for answer in answers] == [(2.0, True)]
+    published = client.post(
+        f"/api/quizzes/sessions/{launched['id']}/publish-grades",
+        headers=environment["teacher_headers"],
+    )
+    assert published.status_code == 200
 
 
 def test_student_images_are_scoped_to_the_current_question(tmp_path: Path) -> None:

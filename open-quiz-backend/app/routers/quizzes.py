@@ -387,8 +387,23 @@ def pause_quiz_session(
             ErrorCode.QUIZ_SESSION_NOT_RUNNING,
             "Seul un quiz en cours peut être mis en pause",
         )
-    quiz_session.status = SessionStatus.PAUSED
-    quiz_session.paused_at = datetime.now(UTC)
+    transition = session.execute(
+        update(QuizSession)
+        .where(
+            QuizSession.id == quiz_session.id,
+            QuizSession.status == SessionStatus.IN_PROGRESS,
+        )
+        .values(status=SessionStatus.PAUSED, paused_at=datetime.now(UTC))
+        .execution_options(synchronize_session=False)
+    )
+    if affected_rows(transition) != 1:
+        # A concurrent request finished or paused it since it was read.
+        session.rollback()
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_RUNNING,
+            "Seul un quiz en cours peut être mis en pause",
+        )
     session.commit()
     session.refresh(quiz_session)
     publish_quiz_update(request, quiz_session, session)
@@ -412,11 +427,31 @@ def resume_quiz_session(
             ErrorCode.QUIZ_SESSION_NOT_PAUSED,
             "Seul un quiz en pause peut être repris",
         )
-    quiz_session.paused_duration_seconds = (
-        quiz_session.paused_duration_seconds or 0
-    ) + ceil(max(0, (datetime.now(UTC) - quiz_session.paused_at).total_seconds()))
-    quiz_session.paused_at = None
-    quiz_session.status = SessionStatus.IN_PROGRESS
+    transition = session.execute(
+        update(QuizSession)
+        .where(
+            QuizSession.id == quiz_session.id,
+            QuizSession.status == SessionStatus.PAUSED,
+            QuizSession.paused_at == quiz_session.paused_at,
+        )
+        .values(
+            status=SessionStatus.IN_PROGRESS,
+            paused_at=None,
+            paused_duration_seconds=(quiz_session.paused_duration_seconds or 0)
+            + ceil(
+                max(0, (datetime.now(UTC) - quiz_session.paused_at).total_seconds())
+            ),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if affected_rows(transition) != 1:
+        # A concurrent request resumed or finished it since it was read.
+        session.rollback()
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_PAUSED,
+            "Seul un quiz en pause peut être repris",
+        )
     session.commit()
     session.refresh(quiz_session)
     publish_quiz_update(request, quiz_session, session)

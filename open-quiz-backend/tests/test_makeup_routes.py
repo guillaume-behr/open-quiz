@@ -443,6 +443,53 @@ def test_makeup_finish_completes_paused_child_sessions(
         assert child_state.json()["status"] == "finished"
 
 
+@pytest.mark.parametrize("action", ["pause", "resume"])
+def test_makeup_pause_and_resume_never_reopen_a_concurrently_finished_child(
+    environment, action: str
+) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    makeup = create_makeup(client, environment)
+    url = f"/api/quizzes/makeup/sessions/{makeup['id']}"
+    assert (
+        client.post(
+            "/api/quizzes/makeup/join",
+            headers=environment["student_headers"],
+            json={"join_code": makeup["join_code"]},
+        ).status_code
+        == 200
+    )
+    selected = select_quiz(client, environment, makeup, environment["student_headers"])
+    assert selected.status_code == 201
+    child_join_code = selected.json()["join_code"]
+    assert client.post(f"{url}/start", headers=headers).status_code == 200
+    if action == "resume":
+        assert client.post(f"{url}/pause", headers=headers).status_code == 200
+
+    with concurrent_writes(
+        client,
+        (
+            # The child finishes (its last participant handed in, or its time
+            # ran out) after the makeup request read it.
+            "UPDATE quiz_sessions",
+            lambda connection: connection.execute(
+                update(QuizSession)
+                .where(QuizSession.join_code == child_join_code)
+                .values(status="finished")
+            ),
+        ),
+    ) as fired:
+        controlled = client.post(f"{url}/{action}", headers=headers)
+    assert fired
+    assert controlled.status_code == 200
+    with client.app.state.session_factory() as session:
+        child = session.scalar(
+            select(QuizSession).where(QuizSession.join_code == child_join_code)
+        )
+        assert child is not None
+        assert child.status == "finished"
+
+
 def test_makeup_session_requires_quizzes_taken_by_the_class(
     tmp_path: Path,
 ) -> None:

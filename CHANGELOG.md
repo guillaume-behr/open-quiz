@@ -64,6 +64,17 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 - The Python runner loads the Pyodide loader from `/pyodide/` with the rest of
   the runtime instead of bundling it, which shrinks its worker to about 1 kB.
 
+### Fixed
+
+- Sending the last answer again after an exam finished (a double click, a
+  network retry) no longer resets its grade, which kept the teacher from
+  publishing the grades. An answer arriving while the exam is finishing is
+  refused instead of being recorded ungraded.
+- When the last two students hand in at the same moment, the exam now
+  finishes instead of running on until its time is up.
+- Pausing or resuming an exam, or a make-up session, at the moment it
+  finishes no longer reopens it.
+
 ### Security
 
 - Wrong passwords sent from elsewhere no longer lock an account out of a

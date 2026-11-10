@@ -148,11 +148,10 @@ def last_answered_question_id(
 ) -> int | None:
     """The final question once a participant has answered everything.
 
-    A concurrent duplicate of the last answer can reach the server after the
-    winning request already advanced the participant past it, and even after
-    it finished the whole session (finish_when_nobody_can_answer runs in the
-    same transaction). The caller uses this to recognise that submission
-    instead of rejecting it outright.
+    A repeat of the last answer (a double click, a network retry) can reach
+    the server after the first copy already advanced the participant past it,
+    and even after it finished the whole session. The caller uses this to
+    recognise that submission instead of rejecting it outright.
     """
     if (
         quiz_session.status not in (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED)

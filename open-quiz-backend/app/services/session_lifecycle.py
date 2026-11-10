@@ -7,7 +7,7 @@ reveal the correction; a student's unfinished trainings and a whole makeup
 session can be discarded the same way.
 """
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import UTC, datetime, timedelta
 from math import ceil
 
@@ -88,21 +88,26 @@ def quiz_session_is_due(
     )
 
 
-def finish_expired_session(
+def finish_session(
     quiz_session: QuizSession,
     quiz: Quiz,
     session: Session,
+    from_statuses: Collection[SessionStatus] = (SessionStatus.IN_PROGRESS,),
 ) -> bool:
-    """Finish a due session in the current transaction, without committing.
+    """Finish a session in the current transaction, without committing.
 
-    Returns False when a concurrent transaction already moved the session out
-    of in_progress, in which case nothing was changed.
+    This is the only way a session becomes finished: the timer, the last
+    participant done, the teacher closing a makeup session and the retention
+    sweep all come through here. The status changes only if it is still one
+    of ``from_statuses``, so of two concurrent attempts exactly one finishes
+    the session and grades it. Returns False when another transaction already
+    moved it, in which case nothing was changed.
     """
     transition = session.execute(
         update(QuizSession)
         .where(
             QuizSession.id == quiz_session.id,
-            QuizSession.status == SessionStatus.IN_PROGRESS,
+            QuizSession.status.in_(from_statuses),
         )
         .values(status=SessionStatus.FINISHED)
         .execution_options(synchronize_session=False)
@@ -119,6 +124,24 @@ def finish_expired_session(
     return True
 
 
+def lock_for_participant_write(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    session: Session,
+) -> None:
+    """Lock the session row before a participant changes anything in it.
+
+    Every transition that finishes, pauses or resumes a session updates this
+    row, so holding its lock until the commit means the status read here
+    stays true for the whole request: an answer can no longer land after the
+    session was finished and graded, and two participants finishing at once
+    are serialised, so the second one sees the first as done. The session and
+    the participant are reloaded, since they were read before the lock.
+    """
+    session.refresh(quiz_session, with_for_update=True)
+    session.refresh(participant)
+
+
 def expire_quiz_session(
     quiz_session: QuizSession,
     quiz: Quiz,
@@ -132,7 +155,7 @@ def expire_quiz_session(
     """
     if not quiz_session_is_due(quiz_session, quiz):
         return
-    if finish_expired_session(quiz_session, quiz, session):
+    if finish_session(quiz_session, quiz, session):
         session.commit()
     else:
         session.rollback()
@@ -160,7 +183,7 @@ def expire_due_quiz_sessions(
             .where(QuizSession.status == SessionStatus.IN_PROGRESS)
         ).all()
         if quiz_session_is_due(quiz_session, quiz, now)
-        and finish_expired_session(quiz_session, quiz, session)
+        and finish_session(quiz_session, quiz, session)
     ]
     session.commit()
     return finished
@@ -203,19 +226,7 @@ def finish_when_nobody_can_answer(
     )
     if unfinished_count:
         return
-    transition = session.execute(
-        update(QuizSession)
-        .where(
-            QuizSession.id == quiz_session.id,
-            QuizSession.status == SessionStatus.IN_PROGRESS,
-        )
-        .values(status=SessionStatus.FINISHED)
-        .execution_options(synchronize_session=False)
-    )
-    if affected_rows(transition) == 1:
-        quiz_session.status = SessionStatus.FINISHED
-        if quiz.mode == QuizMode.EXAM:
-            compute_final_scores(quiz_session, session)
+    finish_session(quiz_session, quiz, session)
 
 
 def delete_makeup_session_records(

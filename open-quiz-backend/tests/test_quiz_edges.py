@@ -219,14 +219,16 @@ def test_review_summaries_tolerate_corrupted_answers(environment) -> None:
     assert state["answer_summaries"][0]["submitted_answers"] == []
 
 
-def test_a_concurrent_finish_is_not_applied_twice(environment) -> None:
+def test_a_hand_in_after_a_concurrent_finish_is_refused(environment) -> None:
     client = environment["client"]
     launched, headers, url = start(client, environment)
     assert answer(client, environment, url, headers).status_code == 200
     with concurrent_writes(
         client,
         (
-            "UPDATE quiz_sessions SET status",
+            # Right after the request read the session as running, and before
+            # it locks the session row: the lock then reads the new status.
+            "SELECT student_accounts.is_active",
             lambda connection: connection.execute(
                 update(QuizSession)
                 .where(QuizSession.id == launched["id"])
@@ -234,11 +236,53 @@ def test_a_concurrent_finish_is_not_applied_twice(environment) -> None:
             ),
         ),
     ) as fired:
-        hand_in_quiz(client, launched["join_code"], headers)
+        handed_in = client.post(f"{url}/submit", headers=headers)
     assert fired
-    # The concurrent request already closed the session, so this one left it.
+    assert handed_in.status_code == 409
+    assert handed_in.json()["detail"]["code"] == "QUIZ_REVIEW_UNAVAILABLE"
     with client.app.state.session_factory() as session:
         assert session.get(QuizSession, launched["id"]).status == "finished"
+        participant = session.scalar(
+            select(QuizParticipant).where(QuizParticipant.session_id == launched["id"])
+        )
+        assert participant.submitted_at is None
+
+
+@pytest.mark.parametrize("action", ["pause", "resume"])
+def test_pausing_or_resuming_never_overrides_a_concurrent_finish(
+    environment, action: str
+) -> None:
+    client = environment["client"]
+    teacher_headers = environment["teacher_headers"]
+    launched, _, _ = start(client, environment)
+    session_url = f"/api/quizzes/sessions/{launched['id']}"
+    if action == "resume":
+        assert (
+            client.post(f"{session_url}/pause", headers=teacher_headers).json()[
+                "status"
+            ]
+            == "paused"
+        )
+    with concurrent_writes(
+        client,
+        (
+            "UPDATE quiz_sessions",
+            lambda connection: connection.execute(
+                update(QuizSession)
+                .where(QuizSession.id == launched["id"])
+                .values(status="finished")
+            ),
+        ),
+    ) as fired:
+        raced = client.post(f"{session_url}/{action}", headers=teacher_headers)
+    assert fired
+    assert raced.status_code == 409
+    assert raced.json()["detail"]["code"] == (
+        "QUIZ_SESSION_NOT_RUNNING" if action == "pause" else "QUIZ_SESSION_NOT_PAUSED"
+    )
+    assert client.get(session_url, headers=teacher_headers).json()["status"] == (
+        "finished"
+    )
 
 
 def test_grading_rejects_answers_outside_the_participant_draw(environment) -> None:
