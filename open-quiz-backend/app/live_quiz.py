@@ -8,6 +8,16 @@ from urllib.parse import urlparse
 
 from fastapi import WebSocket
 
+# One person following one feed from a few tabs is ordinary; past that, the
+# sockets are refused. Each one holds a connection of the server's shared
+# limit for as long as it stays open, so without a bound a single account
+# could take them all from a class in the middle of an exam.
+MAX_LIVE_SOCKETS_PER_FEED = 4
+
+
+class LiveSocketLimitError(Exception):
+    """This account already follows this feed from too many sockets."""
+
 
 @dataclass(frozen=True)
 class _Subscriber:
@@ -22,9 +32,16 @@ class LiveQuizHub:
     processes, which deliver it to their own sockets with publish_local().
     """
 
-    def __init__(self, max_pending_authentications: int = 64) -> None:
+    def __init__(
+        self,
+        max_pending_authentications: int = 64,
+        max_sockets_per_feed: int = MAX_LIVE_SOCKETS_PER_FEED,
+    ) -> None:
         self._lock = Lock()
         self._subscribers: dict[str, set[_Subscriber]] = defaultdict(set)
+        # Open sockets per (topic, principal), in this worker process.
+        self._sockets: dict[tuple[str, str], int] = defaultdict(int)
+        self._max_sockets_per_feed = max_sockets_per_feed
         self._pending_authentications = 0
         self._max_pending_authentications = max_pending_authentications
         self._relay: Callable[[str], None] | None = None
@@ -44,9 +61,21 @@ class LiveQuizHub:
             self._pending_authentications = max(0, self._pending_authentications - 1)
 
     @asynccontextmanager
-    async def subscribe(self, topic: str) -> AsyncIterator[Queue[None]]:
+    async def subscribe(
+        self, topic: str, principal: str | None = None
+    ) -> AsyncIterator[Queue[None]]:
+        """Follow a topic until the block exits.
+
+        ``principal`` names who holds the socket; LiveSocketLimitError is
+        raised when they already follow this topic from too many.
+        """
         subscriber = _Subscriber(get_running_loop(), Queue(maxsize=1))
+        feed = (topic, principal) if principal is not None else None
         with self._lock:
+            if feed is not None:
+                if self._sockets[feed] >= self._max_sockets_per_feed:
+                    raise LiveSocketLimitError
+                self._sockets[feed] += 1
             self._subscribers[topic].add(subscriber)
         try:
             yield subscriber.queue
@@ -57,6 +86,10 @@ class LiveQuizHub:
                     subscribers.discard(subscriber)
                     if not subscribers:
                         self._subscribers.pop(topic, None)
+                if feed is not None:
+                    self._sockets[feed] -= 1
+                    if not self._sockets[feed]:
+                        del self._sockets[feed]
 
     def publish(self, topic: str) -> None:
         self.publish_local(topic)

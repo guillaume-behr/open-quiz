@@ -1,5 +1,6 @@
 """Live quiz WebSockets for teachers and students."""
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,7 +12,7 @@ from fastapi import status
 from sqlalchemy import update
 from starlette.websockets import WebSocketDisconnect
 
-from app.live_quiz import LiveQuizHub
+from app.live_quiz import LiveQuizHub, LiveSocketLimitError
 from app.models import (
     QuizSession,
 )
@@ -537,6 +538,60 @@ def test_live_quiz_websocket_rejects_untrusted_origin_and_token(
             with pytest.raises(WebSocketDisconnect) as rejected:
                 socket.receive_json()
             assert rejected.value.code == status.WS_1008_POLICY_VIOLATION
+
+
+def test_one_account_may_only_hold_so_many_sockets_on_a_feed() -> None:
+    hub = LiveQuizHub(max_sockets_per_feed=1)
+
+    async def scenario() -> None:
+        async with hub.subscribe("topic", "teacher"):
+            with pytest.raises(LiveSocketLimitError):
+                async with hub.subscribe("topic", "teacher"):
+                    pytest.fail("a second socket was accepted")
+            # Someone else, and another feed, are counted apart.
+            async with hub.subscribe("topic", "student"):
+                pass
+            async with hub.subscribe("other", "teacher"):
+                pass
+        # Closing the socket gives its place back.
+        async with hub.subscribe("topic", "teacher"):
+            pass
+        assert not hub._sockets
+
+    asyncio.run(scenario())
+
+    several = LiveQuizHub(max_sockets_per_feed=2)
+
+    async def two_tabs() -> None:
+        async with several.subscribe("topic", "teacher"):
+            async with several.subscribe("topic", "teacher"):
+                pass
+            # One tab closed: the other still counts.
+            assert several._sockets == {("topic", "teacher"): 1}
+
+    asyncio.run(two_tabs())
+
+
+def test_live_feeds_turn_away_sockets_over_the_limit(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = environment["client"]
+    launched, participant_headers = launch_and_join(client, environment)
+    teacher = {"token": environment["teacher_token"]}
+    feeds = [
+        (TEACHER_SESSIONS, teacher),
+        (f"{TEACHER_SESSIONS}/{launched['id']}", teacher),
+        (TEACHER_MAKEUPS, teacher),
+        (
+            f"/api/quizzes/live/student/sessions/{launched['join_code']}",
+            {"token": participant_headers["X-Quiz-Token"]},
+        ),
+    ]
+    monkeypatch.setattr(client.app.state.live_quiz_hub, "_max_sockets_per_feed", 0)
+    for path, credentials in feeds:
+        with connect(client, path) as socket:
+            socket.send_json(credentials)
+            assert_closed(socket, status.WS_1013_TRY_AGAIN_LATER)
 
 
 def test_live_socket_authentication_gate_is_bounded() -> None:

@@ -5,7 +5,11 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
-from app.auth_guards import password_rate_subject, two_factor_rate_subject
+from app.auth_guards import (
+    password_rate_subject,
+    trusted_password_rate_subject,
+    two_factor_rate_subject,
+)
 from app.dependencies import AdminUser, DbSession
 from app.enums import QuizMode
 from app.errors import ApiError, ErrorCode
@@ -168,6 +172,7 @@ def reset_user_credentials(
     session.commit()
     limiter = request.app.state.login_rate_limiter
     limiter.clear_subject(password_rate_subject(user.username))
+    limiter.clear_subject(trusted_password_rate_subject(user.id))
     limiter.clear_subject(two_factor_rate_subject(user.id))
     request.app.state.two_factor_daily_rate_limiter.clear_subject(
         two_factor_rate_subject(user.id)

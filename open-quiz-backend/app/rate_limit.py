@@ -172,6 +172,7 @@ class FixedWindowRateLimiter:
 def attach_rate_limiters(app: FastAPI, settings: Settings) -> None:
     """Give the app its limiters, which count attempts in a pool of their own."""
     limiter_sessions = build_rate_limiter_session_factory(settings.database_url)
+    app.state.rate_limiter_sessions = limiter_sessions
     app.state.login_rate_limiter = LoginRateLimiter(
         limiter_sessions,
         settings.login_attempts,

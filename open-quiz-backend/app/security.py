@@ -5,6 +5,7 @@ from hashlib import sha256
 from hmac import compare_digest
 from hmac import new as hmac_new
 from secrets import token_urlsafe
+from threading import BoundedSemaphore
 from zoneinfo import ZoneInfo
 
 import jwt
@@ -14,6 +15,11 @@ from pwdlib import PasswordHash
 
 password_hash = PasswordHash.recommended()
 DUMMY_PASSWORD_HASH = password_hash.hash(token_urlsafe(32))
+# Argon2 takes tens of megabytes for each hash it computes. Sign-in attempts
+# arrive on the request thread pool, so without a bound a flood of them would
+# hold that memory once per thread; past this many they wait their turn.
+MAX_CONCURRENT_PASSWORD_HASHES = 4
+password_hashing = BoundedSemaphore(MAX_CONCURRENT_PASSWORD_HASHES)
 ACCESS_TOKEN_REQUIRED_CLAIMS = ["sub", "type", "ver", "iat", "exp"]
 TWO_FACTOR_TOKEN_REQUIRED_CLAIMS = ["sub", "type", "jti", "iat", "exp"]
 TWO_FACTOR_TRUST_TOKEN_TYPE = "two_factor_trust"  # noqa: S105 - a JWT type.
@@ -23,11 +29,13 @@ TWO_FACTOR_TRUST_MAXIMUM = timedelta(hours=24)
 
 
 def hash_password(password: str) -> str:
-    return password_hash.hash(password)
+    with password_hashing:
+        return password_hash.hash(password)
 
 
 def verify_password(password: str, encoded: str) -> bool:
-    return password_hash.verify(password, encoded)
+    with password_hashing:
+        return password_hash.verify(password, encoded)
 
 
 def access_token_version(

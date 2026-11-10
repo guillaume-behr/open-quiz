@@ -91,6 +91,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 task.cancel()
                 with suppress(CancelledError):
                     await task
+            # Close pooled connections now rather than when the engines are
+            # garbage collected, so apps created one after another (tests,
+            # reloads) do not pile up idle connections on the server.
+            session_factory.kw["bind"].dispose()
+            app.state.rate_limiter_sessions.kw["bind"].dispose()
 
     production = settings.environment == "production"
     app = FastAPI(

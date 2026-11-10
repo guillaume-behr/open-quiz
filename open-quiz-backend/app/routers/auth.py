@@ -12,6 +12,7 @@ from app.audit import audit_event
 from app.auth_guards import (
     enforce_global_auth_limit,
     password_rate_subject,
+    trusted_password_rate_subject,
     two_factor_rate_subject,
     validate_origin,
 )
@@ -299,6 +300,21 @@ def revoke_refresh_family(
     return True
 
 
+def password_attempt_subject(
+    username: str, user: User | None, request: Request, session: Session
+) -> str:
+    """The bucket this password attempt counts against.
+
+    A browser the account trusts has a bucket of its own, so that wrong
+    passwords sent from elsewhere cannot lock the owner out of it.
+    """
+    if user is not None:
+        two_factor = session.get(TwoFactorCredential, user.id)
+        if two_factor is not None and browser_is_trusted(request, user, two_factor):
+            return trusted_password_rate_subject(user.id)
+    return password_rate_subject(username)
+
+
 def password_user(payload: LoginRequest, request: Request, session: Session) -> User:
     """The active account whose password this is, within the attempt limits."""
     user = session.scalar(select(User).where(User.username == payload.username))
@@ -309,7 +325,7 @@ def password_user(payload: LoginRequest, request: Request, session: Session) -> 
         known_identity=user is not None and user.is_active,
     )
     limiter = request.app.state.login_rate_limiter
-    rate_subject = password_rate_subject(payload.username)
+    rate_subject = password_attempt_subject(payload.username, user, request, session)
     retry_after = limiter.reserve(rate_subject)
     if retry_after:
         audit_event("auth.login_rate_limited")

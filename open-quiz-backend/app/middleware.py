@@ -4,6 +4,7 @@ from collections.abc import Callable
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
@@ -182,7 +183,7 @@ class RequestBodyLimitMiddleware:
 def add_middleware(
     app: FastAPI, settings: Settings, session_factory: sessionmaker[Session]
 ) -> None:
-    """Body limits, CORS, HTTPS, security headers and access log.
+    """Body limits, CORS, HTTPS, trusted hosts, security headers and access log.
 
     Each middleware added wraps the previous ones, so the access log, added
     last, sees every response, including the rejections of the others.
@@ -213,6 +214,13 @@ def add_middleware(
     )
     if production:
         app.add_middleware(HTTPSRedirectMiddleware)
+        # Outside the redirect, which builds its target from the Host header:
+        # a name the instance does not go by is refused before it is echoed.
+        app.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=settings.allowed_hosts,
+            www_redirect=False,
+        )
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):

@@ -41,6 +41,42 @@ test("Python execution still blocks browser data and network capabilities", asyn
     )
 })
 
+test("Python execution cannot reach a capability through its prototype", async ({
+    page,
+}) => {
+    await page.goto("/student/login")
+
+    const errors = await page.evaluate(async () => {
+        const { runPython } =
+            await import("/src/components/question-banks/python-runner.ts")
+        const failure = (source: string) =>
+            runPython(source).then(
+                () => "",
+                (error: unknown) =>
+                    error instanceof Error ? error.message : String(error)
+            )
+        return Promise.all([
+            // fetch is defined on WorkerGlobalScope.prototype, not on self.
+            failure(
+                "from js import WorkerGlobalScope, self\nWorkerGlobalScope.prototype.fetch.call(self, '/healthz')"
+            ),
+            failure(
+                "from js import Object, self\nObject.getPrototypeOf(Object.getPrototypeOf(self)).indexedDB()"
+            ),
+            failure(
+                "from js import WebSocketStream\nWebSocketStream.new('ws://127.0.0.1:4173/')"
+            ),
+            failure("from js import navigator\nnavigator.storage()"),
+        ])
+    })
+
+    for (const error of errors) {
+        expect(error).toContain(
+            "This browser capability is disabled for Python execution"
+        )
+    }
+})
+
 test("concurrent Python requests keep their output isolated", async ({ page }) => {
     await page.goto("/student/login")
 
