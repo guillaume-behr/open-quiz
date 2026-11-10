@@ -63,9 +63,6 @@ from app.schemas import (
     QuizResponse,
     StudentQuizJoinResponse,
 )
-from app.services.grading import (
-    compute_final_scores,
-)
 from app.services.question_draws import (
     draw_unique_question_ids,
     question_draw_pool,
@@ -74,6 +71,7 @@ from app.services.question_draws import (
 from app.services.session_lifecycle import (
     delete_makeup_session_records,
     discard_active_training_sessions,
+    finish_session,
 )
 from app.session_responses import (
     makeup_session_response,
@@ -254,9 +252,17 @@ def cancel_makeup_session(
 
 
 def apply_makeup_action(
-    child: QuizSession, action: MakeupAction, now: datetime, session: Session
+    child: QuizSession,
+    quiz: Quiz,
+    action: MakeupAction,
+    now: datetime,
+    session: Session,
 ) -> None:
-    """Carry a makeup action over to one student's quiz session."""
+    """Carry a makeup action over to one student's quiz session.
+
+    Pausing and resuming only apply if the child is still in the status they
+    were checked against, so a child that finished meanwhile stays finished.
+    """
     if action == MakeupAction.START:
         if child.status != SessionStatus.WAITING:
             return
@@ -269,25 +275,42 @@ def apply_makeup_action(
     elif action == MakeupAction.PAUSE:
         if child.status != SessionStatus.IN_PROGRESS:
             return
-        child.status = SessionStatus.PAUSED
-        child.paused_at = now
+        session.execute(
+            update(QuizSession)
+            .where(
+                QuizSession.id == child.id,
+                QuizSession.status == SessionStatus.IN_PROGRESS,
+            )
+            .values(status=SessionStatus.PAUSED, paused_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        session.refresh(child)
     elif action == MakeupAction.RESUME:
         if child.status != SessionStatus.PAUSED or child.paused_at is None:
             return
-        child.paused_duration_seconds = (child.paused_duration_seconds or 0) + ceil(
-            max(0, (now - child.paused_at).total_seconds())
+        session.execute(
+            update(QuizSession)
+            .where(
+                QuizSession.id == child.id,
+                QuizSession.status == SessionStatus.PAUSED,
+                QuizSession.paused_at == child.paused_at,
+            )
+            .values(
+                status=SessionStatus.IN_PROGRESS,
+                paused_at=None,
+                paused_duration_seconds=(child.paused_duration_seconds or 0)
+                + ceil(max(0, (now - child.paused_at).total_seconds())),
+            )
+            .execution_options(synchronize_session=False)
         )
-        child.paused_at = None
-        child.status = SessionStatus.IN_PROGRESS
+        session.refresh(child)
     else:  # finish
-        if child.status not in {SessionStatus.IN_PROGRESS, SessionStatus.PAUSED}:
-            return
-        child.status = SessionStatus.FINISHED
-        compute_final_scores(child, session)
-        for participant in session.scalars(
-            select(QuizParticipant).where(QuizParticipant.session_id == child.id)
-        ):
-            participant.current_position = None
+        finish_session(
+            child,
+            quiz,
+            session,
+            from_statuses=(SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
+        )
 
 
 @router.post(
@@ -338,11 +361,14 @@ def control_makeup_session(
             "Action impossible pour cette session",
         )
     makeup.status = target
-    children = list(
-        session.scalars(
-            select(QuizSession).where(QuizSession.makeup_session_id == makeup.id)
+    children = [
+        (child, quiz)
+        for child, quiz in session.execute(
+            select(QuizSession, Quiz)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(QuizSession.makeup_session_id == makeup.id)
         )
-    )
+    ]
     if action == MakeupAction.START and not children:
         session.rollback()
         raise ApiError(
@@ -351,10 +377,10 @@ def control_makeup_session(
             "Au moins un élève doit choisir un quiz avant le démarrage",
         )
     now = datetime.now(UTC)
-    for child in children:
-        apply_makeup_action(child, action, now, session)
+    for child, quiz in children:
+        apply_makeup_action(child, quiz, action, now, session)
     session.commit()
-    for child in children:
+    for child, _ in children:
         publish_quiz_update(request, child, session)
     publish_makeup_update(request, professor.id)
     return makeup_session_response(makeup, session)

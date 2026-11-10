@@ -71,6 +71,7 @@ from app.services.session_lifecycle import (
     answer_review_enabled,
     expire_quiz_session,
     finish_when_nobody_can_answer,
+    lock_for_participant_write,
     quiz_session_is_due,
 )
 from app.session_responses import student_state_response
@@ -297,6 +298,7 @@ def leave_student_quiz(
         "quiz_participant_rate_limiter",
         f"participant:{participant.id}",
     )
+    lock_for_participant_write(quiz_session, participant, session)
     participant.left_at = datetime.now(UTC)
     participant.access_token_hash = None
     session.flush()
@@ -331,11 +333,11 @@ def require_answer_accepted(
     quiz_session: QuizSession, participant: QuizParticipant, session: Session
 ) -> None:
     """Reject an answer the session, the student or an exam does not allow."""
-    # "finished" is allowed past this gate only so a concurrent duplicate of
-    # the last answer can still be recognised below: finish_when_nobody_can_answer
-    # runs in the same transaction as the winning submission, so a losing
-    # duplicate can reach here after that transition already committed. Any
-    # other non-"in_progress" status (paused included) still rejects outright.
+    # "finished" is allowed past this gate only so a repeat of the last answer
+    # can still be recognised below: a double click or a network retry can
+    # arrive after the first submission finished the session, and must get
+    # the same answer back rather than an error. Any other non-"in_progress"
+    # status (paused included) still rejects outright.
     if quiz_session.status not in (SessionStatus.IN_PROGRESS, SessionStatus.FINISHED):
         raise ApiError(
             status.HTTP_409_CONFLICT,
@@ -369,8 +371,8 @@ def answered_question(
     """The question an answer is for, its choices, and whether it is retargeted.
 
     A participant who already answered everything has no current question;
-    the answer is then retargeted at their last one, so that a concurrent
-    duplicate of their final answer can be recognised.
+    the answer is then retargeted at their last one, so that a repeat of
+    their final answer can be recognised.
     """
     question_id = current_question_id(quiz_session, participant, session)
     retargeting_finished_answer = question_id is None
@@ -472,8 +474,8 @@ def require_same_finished_answer(
     """Accept a retargeted answer only as a duplicate of the recorded one.
 
     The participant already moved past this question: the submission must
-    match what a concurrent duplicate already recorded for it, rather than
-    silently rewrite a finished answer.
+    match what an earlier copy of it already recorded, rather than silently
+    rewrite a finished answer.
     """
     existing_answer = session.scalar(
         select(QuizAnswer).where(
@@ -567,6 +569,7 @@ def submit_student_answer(
         f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
+    lock_for_participant_write(quiz_session, participant, session)
     require_answer_accepted(quiz_session, participant, session)
     question, choices, retargeting = answered_question(
         quiz_session, participant, session
@@ -576,6 +579,12 @@ def submit_student_answer(
         require_same_finished_answer(
             quiz_session, participant, question.id, answer_data, session
         )
+        # A repeat of an answer already recorded changes nothing; writing it
+        # again would also reset a grade the finished session already gave.
+        state = student_state_response(quiz_session, quiz, participant, session)
+        if feedback is not None:
+            state.training_feedback = feedback
+        return state
     store_answer(quiz_session, participant, question.id, answer_data, session)
     advance_participant(quiz_session, quiz, participant, session)
     session.flush()
@@ -658,6 +667,7 @@ def review_student_answers(
         f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
+    lock_for_participant_write(quiz_session, participant, session)
     require_answer_review_offered(quiz_session, quiz)
     if participant.submitted_at is not None:
         return student_state_response(quiz_session, quiz, participant, session)
@@ -695,6 +705,7 @@ def submit_student_quiz(
         f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
+    lock_for_participant_write(quiz_session, participant, session)
     require_answer_review_offered(quiz_session, quiz)
     if participant.submitted_at is not None:
         # A duplicate confirmation must not fail the student whose paper is
@@ -730,6 +741,7 @@ def navigate_student_quiz(
         f"participant:{participant.id}",
     )
     expire_quiz_session(quiz_session, quiz, session)
+    lock_for_participant_write(quiz_session, participant, session)
     target_position = payload.question_number - 1
     allow_previous_questions = quiz_session.allow_previous_questions
     if allow_previous_questions is None:

@@ -21,10 +21,12 @@ from app.models import (
     RefreshSessionFamily,
     User,
 )
+from app.session_retention import close_abandoned_sessions
 
 from support import (
     FRONTEND_ORIGIN,
     TEST_CLIENT_BACKEND_OPTIONS,
+    concurrent_writes,
     create_professor,
     exam_environment,
     login_admin,
@@ -195,6 +197,57 @@ def test_retention_settles_sessions_their_teacher_never_closed(
         recent = session.get(QuizSession, recent_id)
         assert recent is not None
         assert recent.status == "in_progress"
+
+
+def test_retention_leaves_a_session_finished_concurrently_to_its_finisher(
+    tmp_path: Path,
+) -> None:
+    """Grading belongs to whichever transaction actually finished the session."""
+    settings = settings_for(
+        tmp_path / "abandoned-race",
+        abandoned_session_retention_days=7,
+    )
+    with make_client(settings) as client:
+        factory = client.app.state.session_factory
+        with factory() as session:
+            admin = session.scalar(select(User).where(User.is_admin.is_(True)))
+            assert admin is not None
+            abandoned_id = seeded_exam_session(
+                session,
+                admin.id,
+                join_code="RACED01",
+                status_value="in_progress",
+                created_at=datetime.now(UTC) - timedelta(days=10),
+                with_answer=True,
+            )
+            session.commit()
+
+        with (
+            concurrent_writes(
+                client,
+                (
+                    "UPDATE quiz_sessions SET status",
+                    lambda connection: connection.execute(
+                        update(QuizSession)
+                        .where(QuizSession.id == abandoned_id)
+                        .values(status="finished")
+                    ),
+                ),
+            ) as fired,
+            factory() as session,
+        ):
+            assert close_abandoned_sessions(
+                datetime.now(UTC) - timedelta(days=7), session
+            ) == (0, 0)
+            session.commit()
+        assert fired
+
+        with factory() as session:
+            answer = session.scalar(
+                select(QuizAnswer).where(QuizAnswer.session_id == abandoned_id)
+            )
+            assert answer is not None
+            assert not answer.is_graded
 
 
 def test_retention_purges_finished_training_attempts(tmp_path: Path) -> None:
