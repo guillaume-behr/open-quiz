@@ -784,9 +784,16 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             headers=exam_account_headers,
             json={"join_code": quiz_session["join_code"]},
         )
-        assert joined_again.status_code == 403
-        assert joined_again.json()["detail"]["code"] == "QUIZ_JOIN_REJECTED"
-        participant_token = joined.json()["participant_token"]
+        # Joining again resumes the same participation on a new token, and the
+        # first one stops working (#169).
+        assert joined_again.status_code == 201
+        replaced = client.get(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}",
+            headers={"X-Quiz-Token": joined.json()["participant_token"]},
+        )
+        assert replaced.status_code == 401
+        assert replaced.json()["detail"]["code"] == "QUIZ_PARTICIPANT_SESSION_RESUMED"
+        participant_token = joined_again.json()["participant_token"]
         student_headers = {"X-Quiz-Token": participant_token}
         assert (
             client.get(

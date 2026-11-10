@@ -3,9 +3,14 @@
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import update
+
+from app.models import QuizParticipant
+
 from support import (
     add_class_student,
     choice_answer,
+    concurrent_writes,
     correct_choice_id,
     exam_environment,
     hand_in_quiz,
@@ -131,3 +136,23 @@ def test_another_account_cannot_take_over_a_participation(tmp_path: Path) -> Non
             ).status_code
             == 200
         )
+
+
+def test_two_resumes_at_once_hand_out_a_single_token(tmp_path: Path) -> None:
+    """A resume that lost the race to another one is refused, not merged."""
+    with make_client(settings_for(tmp_path / "resume-race")) as client:
+        environment = exam_environment(client)
+        quiz_session, _ = started_exam(client, environment)
+
+        def resume_elsewhere(connection) -> None:
+            connection.execute(
+                update(QuizParticipant).values(access_token_hash="0" * 64)
+            )
+
+        with concurrent_writes(
+            client, ("UPDATE quiz_participants SET", resume_elsewhere)
+        ) as fired:
+            late = rejoin(client, environment, quiz_session["join_code"])
+        assert fired
+        assert late.status_code == 403
+        assert late.json()["detail"]["code"] == "QUIZ_JOIN_REJECTED"
