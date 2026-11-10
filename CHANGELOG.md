@@ -81,6 +81,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   `resume`, `cancel`) now refuse a make-up student's session with 409
   `QUIZ_SESSION_IS_MAKEUP`. Cancelling one through them used to keep that
   student from choosing a quiz again.
+- Timed exams keep ending on time, and data retention keeps running, after an
+  unexpected error: any failed run is logged and retried, instead of only a
+  database error. An exam that cannot be finished no longer keeps every
+  other due exam from finishing.
 
 ### Security
 

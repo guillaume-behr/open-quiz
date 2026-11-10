@@ -7,6 +7,7 @@ reveal the correction; a student's unfinished trainings and a whole makeup
 session can be discarded the same way.
 """
 
+import logging
 from collections.abc import Collection, Iterable
 from datetime import UTC, datetime, timedelta
 from math import ceil
@@ -37,6 +38,8 @@ from app.services.grading import (
     compute_final_scores,
 )
 from app.session_status import ACTIVE_SESSION_STATUSES
+
+logger = logging.getLogger("open_quiz")
 
 
 def quiz_ends_at(
@@ -171,20 +174,29 @@ def expire_due_quiz_sessions(
     even when nobody has it open. The advisory lock lets a single worker do
     it per tick: the others find it taken and skip. Returns the sessions it
     finished, for the caller to publish.
+
+    Each session is finished in its own savepoint: one that fails is logged
+    and skipped, and stays due for the next tick, instead of rolling back
+    every other session with it on every tick.
     """
     if not session.scalar(select(func.pg_try_advisory_xact_lock(EXPIRY_LOCK_KEY))):
         return []
     now = now or datetime.now(UTC)
-    finished = [
-        quiz_session
-        for quiz_session, quiz in session.execute(
-            select(QuizSession, Quiz)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(QuizSession.status == SessionStatus.IN_PROGRESS)
-        ).all()
-        if quiz_session_is_due(quiz_session, quiz, now)
-        and finish_session(quiz_session, quiz, session)
-    ]
+    finished: list[QuizSession] = []
+    for quiz_session, quiz in session.execute(
+        select(QuizSession, Quiz)
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(QuizSession.status == SessionStatus.IN_PROGRESS)
+    ).all():
+        if not quiz_session_is_due(quiz_session, quiz, now):
+            continue
+        quiz_session_id = quiz_session.id
+        try:
+            with session.begin_nested():
+                if finish_session(quiz_session, quiz, session):
+                    finished.append(quiz_session)
+        except Exception:
+            logger.exception("Finishing expired session %s failed", quiz_session_id)
     session.commit()
     return finished
 

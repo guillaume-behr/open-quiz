@@ -9,7 +9,6 @@ from asyncio import sleep, to_thread
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.audit import audit_event
@@ -138,24 +137,29 @@ def expire_due_sessions(
     return len(finished)
 
 
-async def expire_sessions_periodically(session_factory, hub: LiveQuizHub) -> None:
+async def expire_sessions_periodically(
+    session_factory: sessionmaker[Session], hub: LiveQuizHub
+) -> None:
     while True:
         await sleep(SESSION_EXPIRY_INTERVAL_SECONDS)
         try:
             await to_thread(expire_due_sessions, session_factory, hub)
-        except SQLAlchemyError:
-            # The database may be briefly unavailable: the next tick retries.
+        except Exception:
+            # Whatever failed (the database briefly unavailable, or a bug),
+            # ending the loop would stop every timer until the next restart:
+            # the next tick retries. Cancellation is not an Exception, so
+            # shutdown still ends the loop.
             logger.exception("Session expiry failed")
 
 
 async def maintain_data_retention_periodically(
-    session_factory, settings: Settings
+    session_factory: sessionmaker[Session], settings: Settings
 ) -> None:
     while True:
         await sleep(RETENTION_MAINTENANCE_INTERVAL_SECONDS)
         try:
             await to_thread(enforce_data_retention, session_factory, settings)
-        except SQLAlchemyError:
+        except Exception:
             # A failed run must not end the loop, or retention would stop
             # silently until the next restart: the next run retries.
             logger.exception("Data retention maintenance failed")

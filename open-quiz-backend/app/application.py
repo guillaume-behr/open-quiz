@@ -1,7 +1,8 @@
 """The FastAPI application: its state, middleware, routes and lifespan."""
 
+import logging
 from asyncio import CancelledError, create_task
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -42,6 +43,8 @@ from app.routers import (
     users,
 )
 from app.security_state import synchronize_security_state
+
+logger = logging.getLogger("open_quiz")
 
 
 def include_routers(app: FastAPI) -> None:
@@ -87,10 +90,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             live_relay.stop()
-            for task in (maintenance_task, expiry_task):
+            for name, task in (
+                ("data retention", maintenance_task),
+                ("session expiry", expiry_task),
+            ):
                 task.cancel()
-                with suppress(CancelledError):
+                try:
                     await task
+                except CancelledError:
+                    pass
+                except Exception:
+                    # The loops survive their own errors; one that still
+                    # ended a task must not abort the shutdown.
+                    logger.exception("Background task %s failed", name)
             # Close pooled connections now rather than when the engines are
             # garbage collected, so apps created one after another (tests,
             # reloads) do not pile up idle connections on the server.
