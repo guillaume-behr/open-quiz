@@ -55,6 +55,9 @@ follows the same course:
 - the teacher is warned when a student leaves full screen, switches tabs
   or starts printing: these alerts are informative and never trigger an
   automatic penalty;
+- a student who loses their tab (closed window, crashed browser, another
+  device) resumes the exam by joining again with the same code: their answers
+  are kept, the old tab stops working and the teacher is told;
 - make-up sessions: let chosen students retake a selection of past exams;
 - named A4 paper copies with a deterministic draw: a student always gets the
   same paper;

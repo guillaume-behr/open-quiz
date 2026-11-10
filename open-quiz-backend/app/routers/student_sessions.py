@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.audit import audit_event
 from app.choice_tokens import ChoiceTokens
 from app.database import affected_rows
 from app.dependencies import DbSession, current_student
@@ -42,6 +43,7 @@ from app.models import (
     StudentAccount,
 )
 from app.participants import (
+    SESSION_RESUMED_VIOLATION,
     VIOLATION_DEDUPLICATION_SECONDS,
     authenticated_participant,
     enforce_public_rate_limit,
@@ -143,12 +145,16 @@ def rejoin_quiz(
     session: Session,
 ) -> StudentQuizJoinResponse:
     """Reconnect a participant who left, on a new token."""
-    if existing.left_at is None or quiz_session.status not in {
+    if quiz_session.status not in {
         SessionStatus.WAITING,
         SessionStatus.IN_PROGRESS,
         SessionStatus.PAUSED,
     }:
         reject_quiz_join(request, join_subject)
+    if existing.left_at is None:
+        return resume_participation(
+            quiz_session, quiz, existing, student, join_subject, request, session
+        )
     participant_token = token_urlsafe(32)
     active_session = session.execute(
         update(QuizSession)
@@ -202,6 +208,66 @@ def rejoin_quiz(
         reject_quiz_join(request, join_subject)
     session.commit()
     session.refresh(existing)
+    publish_quiz_update(request, quiz_session, session)
+    state = student_state_response(quiz_session, quiz, existing, session)
+    return StudentQuizJoinResponse(
+        **state.model_dump(), participant_token=participant_token
+    )
+
+
+def resume_participation(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    existing: QuizParticipant,
+    student: Student,
+    join_subject: str,
+    request: Request,
+    session: Session,
+) -> StudentQuizJoinResponse:
+    """Hand a new token to a student still in the session who lost theirs.
+
+    A crashed tab, a closed window or another device loses the token kept in
+    the browser. The student account is authenticated, so it takes its own
+    participation back: same row, answers and position. The previous token
+    stops working at once, so one account never sits the exam in two places,
+    and its tab is told why. Once the exam has started, the teacher sees the
+    takeover as a monitoring alert.
+    """
+    participant_token = token_urlsafe(32)
+    resumed_values: dict[str, object] = {
+        "access_token_hash": participant_token_hash(participant_token),
+        "replaced_token_hash": existing.access_token_hash,
+        "student_identifier": student.identifier,
+        "student_display_name": student.display_name,
+    }
+    reported = quiz_session.status != SessionStatus.WAITING
+    if reported:
+        resumed_values |= {
+            "violation_count": QuizParticipant.violation_count + 1,
+            "last_violation_type": SESSION_RESUMED_VIOLATION,
+            "last_violation_at": datetime.now(UTC),
+        }
+    resumed = session.execute(
+        update(QuizParticipant)
+        .where(
+            QuizParticipant.id == existing.id,
+            QuizParticipant.left_at.is_(None),
+            QuizParticipant.access_token_hash == existing.access_token_hash,
+        )
+        .values(**resumed_values)
+        .execution_options(synchronize_session=False)
+    )
+    if affected_rows(resumed) != 1:
+        session.rollback()
+        reject_quiz_join(request, join_subject)
+    session.commit()
+    session.refresh(existing)
+    audit_event(
+        "quiz.participation_resumed",
+        session_id=quiz_session.id,
+        participant_id=existing.id,
+        reported=reported,
+    )
     publish_quiz_update(request, quiz_session, session)
     state = student_state_response(quiz_session, quiz, existing, session)
     return StudentQuizJoinResponse(

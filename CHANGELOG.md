@@ -35,6 +35,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 - At startup the backend applies migration 0006, which adds the “show
   provisional grades” option to quizzes and sessions. Existing quizzes keep
   showing provisional grades.
+- At startup the backend applies migration 0007, which adds a column to
+  quiz participants for resumed exams.
 
 ### Added
 
@@ -69,6 +71,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- A student who lost their exam tab (closed window, crashed browser, another
+  device) can join again with the same code and resume where they were, on
+  a new participant token. The old tab stops working and is told the exam
+  was resumed elsewhere (401 `QUIZ_PARTICIPANT_SESSION_RESUMED`); once the
+  exam has started, the teacher sees a `session_resumed` monitoring alert.
 - Sending the last answer again after an exam finished (a double click, a
   network retry) no longer resets its grade, which kept the teacher from
   publishing the grades. An answer arriving while the exam is finishing is
