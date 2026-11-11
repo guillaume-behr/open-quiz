@@ -78,7 +78,9 @@ export async function restoreSession(): Promise<User> {
  */
 export async function logout({
     forgetBrowser = false,
-}: { forgetBrowser?: boolean } = {}): Promise<void> {
+}: { forgetBrowser?: boolean } = {}): Promise<boolean> {
+    // Resolves to whether the server confirmed: only then are the session
+    // cookies gone from this browser.
     try {
         await request<void>(
             "/api/auth/logout",
@@ -91,8 +93,10 @@ export async function logout({
             },
             false
         )
+        return true
     } catch {
         // Local credentials must still be discarded when the API is offline.
+        return false
     } finally {
         clearSessionTokens()
     }

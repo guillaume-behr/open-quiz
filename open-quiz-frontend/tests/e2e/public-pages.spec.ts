@@ -217,6 +217,9 @@ test("cookie settings clear local quiz and preference data", async ({
         sessionStorage.setItem("open-quiz-student-session", "stored-session")
         sessionStorage.setItem("open-quiz-training-session", "training-session")
         sessionStorage.setItem("open-quiz-refresh-proof", "stored-proof")
+        sessionStorage.setItem("open-quiz-module-reload-at", "1")
+        localStorage.setItem("open-quiz-teacher-results-view", "cards")
+        localStorage.setItem("open-quiz-session-display:quiz-4", "{}")
     })
     await page.route("**/api/auth/logout", async (route) => {
         await route.fulfill({ status: 204 })
@@ -267,4 +270,34 @@ test("cookie settings clear local quiz and preference data", async ({
             training: null,
             proof: null,
         })
+    // No Open Quiz key survives, whether or not the page lists it.
+    expect(
+        await page.evaluate(() =>
+            [...Object.keys(localStorage), ...Object.keys(sessionStorage)].filter(
+                (key) => key.startsWith("open-quiz-")
+            )
+        )
+    ).toEqual([])
+})
+
+test("cookie settings say so when the sign-in session could not be cleared", async ({
+    page,
+}) => {
+    let attempts = 0
+    await page.route("**/api/auth/logout", async (route) => {
+        attempts += 1
+        await route.fulfill(
+            attempts === 1 ? { status: 503, json: {} } : { status: 204 }
+        )
+    })
+    await page.goto("/cookie-settings")
+    await page.getByRole("button", { name: "Clear and sign out" }).click()
+
+    await expect(page.getByRole("status")).toHaveText(
+        "The data could not be fully cleared: the server could not be reached, or the browser refused access to its storage. Try again."
+    )
+    await page.getByRole("button", { name: "Try again" }).click()
+    await expect(page.getByRole("status")).toHaveText(
+        "Local data and the sign-in session have been cleared."
+    )
 })

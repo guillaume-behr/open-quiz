@@ -787,17 +787,18 @@ def logout(
 
     The two-factor trust cookie survives a plain logout; ``forget_browser``
     clears it too.
+
+    Revoking the session needs the refresh proof, which only the tab that
+    signed in holds. Without it (another tab, after the first one closed),
+    the session is left to expire, but this browser still forgets it: the
+    cookies are cleared all the same. validate_origin keeps other sites from
+    clearing them.
     """
     validate_origin(request)
     raw_token = request.cookies.get(REFRESH_COOKIE)
-    if raw_token:
-        if not validate_refresh_proof(request, raw_token):
-            audit_event("auth.logout_proof_rejected")
-            raise ApiError(
-                status.HTTP_403_FORBIDDEN,
-                ErrorCode.AUTH_REFRESH_PROOF_INVALID,
-                "Preuve de session invalide",
-            )
+    if raw_token and not validate_refresh_proof(request, raw_token):
+        audit_event("auth.logout_proof_rejected")
+    elif raw_token:
         session.execute(
             update(RefreshSession)
             .where(
