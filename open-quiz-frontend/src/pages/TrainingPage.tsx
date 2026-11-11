@@ -2,7 +2,6 @@ import { RichText } from "@/components/ui/rich-text"
 import { getStudentQuizSession, submitStudentQuizAnswer } from "@/api/quizzes"
 import { apiErrorMessage } from "@/lib/errors"
 import type {
-    StudentAccount,
     StudentQuizQuestion,
     StudentQuizSession,
     TrainingFeedback,
@@ -23,14 +22,7 @@ import { isRtlLanguage } from "@/lib/utils"
 import { ArrowLeft, CheckCircle2, Info, Scale, XCircle } from "lucide-react"
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useLocation, useNavigate } from "react-router"
-
-type TrainingRouteState = {
-    student?: StudentAccount
-    token?: string
-    session?: StudentQuizSession
-    participantToken?: string
-}
+import { useNavigate } from "react-router"
 
 function storedTraining(): {
     joinCode: string
@@ -42,15 +34,11 @@ function storedTraining(): {
 export function TrainingPage() {
     const { t, i18n } = useTranslation()
     const navigate = useNavigate()
-    const location = useLocation()
-    const routeState = location.state as TrainingRouteState | null
+    // The training is read back from storage, never from router state
+    // (src/lib/student-session-storage.ts).
     const [stored] = useState(storedTraining)
-    const [participantToken] = useState(
-        routeState?.participantToken ?? stored?.participantToken ?? null
-    )
-    const [session, setSession] = useState<StudentQuizSession | null>(
-        routeState?.session ?? null
-    )
+    const [participantToken] = useState(stored?.participantToken ?? null)
+    const [session, setSession] = useState<StudentQuizSession | null>(null)
     const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([])
     const [writtenAnswer, setWrittenAnswer] = useState("")
     const [feedback, setFeedback] = useState<TrainingFeedback | null>(null)

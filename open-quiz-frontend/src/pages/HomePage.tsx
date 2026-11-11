@@ -1,3 +1,4 @@
+import { rememberedStudentFor } from "@/lib/student-session-storage"
 import {
     clearStudentSession,
     loginStudent,
@@ -34,10 +35,21 @@ import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
 import { useLocation, useNavigate } from "react-router"
 
-type StudentRouteState = {
-    student?: StudentAccount
-    token?: string
-    section?: StudentSection
+const STUDENT_SECTIONS: readonly StudentSection[] = [
+    "exam",
+    "training",
+    "makeup",
+    "results",
+]
+
+// Router state only carries which section to show: never a token or the
+// student (src/lib/student-session-storage.ts). It is checked, not trusted.
+function routeSection(state: unknown): StudentSection | null {
+    const section =
+        state && typeof state === "object" && "section" in state
+            ? state.section
+            : null
+    return STUDENT_SECTIONS.find((candidate) => candidate === section) ?? null
 }
 
 const TrainingQuizzesPanel = lazy(() =>
@@ -68,12 +80,9 @@ export function HomePage({
     const { t } = useTranslation()
     const navigate = useNavigate()
     const location = useLocation()
-    const routeState = location.state as StudentRouteState | null
-    const [student, setStudent] = useState<StudentAccount | null>(
-        routeState?.student ?? null
-    )
-    const [token, setToken] = useState<string | null>(
-        routeState?.token ?? readStudentToken()
+    const [token, setToken] = useState<string | null>(readStudentToken)
+    const [student, setStudent] = useState<StudentAccount | null>(() =>
+        rememberedStudentFor(token)
     )
     const [identifier, setIdentifier] = useState("")
     const [password, setPassword] = useState("")
@@ -85,7 +94,7 @@ export function HomePage({
     const [isJoining, setIsJoining] = useState(false)
     const [storedExam] = useState(readStoredQuizSession)
     const [activeTab, setActiveTab] = useState<StudentSection>(
-        routeState?.section ?? initialSection
+        routeSection(location.state) ?? initialSection
     )
     const dashboardEntries: DashboardEntry<StudentSection>[] = [
         {
@@ -125,7 +134,7 @@ export function HomePage({
         if (location.pathname !== destination) {
             navigate(destination, {
                 replace: true,
-                state: { student, token, section },
+                state: { section },
             })
         }
     }
@@ -138,20 +147,14 @@ export function HomePage({
         }
         if (student) {
             if (page === "login")
-                navigate("/student/dashboard", {
-                    replace: true,
-                    state: { student, token },
-                })
+                navigate("/student/dashboard", { replace: true })
             return
         }
         restoreStudent(token)
             .then((restored) => {
                 setStudent(restored)
                 if (page === "login")
-                    navigate("/student/dashboard", {
-                        replace: true,
-                        state: { student: restored, token },
-                    })
+                    navigate("/student/dashboard", { replace: true })
             })
             .catch(() => {
                 clearStudentSession()
@@ -177,10 +180,9 @@ export function HomePage({
         try {
             const result = await loginStudent(identifier.trim(), password)
             setPassword("")
-            navigate("/student/dashboard", {
-                replace: true,
-                state: { student: result.student, token: result.token },
-            })
+            setToken(result.token)
+            setStudent(result.student)
+            navigate("/student/dashboard", { replace: true })
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("student-login-error")))
         } finally {
@@ -207,7 +209,7 @@ export function HomePage({
                 joinCode: joined.join_code,
                 participantToken: joined.participant_token,
             })
-            navigate("/student/exam", { state: { student, token } })
+            navigate("/student/exam")
         } catch (caught) {
             setJoinError(apiErrorMessage(caught, t, t("join-quiz-error")))
         } finally {
@@ -264,11 +266,7 @@ export function HomePage({
                             />
                             <Button
                                 className="h-12 w-full text-base"
-                                onClick={() =>
-                                    navigate("/student/exam", {
-                                        state: { student, token },
-                                    })
-                                }
+                                onClick={() => navigate("/student/exam")}
                             >
                                 <ClipboardPenLine />
                                 {t("resume-quiz")}
@@ -290,7 +288,7 @@ export function HomePage({
                 </div>
             ) : activeTab === "training" ? (
                 <div className="mt-6">
-                    <TrainingQuizzesPanel student={student} token={token} />
+                    <TrainingQuizzesPanel token={token} />
                 </div>
             ) : activeTab === "makeup" ? (
                 <div className="mt-6 flex justify-center">

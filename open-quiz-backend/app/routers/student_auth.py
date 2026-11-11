@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.audit import audit_event
 from app.auth_guards import (
@@ -13,8 +13,15 @@ from app.dependencies import (
     DbSession,
     current_student,
 )
+from app.enums import QuizMode
 from app.errors import ApiError, ErrorCode
-from app.models import StudentAccount
+from app.models import (
+    Quiz,
+    QuizParticipant,
+    QuizSession,
+    Student,
+    StudentAccount,
+)
 from app.schemas import (
     StudentAccountResponse,
     StudentLoginRequest,
@@ -92,9 +99,28 @@ def logout_student(
     Student tokens are stateless, so a shared classroom computer would keep a
     usable token until it expires. Bumping the generation revokes the account's
     tokens on every device, which is the safe side for a shared computer.
-    Quiz participation tokens are separate and stay valid.
+
+    Training participation tokens are revoked too, so whoever uses the
+    computer next cannot go on training as this student. Exam participations
+    keep theirs: a student who signs out mid-exam signs in again and resumes.
     """
     account.access_token_generation += 1
+    training_session_ids = (
+        select(QuizSession.id)
+        .join(Quiz, Quiz.id == QuizSession.quiz_id)
+        .where(Quiz.mode == QuizMode.TRAINING)
+    )
+    session.execute(
+        update(QuizParticipant)
+        .where(
+            QuizParticipant.student_id.in_(
+                select(Student.id).where(Student.account_id == account.id)
+            ),
+            QuizParticipant.session_id.in_(training_session_ids),
+        )
+        .values(access_token_hash=None)
+        .execution_options(synchronize_session=False)
+    )
     session.commit()
     audit_event("student_auth.logout", account_id=account.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
