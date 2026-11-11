@@ -123,6 +123,13 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Security
 
+- “Clear this device's data” (`/cookie-settings`) works from any tab: the
+  logout route clears the refresh and two-factor trust cookies even without
+  the session proof, which only the tab that signed in holds (it then leaves
+  the server-side session to expire instead of revoking it, and answers 204
+  instead of 403). The page reports a failure instead of claiming success,
+  and clears every `open-quiz-*` key in both browser storages; its storage
+  table now lists them all.
 - Student tokens no longer go into the browser history. After a student
   logs out, Back, Forward or a reload on a shared computer can no longer
   bring the next person into the previous student's training or dashboard.

@@ -35,7 +35,11 @@ from app.models import (
     User,
 )
 from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
-from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
+from app.routers.auth import (
+    REFRESH_COOKIE,
+    REFRESH_PROOF_HEADER,
+    TWO_FACTOR_TRUST_COOKIE,
+)
 from app.schemas import (
     LoginRequest,
     StudentLoginRequest,
@@ -712,13 +716,36 @@ def test_refresh_and_logout_require_the_session_proof(tmp_path: Path) -> None:
             ).status_code
             == 403
         )
-        assert client.post("/api/auth/logout").status_code == 403
-
         refreshed = client.post(
             "/api/auth/refresh",
             headers=refresh_headers(client),
         )
         assert refreshed.status_code == 200
+
+
+def test_a_logout_without_the_proof_still_clears_this_browser(
+    tmp_path: Path,
+) -> None:
+    """A tab without the proof (a new one, on a shared computer) can still
+    make this browser forget the session; only revoking it needs the proof."""
+    with make_client(settings_for(tmp_path / "logout-no-proof.db")) as client:
+        complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        raw_token = client.cookies.get(REFRESH_COOKIE)
+        assert raw_token
+        assert client.cookies.get(TWO_FACTOR_TRUST_COOKIE)
+
+        cleared = client.post("/api/auth/logout", json={"forget_browser": True})
+
+        assert cleared.status_code == 204
+        assert client.cookies.get(REFRESH_COOKIE) is None
+        assert client.cookies.get(TWO_FACTOR_TRUST_COOKIE) is None
+        # The server-side session was not revoked: whoever holds the cookie
+        # and its proof could still use it, and nobody else can.
+        client.cookies.set(REFRESH_COOKIE, raw_token, path="/api/auth")
+        assert client.post("/api/auth/refresh").status_code == 403
+        assert (
+            client.post("/api/auth/refresh", headers=refresh_headers(client))
+        ).status_code == 200
 
 
 def test_later_login_requires_two_factor_code(tmp_path: Path) -> None:

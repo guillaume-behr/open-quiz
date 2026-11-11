@@ -131,7 +131,12 @@ code avant minuit, heure de l’appareil, et 24 heures au plus : le mot de passe
 reste exigé. Ce cookie HttpOnly n’ouvre aucune session seul ; le voler sans le
 mot de passe ne donne rien. Sur un poste partagé, une simple déconnexion le
 conserve : effacez les données de l’appareil depuis `/cookie-settings`, ou
-désactivez la fonction avec `TWO_FACTOR_BROWSER_TRUST=false`.
+désactivez la fonction avec `TWO_FACTOR_BROWSER_TRUST=false`. Cet effacement
+fonctionne depuis n’importe quel onglet, même un nouvel onglet ouvert après la
+fermeture de celui de la connexion : les cookies sont toujours supprimés, et la
+page signale un échec si le serveur n’a pas pu être joint. Sans la preuve de
+session de l’onglet de connexion, la session côté serveur n’est pas révoquée
+mais expire d’elle-même ; elle reste inutilisable sans son cookie.
 
 Les tentatives de connexion sont comptées par identifiant, jamais par adresse
 IP : n’importe qui peut donc épuiser celles d’un compte dont il connaît

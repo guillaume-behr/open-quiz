@@ -9,13 +9,13 @@ import {
     type PublicInformation,
 } from "@/api/public-information"
 import { Button } from "@/components/ui/button"
+import { clearOpenQuizStorage } from "@/lib/device-storage"
 import { CircleAlert, ExternalLink, Trash2 } from "lucide-react"
 import { type ReactNode, useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 const UPDATED_AT = new Date("2026-08-12T00:00:00+02:00")
-const LOCAL_STORAGE_KEYS = ["i18nextLng", "vite-ui-theme"]
 
 function usePublicInformation() {
     const [information, setInformation] = useState<PublicInformation | null>(
@@ -506,24 +506,23 @@ export function AccessibilityPage() {
 export function CookiesPage() {
     const { t } = useTranslation()
     const { information, loadFailed } = usePublicInformation()
-    const [cleared, setCleared] = useState(false)
+    const [clearStatus, setClearStatus] = useState<
+        "idle" | "clearing" | "cleared" | "failed"
+    >("idle")
     const statusId = useId()
     const maxAge = information?.cookies.authentication_max_age_days
     const twoFactorTrust = information?.cookies.two_factor_trust_enabled
 
     async function clearLocalData() {
-        await logout({ forgetBrowser: true }).catch(() => undefined)
+        setClearStatus("clearing")
+        // The server clears the session cookies even from a tab that did not
+        // sign in; only a failed request leaves them in place.
+        const cookiesCleared = await logout({ forgetBrowser: true })
         const studentToken = readStudentToken()
         if (studentToken) await logoutStudent(studentToken)
-        try {
-            for (const key of LOCAL_STORAGE_KEYS) {
-                localStorage.removeItem(key)
-            }
-            clearStudentSession()
-        } catch {
-            // Browser storage can be disabled while the server session is revoked.
-        }
-        setCleared(true)
+        clearStudentSession()
+        const storageCleared = clearOpenQuizStorage()
+        setClearStatus(cookiesCleared && storageCleared ? "cleared" : "failed")
     }
 
     return (
@@ -666,6 +665,24 @@ export function CookiesPage() {
                                 purpose={t("cookies-auth-purpose")}
                                 duration={t("cookies-session-duration")}
                             />
+                            <StorageRow
+                                name="open-quiz-teacher-results-view"
+                                type={t("cookies-local-storage")}
+                                purpose={t("cookies-results-view-purpose")}
+                                duration={t("cookies-device-duration")}
+                            />
+                            <StorageRow
+                                name="open-quiz-session-display:…"
+                                type={t("cookies-local-storage")}
+                                purpose={t("cookies-session-display-purpose")}
+                                duration={t("cookies-session-display-duration")}
+                            />
+                            <StorageRow
+                                name="open-quiz-module-reload-at"
+                                type={t("cookies-session-storage")}
+                                purpose={t("cookies-module-reload-purpose")}
+                                duration={t("cookies-session-duration")}
+                            />
                         </tbody>
                     </table>
                 </div>
@@ -681,18 +698,31 @@ export function CookiesPage() {
                 <Button
                     className="mt-4"
                     variant="outline"
+                    disabled={clearStatus === "clearing"}
                     onClick={() => void clearLocalData()}
                     aria-describedby={statusId}
                 >
                     <Trash2 aria-hidden="true" />
-                    {t("cookies-clear-button")}
+                    {t(
+                        clearStatus === "failed"
+                            ? "cookies-clear-retry"
+                            : "cookies-clear-button"
+                    )}
                 </Button>
                 <p
                     id={statusId}
-                    className="mt-3 text-sm font-medium"
+                    className={
+                        clearStatus === "failed"
+                            ? "mt-3 text-sm font-medium text-destructive"
+                            : "mt-3 text-sm font-medium"
+                    }
                     role="status"
                 >
-                    {cleared ? t("cookies-clear-success") : ""}
+                    {clearStatus === "cleared"
+                        ? t("cookies-clear-success")
+                        : clearStatus === "failed"
+                          ? t("cookies-clear-error")
+                          : ""}
                 </p>
             </section>
 
