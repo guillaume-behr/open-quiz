@@ -12,10 +12,13 @@ import {
     CreateTeacherForm,
 } from "@/components/admin/teacher-account-forms"
 import { ProblemReportsPanel } from "@/components/admin/problem-reports-panel"
+import { useAsyncAction } from "@/hooks/use-async-action"
 import { usePagedList } from "@/hooks/use-paged-list"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import { Button } from "@/components/ui/button"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
+import { FieldError } from "@/components/ui/field"
+import { ListStatus } from "@/components/ui/list-status"
 import { Pagination } from "@/components/ui/pagination"
 import { apiErrorMessage } from "@/lib/errors"
 import {
@@ -54,37 +57,9 @@ export function AdminWorkspace({
     const [activeSection, setActiveSection] = useState<"users" | "reports">(
         "users"
     )
-    const [error, setError] = useState("")
     const [success, setSuccess] = useState("")
-    const [isCreating, setIsCreating] = useState(false)
     const [recoveryUser, setRecoveryUser] = useState<User | null>(null)
     const [deletingUser, setDeletingUser] = useState<User | null>(null)
-    const [isUpdatingUser, setIsUpdatingUser] = useState(false)
-
-    async function handleCreateUser(event: SyntheticEvent<HTMLFormElement>) {
-        event.preventDefault()
-        setError("")
-        setSuccess("")
-        setIsCreating(true)
-        const formElement = event.currentTarget
-        const form = new FormData(formElement)
-        const newUser: NewUser = {
-            username: String(form.get("username")),
-            display_name: String(form.get("displayName")),
-            password: String(form.get("password")),
-        }
-        try {
-            const created = await createUser(newUser)
-            userList.showPage(1)
-            userList.reload()
-            setSuccess(t("user-created", { username: created.username }))
-            formElement.reset()
-        } catch (caught) {
-            setError(apiErrorMessage(caught, t, t("create-user-error")))
-        } finally {
-            setIsCreating(false)
-        }
-    }
 
     function replaceUser(updated: User) {
         userList.setData(
@@ -98,11 +73,29 @@ export function AdminWorkspace({
         )
     }
 
-    async function handleStatusChange(user: User) {
-        setError("")
-        setSuccess("")
-        setIsUpdatingUser(true)
-        try {
+    // Each action keeps its own error, shown where the action was taken: a
+    // dialog's failure inside that dialog, not behind it.
+    const creation = useAsyncAction(
+        async (formElement: HTMLFormElement) => {
+            setSuccess("")
+            const form = new FormData(formElement)
+            const newUser: NewUser = {
+                username: String(form.get("username")),
+                display_name: String(form.get("displayName")),
+                password: String(form.get("password")),
+            }
+            const created = await createUser(newUser)
+            userList.showPage(1)
+            userList.reload()
+            setSuccess(t("user-created", { username: created.username }))
+            formElement.reset()
+        },
+        (caught) => apiErrorMessage(caught, t, t("create-user-error"))
+    )
+
+    const statusChange = useAsyncAction(
+        async (user: User) => {
+            setSuccess("")
             const updated = await updateUserStatus(user.id, !user.is_active)
             replaceUser(updated)
             setSuccess(
@@ -110,56 +103,59 @@ export function AdminWorkspace({
                     username: updated.username,
                 })
             )
-        } catch (caught) {
-            setError(apiErrorMessage(caught, t, t("user-update-error")))
-        } finally {
-            setIsUpdatingUser(false)
-        }
-    }
+        },
+        (caught) => apiErrorMessage(caught, t, t("user-update-error"))
+    )
 
-    async function handleDelete() {
-        if (!deletingUser) return
-        setError("")
-        setSuccess("")
-        setIsUpdatingUser(true)
-        try {
-            const { id, username } = deletingUser
-            await deleteUser(id)
+    const deletion = useAsyncAction(
+        async (user: User) => {
+            setSuccess("")
+            await deleteUser(user.id)
             setDeletingUser(null)
             userList.reload()
-            setSuccess(t("user-deleted", { username }))
-        } catch (caught) {
-            setError(apiErrorMessage(caught, t, t("user-delete-error")))
-        } finally {
-            setIsUpdatingUser(false)
-        }
-    }
+            setSuccess(t("user-deleted", { username: user.username }))
+        },
+        (caught) => apiErrorMessage(caught, t, t("user-delete-error"))
+    )
 
-    async function handleCredentialReset(
-        event: SyntheticEvent<HTMLFormElement>
-    ) {
-        event.preventDefault()
-        if (!recoveryUser) return
-        const form = new FormData(event.currentTarget)
-        setError("")
-        setSuccess("")
-        setIsUpdatingUser(true)
-        try {
-            const updated = await resetUserCredentials(
-                recoveryUser.id,
-                String(form.get("password")),
-                true
-            )
+    const credentialReset = useAsyncAction(
+        async (user: User, password: string) => {
+            setSuccess("")
+            const updated = await resetUserCredentials(user.id, password, true)
             replaceUser(updated)
             setRecoveryUser(null)
             setSuccess(
                 t("user-credentials-reset", { username: updated.username })
             )
-        } catch (caught) {
-            setError(apiErrorMessage(caught, t, t("user-update-error")))
-        } finally {
-            setIsUpdatingUser(false)
-        }
+        },
+        (caught) => apiErrorMessage(caught, t, t("user-update-error"))
+    )
+
+    const isUpdatingUser =
+        statusChange.isPending ||
+        deletion.isPending ||
+        credentialReset.isPending
+
+    function handleCreateUser(event: SyntheticEvent<HTMLFormElement>) {
+        event.preventDefault()
+        void creation.run(event.currentTarget)
+    }
+
+    function openDeletion(user: User | null) {
+        deletion.setError(null)
+        setDeletingUser(user)
+    }
+
+    function openRecovery(user: User | null) {
+        credentialReset.setError(null)
+        setRecoveryUser(user)
+    }
+
+    function handleCredentialReset(event: SyntheticEvent<HTMLFormElement>) {
+        event.preventDefault()
+        if (!recoveryUser) return
+        const form = new FormData(event.currentTarget)
+        void credentialReset.run(recoveryUser, String(form.get("password")))
     }
 
     return (
@@ -225,10 +221,10 @@ export function AdminWorkspace({
                 <>
                     <div className="grid gap-4 lg:grid-cols-[minmax(300px,0.8fr)_minmax(420px,1.2fr)]">
                         <CreateTeacherForm
-                            error={error}
+                            error={creation.error}
                             success={success}
-                            isCreating={isCreating}
-                            onSubmit={(event) => void handleCreateUser(event)}
+                            isCreating={creation.isPending}
+                            onSubmit={handleCreateUser}
                         />
 
                         <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
@@ -240,119 +236,141 @@ export function AdminWorkspace({
                                     <h2 className="text-xl font-bold">
                                         {t("users")}
                                     </h2>
-                                    <p className="text-sm text-muted-foreground">
-                                        {t("user-count", {
-                                            count: userList.data?.total ?? 0,
-                                        })}
-                                    </p>
+                                    {userList.data && (
+                                        <p className="text-sm text-muted-foreground">
+                                            {t("user-count", {
+                                                count: userList.data.total,
+                                            })}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
-                            <div
-                                key={userList.page}
-                                className="animate-in divide-y duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+                            {statusChange.error && (
+                                <FieldError className="mb-4">
+                                    {statusChange.error}
+                                </FieldError>
+                            )}
+                            <ListStatus
+                                isLoading={
+                                    userList.isLoading &&
+                                    userList.data === undefined
+                                }
+                                error={
+                                    userList.error
+                                        ? t("users-load-error")
+                                        : null
+                                }
+                                onRetry={userList.reload}
                             >
-                                {userList.items.map((user) => (
-                                    <div
-                                        key={user.id}
-                                        className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
-                                    >
-                                        <div className="min-w-0">
-                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                                <p className="min-w-0 truncate font-semibold">
-                                                    {user.display_name}
+                                <div
+                                    key={userList.page}
+                                    className="animate-in divide-y duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+                                >
+                                    {userList.items.map((user) => (
+                                        <div
+                                            key={user.id}
+                                            className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
+                                        >
+                                            <div className="min-w-0">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                    <p className="min-w-0 truncate font-semibold">
+                                                        {user.display_name}
+                                                    </p>
+                                                    {user.is_admin && (
+                                                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                                            <ShieldCheck className="size-3" />
+                                                            {t("admin")}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="truncate text-sm text-muted-foreground">
+                                                    @{user.username}
                                                 </p>
-                                                {user.is_admin && (
-                                                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                                                        <ShieldCheck className="size-3" />
-                                                        {t("admin")}
-                                                    </span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span
+                                                    className={
+                                                        user.is_active
+                                                            ? "rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success"
+                                                            : "rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                                                    }
+                                                >
+                                                    {t(
+                                                        user.is_active
+                                                            ? "active"
+                                                            : "inactive"
+                                                    )}
+                                                </span>
+                                                {!user.is_admin && (
+                                                    <>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() =>
+                                                                openRecovery(
+                                                                    user
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                isUpdatingUser
+                                                            }
+                                                        >
+                                                            <KeyRound />
+                                                            {t(
+                                                                "account-recovery"
+                                                            )}
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() =>
+                                                                void statusChange.run(
+                                                                    user
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                isUpdatingUser
+                                                            }
+                                                        >
+                                                            {user.is_active ? (
+                                                                <UserX />
+                                                            ) : (
+                                                                <UserCheck />
+                                                            )}
+                                                            {t(
+                                                                user.is_active
+                                                                    ? "disable"
+                                                                    : "enable"
+                                                            )}
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="destructive"
+                                                            onClick={() =>
+                                                                openDeletion(
+                                                                    user
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                isUpdatingUser
+                                                            }
+                                                        >
+                                                            <Trash2 />
+                                                            {t("delete")}
+                                                        </Button>
+                                                    </>
                                                 )}
                                             </div>
-                                            <p className="truncate text-sm text-muted-foreground">
-                                                @{user.username}
-                                            </p>
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span
-                                                className={
-                                                    user.is_active
-                                                        ? "rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success"
-                                                        : "rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
-                                                }
-                                            >
-                                                {t(
-                                                    user.is_active
-                                                        ? "active"
-                                                        : "inactive"
-                                                )}
-                                            </span>
-                                            {!user.is_admin && (
-                                                <>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() =>
-                                                            setRecoveryUser(
-                                                                user
-                                                            )
-                                                        }
-                                                        disabled={
-                                                            isUpdatingUser
-                                                        }
-                                                    >
-                                                        <KeyRound />
-                                                        {t("account-recovery")}
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() =>
-                                                            void handleStatusChange(
-                                                                user
-                                                            )
-                                                        }
-                                                        disabled={
-                                                            isUpdatingUser
-                                                        }
-                                                    >
-                                                        {user.is_active ? (
-                                                            <UserX />
-                                                        ) : (
-                                                            <UserCheck />
-                                                        )}
-                                                        {t(
-                                                            user.is_active
-                                                                ? "disable"
-                                                                : "enable"
-                                                        )}
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="destructive"
-                                                        onClick={() =>
-                                                            setDeletingUser(
-                                                                user
-                                                            )
-                                                        }
-                                                        disabled={
-                                                            isUpdatingUser
-                                                        }
-                                                    >
-                                                        <Trash2 />
-                                                        {t("delete")}
-                                                    </Button>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <Pagination
-                                currentPage={userList.page}
-                                totalPages={userList.totalPages}
-                                onPageChange={userList.showPage}
-                            />
+                                    ))}
+                                </div>
+                                <Pagination
+                                    currentPage={userList.page}
+                                    totalPages={userList.totalPages}
+                                    onPageChange={userList.showPage}
+                                />
+                            </ListStatus>
                         </section>
                     </div>
                     <ConfirmDeleteDialog
@@ -361,19 +379,32 @@ export function AdminWorkspace({
                         description={t("delete-user-help", {
                             username: deletingUser?.username,
                         })}
-                        isBusy={isUpdatingUser}
-                        onClose={() => setDeletingUser(null)}
-                        onConfirm={() => void handleDelete()}
+                        isBusy={deletion.isPending}
+                        error={deletion.error}
+                        onClose={() => openDeletion(null)}
+                        onConfirm={() =>
+                            deletingUser && void deletion.run(deletingUser)
+                        }
                     />
                     <AccountRecoveryDialog
                         user={recoveryUser}
-                        isBusy={isUpdatingUser}
-                        onClose={() => setRecoveryUser(null)}
-                        onSubmit={(event) => void handleCredentialReset(event)}
+                        isBusy={credentialReset.isPending}
+                        error={credentialReset.error}
+                        onClose={() => openRecovery(null)}
+                        onSubmit={handleCredentialReset}
                     />
                 </>
             ) : (
                 <ProblemReportsPanel
+                    isLoading={
+                        reportList.isLoading && reportList.data === undefined
+                    }
+                    loadError={
+                        reportList.error
+                            ? t("problem-reports-load-error")
+                            : null
+                    }
+                    onRetry={reportList.reload}
                     reports={reportList.items}
                     page={reportList.page}
                     totalPages={reportList.totalPages}

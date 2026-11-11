@@ -19,6 +19,7 @@ import { ClassFormDialog } from "@/components/classes/class-form-dialog"
 import { ClassImportDialog } from "@/components/classes/class-import-dialog"
 import { writeCredentialCards } from "@/components/classes/print-credentials"
 import { StudentAssignmentDialog } from "@/components/classes/student-assignment-dialog"
+import { useAsyncAction } from "@/hooks/use-async-action"
 import { usePagedList } from "@/hooks/use-paged-list"
 import { Button } from "@/components/ui/button"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
@@ -67,20 +68,20 @@ export function ClassesPanel({
     const [gradeLevel, setGradeLevel] = useState("")
     const [newGradeLevel, setNewGradeLevel] = useState("")
     const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
-    const [isBusy, setIsBusy] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const [isFormBusy, setIsFormBusy] = useState(false)
+    const [printingClassId, setPrintingClassId] = useState<number | null>(null)
     const [importOpen, setImportOpen] = useState(false)
 
-    async function downloadImportExample() {
-        try {
+    // Each surface keeps its own error and busy state: a failure shows where
+    // its action was taken, and never in the next dialog opened.
+    const download = useAsyncAction(
+        async () =>
             saveBlob(
                 await downloadClassImportExample(),
                 "open-quiz-classes-example.json"
-            )
-        } catch {
-            setError(t("json-download-error"))
-        }
-    }
+            ),
+        () => t("json-download-error")
+    )
 
     // Show the managed class as the list last loaded it.
     const [syncedList, setSyncedList] = useState(classList.data)
@@ -97,22 +98,9 @@ export function ClassesPanel({
         }
     }
 
-    function closeClassForm() {
-        setEditing(null)
-        setClassName("")
-        setGradeLevel("")
-        setNewGradeLevel("")
-        setIsAddingGradeLevel(false)
-        setManaged(null)
-        setError(null)
-        onCreateDialogOpenChange(false)
-    }
-
-    async function saveClass(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault()
-        setIsBusy(true)
-        setError(null)
-        try {
+    /** Saves the class form; its error is also the form's other errors. */
+    const classForm = useAsyncAction(
+        async () => {
             if (editing)
                 await updateStudentClass(
                     editing.id,
@@ -122,11 +110,25 @@ export function ClassesPanel({
             else await createStudentClass(className.trim(), gradeLevel)
             closeClassForm()
             classList.reload()
-        } catch (caught) {
-            setError(apiErrorMessage(caught, t, t("class-create-error")))
-        } finally {
-            setIsBusy(false)
-        }
+        },
+        (caught) => apiErrorMessage(caught, t, t("class-create-error"))
+    )
+    const setFormError = classForm.setError
+
+    function closeClassForm() {
+        setEditing(null)
+        setClassName("")
+        setGradeLevel("")
+        setNewGradeLevel("")
+        setIsAddingGradeLevel(false)
+        setManaged(null)
+        setFormError(null)
+        onCreateDialogOpenChange(false)
+    }
+
+    function saveClass(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault()
+        void classForm.run()
     }
 
     async function addGradeLevel() {
@@ -137,44 +139,45 @@ export function ClassesPanel({
             setNewGradeLevel("")
             setIsAddingGradeLevel(false)
         } catch (caught) {
-            setError(apiErrorMessage(caught, t, t("grade-level-create-error")))
+            setFormError(
+                apiErrorMessage(caught, t, t("grade-level-create-error"))
+            )
         }
     }
 
+    const assignment = useAsyncAction(
+        async (selectedAccountIds: Set<number>) => {
+            if (!managed || selectedAccountIds.size === 0) return
+            let updated = managed
+            try {
+                for (const accountId of selectedAccountIds) {
+                    updated = await assignStudentAccount(managed.id, accountId)
+                }
+            } finally {
+                // Show the students assigned before a failure too.
+                setManaged(updated)
+            }
+            setAssigning(false)
+            classList.reload()
+        },
+        (caught) => apiErrorMessage(caught, t, t("student-assignment-error"))
+    )
+
     async function openAssignment() {
-        setIsBusy(true)
-        setError(null)
+        setIsFormBusy(true)
+        setFormError(null)
         try {
             const available = (await getAllStudents()).filter(
                 (account) =>
                     account.is_active && account.class_id !== managed?.id
             )
             setAccounts(available)
+            assignment.setError(null)
             setAssigning(true)
         } catch {
-            setError(t("students-load-error"))
+            setFormError(t("students-load-error"))
         } finally {
-            setIsBusy(false)
-        }
-    }
-
-    async function assign(selectedAccountIds: Set<number>) {
-        if (!managed || selectedAccountIds.size === 0) return
-        setIsBusy(true)
-        setError(null)
-        let updated = managed
-        try {
-            for (const accountId of selectedAccountIds) {
-                updated = await assignStudentAccount(managed.id, accountId)
-            }
-            setManaged(updated)
-            setAssigning(false)
-            classList.reload()
-        } catch (caught) {
-            setManaged(updated)
-            setError(apiErrorMessage(caught, t, t("student-assignment-error")))
-        } finally {
-            setIsBusy(false)
+            setIsFormBusy(false)
         }
     }
 
@@ -183,8 +186,8 @@ export function ClassesPanel({
         lastName: string
     ): Promise<boolean> {
         if (!managed) return false
-        setIsBusy(true)
-        setError(null)
+        setIsFormBusy(true)
+        setFormError(null)
         try {
             const account = await createStudentAccount({
                 first_name: firstName,
@@ -196,18 +199,18 @@ export function ClassesPanel({
             classList.reload()
             return true
         } catch (caught) {
-            setError(
+            setFormError(
                 apiErrorMessage(caught, t, t("student-account-save-error"))
             )
             return false
         } finally {
-            setIsBusy(false)
+            setIsFormBusy(false)
         }
     }
 
     async function unassign(accountId: number) {
         if (!managed) return
-        setIsBusy(true)
+        setIsFormBusy(true)
         try {
             await unassignStudentAccount(managed.id, accountId)
             setManaged({
@@ -219,61 +222,67 @@ export function ClassesPanel({
             })
             classList.reload()
         } catch (caught) {
-            setError(
+            setFormError(
                 apiErrorMessage(caught, t, t("student-unassignment-error"))
             )
         } finally {
-            setIsBusy(false)
+            setIsFormBusy(false)
         }
     }
 
-    async function removeClass() {
-        if (!deleting) return
-        setIsBusy(true)
-        try {
-            await deleteStudentClass(deleting.id)
+    const deletion = useAsyncAction(
+        async (studentClass: StudentClass) => {
+            await deleteStudentClass(studentClass.id)
             setDeleting(null)
             classList.reload()
-        } catch (caught) {
-            setError(
-                apiErrorMessage(caught, t, t("class-student-delete-error"))
-            )
-        } finally {
-            setIsBusy(false)
-        }
+        },
+        (caught) => apiErrorMessage(caught, t, t("class-student-delete-error"))
+    )
+
+    function openDeletion(studentClass: StudentClass | null) {
+        deletion.setError(null)
+        setDeleting(studentClass)
     }
 
-    async function printCredentials(studentClass: StudentClass) {
+    const printing = useAsyncAction(
+        async (studentClass: StudentClass, printWindow: Window) => {
+            setPrintingClassId(studentClass.id)
+            try {
+                const credentials = await getClassStudentCredentials(
+                    studentClass.id
+                )
+                writeCredentialCards(
+                    printWindow.document,
+                    studentClass,
+                    credentials,
+                    t,
+                    i18n.resolvedLanguage ?? "fr",
+                    i18n.dir()
+                )
+                printWindow.onafterprint = () => printWindow.close()
+                printWindow.focus()
+                printWindow.setTimeout(() => printWindow.print(), 100)
+            } catch (caught) {
+                printWindow.close()
+                throw caught
+            } finally {
+                setPrintingClassId(null)
+            }
+        },
+        () => t("student-credentials-print-error")
+    )
+
+    function printCredentials(studentClass: StudentClass) {
         const printWindow = window.open("", "_blank")
         if (!printWindow) {
-            setError(t("student-credentials-print-popup-error"))
+            printing.setError(t("student-credentials-print-popup-error"))
             return
         }
         printWindow.opener = null
-        setIsBusy(true)
-        setError(null)
-        try {
-            const credentials = await getClassStudentCredentials(
-                studentClass.id
-            )
-            writeCredentialCards(
-                printWindow.document,
-                studentClass,
-                credentials,
-                t,
-                i18n.resolvedLanguage ?? "fr",
-                i18n.dir()
-            )
-            printWindow.onafterprint = () => printWindow.close()
-            printWindow.focus()
-            printWindow.setTimeout(() => printWindow.print(), 100)
-        } catch {
-            printWindow.close()
-            setError(t("student-credentials-print-error"))
-        } finally {
-            setIsBusy(false)
-        }
+        void printing.run(studentClass, printWindow)
     }
+
+    const listError = printing.error ?? download.error
 
     return (
         <div className="mt-6">
@@ -300,7 +309,7 @@ export function ClassesPanel({
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => void downloadImportExample()}
+                                onClick={() => void download.run()}
                             >
                                 <FileJson />
                                 {t("download-json-example")}
@@ -348,22 +357,25 @@ export function ClassesPanel({
                                 <ClassCard
                                     key={studentClass.id}
                                     studentClass={studentClass}
-                                    isBusy={isBusy}
+                                    isBusy={printingClassId === studentClass.id}
                                     onEdit={() => {
+                                        setFormError(null)
                                         setEditing(studentClass)
                                         setManaged(studentClass)
                                         setClassName(studentClass.name)
                                         setGradeLevel(studentClass.grade_level)
                                     }}
-                                    onDelete={() => setDeleting(studentClass)}
+                                    onDelete={() => openDeletion(studentClass)}
                                     onPrint={() =>
-                                        void printCredentials(studentClass)
+                                        printCredentials(studentClass)
                                     }
                                 />
                             ))}
                         </div>
                     )}
-                    {error && <FieldError className="mt-4">{error}</FieldError>}
+                    {listError && (
+                        <FieldError className="mt-4">{listError}</FieldError>
+                    )}
                     <Pagination
                         currentPage={classList.page}
                         totalPages={classList.totalPages}
@@ -378,7 +390,8 @@ export function ClassesPanel({
                 onImported={() => {
                     setImportOpen(false)
                     classList.reload()
-                    setError(null)
+                    printing.setError(null)
+                    download.setError(null)
                 }}
             />
             <ClassFormDialog
@@ -390,8 +403,8 @@ export function ClassesPanel({
                 gradeLevel={gradeLevel}
                 newGradeLevel={newGradeLevel}
                 isAddingGradeLevel={isAddingGradeLevel}
-                isBusy={isBusy}
-                error={error}
+                isBusy={classForm.isPending || isFormBusy}
+                error={classForm.error}
                 onClassNameChange={setClassName}
                 onGradeLevelChange={setGradeLevel}
                 onNewGradeLevelChange={setNewGradeLevel}
@@ -404,7 +417,7 @@ export function ClassesPanel({
                     managed ? (
                         <ClassStudentsSection
                             studentClass={managed}
-                            isBusy={isBusy}
+                            isBusy={classForm.isPending || isFormBusy}
                             onOpenAssignment={() => void openAssignment()}
                             onCreateStudent={createAndAssignStudent}
                             onUnassign={(accountId) => void unassign(accountId)}
@@ -419,19 +432,20 @@ export function ClassesPanel({
                 accounts={accounts}
                 gradeLevels={gradeLevels}
                 onDeleteGradeLevel={onDeleteGradeLevel}
-                isBusy={isBusy}
-                error={error}
+                isBusy={assignment.isPending}
+                error={assignment.error}
                 onCancel={() => setAssigning(false)}
-                onAssign={(accountIds) => void assign(accountIds)}
+                onAssign={(accountIds) => void assignment.run(accountIds)}
             />
 
             <ConfirmDeleteDialog
                 open={deleting !== null}
                 title={t("delete-class")}
                 description={t("delete-class-help", { name: deleting?.name })}
-                isBusy={isBusy}
-                onClose={() => setDeleting(null)}
-                onConfirm={() => void removeClass()}
+                isBusy={deletion.isPending}
+                error={deletion.error}
+                onClose={() => openDeletion(null)}
+                onConfirm={() => deleting && void deletion.run(deleting)}
             />
         </div>
     )

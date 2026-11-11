@@ -39,6 +39,7 @@ export function GradeLevelSelect({
         setIsDeleting(true)
         try {
             await onDelete(levelToDelete)
+            setDeleteError(null)
             onChange("")
             setLevelToDelete(null)
         } catch (error) {
@@ -63,7 +64,11 @@ export function GradeLevelSelect({
                 <select
                     id={id}
                     value={value}
-                    onChange={(event) => onChange(event.target.value)}
+                    onChange={(event) => {
+                        // A failed deletion is about the level then selected.
+                        setDeleteError(null)
+                        onChange(event.target.value)
+                    }}
                     disabled={disabled}
                     className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     required={required}

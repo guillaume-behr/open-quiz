@@ -1,7 +1,12 @@
 import type { User } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { LoaderCircle, KeyRound, UserPlus } from "lucide-react"
@@ -15,7 +20,7 @@ export function CreateTeacherForm({
     isCreating,
     onSubmit,
 }: {
-    error: string
+    error: string | null
     success: string
     isCreating: boolean
     onSubmit: (event: SyntheticEvent<HTMLFormElement>) => void
@@ -106,11 +111,14 @@ export function CreateTeacherForm({
 export function AccountRecoveryDialog({
     user,
     isBusy,
+    error = null,
     onClose,
     onSubmit,
 }: {
     user: User | null
     isBusy: boolean
+    /** Why the last reset failed, shown in the dialog that stays open. */
+    error?: string | null
     onClose: () => void
     onSubmit: (event: SyntheticEvent<HTMLFormElement>) => void
 }) {
@@ -144,6 +152,7 @@ export function AccountRecoveryDialog({
                         {t("account-recovery-security-help")}
                     </p>
                 </Field>
+                {error && <FieldError>{error}</FieldError>}
                 <div className="flex justify-end gap-2">
                     <Button
                         type="button"

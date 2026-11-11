@@ -1,14 +1,19 @@
 import { deleteProblemReport } from "@/api/problem-reports"
 import type { ProblemReport } from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
+import { ListStatus } from "@/components/ui/list-status"
 import { Pagination } from "@/components/ui/pagination"
+import { useAsyncAction } from "@/hooks/use-async-action"
 import { apiErrorMessage } from "@/lib/errors"
 import { Inbox, LoaderCircle, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 export function ProblemReportsPanel({
+    isLoading,
+    loadError,
+    onRetry,
     reports,
     onDeleted,
     page,
@@ -16,6 +21,10 @@ export function ProblemReportsPanel({
     total,
     onPageChange,
 }: {
+    /** True until the list has loaded once. */
+    isLoading: boolean
+    loadError: string | null
+    onRetry: () => void
     reports: ProblemReport[]
     onDeleted: (reportId: number) => void
     page: number
@@ -24,32 +33,27 @@ export function ProblemReportsPanel({
     onPageChange: (page: number) => void
 }) {
     const { t, i18n } = useTranslation()
-    const [deletingId, setDeletingId] = useState<number | null>(null)
     const [reportToDelete, setReportToDelete] = useState<ProblemReport | null>(
         null
     )
-    const [error, setError] = useState("")
     const dateFormatter = new Intl.DateTimeFormat(i18n.resolvedLanguage, {
         dateStyle: "medium",
         timeStyle: "short",
     })
 
-    async function handleDelete() {
-        if (!reportToDelete) return
-        setError("")
-        setDeletingId(reportToDelete.id)
-        try {
-            await deleteProblemReport(reportToDelete.id)
-            const deletedId = reportToDelete.id
+    const deletion = useAsyncAction(
+        async (report: ProblemReport) => {
+            await deleteProblemReport(report.id)
             setReportToDelete(null)
-            onDeleted(deletedId)
-        } catch (caught) {
-            setError(
-                apiErrorMessage(caught, t, t("delete-problem-report-error"))
-            )
-        } finally {
-            setDeletingId(null)
-        }
+            onDeleted(report.id)
+        },
+        (caught) => apiErrorMessage(caught, t, t("delete-problem-report-error"))
+    )
+    const deletingId = deletion.isPending ? reportToDelete?.id : undefined
+
+    function openDeletion(report: ProblemReport | null) {
+        deletion.setError(null)
+        setReportToDelete(report)
     }
 
     const content =
@@ -71,11 +75,6 @@ export function ProblemReportsPanel({
                         {t("problem-report-count", { count: total })}
                     </p>
                 </div>
-                {error && (
-                    <p className="mb-4 text-sm text-destructive" role="alert">
-                        {error}
-                    </p>
-                )}
                 <div
                     key={reports.map((report) => report.id).join(",")}
                     className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
@@ -109,8 +108,8 @@ export function ProblemReportsPanel({
                                 <Button
                                     size="sm"
                                     variant="destructive"
-                                    disabled={deletingId !== null}
-                                    onClick={() => setReportToDelete(report)}
+                                    disabled={deletion.isPending}
+                                    onClick={() => openDeletion(report)}
                                 >
                                     {deletingId === report.id ? (
                                         <LoaderCircle
@@ -139,36 +138,25 @@ export function ProblemReportsPanel({
 
     return (
         <>
-            {content}
-            <Dialog
+            <ListStatus
+                isLoading={isLoading}
+                error={loadError}
+                onRetry={onRetry}
+            >
+                {content}
+            </ListStatus>
+            <ConfirmDeleteDialog
                 open={reportToDelete !== null}
-                onOpenChange={(open) => {
-                    if (!open && deletingId === null) setReportToDelete(null)
-                }}
                 title={t("delete-problem-report")}
                 description={t("delete-problem-report-confirmation")}
-                size="sm"
-            >
-                <div className="flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        disabled={deletingId !== null}
-                        onClick={() => setReportToDelete(null)}
-                    >
-                        {t("cancel")}
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        disabled={deletingId !== null}
-                        onClick={() => void handleDelete()}
-                    >
-                        {deletingId !== null && (
-                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                        )}
-                        {t("delete-problem-report")}
-                    </Button>
-                </div>
-            </Dialog>
+                confirmLabel={t("delete-problem-report")}
+                isBusy={deletion.isPending}
+                error={deletion.error}
+                onClose={() => openDeletion(null)}
+                onConfirm={() =>
+                    reportToDelete && void deletion.run(reportToDelete)
+                }
+            />
         </>
     )
 }
