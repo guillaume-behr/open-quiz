@@ -71,6 +71,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- An exam answer being written is no longer lost when the page is reloaded,
+  the tab crashes or the browser restarts within its session: unsubmitted
+  answers are kept in `sessionStorage` (`open-quiz-exam-draft:*`) and removed
+  once submitted, when the paper is handed in or the exam ends, and on
+  logout. An answer the student cleared now stays cleared instead of showing
+  the recorded one again.
 - A student answer now names the question it was given for (`question_id`,
   required). An answer from a page that shows another question than the
   server's current one is refused with 409 `ANSWER_QUESTION_MISMATCH` instead

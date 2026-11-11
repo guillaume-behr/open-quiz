@@ -1175,3 +1175,83 @@ test("the countdown follows the server's clock, not the computer's", async ({
     // 10 minutes left on the server, although the computer would say 5.
     await expect(page.getByRole("timer")).toHaveText(/^(10:00|9:5\d)$/)
 })
+
+async function mockWrittenExam(page: Page, recordedFirstAnswer: string | null) {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+    })
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
+        (socket) => socket.onMessage(() => {})
+    )
+    await page.route("**/api/quizzes/join", async (route) => {
+        await route.fulfill({
+            json: {
+                ...writtenExamState(2, null),
+                participant_token: "participant-token",
+            },
+        })
+    })
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({ json: writtenExamState(2, null) })
+    })
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/navigate",
+        async (route) => {
+            const target = route.request().postDataJSON()
+                .question_number as number
+            await route.fulfill({
+                json:
+                    target === 1
+                        ? writtenExamState(1, recordedFirstAnswer)
+                        : writtenExamState(2, null),
+            })
+        }
+    )
+}
+
+test("an unsubmitted answer survives a reload of the exam page", async ({
+    page,
+}) => {
+    await mockWrittenExam(page, null)
+    await joinExamViaDashboard(page, "ABCD")
+    const writtenAnswer = page.getByLabel("Written answer")
+    await writtenAnswer.fill("An essay that is still being written")
+    // Kept in sessionStorage at most half a second after typing.
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                Object.keys(sessionStorage).filter((key) =>
+                    key.startsWith("open-quiz-exam-draft:ABCD:")
+                )
+            )
+        )
+        .toEqual(["open-quiz-exam-draft:ABCD:43"])
+
+    await page.reload()
+
+    await expect(
+        page.getByRole("heading", { name: "Second question" })
+    ).toBeVisible()
+    await expect(writtenAnswer).toHaveValue(
+        "An essay that is still being written"
+    )
+})
+
+test("an answer the student cleared stays cleared", async ({ page }) => {
+    await mockWrittenExam(page, "Chlorophyll captures light.")
+    await joinExamViaDashboard(page, "ABCD")
+    const writtenAnswer = page.getByLabel("Written answer")
+
+    await page.getByRole("button", { name: "Question 1 on 2" }).click()
+    await expect(writtenAnswer).toHaveValue("Chlorophyll captures light.")
+    await writtenAnswer.fill("")
+    await page.getByRole("button", { name: "Question 2 on 2" }).click()
+    await page.getByRole("button", { name: "Question 1 on 2" }).click()
+
+    // The empty draft wins over the answer the server still holds.
+    await expect(writtenAnswer).toHaveValue("")
+})

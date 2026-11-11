@@ -155,6 +155,7 @@
     "cookies-theme-purpose": "Tema claro, escuro ou do sistema escolhido.",
     "cookies-student-auth-purpose": "Manter a sessão autenticada do aluno neste separador.",
     "cookies-activity-purpose": "Código do questionário e token para retomar um exame ou treino neste separador.",
+    "cookies-exam-draft-purpose": "Respostas de prova em redação e ainda não enviadas, para que recarregar a página não as perca. Removidas na entrega da prova, ao fim da prova ou quando o aluno sai.",
     "cookies-device-duration": "Até ser eliminado deste dispositivo.",
     "cookies-session-duration": "Até fechar o separador, sair voluntariamente ou apagar os dados abaixo.",
     "cookies-clear-title": "Apagar dados deste dispositivo",

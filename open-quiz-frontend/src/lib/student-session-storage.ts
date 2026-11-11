@@ -40,7 +40,7 @@ export function writeStudentItem(key: string, value: string): void {
     }
 }
 
-function removeStudentItem(key: string): void {
+export function removeStudentItem(key: string): void {
     memoryFallback.delete(key)
     try {
         sessionStorage.removeItem(key)
@@ -50,8 +50,34 @@ function removeStudentItem(key: string): void {
 }
 
 /** Forget every token and the signed-in student. */
+// Unsubmitted exam answers, one key per question: `<prefix><joinCode>:<id>`
+// (src/components/student-quiz/answer-drafts.ts).
+export const EXAM_DRAFT_KEY_PREFIX = "open-quiz-exam-draft:"
+
+/** Keys in sessionStorage (or its memory fallback) that start with a prefix. */
+export function studentItemKeys(prefix: string): string[] {
+    const keys = [...memoryFallback.keys()].filter((key) =>
+        key.startsWith(prefix)
+    )
+    try {
+        for (let index = 0; index < sessionStorage.length; index += 1) {
+            const key = sessionStorage.key(index)
+            if (key?.startsWith(prefix) && !keys.includes(key)) keys.push(key)
+        }
+    } catch {
+        // Only the memory fallback is readable.
+    }
+    return keys
+}
+
+export function removeStudentItems(keys: Iterable<string>): void {
+    for (const key of keys) removeStudentItem(key)
+}
+
+/** Forget every token, every exam draft and the signed-in student. */
 export function clearStudentStorage(): void {
-    for (const key of STUDENT_STORAGE_KEYS) removeStudentItem(key)
+    removeStudentItems(STUDENT_STORAGE_KEYS)
+    removeStudentItems(studentItemKeys(EXAM_DRAFT_KEY_PREFIX))
     rememberedStudent = null
 }
 

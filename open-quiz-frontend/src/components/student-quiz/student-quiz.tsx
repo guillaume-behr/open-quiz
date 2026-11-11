@@ -28,12 +28,9 @@ import {
 } from "./student-quiz-session"
 import { StudentQuizPage } from "./student-quiz-page"
 import { useQuizMonitoring } from "./use-quiz-monitoring"
+import { removeDrafts } from "./answer-drafts"
+import { useAnswerDrafts } from "./use-answer-drafts"
 import { useQuizTranslation } from "./use-quiz-translation"
-
-type AnswerDraft = {
-    selectedChoiceIds: string[]
-    writtenAnswer: string
-}
 
 export function StudentQuiz({
     studentToken,
@@ -59,9 +56,11 @@ export function StudentQuiz({
     const liveSessionRef = useRef<StudentQuizSession | null>(session)
     const liveRevisionRef = useRef(0)
     // What the student has entered on each question they visited, so that
-    // stepping back to an earlier question and returning does not throw away
-    // an answer that is not submitted yet.
-    const answerDraftsRef = useRef(new Map<number, AnswerDraft>())
+    // stepping back to an earlier question, or reloading the tab, does not
+    // throw away an answer that is not submitted yet.
+    const drafts = useAnswerDrafts(
+        session?.join_code ?? restoredSession?.joinCode ?? null
+    )
     const draftedQuestionIdRef = useRef<number | null>(null)
     const { isFullscreen, enterFullscreen } = useQuizMonitoring(
         session,
@@ -81,25 +80,27 @@ export function StudentQuiz({
     const liveJoinCode = session?.join_code
 
     // Show the question being opened with the draft kept for it, and fall back
-    // to the answer already recorded by the server when there is none.
-    const applyAnswerState = useCallback((updated: StudentQuizSession) => {
-        const questionId = updated.question?.id ?? null
-        draftedQuestionIdRef.current = questionId
-        const draft =
-            questionId === null
-                ? undefined
-                : answerDraftsRef.current.get(questionId)
-        setSelectedChoiceIds(
-            draft?.selectedChoiceIds.length
-                ? draft.selectedChoiceIds
-                : (updated.selected_choice_ids ?? [])
-        )
-        setWrittenAnswer(
-            draft?.writtenAnswer
-                ? draft.writtenAnswer
-                : (updated.written_answer ?? "")
-        )
-    }, [])
+    // to the answer already recorded by the server when there is none. An
+    // empty draft is a draft: an answer the student cleared stays cleared.
+    const applyAnswerState = useCallback(
+        (updated: StudentQuizSession) => {
+            const questionId = updated.question?.id ?? null
+            draftedQuestionIdRef.current = questionId
+            const draft =
+                questionId === null ? undefined : drafts.getDraft(questionId)
+            setSelectedChoiceIds(
+                draft !== undefined
+                    ? draft.selectedChoiceIds
+                    : (updated.selected_choice_ids ?? [])
+            )
+            setWrittenAnswer(
+                draft !== undefined
+                    ? draft.writtenAnswer
+                    : (updated.written_answer ?? "")
+            )
+        },
+        [drafts]
+    )
 
     const applySession = useCallback(
         (updated: StudentQuizSession) => {
@@ -116,11 +117,15 @@ export function StudentQuiz({
     useEffect(() => {
         const questionId = draftedQuestionIdRef.current
         if (questionId === null) return
-        answerDraftsRef.current.set(questionId, {
-            selectedChoiceIds,
-            writtenAnswer,
-        })
-    }, [selectedChoiceIds, writtenAnswer])
+        drafts.setDraft(questionId, { selectedChoiceIds, writtenAnswer })
+    }, [drafts, selectedChoiceIds, writtenAnswer])
+
+    // A handed-in or ended exam keeps no draft in this browser.
+    const sessionStatus = session?.status
+    useEffect(() => {
+        if (sessionStatus === "finished" || sessionStatus === "cancelled")
+            drafts.clearAll()
+    }, [drafts, sessionStatus])
 
     useEffect(() => {
         if (!restoredSession) return
@@ -209,6 +214,9 @@ export function StudentQuiz({
                 joinCode: state.join_code,
                 participantToken: participant_token,
             })
+            // Drafts left in this tab by an earlier participation, perhaps
+            // another student's, never show in this one.
+            removeDrafts(state.join_code)
             setParticipantToken(participant_token)
             applySession(state)
         } catch (caught) {
@@ -233,7 +241,7 @@ export function StudentQuiz({
             return
         }
         clearStoredQuizSession()
-        answerDraftsRef.current.clear()
+        drafts.clearAll()
         draftedQuestionIdRef.current = null
         setSession(null)
         setParticipantToken(null)
@@ -319,6 +327,8 @@ export function StudentQuiz({
                 session.join_code,
                 participantToken
             )
+            // The paper is handed in: nothing is left to draft.
+            drafts.clearAll()
             if (liveRevisionRef.current === liveRevision) applySession(updated)
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("student-submit-quiz-error")))
@@ -354,7 +364,7 @@ export function StudentQuiz({
             )
             // The server now holds this answer: coming back to the question
             // must show what was submitted, not a stale draft.
-            answerDraftsRef.current.delete(answeredQuestionId)
+            drafts.clearDraft(answeredQuestionId)
             if (liveRevisionRef.current === liveRevision) applySession(updated)
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("student-answer-error")))
