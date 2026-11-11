@@ -155,6 +155,7 @@
     "cookies-theme-purpose": "Tema claro, oscuro o del sistema elegido.",
     "cookies-student-auth-purpose": "Mantener la sesión autenticada del alumno en esta pestaña.",
     "cookies-activity-purpose": "Código del cuestionario y token para reanudar un examen o entrenamiento en esta pestaña.",
+    "cookies-exam-draft-purpose": "Respuestas de examen en redacción y aún no enviadas, para que recargar la página no las pierda. Se eliminan al entregar el examen, al terminar o al cerrar la sesión.",
     "cookies-device-duration": "Hasta que se elimine de este dispositivo.",
     "cookies-session-duration": "Hasta cerrar la pestaña, salir voluntariamente o borrar los datos abajo.",
     "cookies-clear-title": "Borrar los datos de este dispositivo",

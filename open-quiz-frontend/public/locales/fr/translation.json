@@ -155,6 +155,7 @@
     "cookies-theme-purpose": "Thème choisi : clair, sombre ou celui du système.",
     "cookies-student-auth-purpose": "Maintenir la session élève authentifiée dans cet onglet.",
     "cookies-activity-purpose": "Code du quiz et jeton de participation permettant de reprendre un examen ou un entraînement dans cet onglet.",
+    "cookies-exam-draft-purpose": "Réponses d’examen en cours de rédaction et pas encore envoyées, pour qu’un rechargement de la page ne les perde pas. Supprimées à la remise de la copie, à la fin de l’examen ou à la déconnexion de l’élève.",
     "cookies-device-duration": "Jusqu’à sa suppression sur cet appareil.",
     "cookies-session-duration": "Jusqu’à la fermeture de l’onglet, la sortie volontaire du quiz ou l’effacement ci-dessous.",
     "cookies-clear-title": "Supprimer les données de cet appareil",

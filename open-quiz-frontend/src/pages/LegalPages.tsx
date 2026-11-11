@@ -666,6 +666,12 @@ export function CookiesPage() {
                                 duration={t("cookies-session-duration")}
                             />
                             <StorageRow
+                                name="open-quiz-exam-draft:…"
+                                type={t("cookies-session-storage")}
+                                purpose={t("cookies-exam-draft-purpose")}
+                                duration={t("cookies-session-duration")}
+                            />
+                            <StorageRow
                                 name="open-quiz-teacher-results-view"
                                 type={t("cookies-local-storage")}
                                 purpose={t("cookies-results-view-purpose")}

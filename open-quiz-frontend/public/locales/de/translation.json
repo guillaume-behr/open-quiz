@@ -155,6 +155,7 @@
     "cookies-theme-purpose": "Gewähltes helles, dunkles oder Systemdesign.",
     "cookies-student-auth-purpose": "Die authentifizierte Lernendensitzung in diesem Tab aufrechterhalten.",
     "cookies-activity-purpose": "Quizcode und Teilnahmetoken zum Fortsetzen einer Prüfung oder Übung in diesem Tab.",
+    "cookies-exam-draft-purpose": "Prüfungsantworten, die gerade geschrieben und noch nicht gesendet wurden, damit sie beim Neuladen der Seite nicht verloren gehen. Gelöscht bei Abgabe, am Ende der Prüfung oder bei der Abmeldung.",
     "cookies-device-duration": "Bis zur Löschung auf diesem Gerät.",
     "cookies-session-duration": "Bis der Tab geschlossen, das Quiz freiwillig verlassen oder die Daten unten gelöscht werden.",
     "cookies-clear-title": "Daten von diesem Gerät löschen",

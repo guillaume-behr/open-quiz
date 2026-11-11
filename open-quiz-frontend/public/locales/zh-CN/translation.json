@@ -155,6 +155,7 @@
     "cookies-theme-purpose": "所选浅色、深色或系统主题。",
     "cookies-student-auth-purpose": "在此标签页中保持学生登录状态。",
     "cookies-activity-purpose": "测验代码和参与令牌，用于在此标签页恢复考试或训练。",
+    "cookies-exam-draft-purpose": "正在作答但尚未提交的考试答案，以免重新加载页面时丢失。交卷、考试结束或学生退出登录时删除。",
     "cookies-device-duration": "直至从本设备删除。",
     "cookies-session-duration": "直至关闭标签页、主动离开测验或在下方清除数据。",
     "cookies-clear-title": "清除此设备的数据",

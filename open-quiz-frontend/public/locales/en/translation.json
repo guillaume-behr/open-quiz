@@ -155,6 +155,7 @@
     "cookies-theme-purpose": "Selected light, dark or system theme.",
     "cookies-student-auth-purpose": "Maintain the authenticated student session in this tab.",
     "cookies-activity-purpose": "Quiz code and participant token used to resume an exam or training session in this tab.",
+    "cookies-exam-draft-purpose": "Exam answers being written and not submitted yet, so that reloading the page does not lose them. Removed when the paper is handed in, the exam ends or the student signs out.",
     "cookies-device-duration": "Until removed from this device.",
     "cookies-session-duration": "Until the tab is closed, the quiz is left voluntarily or the data is cleared below.",
     "cookies-clear-title": "Clear data from this device",
