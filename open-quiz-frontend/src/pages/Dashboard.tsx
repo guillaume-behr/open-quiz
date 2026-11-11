@@ -10,6 +10,7 @@ import {
     type DashboardEntry,
 } from "@/components/navigation/dashboard-shell"
 import { Button } from "@/components/ui/button"
+import { LoadErrorNotice } from "@/components/ui/list-status"
 import { PageLoader } from "@/components/ui/page-loader"
 import { useStaffSession } from "@/hooks/use-staff-session"
 import {
@@ -101,6 +102,8 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const [isStudentCreationOpen, setIsStudentCreationOpen] = useState(false)
     const [isResultsExportOpen, setIsResultsExportOpen] = useState(false)
     const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([])
+    const [gradeLevelsFailed, setGradeLevelsFailed] = useState(false)
+    const [gradeLevelsAttempt, setGradeLevelsAttempt] = useState(0)
 
     const dashboardEntries: DashboardEntry<DashboardSection>[] = [
         {
@@ -172,16 +175,21 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
         let active = true
         getGradeLevels()
             .then((levels) => {
-                if (active) setGradeLevels(levels)
+                if (!active) return
+                setGradeLevels(levels)
+                setGradeLevelsFailed(false)
             })
             .catch(() => {
-                // A transient failure leaves the list empty, not the session.
-                if (active) setGradeLevels([])
+                // A transient failure leaves the list empty, not the session,
+                // and says so: empty selects alone would look like no levels.
+                if (!active) return
+                setGradeLevels([])
+                setGradeLevelsFailed(true)
             })
         return () => {
             active = false
         }
-    }, [teacherId])
+    }, [teacherId, gradeLevelsAttempt])
 
     useEffect(() => {
         const previousTitle = document.title
@@ -305,6 +313,16 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
                 </>
             }
         >
+            {gradeLevelsFailed && (
+                <div className="mt-6">
+                    <LoadErrorNotice
+                        message={t("grade-levels-load-error")}
+                        onRetry={() =>
+                            setGradeLevelsAttempt((attempt) => attempt + 1)
+                        }
+                    />
+                </div>
+            )}
             {activeSection === "question-banks" && (
                 <QuestionBanksPanel
                     gradeLevels={gradeLevels}

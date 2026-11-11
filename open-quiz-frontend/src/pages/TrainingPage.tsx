@@ -137,7 +137,10 @@ export function TrainingPage() {
                           selected_choice_ids: selectedChoiceIds,
                       }
             )
-            if (!updated.training_feedback) throw new Error("Missing feedback")
+            if (!updated.training_feedback) {
+                setError(t("training-answer-error"))
+                return
+            }
             setAnsweredQuestion(question)
             setFeedback(updated.training_feedback)
             setNextSession(updated)

@@ -80,6 +80,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   once when the tab comes back to the foreground or the network returns. The
   student's quiz and the teacher's supervision window say when they are
   reconnecting, and a student's connection closes once the session is over.
+- Errors in the administration space and the class list now show where the
+  action was taken: a failed teacher deletion, access reset, problem report
+  or class deletion is explained inside its still-open dialog instead of
+  behind it, and a print or download error no longer reappears in the next
+  form opened. Printing one class's credentials no longer disables the other
+  classes. The user and problem-report lists show their loading state, and a
+  failed load with a button to try again, instead of reading as empty; grade
+  levels that fail to load say so too.
 - A question prompt with many asterisks (pasted Markdown, an imported bank)
   no longer freezes the question editor and every student's tab: parsing the
   prompt's formatting took exponential time, and now takes about a

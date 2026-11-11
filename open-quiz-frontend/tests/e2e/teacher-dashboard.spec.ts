@@ -2228,3 +2228,96 @@ test("an expired session takes the teacher back to the login form", async ({
         page.getByText("Your session has expired. Sign in again to continue.")
     ).toBeVisible()
 })
+
+test("a failed class deletion is explained inside its dialog, and nowhere else", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.route("**/api/classes/11", (route) =>
+        route.request().method() === "DELETE"
+            ? route.fulfill({ status: 500, json: {} })
+            : route.fallback()
+    )
+    await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
+
+    await page.getByRole("button", { name: "Delete class" }).click()
+    const dialog = page.getByRole("dialog", { name: "Delete class" })
+    await dialog.getByRole("button", { name: "Delete" }).click()
+    await expect(dialog).toContainText("Unable to perform this deletion.")
+    await dialog.getByRole("button", { name: "Cancel" }).click()
+
+    // The class form opened next starts without the deletion's message.
+    await page.getByRole("button", { name: "New class" }).click()
+    await expect(page.getByRole("dialog")).toBeVisible()
+    await expect(
+        page.getByText("Unable to perform this deletion.")
+    ).toHaveCount(0)
+})
+
+test("printing one class's credentials leaves the other classes available", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.route("**/api/classes?**", (route) =>
+        route.fulfill({
+            json: [
+                existingClass,
+                { ...existingClass, id: 12, name: "Class 8C" },
+            ],
+            headers: {
+                "X-Page": "1",
+                "X-Page-Size": "8",
+                "X-Total-Count": "2",
+            },
+        })
+    )
+    // The credentials of the first class take their time.
+    await page.route("**/api/students/credentials?class_id=11", () => {})
+    await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
+
+    const cards = page.getByRole("article")
+    await cards
+        .filter({ hasText: "Class 8B" })
+        .getByRole("button", { name: "Print credentials" })
+        .click()
+
+    await expect(
+        cards
+            .filter({ hasText: "Class 8B" })
+            .getByRole("button", { name: "Print credentials" })
+    ).toBeDisabled()
+    await expect(
+        cards
+            .filter({ hasText: "Class 8C" })
+            .getByRole("button", { name: "Print credentials" })
+    ).toBeEnabled()
+})
+
+test("grade levels that fail to load say so and can be loaded again", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    // Fails until the test lets it through, however often it is asked.
+    let failing = true
+    await page.route("**/api/classes/grade-levels", async (route) => {
+        if (route.request().method() === "GET" && failing)
+            return route.fulfill({ status: 500, json: {} })
+        return route.fallback()
+    })
+    await page.goto("/teacher/dashboard")
+
+    await expect(page.getByRole("alert")).toContainText(
+        "Failed to load grade levels"
+    )
+    failing = false
+    await page.getByRole("button", { name: "Try again" }).click()
+    await expect(page.getByRole("alert")).toHaveCount(0)
+
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
+    await page.getByRole("button", { name: "New class" }).click()
+    await expect(
+        page.getByRole("dialog").getByRole("option", { name: "Grade 8" })
+    ).toHaveCount(1)
+})

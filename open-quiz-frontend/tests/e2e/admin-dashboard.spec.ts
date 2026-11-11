@@ -256,3 +256,52 @@ test("changing the language does not restore the administrator session again", a
         )
     ).toHaveLength(1)
 })
+
+test("a failed teacher deletion is explained inside its dialog", async ({
+    page,
+}) => {
+    await mockAdminApi(page)
+    await page.route("**/api/admin/users/7", (route) =>
+        route.fulfill({ status: 500, json: {} })
+    )
+    await page.goto("/admin/dashboard")
+
+    await page
+        .getByText("@grace", { exact: true })
+        .locator("../..")
+        .getByRole("button", { name: "Delete" })
+        .click()
+    const dialog = page.getByRole("dialog", { name: "Delete the teacher" })
+    await dialog.getByRole("button", { name: "Delete" }).click()
+
+    await expect(dialog).toContainText("This teacher could not be deleted.")
+    await dialog.getByRole("button", { name: "Cancel" }).click()
+    await expect(dialog).toBeHidden()
+    // The message stays with the dialog, not behind it on the page.
+    await expect(
+        page.getByText("This teacher could not be deleted.")
+    ).toHaveCount(0)
+})
+
+test("a user list that fails to load says so and can be loaded again", async ({
+    page,
+}) => {
+    await mockAdminApi(page)
+    // Fails until the test lets it through, however often it is asked.
+    let failing = true
+    await page.route("**/api/admin/users?**", async (route) => {
+        if (failing) return route.fulfill({ status: 500, json: {} })
+        return route.fallback()
+    })
+    await page.goto("/admin/dashboard")
+
+    await expect(page.getByRole("alert")).toContainText("Failed to load users.")
+    await expect(page.getByText("0 accounts")).toHaveCount(0)
+
+    failing = false
+    await page.getByRole("button", { name: "Try again" }).click()
+
+    await expect(page.getByText("Grace Hopper")).toBeVisible()
+    await expect(page.getByText("2 accounts")).toBeVisible()
+    await expect(page.getByRole("alert")).toHaveCount(0)
+})
