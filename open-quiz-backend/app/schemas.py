@@ -73,7 +73,8 @@ TIMEZONE_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_+-]*(?:/[A-Za-z0-9_+-]+
 
 class TwoFactorVerifyRequest(BaseModel):
     challenge_token: str = Field(min_length=1, max_length=2048)
-    code: str = Field(pattern=r"^\d{6}$")
+    # [0-9], not \d: \d also matches non-ASCII digits such as "١٢٣٤٥٦".
+    code: str = Field(pattern=r"^[0-9]{6}$")
     # The browser's time zone, which decides when "today" ends for the trusted
     # browser. Anything unusable falls back to UTC rather than failing a login.
     timezone: str | None = None

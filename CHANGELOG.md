@@ -71,6 +71,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- A two-factor code typed with non-ASCII digits (such as `١٢٣٤٥٦`) is refused
+  with 422 instead of a server error, and no longer counts as an attempt.
+- A request body sent without `Content-Length` (chunked) that grows past the
+  limit answers 413 `REQUEST_BODY_TOO_LARGE`, as one announced too large
+  does, instead of a bare 400.
+- Two first sign-ins of a teacher at the same moment (a double click, two
+  devices) no longer fail with a server error: both start the same
+  two-factor enrollment.
 - An exam answer being written is no longer lost when the page is reloaded,
   the tab crashes or the browser restarts within its session: unsubmitted
   answers are kept in `sessionStorage` (`open-quiz-exam-draft:*`) and removed
