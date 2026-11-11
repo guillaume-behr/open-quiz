@@ -1,24 +1,19 @@
 import {
-    STUDENT_STORAGE_KEYS,
+    clearStudentStorage,
+    readStudentItem,
+    rememberStudent,
     STUDENT_TOKEN_STORAGE_KEY,
+    writeStudentItem,
 } from "@/lib/student-session-storage"
 import { request } from "./client"
 import type { StudentAccount, StudentQuizHistoryItem } from "./types"
 
 export function readStudentToken(): string | null {
-    try {
-        return sessionStorage.getItem(STUDENT_TOKEN_STORAGE_KEY)
-    } catch {
-        return null
-    }
+    return readStudentItem(STUDENT_TOKEN_STORAGE_KEY)
 }
 
 export function clearStudentSession(): void {
-    try {
-        for (const key of STUDENT_STORAGE_KEYS) sessionStorage.removeItem(key)
-    } catch {
-        // The in-memory portal state is cleared by its caller.
-    }
+    clearStudentStorage()
 }
 
 export async function loginStudent(
@@ -36,12 +31,9 @@ export async function loginStudent(
         },
         false
     )
-    try {
-        for (const key of STUDENT_STORAGE_KEYS) sessionStorage.removeItem(key)
-        sessionStorage.setItem(STUDENT_TOKEN_STORAGE_KEY, result.access_token)
-    } catch {
-        // The session still works in memory if storage is unavailable.
-    }
+    clearStudentStorage()
+    writeStudentItem(STUDENT_TOKEN_STORAGE_KEY, result.access_token)
+    rememberStudent(result.access_token, result.student)
     return { student: result.student, token: result.access_token }
 }
 
@@ -60,12 +52,14 @@ export async function logoutStudent(token: string): Promise<void> {
     }
 }
 
-export function restoreStudent(token: string): Promise<StudentAccount> {
-    return request<StudentAccount>(
+export async function restoreStudent(token: string): Promise<StudentAccount> {
+    const student = await request<StudentAccount>(
         "/api/student-auth/me",
         { headers: { Authorization: `Bearer ${token}` } },
         false
     )
+    rememberStudent(token, student)
+    return student
 }
 
 export function getStudentQuizHistory(

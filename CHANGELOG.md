@@ -123,6 +123,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Security
 
+- Student tokens no longer go into the browser history. After a student
+  logs out, Back, Forward or a reload on a shared computer can no longer
+  bring the next person into the previous student's training or dashboard.
+  Logging out also revokes the student's training participations on the
+  server; exam participations stay valid, so a student can sign in again and
+  resume a running exam.
 - A student who left an exam's waiting room without answering no longer
   finds that exam, and its correction, in their history.
 - A new quiz option, “Show provisional grades” (on by default, and for every

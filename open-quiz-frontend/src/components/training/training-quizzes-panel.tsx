@@ -4,11 +4,7 @@ import {
     startTrainingQuiz,
 } from "@/api/quizzes"
 import { apiErrorMessage } from "@/lib/errors"
-import type {
-    QuestionBank,
-    StudentAccount,
-    TrainingHistoryItem,
-} from "@/api/types"
+import type { QuestionBank, TrainingHistoryItem } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Grade } from "@/components/ui/grade"
@@ -22,13 +18,7 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 
-export function TrainingQuizzesPanel({
-    student,
-    token,
-}: {
-    student: StudentAccount
-    token: string
-}) {
+export function TrainingQuizzesPanel({ token }: { token: string }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const [banks, setBanks] = useState<QuestionBank[]>([])
@@ -67,9 +57,7 @@ export function TrainingQuizzesPanel({
                 joinCode: session.join_code,
                 participantToken,
             })
-            navigate("/student/training", {
-                state: { student, token, session, participantToken },
-            })
+            navigate("/student/training")
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("training-start-error")))
         } finally {

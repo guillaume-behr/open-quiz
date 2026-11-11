@@ -205,6 +205,17 @@ test("a student translates a training quiz and its correction", async ({
             json: { ...session, participant_token: "training-token" },
         })
     })
+    // The training page reads its session back from the server, with the
+    // participant token kept in storage (never in router state).
+    await page.route(
+        /\/api\/quizzes\/student\/sessions\/TRAIN\d$/,
+        async (route) => {
+            expect(route.request().headers()["x-quiz-token"]).toBe(
+                "training-token"
+            )
+            await route.fulfill({ json: session })
+        }
+    )
     await page.route(
         "**/api/quizzes/student/sessions/TRAIN2/answer",
         async (route) => {
@@ -323,6 +334,17 @@ test("a student launches training and sees the correct answer", async ({
             json: { ...session, participant_token: "training-token" },
         })
     })
+    // The training page reads its session back from the server, with the
+    // participant token kept in storage (never in router state).
+    await page.route(
+        /\/api\/quizzes\/student\/sessions\/TRAIN\d$/,
+        async (route) => {
+            expect(route.request().headers()["x-quiz-token"]).toBe(
+                "training-token"
+            )
+            await route.fulfill({ json: session })
+        }
+    )
     await page.route(
         "**/api/quizzes/student/sessions/TRAIN1/answer",
         async (route) => {
@@ -763,4 +785,112 @@ test("student login remains usable on a mobile viewport", async ({ page }) => {
     await expect(loginButton).toBeInViewport()
     await expect(page.getByLabel("Student ID")).toBeEditable()
     await expect(page.getByLabel("Password", { exact: true })).toBeEditable()
+})
+
+test("after logout, the history never resumes the previous student's training", async ({
+    page,
+}) => {
+    await page.route("**/api/student-auth/login", async (route) => {
+        await route.fulfill({
+            json: { access_token: "student-token", student },
+        })
+    })
+    await page.route("**/api/student-auth/logout", async (route) => {
+        await route.fulfill({ status: 204 })
+    })
+    await page.route("**/api/quizzes/training", async (route) => {
+        await route.fulfill({
+            json: [
+                {
+                    id: 12,
+                    grade_level: "Grade 8",
+                    chapter: "Practice science",
+                    question_count: 1,
+                    easy_question_count: 1,
+                    medium_question_count: 0,
+                    hard_question_count: 0,
+                    created_at: "2026-01-01T00:00:00Z",
+                },
+            ],
+        })
+    })
+    const session = {
+        quiz_title: "Practice science",
+        source_language: "en",
+        class_name: "Class 8B",
+        student_name: "Alex Example",
+        join_code: "TRAIN3",
+        status: "in_progress",
+        ends_at: null,
+        server_now: "2026-01-06T10:00:00Z",
+        question_number: 1,
+        total_questions: 1,
+        has_answered: false,
+        answered_count: 0,
+        allow_previous_questions: false,
+        selected_choice_ids: null,
+        written_answer: null,
+        question: {
+            id: 61,
+            prompt: "Which planet is red?",
+            difficulty: "easy",
+            answer_mode: "written",
+            answer_mode_disclosed: true,
+            response_language: null,
+            has_image: false,
+            code_language: null,
+            code_content: null,
+            choices: [],
+        },
+        training_feedback: null,
+    }
+    await page.route("**/api/quizzes/training/12/start", async (route) => {
+        await route.fulfill({
+            json: { ...session, participant_token: "training-token" },
+        })
+    })
+    await page.route(
+        "**/api/quizzes/student/sessions/TRAIN3",
+        async (route) => {
+            await route.fulfill({ json: session })
+        }
+    )
+
+    await page.goto("/student/login")
+    await page.getByLabel("Student ID").fill("alex-8b")
+    await page.getByLabel("Password", { exact: true }).fill("student-password")
+    await page.getByRole("button", { name: "Sign in" }).click()
+    await page.getByRole("button", { name: "Training", exact: true }).click()
+    await page.getByRole("button", { name: "Start training" }).click()
+    await expect(page.getByText("Which planet is red?")).toBeVisible()
+    // No token ever goes into the browser history.
+    expect(
+        await page.evaluate(() => JSON.stringify(history.state))
+    ).not.toMatch(/token/i)
+
+    await page.goBack()
+    await expect(page).toHaveURL(/\/student\/dashboard$/)
+    await page.getByRole("button", { name: "Log out" }).click()
+    await expect(page).toHaveURL(/\/student\/login$/)
+
+    const requestsAfterLogout: string[] = []
+    page.on("request", (request) => {
+        const headers = request.headers()
+        if (
+            headers["x-quiz-token"] === "training-token" ||
+            headers.authorization === "Bearer student-token"
+        )
+            requestsAfterLogout.push(request.url())
+    })
+    // The next person on this computer walks the history: Forward reaches
+    // the training page the previous student left, Back the dashboard.
+    await page.goForward()
+    await expect(page.getByLabel("Student ID")).toBeVisible()
+    await page.goBack()
+    await expect(page.getByLabel("Student ID")).toBeVisible()
+    await page.reload()
+    await expect(page.getByLabel("Student ID")).toBeVisible()
+    await expect(page.getByText("Alex Example")).toHaveCount(0)
+    await expect(page.getByText("Which planet is red?")).toHaveCount(0)
+    expect(requestsAfterLogout).toEqual([])
 })

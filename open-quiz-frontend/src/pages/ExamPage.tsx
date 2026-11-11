@@ -1,3 +1,4 @@
+import { rememberedStudentFor } from "@/lib/student-session-storage"
 import {
     clearStudentSession,
     readStudentToken,
@@ -9,21 +10,14 @@ import { readStoredQuizSession } from "@/components/student-quiz/student-quiz-se
 import { PageLoader } from "@/components/ui/page-loader"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useLocation, useNavigate } from "react-router"
-
-type ExamLocationState = {
-    student?: StudentAccount
-    token?: string
-}
+import { useNavigate } from "react-router"
 
 export function ExamPage() {
     const { t } = useTranslation()
     const navigate = useNavigate()
-    const location = useLocation()
-    const routeState = location.state as ExamLocationState | null
-    const [token] = useState(() => routeState?.token ?? readStudentToken())
-    const [student, setStudent] = useState<StudentAccount | null>(
-        routeState?.student ?? null
+    const [token] = useState(readStudentToken)
+    const [student, setStudent] = useState<StudentAccount | null>(() =>
+        rememberedStudentFor(token)
     )
     const [isLoading, setIsLoading] = useState(Boolean(token && !student))
     const returnToDashboard = useCallback(() => {

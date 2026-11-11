@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import type { StudentAccount } from "@/api/types"
 import {
     clearStoredStudentSession,
+    clearStudentStorage,
     QUIZ_SESSION_STORAGE_KEY,
     readStoredStudentSession,
+    rememberedStudentFor,
+    rememberStudent,
     storeStudentSession,
 } from "@/lib/student-session-storage"
 
@@ -64,5 +68,30 @@ describe("student session storage", () => {
         expect(() =>
             clearStoredStudentSession(QUIZ_SESSION_STORAGE_KEY)
         ).not.toThrow()
+    })
+
+    it("keeps a session in memory when storage is blocked, until cleared", () => {
+        for (const method of ["getItem", "setItem", "removeItem"] as const) {
+            vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+                throw new Error("blocked")
+            })
+        }
+        const stored = { joinCode: "ABC123", participantToken: "token" }
+        storeStudentSession(QUIZ_SESSION_STORAGE_KEY, stored)
+        expect(readStoredStudentSession(QUIZ_SESSION_STORAGE_KEY)).toEqual(
+            stored
+        )
+        clearStudentStorage()
+        expect(readStoredStudentSession(QUIZ_SESSION_STORAGE_KEY)).toBeNull()
+    })
+
+    it("remembers the signed-in student for their token only", () => {
+        const student = { id: 7, display_name: "Alex" } as StudentAccount
+        rememberStudent("token-a", student)
+        expect(rememberedStudentFor("token-a")).toBe(student)
+        expect(rememberedStudentFor("token-b")).toBeNull()
+        expect(rememberedStudentFor(null)).toBeNull()
+        clearStudentStorage()
+        expect(rememberedStudentFor("token-a")).toBeNull()
     })
 })
