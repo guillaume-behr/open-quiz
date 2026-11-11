@@ -6,10 +6,10 @@ from typing import Any
 import pytest
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
-from sqlalchemy import event, update
+from sqlalchemy import event, select, update
 
 from app import security
-from app.models import StudentAccount
+from app.models import StudentAccount, User
 from app.routers import auth, student_auth
 from app.routers.auth import REFRESH_COOKIE
 
@@ -160,3 +160,30 @@ def test_signing_in_does_not_sweep_expired_sessions(tmp_path: Path) -> None:
         finally:
             event.remove(engine, "before_cursor_execute", record)
         assert deletes == []
+
+
+def test_a_teachers_outdated_password_hash_is_upgraded_too(tmp_path: Path) -> None:
+    with make_client(settings_for(tmp_path / "rehash-teacher")) as client:
+        complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        weak_hash = WEAK_HASHER.hash(ADMIN_PASSWORD)
+        with client.app.state.session_factory() as session:
+            session.execute(
+                update(User)
+                .where(User.username == "root-admin")
+                .values(password_hash=weak_hash)
+            )
+            session.commit()
+
+        # The browser is trusted, so the password alone signs in.
+        signed_in = client.post(
+            "/api/auth/login",
+            json={"username": "root-admin", "password": ADMIN_PASSWORD},
+        )
+
+        assert signed_in.status_code == 200
+        with client.app.state.session_factory() as session:
+            stored = session.scalars(
+                select(User.password_hash).where(User.username == "root-admin")
+            ).one()
+        assert stored != weak_hash
+        assert not security.password_hash.current_hasher.check_needs_rehash(stored)
