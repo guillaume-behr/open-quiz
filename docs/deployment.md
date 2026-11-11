@@ -432,22 +432,58 @@ une instance isolée.
 
 Avant une mise à jour :
 
-1. lisez les notes de la release visée ;
+1. lisez les notes de la release visée (`CHANGELOG.md`) ;
 2. sauvegardez le fichier `.env` ; `update.sh` sauvegarde la base ;
 3. vérifiez que le dépôt ne contient aucune modification locale à préserver.
+
+Pour installer une release précise, ce qui est recommandé en production :
+
+```shell
+sh ./update.sh --version v1.0.0
+```
+
+Sans `--version`, le script suit la branche du clone (`git pull --ff-only`) :
+il déploie alors la dernière révision, y compris les changements non publiés
+de la section `[Unreleased]` du `CHANGELOG.md`, et le signale.
 
 ```shell
 sh ./update.sh
 ```
 
+Après `--version` ou un retour arrière, le clone n’est plus sur une branche :
+la mise à jour suivante se fait avec `--version`, ou bien revenez d’abord sur
+la branche avec `git checkout master`.
+
 Le script vérifie d’abord que Docker est accessible, que
 `open-quiz-backend/.env` existe et que le dépôt ne contient aucune modification
-locale, puis effectue un `git pull --ff-only`. Il affiche la révision avant et
+locale, puis récupère la révision demandée. Il affiche la révision avant et
 après la mise à jour. Il valide ensuite la configuration Compose, sauvegarde la
-base dans `backups/` (désactivable avec `--no-backup`), démarre la base, crée
-ou ajuste le rôle `open_quiz_app`, reconstruit les conteneurs, attend leur état sain et affiche leur statut ainsi que l’origine
-publique configurée. En cas de problème, `sh ./restore.sh` suivi du fichier
-indiqué revient à l’état d’avant la mise à jour.
+base dans `backups/` (désactivable avec `--no-backup`), et note dans
+`backups/*.rollback` ce qu’un retour arrière demande : la révision en service,
+cette sauvegarde et les images en service, conservées sous le nom
+`open-quiz-rollback` (les trois dernières par service). Il démarre ensuite la
+base, crée ou ajuste le rôle `open_quiz_app`, reconstruit les conteneurs,
+attend leur état sain (120 s par défaut, réglable avec `--wait-timeout` ou
+`OPEN_QUIZ_WAIT_TIMEOUT`) et affiche leur statut ainsi que l’origine publique
+configurée.
+
+### Revenir à la version précédente
+
+Si la mise à jour échoue, ou si la nouvelle version pose problème :
+
+```shell
+sh ./update.sh --rollback
+```
+
+Après confirmation, le script remet le code de la révision précédente, ses
+images (sans rien reconstruire), puis la base sauvegardée juste avant la mise à
+jour, et redémarre l’ensemble. Tout ce qui a été écrit depuis la mise à jour est
+perdu. Sans sauvegarde (`--no-backup`), seuls le code et les images reviennent.
+En cas d’échec, `update.sh` affiche cette commande.
+
+`sh ./restore.sh` seul ne suffit pas : il ne remplace que la base, et le
+backend de la nouvelle version, redémarré ensuite, réappliquerait aussitôt ses
+migrations.
 
 Pour reconstruire et redémarrer sans récupérer de révision, par exemple après
 avoir modifié `.env` :

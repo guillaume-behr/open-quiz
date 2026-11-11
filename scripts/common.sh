@@ -67,12 +67,16 @@ require_commands() {
     done
 }
 
-# Define compose() against a reachable Docker daemon, retrying through sudo so
+# Define compose() and docker_cli() against a reachable Docker daemon, retrying through sudo so
 # that a user outside the docker group still gets a working deployment.
 setup_compose() {
     if docker info >/dev/null 2>&1; then
         compose() {
             docker compose "$@"
+        }
+        # shellcheck disable=SC2329 # called by update.sh, which sources this file
+        docker_cli() {
+            docker "$@"
         }
     elif ! command -v sudo >/dev/null 2>&1; then
         fail "Docker is not running, or this user cannot reach it. Start Docker, or add your user to the 'docker' group and open a new session."
@@ -80,6 +84,10 @@ setup_compose() {
         # Cached or passwordless sudo: no prompt needed.
         compose() {
             sudo docker compose "$@"
+        }
+        # shellcheck disable=SC2329 # called by update.sh, which sources this file
+        docker_cli() {
+            sudo docker "$@"
         }
     elif [ -t 0 ]; then
         # Only ever prompt for a password when someone is there to type it;
@@ -90,6 +98,10 @@ setup_compose() {
             || fail "Docker is not running, or this user cannot reach it even with sudo."
         compose() {
             sudo docker compose "$@"
+        }
+        # shellcheck disable=SC2329 # called by update.sh, which sources this file
+        docker_cli() {
+            sudo docker "$@"
         }
     else
         fail "Docker is unreachable for this user and no terminal is available to confirm sudo. Add your user to the 'docker' group, or re-run from an interactive shell."

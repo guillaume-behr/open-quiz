@@ -43,6 +43,15 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Added
 
+- `update.sh --version vX.Y.Z` installs a release; without it the script still
+  follows the branch, and now says that it deploys unreleased changes.
+- `update.sh --rollback` returns to the code, images and data of the
+  deployment before the last update. Each update records what it needs in
+  `backups/*.rollback` and keeps the previous images as `open-quiz-rollback`
+  (the last three per service); an update that fails prints the command.
+- `update.sh --wait-timeout SECONDS` (or `OPEN_QUIZ_WAIT_TIMEOUT`, also read
+  by `restore.sh`) for migrations that need more than 120 seconds.
+- Version tags create a GitHub release from their `CHANGELOG.md` section.
 - Teachers can format question prompts: `**bold**`, `*italic*`, `` `code` ``
   and line breaks, with a toolbar, Ctrl+B / Ctrl+I shortcuts and a live
   preview in the question editor. Formatting shows to students, in results and
@@ -80,6 +89,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- The deployment guide no longer says that `restore.sh` alone returns to the
+  state before an update: it restores the data only, and the new backend
+  re-applies its migrations.
 - Filtering results by class no longer also shows classes whose name
   contains the chosen one (“5e A” also matched “5e AB”).
 - The results schedule shows every session of the week on screen, not only
@@ -451,10 +463,10 @@ the upgrade path changes the major number.
 
 ## [0.3.0] — 2026-08-29
 
-First tagged version.
+First version described in this changelog; `v0.1.0` is an earlier tag.
 
 [Unreleased]: https://github.com/guillaume-behr/open-quiz/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/guillaume-behr/open-quiz/compare/1518fe7...v1.0.0
-[0.4.0]: https://github.com/guillaume-behr/open-quiz/compare/v0.3.5...1518fe7
+[1.0.0]: https://github.com/guillaume-behr/open-quiz/compare/v0.4.0...v1.0.0
+[0.4.0]: https://github.com/guillaume-behr/open-quiz/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/guillaume-behr/open-quiz/compare/v0.3.0...v0.3.5
-[0.3.0]: https://github.com/guillaume-behr/open-quiz/releases/tag/v0.3.0
+[0.3.0]: https://github.com/guillaume-behr/open-quiz/compare/v0.1.0...v0.3.0

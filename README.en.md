@@ -157,12 +157,14 @@ The expected answer is `{"status":"ok"}`.
 ### Updates
 
 ```shell
-sh ./update.sh
+sh ./update.sh --version v1.0.0
 ```
 
-The script pulls the new revision, rebuilds the images and restarts the
+The script fetches the release, rebuilds the images and restarts the
 containers; the backend applies pending database migrations by itself at
-startup. `--no-pull` rebuilds without fetching a new revision. Before each
+startup. Without `--version` it follows the clone's branch, unreleased changes
+included. If the update fails or misbehaves, `sh ./update.sh --rollback` returns
+to the previous code, images and data. `--no-pull` rebuilds without fetching a new revision. Before each
 update, read the **Upgrade actions** of the new version in the
 [changelog](CHANGELOG.md).
 
