@@ -1255,3 +1255,107 @@ test("an answer the student cleared stays cleared", async ({ page }) => {
     // The empty draft wins over the answer the server still holds.
     await expect(writtenAnswer).toHaveValue("")
 })
+
+test("a connection that goes silent shows it is reconnecting, then reconnects", async ({
+    page,
+}) => {
+    await page.clock.install({ time: new Date("2026-11-10T10:00:00Z") })
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+        sessionStorage.setItem(
+            "open-quiz-student-session",
+            JSON.stringify({
+                joinCode: "ABCD",
+                participantToken: "participant-token",
+            })
+        )
+    })
+    let connections = 0
+    const secondConnection: { answer?: () => void } = {}
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
+        (socket) => {
+            connections += 1
+            const connection = connections
+            socket.onMessage(() => {
+                const ping = () => socket.send(JSON.stringify({ type: "ping" }))
+                // The first connection answers once, then goes silent
+                // without ever closing, like a half-open connection.
+                if (connection === 1) ping()
+                else secondConnection.answer = ping
+            })
+        }
+    )
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({
+            json: {
+                ...writtenExamState(1, null),
+                server_now: "2026-11-10T10:00:00Z",
+                ends_at: "2026-11-10T11:00:00Z",
+            },
+        })
+    })
+
+    await page.goto("/student/exam")
+    await expect(
+        page.getByRole("heading", { name: "First question" })
+    ).toBeVisible()
+    const reconnecting = page.getByText("Connection lost — reconnecting…")
+    await expect.poll(() => connections).toBe(1)
+    await expect(reconnecting).toBeHidden()
+
+    await page.clock.runFor(61_000)
+    await expect(reconnecting).toBeVisible()
+
+    await page.clock.runFor(1_000)
+    await expect.poll(() => secondConnection.answer).toBeDefined()
+    secondConnection.answer?.()
+    await expect(reconnecting).toBeHidden()
+    expect(connections).toBe(2)
+})
+
+test("the live connection closes once the session is finished", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(document, "fullscreenElement", {
+            configurable: true,
+            get: () => document.documentElement,
+        })
+        sessionStorage.setItem(
+            "open-quiz-student-session",
+            JSON.stringify({
+                joinCode: "ABCD",
+                participantToken: "participant-token",
+            })
+        )
+    })
+    const closeCodes: (number | undefined)[] = []
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
+        (socket) => {
+            socket.onClose((code) => closeCodes.push(code))
+            socket.onMessage(() =>
+                socket.send(
+                    JSON.stringify({
+                        type: "session",
+                        data: {
+                            ...writtenExamState(1, null),
+                            status: "finished",
+                        },
+                    })
+                )
+            )
+        }
+    )
+    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
+        await route.fulfill({ json: writtenExamState(1, null) })
+    })
+
+    await page.goto("/student/exam")
+
+    await expect.poll(() => closeCodes).toEqual([1000])
+})
