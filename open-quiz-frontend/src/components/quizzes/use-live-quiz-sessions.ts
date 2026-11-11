@@ -39,7 +39,15 @@ export function useLiveQuizSessions() {
     const [sessionActionToConfirm, setSessionActionToConfirm] = useState<
         "cancel" | "delete" | null
     >(null)
+    // The session whose live updates are reconnecting, if any: a state left
+    // by a session closed meanwhile does not show on the next one.
+    const [reconnectingSessionId, setReconnectingSessionId] = useState<
+        number | null
+    >(null)
     const activeSessionId = activeSession?.id
+    const activeSessionReconnecting =
+        activeSessionId !== undefined &&
+        reconnectingSessionId === activeSessionId
 
     useEffect(
         () =>
@@ -92,6 +100,10 @@ export function useLiveQuizSessions() {
             },
             onUnavailable: () =>
                 setActiveSessionError(t("quiz-session-refresh-error")),
+            onConnectionChange: (state) =>
+                setReconnectingSessionId(
+                    state === "reconnecting" ? activeSessionId : null
+                ),
         })
     }, [activeSessionId, t])
 
@@ -215,6 +227,7 @@ export function useLiveQuizSessions() {
         liveSessionsLoadFailed,
         activeSession,
         activeSessionError,
+        activeSessionReconnecting,
         isStarting,
         sessionAction,
         sessionActionToConfirm,

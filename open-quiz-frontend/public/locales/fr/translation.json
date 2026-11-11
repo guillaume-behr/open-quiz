@@ -345,6 +345,7 @@
     "joined-students_one": "{{count}} élève connecté",
     "joined-students_other": "{{count}} élèves connectés",
     "live-updates": "Mise à jour en direct",
+    "live-reconnecting": "Connexion perdue — reconnexion…",
     "enlarge-session": "Agrandir",
     "session-display-unavailable": "Aucun quiz à afficher",
     "session-display-unavailable-help": "Ouvrez cette vue depuis un quiz en cours du tableau de bord enseignant, et laissez cet onglet ouvert.",

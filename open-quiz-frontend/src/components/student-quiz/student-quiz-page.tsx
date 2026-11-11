@@ -1,4 +1,5 @@
 import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
+import { LiveReconnectingNotice } from "@/components/live-reconnecting-notice"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { Button } from "@/components/ui/button"
 import { ListChecks, LoaderCircle } from "lucide-react"
@@ -17,6 +18,7 @@ type StudentQuizPageProps = {
     question: StudentQuizQuestion | null
     participantToken: string
     title: string
+    liveReconnecting: boolean
     contentDirection: "ltr" | "rtl"
     selectedChoiceIds: string[]
     writtenAnswer: string
@@ -38,6 +40,7 @@ export function StudentQuizPage({
     question,
     participantToken,
     title,
+    liveReconnecting,
     contentDirection,
     selectedChoiceIds,
     writtenAnswer,
@@ -72,6 +75,7 @@ export function StudentQuizPage({
                 title={title}
                 contentDirection={contentDirection}
             />
+            <LiveReconnectingNotice reconnecting={liveReconnecting} />
             {translation.offered && (
                 <TranslationNotice
                     translation={translation}

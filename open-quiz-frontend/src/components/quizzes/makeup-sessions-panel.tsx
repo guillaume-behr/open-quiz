@@ -30,6 +30,7 @@ export function MakeupSessionsPanel() {
     const [error, setError] = useState<string | null>(null)
     const [selectedSession, setSelectedSession] =
         useState<MakeupSession | null>(null)
+    const [liveReconnecting, setLiveReconnecting] = useState(false)
 
     useEffect(() => {
         getAllStudentClasses()
@@ -79,6 +80,8 @@ export function MakeupSessionsPanel() {
                 )
             },
             onUnavailable: () => setError(t("makeup-load-error")),
+            onConnectionChange: (state) =>
+                setLiveReconnecting(state === "reconnecting"),
         })
     }, [t])
 
@@ -323,6 +326,7 @@ export function MakeupSessionsPanel() {
             <ActiveQuizSessionDialog
                 session={selectedSession}
                 error={error}
+                reconnecting={liveReconnecting}
                 isStarting={busy}
                 action={busy ? "pause" : null}
                 onClose={() => setSelectedSession(null)}

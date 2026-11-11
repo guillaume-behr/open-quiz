@@ -345,6 +345,7 @@
     "joined-students_one": "{{count}} aluno conectado",
     "joined-students_other": "{{count}} alunos conectados",
     "live-updates": "Atualização ao vivo",
+    "live-reconnecting": "Conexão perdida — reconectando…",
     "enlarge-session": "Ampliar",
     "session-display-unavailable": "Nenhum quiz para exibir",
     "session-display-unavailable-help": "Abra esta vista a partir de um quiz em curso no painel do professor e mantenha esse separador aberto.",

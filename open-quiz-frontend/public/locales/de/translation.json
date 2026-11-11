@@ -345,6 +345,7 @@
     "joined-students_one": "{{count}} Student verbunden",
     "joined-students_other": "{{count}} Studenten verbunden",
     "live-updates": "Live-Update",
+    "live-reconnecting": "Verbindung unterbrochen – wird wiederhergestellt…",
     "enlarge-session": "Vergrößern",
     "session-display-unavailable": "Kein Quiz zum Anzeigen",
     "session-display-unavailable-help": "Öffnen Sie diese Ansicht aus einem laufenden Quiz im Lehrerbereich und lassen Sie den Tab geöffnet.",

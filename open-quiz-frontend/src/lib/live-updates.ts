@@ -9,11 +9,29 @@ type LiveSocketOptions<T> = {
     onData: (data: T) => void
     onDeleted?: () => void
     onUnavailable: () => void
+    /** Told when updates flow again, and when they stop until a reconnect. */
+    onConnectionChange?: (state: LiveConnectionState) => void
 }
+
+export type LiveConnectionState = "connected" | "reconnecting"
 
 const MAX_RECONNECT_DELAY_MS = 10_000
 const CONNECTION_TIMEOUT_MS = 10_000
 const RECONNECT_JITTER = 0.25
+/** The server sends a ping at least this often (`LiveHeartbeat`). */
+const SERVER_HEARTBEAT_MS = 25_000
+/**
+ * Silence after which an open socket is presumed dead: a half-open
+ * connection (sleep and wake, a network change, a proxy dropping the stream)
+ * stays OPEN and never reports closing. Two heartbeats plus a margin.
+ */
+export const LIVENESS_TIMEOUT_MS = 60_000
+/**
+ * When the tab comes back or the network returns, a connection silent for
+ * longer than a heartbeat (plus a margin for delivery) is replaced at once:
+ * background tabs throttle timers, so the watchdog may not have run yet.
+ */
+const STALE_AFTER_MS = SERVER_HEARTBEAT_MS + 5_000
 
 export function connectLiveUpdates<T>({
     path,
@@ -21,19 +39,41 @@ export function connectLiveUpdates<T>({
     onData,
     onDeleted,
     onUnavailable,
+    onConnectionChange,
 }: LiveSocketOptions<T>): () => void {
     let stopped = false
     let socket: WebSocket | null = null
     let reconnectTimer: number | null = null
     let connectionTimer: number | null = null
+    let livenessTimer: number | null = null
+    let lastMessageAt = 0
+    let connectionState: LiveConnectionState | null = null
     let isGettingToken = false
     let attempts = 0
     let refreshAttempted = false
     let forceRefresh = false
 
+    const setConnectionState = (state: LiveConnectionState) => {
+        if (connectionState === state) return
+        connectionState = state
+        onConnectionChange?.(state)
+    }
+
+    const clearSocketTimers = () => {
+        if (connectionTimer !== null) {
+            window.clearTimeout(connectionTimer)
+            connectionTimer = null
+        }
+        if (livenessTimer !== null) {
+            window.clearTimeout(livenessTimer)
+            livenessTimer = null
+        }
+    }
+
     const scheduleReconnect = () => {
         if (stopped || reconnectTimer !== null || socket || isGettingToken)
             return
+        setConnectionState("reconnecting")
         const baseDelay = Math.min(
             MAX_RECONNECT_DELAY_MS,
             500 * 2 ** Math.min(attempts, 5)
@@ -47,6 +87,39 @@ export function connectLiveUpdates<T>({
             reconnectTimer = null
             void connect()
         }, delay)
+    }
+
+    /**
+     * Gives up on the current socket without waiting for its close event,
+     * which a dead connection may never send, and reconnects.
+     */
+    const abandonSocket = (immediately: boolean) => {
+        const abandoned = socket
+        if (!abandoned) return
+        socket = null
+        clearSocketTimers()
+        // close() only accepts 1000 or 3000-4999, so pass no code at all.
+        try {
+            abandoned.close()
+        } catch {
+            // Already closing: the reconnect below does not depend on it.
+        }
+        if (immediately) {
+            setConnectionState("reconnecting")
+            attempts = 0
+            void connect()
+        } else {
+            scheduleReconnect()
+        }
+    }
+
+    const watchLiveness = (currentSocket: WebSocket) => {
+        lastMessageAt = Date.now()
+        if (livenessTimer !== null) window.clearTimeout(livenessTimer)
+        livenessTimer = window.setTimeout(() => {
+            livenessTimer = null
+            if (socket === currentSocket) abandonSocket(false)
+        }, LIVENESS_TIMEOUT_MS)
     }
 
     const connect = async () => {
@@ -78,23 +151,13 @@ export function connectLiveUpdates<T>({
         socket = currentSocket
         connectionTimer = window.setTimeout(() => {
             connectionTimer = null
-            if (socket === currentSocket) {
-                // close() only accepts 1000 or 3000-4999, so pass no code at
-                // all: the close listener below schedules the reconnect once
-                // the abandoned handshake reports 1006.
-                try {
-                    currentSocket.close()
-                } catch {
-                    socket = null
-                    scheduleReconnect()
-                }
-            }
+            if (socket === currentSocket) abandonSocket(false)
         }, CONNECTION_TIMEOUT_MS)
         currentSocket.addEventListener("open", () => {
             currentSocket.send(JSON.stringify({ token }))
         })
         currentSocket.addEventListener("message", (event) => {
-            if (stopped) return
+            if (stopped || socket !== currentSocket) return
             let message: LiveMessage<T>
             try {
                 message = JSON.parse(String(event.data)) as LiveMessage<T>
@@ -105,6 +168,9 @@ export function connectLiveUpdates<T>({
                 window.clearTimeout(connectionTimer)
                 connectionTimer = null
             }
+            // Every message, pings included, proves the connection alive.
+            watchLiveness(currentSocket)
+            setConnectionState("connected")
             if (message.type === "ping") {
                 attempts = 0
                 refreshAttempted = false
@@ -121,11 +187,10 @@ export function connectLiveUpdates<T>({
             }
         })
         currentSocket.addEventListener("close", (event) => {
-            if (socket === currentSocket) socket = null
-            if (connectionTimer !== null) {
-                window.clearTimeout(connectionTimer)
-                connectionTimer = null
-            }
+            // An abandoned socket was already replaced.
+            if (socket !== currentSocket) return
+            socket = null
+            clearSocketTimers()
             if (stopped || event.code === 1000) return
             if (event.code === 1008) {
                 if (!refreshAttempted) {
@@ -144,6 +209,16 @@ export function connectLiveUpdates<T>({
 
     const reconnectWhenOnline = () => {
         if (stopped) return
+        if (socket) {
+            // A connection that still delivers is kept; a silent one may be
+            // half-open and is replaced now rather than at the watchdog.
+            if (
+                lastMessageAt > 0 &&
+                Date.now() - lastMessageAt > STALE_AFTER_MS
+            )
+                abandonSocket(true)
+            return
+        }
         attempts = 0
         if (reconnectTimer !== null) {
             window.clearTimeout(reconnectTimer)
@@ -152,13 +227,19 @@ export function connectLiveUpdates<T>({
         void connect()
     }
 
+    const reconnectWhenVisible = () => {
+        if (document.visibilityState === "visible") reconnectWhenOnline()
+    }
+
     window.addEventListener("online", reconnectWhenOnline)
+    document.addEventListener("visibilitychange", reconnectWhenVisible)
     void connect()
     return () => {
         stopped = true
         if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
-        if (connectionTimer !== null) window.clearTimeout(connectionTimer)
+        clearSocketTimers()
         window.removeEventListener("online", reconnectWhenOnline)
+        document.removeEventListener("visibilitychange", reconnectWhenVisible)
         socket?.close(1000)
     }
 }

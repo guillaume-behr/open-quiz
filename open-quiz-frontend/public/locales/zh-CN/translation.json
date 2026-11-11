@@ -345,6 +345,7 @@
     "joined-students_one": "{{count}} 学生已连接",
     "joined-students_other": "{{count}} 学生已连接",
     "live-updates": "实时更新",
+    "live-reconnecting": "连接已断开，正在重新连接…",
     "enlarge-session": "放大显示",
     "session-display-unavailable": "没有可显示的测验",
     "session-display-unavailable-help": "请从教师面板中正在进行的测验打开此视图，并保持该标签页打开。",

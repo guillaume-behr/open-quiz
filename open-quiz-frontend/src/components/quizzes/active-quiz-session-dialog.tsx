@@ -1,4 +1,5 @@
 import type { MakeupSession, QuizParticipant, QuizSession } from "@/api/types"
+import { LiveReconnectingNotice } from "@/components/live-reconnecting-notice"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import {
     publishSessionDisplay,
@@ -32,6 +33,8 @@ type SessionAction = "pause" | "resume" | "cancel" | "delete" | null
 type ActiveQuizSessionDialogProps = {
     session: QuizSession | MakeupSession | null
     error: string | null
+    /** Live updates stopped: what the dialog shows may be out of date. */
+    reconnecting?: boolean
     isStarting: boolean
     action: SessionAction
     onClose: () => void
@@ -56,6 +59,7 @@ function sessionStatusKey(status: QuizSession["status"]): string {
 export function ActiveQuizSessionDialog({
     session,
     error,
+    reconnecting = false,
     isStarting,
     action,
     onClose,
@@ -90,6 +94,7 @@ export function ActiveQuizSessionDialog({
         >
             {session && (
                 <div>
+                    <LiveReconnectingNotice reconnecting={reconnecting} />
                     <SessionSummary session={session} title={title} />
                     <Participants session={session} />
                     {error && <FieldError className="mt-4">{error}</FieldError>}

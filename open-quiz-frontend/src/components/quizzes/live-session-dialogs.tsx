@@ -9,6 +9,7 @@ export function LiveSessionDialogs({ live }: { live: LiveQuizSessions }) {
             <ActiveQuizSessionDialog
                 session={live.activeSession}
                 error={live.activeSessionError}
+                reconnecting={live.activeSessionReconnecting}
                 isStarting={live.isStarting}
                 action={live.sessionAction}
                 onClose={live.closeSession}

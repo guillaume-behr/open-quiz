@@ -345,6 +345,7 @@
     "joined-students_one": "{{count}} estudiante conectado",
     "joined-students_other": "{{count}} estudiantes conectados",
     "live-updates": "Actualización en vivo",
+    "live-reconnecting": "Conexión perdida — reconectando…",
     "enlarge-session": "Ampliar",
     "session-display-unavailable": "Ningún cuestionario que mostrar",
     "session-display-unavailable-help": "Abra esta vista desde un cuestionario en curso del panel del profesor y mantenga esa pestaña abierta.",
