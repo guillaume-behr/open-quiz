@@ -1,4 +1,5 @@
 import { getAllStudentClasses } from "@/api/classes"
+import { formatMinutes, useLocale } from "@/lib/locale"
 import { createMakeupSession, getMakeupQuizOptions } from "@/api/quizzes"
 import type { Quiz, StudentClass } from "@/api/types"
 import { formatClassName } from "@/lib/utils"
@@ -15,6 +16,7 @@ import { apiErrorMessage } from "@/lib/errors"
 
 export function MakeupSessionsPanel() {
     const { t } = useTranslation()
+    const locale = useLocale()
     const [classes, setClasses] = useState<StudentClass[]>([])
     const [quizOptions, setQuizOptions] = useState<Quiz[]>([])
     const [quizSearch, setQuizSearch] = useState("")
@@ -179,10 +181,10 @@ export function MakeupSessionsPanel() {
                                                 </span>
                                             </span>
                                             <span className="text-muted-foreground">
-                                                {Math.round(
-                                                    quiz.duration_seconds / 60
-                                                )}{" "}
-                                                min
+                                                {formatMinutes(
+                                                    quiz.duration_seconds,
+                                                    locale
+                                                )}
                                             </span>
                                         </label>
                                     ))

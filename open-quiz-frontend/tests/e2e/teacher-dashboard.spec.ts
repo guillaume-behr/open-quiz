@@ -913,7 +913,7 @@ test("teacher creates, exports, imports, and deletes question banks", async ({
     const exportPromise = page.waitForEvent("download")
     await existingBank.getByRole("button", { name: "Export" }).click()
     expect((await exportPromise).suggestedFilename()).toBe(
-        "banque-grade-8-matter-and-energy.json"
+        "question-bank-grade-8-matter-and-energy.json"
     )
 
     const examplePromise = page.waitForEvent("download")
@@ -2109,7 +2109,7 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     const downloadPromise = page.waitForEvent("download")
     await exportDialog.getByRole("button", { name: "Export CSV" }).click()
     const download = await downloadPromise
-    expect(download.suggestedFilename()).toBe("resultats-classe-11-quiz-31.csv")
+    expect(download.suggestedFilename()).toBe("class-results-11-quiz-31.csv")
     expect(
         requests.some((request) => {
             const url = new URL(request.url())
@@ -2656,4 +2656,19 @@ test("a finished retake never offers a Delete button that does nothing", async (
     await expect(
         page.getByRole("button", { name: "Delete session" })
     ).toHaveCount(0)
+})
+
+test("names with apostrophes and ampersands are shown as typed", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.route("http://127.0.0.1:4173/api/users/me", (route) =>
+        route.fulfill({
+            json: { ...teacher, display_name: "D'Artagnan & Q<A>" },
+        })
+    )
+    await page.goto("/teacher/dashboard")
+    await expect(
+        page.getByRole("heading", { name: "Welcome, D'Artagnan & Q<A>" })
+    ).toBeVisible()
 })

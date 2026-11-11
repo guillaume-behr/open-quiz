@@ -84,7 +84,8 @@ async function errorFrom(response: Response): Promise<Error> {
             ? body.detail.code
             : null
     return new ApiError(
-        detail ?? code ?? "Une erreur est survenue.",
+        // Never shown as is: screens show apiErrorMessage, a translated text.
+        detail ?? code ?? `Request failed with status ${response.status}`,
         response.status,
         body.detail
     )

@@ -1,4 +1,5 @@
 import { joinMakeupSession, selectMakeupQuiz } from "@/api/quizzes"
+import { formatMinutes, useLocale } from "@/lib/locale"
 import { apiErrorMessage } from "@/lib/errors"
 import type { MakeupJoin } from "@/api/types"
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,7 @@ import { useNavigate } from "react-router"
 
 export function StudentMakeupPanel({ token }: { token: string }) {
     const { t } = useTranslation()
+    const locale = useLocale()
     const navigate = useNavigate()
     const [code, setCode] = useState("")
     const [lobby, setLobby] = useState<MakeupJoin | null>(null)
@@ -86,7 +88,10 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                                     {quiz.title}
                                 </span>
                                 <span className="shrink-0 text-sm text-muted-foreground">
-                                    {Math.round(quiz.duration_seconds / 60)} min
+                                    {formatMinutes(
+                                        quiz.duration_seconds,
+                                        locale
+                                    )}
                                 </span>
                             </button>
                         ))

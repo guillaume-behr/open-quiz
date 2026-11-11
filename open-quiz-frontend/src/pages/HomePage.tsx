@@ -1,4 +1,5 @@
 import { rememberedStudentFor } from "@/lib/student-session-storage"
+import { usePageTitle } from "@/hooks/use-page-title"
 import {
     clearStudentSession,
     loginStudent,
@@ -165,13 +166,7 @@ export function HomePage({
             .finally(() => setIsLoading(false))
     }, [navigate, page, student, token])
 
-    useEffect(() => {
-        const previousTitle = document.title
-        document.title = `Open Quiz | ${t("student-dashboard")}`
-        return () => {
-            document.title = previousTitle
-        }
-    }, [t])
+    usePageTitle(t("student-dashboard"))
 
     async function handleLogin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()

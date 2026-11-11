@@ -1,4 +1,5 @@
 import { logout } from "@/api/auth"
+import { usePageTitle } from "@/hooks/use-page-title"
 import {
     clearStudentSession,
     logoutStudent,
@@ -38,17 +39,6 @@ function usePublicInformation() {
     }, [])
 
     return { information, loadFailed }
-}
-
-function usePageTitle(title: string) {
-    const { t } = useTranslation()
-    useEffect(() => {
-        const previousTitle = document.title
-        document.title = t("legal-page-browser-title", { title })
-        return () => {
-            document.title = previousTitle
-        }
-    }, [t, title])
 }
 
 function LegalPage({

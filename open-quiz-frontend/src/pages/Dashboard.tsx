@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/use-page-title"
 import {
     createGradeLevel,
     deleteGradeLevel,
@@ -191,14 +192,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
         }
     }, [teacherId, gradeLevelsAttempt])
 
-    useEffect(() => {
-        const previousTitle = document.title
-        document.title = `Open Quiz | ${t("professor-space")}`
-
-        return () => {
-            document.title = previousTitle
-        }
-    }, [t])
+    usePageTitle(t("professor-space"))
 
     function handleLogout() {
         void session.signOut().finally(() => setGradeLevels([]))

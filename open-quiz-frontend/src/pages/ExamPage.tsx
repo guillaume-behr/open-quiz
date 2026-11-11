@@ -1,4 +1,5 @@
 import { rememberedStudentFor } from "@/lib/student-session-storage"
+import { usePageTitle } from "@/hooks/use-page-title"
 import {
     clearStudentSession,
     readStudentToken,
@@ -43,13 +44,7 @@ export function ExamPage() {
             .finally(() => setIsLoading(false))
     }, [navigate, student, token])
 
-    useEffect(() => {
-        const previousTitle = document.title
-        document.title = `Open Quiz | ${t("exam-mode")}`
-        return () => {
-            document.title = previousTitle
-        }
-    }, [t])
+    usePageTitle(t("exam-mode"))
 
     if (isLoading || !student || !token) {
         return <PageLoader />

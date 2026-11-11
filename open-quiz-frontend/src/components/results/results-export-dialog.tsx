@@ -73,7 +73,14 @@ function ResultsExportForm({
             try {
                 saveBlob(
                     await downloadQuizResults(classId, exportQuizId),
-                    `resultats-classe-${classId}${exportQuizId === null ? "-tous-les-quiz" : `-quiz-${exportQuizId}`}.csv`
+                    `${
+                        exportQuizId === null
+                            ? t("results-export-filename-all", { classId })
+                            : t("results-export-filename-quiz", {
+                                  classId,
+                                  quizId: exportQuizId,
+                              })
+                    }.csv`
                 )
             } finally {
                 onExportingChange(false)

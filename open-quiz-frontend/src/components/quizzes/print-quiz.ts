@@ -1,3 +1,4 @@
+import { CODE_LANGUAGES } from "@/components/question-banks/code-languages"
 import {
     getChoiceImage,
     getQuestionImage,
@@ -176,7 +177,9 @@ export async function printExamSubjects(
         if (language) {
             const label = doc.createElement("span")
             label.className = "code-language"
-            label.textContent = language
+            label.textContent =
+                CODE_LANGUAGES.find((item) => item.value === language)?.label ??
+                language
             pre.append(label)
         }
         const code = doc.createElement("code")
@@ -193,7 +196,7 @@ export async function printExamSubjects(
         header.append(title)
         const className = doc.createElement("p")
         className.className = "class-name"
-        className.textContent = `${t("class-name")} : ${studentClass.grade_level} ${studentClass.name}`
+        className.textContent = `${t("label-colon", { label: t("class-name") })} ${studentClass.grade_level} ${studentClass.name}`
         header.append(className)
         const identity = doc.createElement("div")
         identity.className = "identity"
@@ -201,7 +204,7 @@ export async function printExamSubjects(
             const line = doc.createElement("div")
             line.className = "identity-line"
             const text = doc.createElement("span")
-            text.textContent = `${label} :`
+            text.textContent = t("label-colon", { label })
             const blank = doc.createElement("span")
             blank.className = "identity-blank"
             line.append(text, blank)

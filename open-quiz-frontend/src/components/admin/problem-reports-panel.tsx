@@ -88,7 +88,9 @@ export function ProblemReportsPanel({
                                 <dl className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
                                     <div>
                                         <dt className="inline font-semibold">
-                                            {t("reported-page")} :
+                                            {t("label-colon", {
+                                                label: t("reported-page"),
+                                            })}
                                         </dt>{" "}
                                         <dd className="inline font-mono">
                                             {report.page_path}
@@ -96,7 +98,9 @@ export function ProblemReportsPanel({
                                     </div>
                                     <div>
                                         <dt className="inline font-semibold">
-                                            {t("reported-at")} :
+                                            {t("label-colon", {
+                                                label: t("reported-at"),
+                                            })}
                                         </dt>{" "}
                                         <dd className="inline">
                                             {dateFormatter.format(

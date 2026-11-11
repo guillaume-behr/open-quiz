@@ -74,6 +74,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Names and titles with an apostrophe, an ampersand or angle brackets show
+  as typed instead of as HTML entities (“D'Artagnan”, not “D&#39;Artagnan”).
+  The remaining hard-coded French or English texts now follow the chosen
+  language: label colons, quiz durations, chart percentages, page titles,
+  JSON import locations, Python runner failures, export file names and the
+  language names on printed code; dates and numbers use the language the
+  interface resolved, never a raw browser value.
+
 - Pressing Enter in the student fields of the class dialog adds the student,
   and pressing Enter in a question filter of the question-bank dialog no
   longer saves and closes the dialog. Switching a question to written answer

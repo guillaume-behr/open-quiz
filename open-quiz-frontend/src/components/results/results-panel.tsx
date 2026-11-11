@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useLocale } from "@/lib/locale"
 import { apiErrorMessage } from "@/lib/errors"
 import { useAsyncAction } from "@/hooks/use-async-action"
 import { usePagedList } from "@/hooks/use-paged-list"
@@ -63,7 +64,8 @@ export function ResultsPanel({
     isExportDialogOpen,
     onExportDialogOpenChange,
 }: ResultsPanelProps) {
-    const { t, i18n } = useTranslation()
+    const { t } = useTranslation()
+    const locale = useLocale()
     const resultList = usePagedList(loadResults, { quiz: "", class: "" })
     const results = resultList.items
     const classList = useResource(getAllStudentClasses)
@@ -124,11 +126,11 @@ export function ResultsPanel({
 
     const dateFormatter = useMemo(
         () =>
-            new Intl.DateTimeFormat(i18n.language, {
+            new Intl.DateTimeFormat(locale, {
                 dateStyle: "long",
                 timeStyle: "short",
             }),
-        [i18n.language]
+        [locale]
     )
 
     function resultDate(result: QuizSession) {
@@ -312,7 +314,7 @@ export function ResultsPanel({
                                         .map((result) => result.id)
                                         .join(",")}
                                     results={results}
-                                    locale={i18n.language}
+                                    locale={locale}
                                     onSelect={setSelectedResult}
                                 />
                             ) : (
@@ -363,7 +365,7 @@ export function ResultsPanel({
                         ? `${selectedResult.class_name} · ${resultDate(selectedResult)}`
                         : undefined
                 }
-                locale={i18n.language}
+                locale={locale}
                 isPublishing={publishing.isPending}
                 publishError={publishing.error}
                 onPublish={() => void publishing.run()}
@@ -399,7 +401,7 @@ export function ResultsPanel({
                 )}
                 gradingAnswerId={gradingAnswerId}
                 isReadOnly={selectedResult?.grades_published_at != null}
-                locale={i18n.language}
+                locale={locale}
                 onClose={() => {
                     setSelectedParticipant(null)
                     setGradeError(null)
