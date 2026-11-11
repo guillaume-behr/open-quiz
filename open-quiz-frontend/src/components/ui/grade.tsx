@@ -2,6 +2,7 @@ import { GRADE_SCALE, formatScore, gradeOnScale } from "@/lib/grades"
 import { cn } from "@/lib/utils"
 import { Tooltip } from "@base-ui/react/tooltip"
 import { useTranslation } from "react-i18next"
+import { useLocale } from "@/lib/locale"
 
 type GradeProps = {
     score: number
@@ -32,8 +33,8 @@ export function Grade({
     className,
     focusable = true,
 }: GradeProps) {
-    const { t, i18n } = useTranslation()
-    const locale = i18n.language
+    const { t } = useTranslation()
+    const locale = useLocale()
     const grade = gradeOnScale(score, maximumScore)
     const [value, scale] =
         grade === null

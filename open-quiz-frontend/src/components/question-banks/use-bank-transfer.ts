@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next"
 import {
     downloadQuestionBank,
     downloadQuestionBatchExample,
@@ -14,14 +15,14 @@ import { useTranslation } from "react-i18next"
 
 type ImportedBank = Awaited<ReturnType<typeof importQuestionBatch>>
 
-function exportFilename(bank: QuestionBank): string {
+function exportFilename(bank: QuestionBank, t: TFunction): string {
     const safeName = `${bank.grade_level}-${bank.chapter}`
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-zA-Z0-9]+/g, "-")
         .replace(/^-|-$/g, "")
         .toLowerCase()
-    return `banque-${safeName || bank.id}.json`
+    return `${t("question-bank-export-filename", { name: safeName || bank.id })}.json`
 }
 
 /**
@@ -47,7 +48,11 @@ export function useBankTransfer({
             t,
             caughtError instanceof ApiError && caughtError.status === 409
                 ? t("json-import-duplicate-error")
-                : describeJsonImportFailure(caughtError, t("json-import-error"))
+                : describeJsonImportFailure(
+                      caughtError,
+                      t,
+                      t("json-import-error")
+                  )
         )
     )
 
@@ -71,7 +76,10 @@ export function useBankTransfer({
         setBatchMessage(null)
         setIsBatchBusy(true)
         try {
-            saveBlob(await downloadQuestionBank(bank.id), exportFilename(bank))
+            saveBlob(
+                await downloadQuestionBank(bank.id),
+                exportFilename(bank, t)
+            )
         } catch (caughtError) {
             setBatchError(
                 apiErrorMessage(caughtError, t, t("json-export-error"))

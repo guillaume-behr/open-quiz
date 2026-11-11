@@ -1,6 +1,9 @@
 import type { CodeLanguage } from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { runPython as executePython } from "@/components/question-banks/python-runner"
+import {
+    describePythonFailure,
+    runPython as executePython,
+} from "@/components/question-banks/python-runner"
 import { LoaderCircle, Play } from "lucide-react"
 import { Highlight, themes } from "prism-react-renderer"
 import {
@@ -154,9 +157,7 @@ export function CodeBlock({
         } catch (error) {
             if (mountedRef.current && currentCodeRef.current === source) {
                 setResult(
-                    `${t("python-run-error")}\n${
-                        error instanceof Error ? error.message : String(error)
-                    }`
+                    `${t("python-run-error")}\n${describePythonFailure(error, t)}`
                 )
             }
         } finally {

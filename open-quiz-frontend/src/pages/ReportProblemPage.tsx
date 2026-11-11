@@ -1,10 +1,11 @@
 import { createProblemReport } from "@/api/problem-reports"
+import { usePageTitle } from "@/hooks/use-page-title"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
 import { apiErrorMessage } from "@/lib/errors"
 import { CircleCheck, LoaderCircle, MessageSquareWarning } from "lucide-react"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useLocation } from "react-router"
 
@@ -34,15 +35,7 @@ export function ReportProblemPage() {
     const [error, setError] = useState("")
     const [sent, setSent] = useState(false)
 
-    useEffect(() => {
-        const previousTitle = document.title
-        document.title = t("legal-page-browser-title", {
-            title: t("signal"),
-        })
-        return () => {
-            document.title = previousTitle
-        }
-    }, [t])
+    usePageTitle(t("signal"))
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -100,7 +93,9 @@ export function ReportProblemPage() {
 
                     <div className="rounded-lg bg-muted p-3 text-sm">
                         <span className="font-semibold">
-                            {t("problem-report-page")} :
+                            {t("label-colon", {
+                                label: t("problem-report-page"),
+                            })}
                         </span>{" "}
                         <span className="font-mono">{pagePath}</span>
                     </div>

@@ -59,9 +59,9 @@ describe("describeJsonImportFailure", () => {
     })
 
     it("falls back for any other failure", () => {
-        expect(describeJsonImportFailure(new Error("network"), t, "Failed")).toBe(
-            "Failed"
-        )
+        expect(
+            describeJsonImportFailure(new Error("network"), t, "Failed")
+        ).toBe("Failed")
         expect(
             describeJsonImportFailure(
                 new ApiError("Conflict", 409, { code: "X" }),

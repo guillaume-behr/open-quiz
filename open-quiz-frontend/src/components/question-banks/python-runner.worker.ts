@@ -18,6 +18,7 @@ type RunResponse = {
     output?: string
     error?: string
     fatal?: boolean
+    outputLimitExceeded?: boolean
 }
 
 type PythonRuntime = {
@@ -153,6 +154,7 @@ async function execute({ id, source }: RunRequest): Promise<void> {
             id,
             error: error instanceof Error ? error.message : String(error),
             fatal,
+            outputLimitExceeded: fatal,
         } satisfies RunResponse)
         if (fatal) self.close()
     }

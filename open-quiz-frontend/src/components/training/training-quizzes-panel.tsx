@@ -1,3 +1,4 @@
+import { formatPercent, useLocale } from "@/lib/locale"
 import {
     getTrainingHistory,
     getTrainingQuestionBanks,
@@ -203,7 +204,8 @@ export function TrainingQuizzesPanel({ token }: { token: string }) {
 }
 
 function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
-    const { t, i18n } = useTranslation()
+    const { t } = useTranslation()
+    const locale = useLocale()
     const chart = {
         left: 52,
         right: 788,
@@ -263,7 +265,7 @@ function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
                                 textAnchor="end"
                                 dominantBaseline="middle"
                             >
-                                {value} %
+                                {formatPercent(value, locale)}
                             </text>
                         </g>
                     ))}
@@ -349,7 +351,7 @@ function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
                         className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
                     >
                         <time dateTime={item.started_at}>
-                            {new Intl.DateTimeFormat(i18n.resolvedLanguage, {
+                            {new Intl.DateTimeFormat(locale, {
                                 dateStyle: "medium",
                                 timeStyle: "short",
                             }).format(new Date(item.started_at))}

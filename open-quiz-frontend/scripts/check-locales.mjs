@@ -8,6 +8,10 @@ const localesDirectory = fileURLToPath(
 const pluralSuffix = /_(zero|one|two|few|many|other)$/
 const interpolationPattern = /{{\s*([^},\s]+)/g
 const identicalTranslationAllowlist = new Set([
+    // Punctuation patterns: the same as English in several languages.
+    "json-invalid-field",
+    "json-syntax-error",
+    "label-colon",
     "admin",
     "admin-login",
     "administration",

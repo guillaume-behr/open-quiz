@@ -913,7 +913,7 @@ test("teacher creates, exports, imports, and deletes question banks", async ({
     const exportPromise = page.waitForEvent("download")
     await existingBank.getByRole("button", { name: "Export" }).click()
     expect((await exportPromise).suggestedFilename()).toBe(
-        "banque-grade-8-matter-and-energy.json"
+        "question-bank-grade-8-matter-and-energy.json"
     )
 
     const examplePromise = page.waitForEvent("download")
@@ -2109,7 +2109,7 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     const downloadPromise = page.waitForEvent("download")
     await exportDialog.getByRole("button", { name: "Export CSV" }).click()
     const download = await downloadPromise
-    expect(download.suggestedFilename()).toBe("resultats-classe-11-quiz-31.csv")
+    expect(download.suggestedFilename()).toBe("class-results-11-quiz-31.csv")
     expect(
         requests.some((request) => {
             const url = new URL(request.url())

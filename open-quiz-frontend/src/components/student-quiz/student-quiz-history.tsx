@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useLocale } from "@/lib/locale"
 
 const SCORE_TONE_CLASS_NAMES: Record<ScoreTone, string> = {
     success: "bg-success/10 text-success",
@@ -53,7 +54,8 @@ function QuestionScorePill({
 }
 
 export function StudentQuizHistory({ token }: { token: string }) {
-    const { t, i18n } = useTranslation()
+    const { t } = useTranslation()
+    const locale = useLocale()
     const [items, setItems] = useState<StudentQuizHistoryItem[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [hasError, setHasError] = useState(false)
@@ -62,10 +64,10 @@ export function StudentQuizHistory({ token }: { token: string }) {
     const openSessionIdsRef = useRef<number[]>([])
     const dateFormatter = useMemo(
         () =>
-            new Intl.DateTimeFormat(i18n.language, {
+            new Intl.DateTimeFormat(locale, {
                 dateStyle: "long",
             }),
-        [i18n.language]
+        [locale]
     )
 
     useEffect(() => {
@@ -225,7 +227,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                         answer.is_correct !==
                                                         null
                                                     }
-                                                    locale={i18n.language}
+                                                    locale={locale}
                                                 />
                                             )}
                                         </div>
