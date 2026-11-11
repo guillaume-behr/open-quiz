@@ -56,7 +56,13 @@ export function ClassStudentsSection({
                     {t("assign-student")}
                 </Button>
             </div>
-            <div className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[1fr_1fr_auto]">
+            <form
+                className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[1fr_1fr_auto]"
+                onSubmit={(event) => {
+                    event.preventDefault()
+                    void createStudent()
+                }}
+            >
                 <Input
                     value={newStudentFirstName}
                     onChange={(event) =>
@@ -74,9 +80,8 @@ export function ClassStudentsSection({
                     aria-label={t("last-name")}
                 />
                 <Button
-                    type="button"
+                    type="submit"
                     size="sm"
-                    onClick={() => void createStudent()}
                     disabled={
                         isBusy ||
                         !newStudentFirstName.trim() ||
@@ -86,7 +91,7 @@ export function ClassStudentsSection({
                     <UserPlus />
                     {t("create-student-account")}
                 </Button>
-            </div>
+            </form>
             {studentClass.students.length === 0 ? (
                 <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
                     {t("no-student")}

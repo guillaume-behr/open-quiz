@@ -453,6 +453,7 @@
     "answer-mode": "نوع الاستجابة",
     "single-choice": "اختيار واحد",
     "multiple-choice": "الاختيار من متعدد",
+    "single-choice-kept-first-correct": "يسمح الاختيار الفردي بإجابة صحيحة واحدة فقط: تم الاحتفاظ بأول إجابة محددة كصحيحة فقط.",
     "disclose-answer-mode": "إظهار نوع الاستجابة للطلاب",
     "answer-choices": "الردود المقترحة",
     "written-answer": "إجابة كتابية",

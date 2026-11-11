@@ -417,6 +417,7 @@
     "answer-mode": "作答类型",
     "single-choice": "单选",
     "multiple-choice": "多项选择",
+    "single-choice-kept-first-correct": "单选题只允许一个正确答案：仅保留了第一个标记为正确的答案。",
     "disclose-answer-mode": "向学生显示作答类型",
     "answer-choices": "答案选项",
     "written-answer": "书面回答",

@@ -1,6 +1,8 @@
 import type { CodeLanguage } from "@/api/types"
 
 export type EditableChoice = {
+    /** Client-side row key; never sent to the API. */
+    uid: number
     id?: number
     label: string
     is_correct: boolean

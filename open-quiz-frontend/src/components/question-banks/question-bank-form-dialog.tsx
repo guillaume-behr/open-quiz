@@ -66,8 +66,8 @@ export function QuestionBankFormDialog({
             description={t("create-question-bank-help")}
             size={editingBank ? "xl" : "md"}
         >
-            <form onSubmit={onSubmit}>
-                <FieldGroup className="gap-4">
+            <FieldGroup className="gap-4">
+                <form id="question-bank-form" onSubmit={onSubmit}>
                     <div className="grid items-start gap-4 md:grid-cols-2">
                         <Field>
                             <FieldLabel htmlFor="question-bank-title">
@@ -100,24 +100,26 @@ export function QuestionBankFormDialog({
                             onAdd={onAddGradeLevel}
                         />
                     </div>
-                    {editingBank && questionManagement}
-                    {error && <FieldError>{error}</FieldError>}
-                    <DialogFormActions
-                        isBusy={isBusy}
-                        isEditing={Boolean(editingBank)}
-                        submitLabel={t(
-                            isBusy
-                                ? editingBank
-                                    ? "saving-question-bank"
-                                    : "creating-question-bank"
-                                : editingBank
-                                  ? "save-question-bank"
-                                  : "create-question-bank-action"
-                        )}
-                        onClose={onClose}
-                    />
-                </FieldGroup>
-            </form>
+                </form>
+                {/* Outside the form: Enter in these inputs must not save it. */}
+                {editingBank && questionManagement}
+                {error && <FieldError>{error}</FieldError>}
+                <DialogFormActions
+                    form="question-bank-form"
+                    isBusy={isBusy}
+                    isEditing={Boolean(editingBank)}
+                    submitLabel={t(
+                        isBusy
+                            ? editingBank
+                                ? "saving-question-bank"
+                                : "creating-question-bank"
+                            : editingBank
+                              ? "save-question-bank"
+                              : "create-question-bank-action"
+                    )}
+                    onClose={onClose}
+                />
+            </FieldGroup>
         </Dialog>
     )
 }
