@@ -45,13 +45,20 @@ function reloadForStaleBuild(): void {
 }
 
 class ErrorBoundary extends Component<
-    { children: ReactNode },
+    { children: ReactNode; pathname: string },
     ErrorBoundaryState
 > {
     state: ErrorBoundaryState = { hasError: false }
 
     static getDerivedStateFromError(): ErrorBoundaryState {
         return { hasError: true }
+    }
+
+    // The boundary stays mounted across navigations, so the pages under it
+    // keep their state; an error shown on one page clears on the next one.
+    componentDidUpdate(previous: { pathname: string }) {
+        if (this.state.hasError && previous.pathname !== this.props.pathname)
+            this.setState({ hasError: false })
     }
 
     componentDidCatch(error: Error, info: ErrorInfo) {
@@ -72,7 +79,9 @@ class ErrorBoundary extends Component<
 export function RouteErrorBoundary({ children }: { children: ReactNode }) {
     const location = useLocation()
 
-    return <ErrorBoundary key={location.key}>{children}</ErrorBoundary>
+    return (
+        <ErrorBoundary pathname={location.pathname}>{children}</ErrorBoundary>
+    )
 }
 
 function ErrorBoundaryPage() {

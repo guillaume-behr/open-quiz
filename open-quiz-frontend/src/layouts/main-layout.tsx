@@ -1,5 +1,4 @@
 import { LanguageSelector } from "@/components/language/language-selector"
-import { PageTransition } from "@/components/navigation/page-transition"
 import { ThemeSelector } from "@/components/theme/theme-selector"
 import { useTranslation } from "react-i18next"
 import { Suspense, useState } from "react"
@@ -62,7 +61,7 @@ export function MainLayout() {
                 tabIndex={-1}
                 className="flex min-h-0 w-full flex-1 outline-none"
             >
-                <PageTransition>
+                <div className="relative flex min-h-0 w-full flex-1">
                     <Suspense
                         fallback={
                             <div
@@ -75,7 +74,7 @@ export function MainLayout() {
                     >
                         <Outlet context={{ navbarActionTarget }} />
                     </Suspense>
-                </PageTransition>
+                </div>
             </main>
 
             {!isExamRoute && (

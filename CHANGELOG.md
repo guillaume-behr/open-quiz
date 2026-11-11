@@ -78,6 +78,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   no longer freezes the question editor and every student's tab: parsing the
   prompt's formatting took exponential time, and now takes about a
   millisecond for any prompt. Formatting is read exactly as before.
+- The teacher and administrator dashboards restore the session once: signing
+  in, changing the language or moving between pages no longer renews it
+  again. A teacher who opens the administration page is sent back to their
+  dashboard instead of being signed out, and a session that can no longer be
+  renewed returns to the sign-in form with a message instead of leaving a
+  dashboard whose every request fails.
 - Rotating only `TOTP_ENCRYPTION_KEY` no longer revokes every session nor
   logs a `JWT_SECRET` rotation: the secret's fingerprint now depends on
   `JWT_SECRET` alone. The first start after this update recognises the

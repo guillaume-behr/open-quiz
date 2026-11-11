@@ -2160,3 +2160,71 @@ test("teacher can create a quiz from a question bank", async ({ page }) => {
         hard_question_count: 0,
     })
 })
+
+function refreshRequests(requests: Request[]) {
+    return requests.filter(
+        (request) => new URL(request.url()).pathname === "/api/auth/refresh"
+    ).length
+}
+
+test("signing in restores the session once, not again on the dashboard or a language change", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/teacher/login")
+    await expect(page).toHaveURL(/\/teacher\/dashboard$/)
+    await expect(
+        page.getByRole("heading", { name: "Welcome, Ada Lovelace" })
+    ).toBeVisible()
+
+    for (const section of ["Classes", "Results", "Students"] as const)
+        await page.getByRole("button", { name: section, exact: true }).click()
+    await page.getByRole("button", { name: "Change language" }).click()
+    await page.getByRole("menuitem", { name: "Français" }).click()
+    await expect(
+        page.getByRole("heading", { name: "Bienvenue, Ada Lovelace" })
+    ).toBeVisible()
+
+    expect(refreshRequests(requests)).toBe(1)
+})
+
+test("a teacher opening the admin page stays signed in on their dashboard", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/admin/dashboard")
+
+    await expect(page).toHaveURL(/\/teacher\/dashboard$/)
+    await expect(
+        page.getByRole("heading", { name: "Welcome, Ada Lovelace" })
+    ).toBeVisible()
+    expect(
+        requests.filter(
+            (request) => new URL(request.url()).pathname === "/api/auth/logout"
+        )
+    ).toEqual([])
+})
+
+test("an expired session takes the teacher back to the login form", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+    await expect(
+        page.getByRole("heading", { name: "Welcome, Ada Lovelace" })
+    ).toBeVisible()
+
+    // From now on the server refuses the access token and its renewal.
+    await page.route("**/api/quizzes/sessions/results**", (route) =>
+        route.fulfill({ status: 401, json: {} })
+    )
+    await page.route("**/api/auth/refresh", (route) =>
+        route.fulfill({ status: 401, json: {} })
+    )
+    await page.getByRole("button", { name: "Results", exact: true }).click()
+
+    await expect(page).toHaveURL(/\/teacher\/login$/)
+    await expect(
+        page.getByText("Your session has expired. Sign in again to continue.")
+    ).toBeVisible()
+})

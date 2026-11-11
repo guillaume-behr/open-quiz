@@ -271,6 +271,7 @@
     "two-factor-code-used": "Este código de autenticação está incorreto ou já foi utilizado.",
     "admin-login": "Administração",
     "admin-login-instructions": "Faça login com a conta de administrador configurada.",
+    "staff-session-expired": "Sua sessão expirou. Entre novamente para continuar.",
     "signing-in": "Conexão…",
     "sign-out": "Sair",
     "admin-only": "Esta conta não possui direitos de administrador.",

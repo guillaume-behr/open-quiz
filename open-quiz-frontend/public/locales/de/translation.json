@@ -271,6 +271,7 @@
     "two-factor-code-used": "Dieser Authentifizierungscode ist falsch oder wurde bereits verwendet.",
     "admin-login": "Verwaltung",
     "admin-login-instructions": "Melden Sie sich mit dem konfigurierten Administratorkonto an.",
+    "staff-session-expired": "Deine Sitzung ist abgelaufen. Melde dich erneut an, um fortzufahren.",
     "signing-in": "Verbindung…",
     "sign-out": "Abmelden",
     "admin-only": "Dieses Konto verfügt nicht über Administratorrechte.",

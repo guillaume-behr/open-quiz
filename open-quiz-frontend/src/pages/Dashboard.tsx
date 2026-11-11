@@ -1,10 +1,9 @@
-import { login, logout, restoreSession, verifyTwoFactor } from "@/api/auth"
 import {
     createGradeLevel,
     deleteGradeLevel,
     getGradeLevels,
 } from "@/api/classes"
-import type { GradeLevel, TwoFactorChallenge, User } from "@/api/types"
+import type { GradeLevel } from "@/api/types"
 import { DashboardAuthentication } from "@/components/forms/dashboard-authentication"
 import {
     DashboardShell,
@@ -12,6 +11,7 @@ import {
 } from "@/components/navigation/dashboard-shell"
 import { Button } from "@/components/ui/button"
 import { PageLoader } from "@/components/ui/page-loader"
+import { useStaffSession } from "@/hooks/use-staff-session"
 import {
     ChartColumn,
     ClipboardList,
@@ -89,9 +89,9 @@ const ClassTrainingBanksPanel = lazy(() =>
 export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
-    const [currentUser, setCurrentUser] = useState<User | null>(null)
-    const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
+    const session = useStaffSession("professor")
+    const currentUser =
+        session.user && !session.user.is_admin ? session.user : null
     const [activeSection, setActiveSection] =
         useState<DashboardSection>("students")
     const [isQuestionBankCreationOpen, setIsQuestionBankCreationOpen] =
@@ -151,29 +151,37 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
         dashboardEntries.find((entry) => entry.id === activeSection) ??
         dashboardEntries[0]
 
+    // Where the session sends this page: administrators to their own
+    // dashboard, a signed-in teacher past the login form, and a signed-out
+    // visitor (or an expired session) back to it.
+    const signedInUser = session.user
     useEffect(() => {
-        restoreSession()
-            .then((user) => {
-                if (user.is_admin) {
-                    navigate("/admin/dashboard", { replace: true })
-                    return
-                }
-                setCurrentUser(user)
-                if (page === "login") {
-                    navigate("/teacher/dashboard", { replace: true })
-                    return
-                }
-                void getGradeLevels()
-                    .then(setGradeLevels)
-                    .catch(() => setGradeLevels([]))
+        if (session.isLoading) return
+        if (signedInUser?.is_admin) {
+            navigate("/admin/dashboard", { replace: true })
+        } else if (signedInUser && page === "login") {
+            navigate("/teacher/dashboard", { replace: true })
+        } else if (!signedInUser && page === "dashboard") {
+            navigate("/teacher/login", { replace: true })
+        }
+    }, [navigate, page, session.isLoading, signedInUser])
+
+    const teacherId = currentUser?.id
+    useEffect(() => {
+        if (teacherId === undefined) return
+        let active = true
+        getGradeLevels()
+            .then((levels) => {
+                if (active) setGradeLevels(levels)
             })
             .catch(() => {
-                setCurrentUser(null)
-                if (page === "dashboard")
-                    navigate("/teacher/login", { replace: true })
+                // A transient failure leaves the list empty, not the session.
+                if (active) setGradeLevels([])
             })
-            .finally(() => setIsLoading(false))
-    }, [navigate, page])
+        return () => {
+            active = false
+        }
+    }, [teacherId])
 
     useEffect(() => {
         const previousTitle = document.title
@@ -184,45 +192,8 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
         }
     }, [t])
 
-    async function handleLogin(username: string, password: string) {
-        const result = await login(username, password, "professor")
-        if (result.status === "authenticated") {
-            await completeSignIn(result.user)
-            return
-        }
-        setChallenge(result)
-    }
-
-    async function handleTwoFactor(code: string) {
-        if (!challenge) return
-        await completeSignIn(
-            await verifyTwoFactor(challenge.challenge_token, code)
-        )
-    }
-
-    async function completeSignIn(user: User) {
-        setChallenge(null)
-        if (user.is_admin) {
-            navigate("/admin/dashboard", { replace: true })
-            return
-        }
-        setCurrentUser(user)
-        try {
-            setGradeLevels(await getGradeLevels())
-        } catch {
-            // Authentication succeeded. A transient dashboard bootstrap failure
-            // must not invalidate the consumed two-factor challenge.
-            setGradeLevels([])
-        }
-        navigate("/teacher/dashboard", { replace: true })
-    }
-
     function handleLogout() {
-        void logout().finally(() => {
-            setCurrentUser(null)
-            setGradeLevels([])
-            navigate("/teacher/login", { replace: true })
-        })
+        void session.signOut().finally(() => setGradeLevels([]))
     }
 
     async function handleCreateGradeLevel(name: string): Promise<GradeLevel> {
@@ -251,18 +222,19 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
         )
     }
 
-    if (isLoading) {
+    if (session.isLoading) {
         return <PageLoader />
     }
 
     if (page === "login" && !currentUser) {
         return (
             <DashboardAuthentication
-                challenge={challenge}
+                challenge={session.challenge}
                 title={t("professor-space")}
-                onLogin={handleLogin}
-                onVerify={handleTwoFactor}
-                onCancelChallenge={() => setChallenge(null)}
+                notice={session.expired ? t("staff-session-expired") : null}
+                onLogin={session.signIn}
+                onVerify={session.completeTwoFactor}
+                onCancelChallenge={session.cancelChallenge}
             />
         )
     }
