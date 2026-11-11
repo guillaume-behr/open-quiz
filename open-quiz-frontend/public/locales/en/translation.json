@@ -650,6 +650,8 @@
     "view-answers": "View answers",
     "student-answers": "Student answers",
     "answers-load-error": "Unable to load or grade answers.",
+    "grade-answer-error": "Unable to save this grade.",
+    "score-out-of-range": "Enter a score between 0 and {{max}}.",
     "answers-pending-grading": "{{count}} to grade",
     "question-number": "Question {{number}}",
     "student-answer": "Student answer",

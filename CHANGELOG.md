@@ -56,6 +56,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- The results list filters a class by its id (`class_id`) instead of a
+  search on its name (`class_search`, removed), and accepts a start range
+  (`started_from`, `started_before`).
 - Copying content during an exam no longer warns the teacher, as pasting
   already did not: the monitoring notice no longer lists it, the API refuses a
   `copy_attempt` event with 422, and alerts already recorded for a copy are
@@ -77,6 +80,21 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Filtering results by class no longer also shows classes whose name
+  contains the chosen one (“5e A” also matched “5e AB”).
+- The results schedule shows every session of the week on screen, not only
+  those of the current page, and no longer jumps back when the page changes.
+- An emptied or out-of-range score is refused with a message instead of
+  saving a 0, and a failed grade says so.
+- The quiz duration can be cleared and typed again (“30” no longer becomes
+  “130”).
+- Exam quizzes keep the API's order across pages instead of being sorted
+  again within each page.
+- A failed save of a class's training banks also restores the question
+  counts.
+- “Run” in the Python runner works when the site is served over plain HTTP.
+- A student's quiz history reloads when the student changes and no longer
+  shows a stale answer.
 - The browser now checks usernames and student identifiers before sending
   them: their pattern was invalid under the `v` flag, so browsers ignored it.
 - The teacher and administrator dashboards keep their section in the URL

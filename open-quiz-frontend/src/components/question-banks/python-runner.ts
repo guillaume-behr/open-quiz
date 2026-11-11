@@ -3,6 +3,18 @@ const INITIALIZATION_TIMEOUT_MS = 60_000
 const MAX_SOURCE_CHARACTERS = 20_000
 
 /** Why the runner itself, not the program, failed. */
+let lastRequestId = 0
+
+/**
+ * Identifies a run among the worker's replies. A counter, not
+ * crypto.randomUUID(), which only exists in a secure context (HTTPS or
+ * localhost): an install served over plain HTTP on a LAN must run too.
+ */
+export function nextRequestId(): string {
+    lastRequestId += 1
+    return String(lastRequestId)
+}
+
 export type PythonRunnerFailure =
     | "timeout"
     | "crashed"
@@ -102,7 +114,7 @@ export function runPython(source: string): Promise<string> {
     if (source.length > MAX_SOURCE_CHARACTERS) {
         return Promise.reject(new PythonRunnerError("source-too-long"))
     }
-    const id = crypto.randomUUID()
+    const id = nextRequestId()
     return new Promise((resolve, reject) => {
         const timeout = window.setTimeout(() => {
             stopWorker(new PythonRunnerError("init-timeout"))

@@ -1,34 +1,23 @@
 import type { QuizSession } from "@/api/types"
-import { resultStart } from "@/components/results/results-utils"
+import {
+    addDays,
+    DAYS_PER_WEEK,
+    resultStart,
+} from "@/components/results/results-utils"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 
 const HOUR_HEIGHT = 72
 const LABEL_WIDTH = 64
-const DAYS_PER_WEEK = 7
 
 type PositionedSession = {
     result: QuizSession
     start: Date
     end: Date
     lane: number
-}
-
-function startOfWeek(date: Date): Date {
-    const start = new Date(date)
-    const mondayOffset = (start.getDay() + 6) % DAYS_PER_WEEK
-    start.setDate(start.getDate() - mondayOffset)
-    start.setHours(0, 0, 0, 0)
-    return start
-}
-
-function addDays(date: Date, amount: number): Date {
-    const next = new Date(date)
-    next.setDate(next.getDate() + amount)
-    return next
 }
 
 function endDate(result: QuizSession, start: Date): Date {
@@ -56,39 +45,28 @@ function positionSessions(results: QuizSession[]): PositionedSession[] {
         })
 }
 
+/**
+ * One week of results, Monday to Sunday. The caller loads the week's
+ * results and says whether earlier or later weeks hold any.
+ */
 export function ResultsSchedule({
+    weekStart,
     results,
+    hasEarlier,
+    hasLater,
     locale,
+    onWeekChange,
     onSelect,
 }: {
+    weekStart: Date
     results: QuizSession[]
+    hasEarlier: boolean
+    hasLater: boolean
     locale: string
+    onWeekChange: (weekStart: Date) => void
     onSelect: (result: QuizSession) => void
 }) {
     const { t } = useTranslation()
-    const latestResultDate = useMemo(() => {
-        const timestamps = results.map((result) =>
-            resultStart(result).getTime()
-        )
-        return new Date(Math.max(...timestamps))
-    }, [results])
-    const [weekOffset, setWeekOffset] = useState(0)
-    const weekStart = useMemo(
-        () =>
-            addDays(startOfWeek(latestResultDate), weekOffset * DAYS_PER_WEEK),
-        [latestResultDate, weekOffset]
-    )
-    const earliestWeekStart = useMemo(() => {
-        const timestamps = results.map((result) =>
-            startOfWeek(resultStart(result)).getTime()
-        )
-        return new Date(Math.min(...timestamps))
-    }, [results])
-    const earliestWeekOffset = Math.round(
-        (earliestWeekStart.getTime() -
-            startOfWeek(latestResultDate).getTime()) /
-            (DAYS_PER_WEEK * 24 * 60 * 60_000)
-    )
     const weekEnd = addDays(weekStart, DAYS_PER_WEEK)
     const days = Array.from({ length: DAYS_PER_WEEK }, (_, index) =>
         addDays(weekStart, index)
@@ -160,8 +138,10 @@ export function ResultsSchedule({
                     size="icon-sm"
                     variant="outline"
                     aria-label={t("results-previous-week")}
-                    disabled={weekOffset <= earliestWeekOffset}
-                    onClick={() => setWeekOffset((offset) => offset - 1)}
+                    disabled={!hasEarlier}
+                    onClick={() =>
+                        onWeekChange(addDays(weekStart, -DAYS_PER_WEEK))
+                    }
                 >
                     <ChevronLeft />
                 </Button>
@@ -174,8 +154,10 @@ export function ResultsSchedule({
                     size="icon-sm"
                     variant="outline"
                     aria-label={t("results-next-week")}
-                    disabled={weekOffset >= 0}
-                    onClick={() => setWeekOffset((offset) => offset + 1)}
+                    disabled={!hasLater}
+                    onClick={() =>
+                        onWeekChange(addDays(weekStart, DAYS_PER_WEEK))
+                    }
                 >
                     <ChevronRight />
                 </Button>

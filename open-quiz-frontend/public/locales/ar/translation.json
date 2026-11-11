@@ -710,6 +710,8 @@
     "view-answers": "عرض الإجابات",
     "student-answers": "إجابات الطالب",
     "answers-load-error": "تعذر تحميل الإجابات أو تصحيحها.",
+    "grade-answer-error": "تعذر حفظ هذه الدرجة.",
+    "score-out-of-range": "أدخل درجة بين 0 و{{max}}.",
     "answers-pending-grading": "{{count}} بانتظار التصحيح",
     "question-number": "السؤال {{number}}",
     "student-answer": "إجابة الطالب",

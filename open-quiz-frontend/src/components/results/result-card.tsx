@@ -64,7 +64,7 @@ export function ResultFilters({
                         {classes.map((studentClass) => (
                             <option
                                 key={studentClass.id}
-                                value={studentClass.name}
+                                value={String(studentClass.id)}
                             >
                                 {formatClassName(
                                     studentClass.grade_level,

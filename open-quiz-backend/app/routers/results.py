@@ -86,8 +86,17 @@ def list_quiz_results(
     session: DbSession,
     paging: Paging,
     quiz_search: Annotated[str, Query(max_length=160)] = "",
-    class_search: Annotated[str, Query(max_length=120)] = "",
+    class_id: Annotated[int | None, Query(ge=1)] = None,
+    started_from: datetime | None = None,
+    started_before: datetime | None = None,
 ) -> list[QuizSessionResponse]:
+    """Finished exam results, newest first.
+
+    ``class_id`` keeps one class's results (another teacher's class yields
+    none, as ownership is checked through the quiz). ``started_from`` and
+    ``started_before`` bound the start time, ``[from, before)``, with the
+    creation time standing in for a session that never started.
+    """
     filters = [
         Quiz.owner_id == professor.id,
         Quiz.mode == QuizMode.EXAM,
@@ -100,12 +109,13 @@ def list_quiz_results(
                 contains_pattern(quiz_search), escape=LIKE_ESCAPE_CHARACTER
             )
         )
-    if class_search:
-        filters.append(
-            QuizSession.class_name.ilike(
-                contains_pattern(class_search), escape=LIKE_ESCAPE_CHARACTER
-            )
-        )
+    if class_id is not None:
+        filters.append(QuizSession.class_id == class_id)
+    session_start = func.coalesce(QuizSession.started_at, QuizSession.created_at)
+    if started_from is not None:
+        filters.append(session_start >= started_from)
+    if started_before is not None:
+        filters.append(session_start < started_before)
     total = (
         session.scalar(
             select(func.count())

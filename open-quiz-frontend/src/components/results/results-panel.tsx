@@ -4,6 +4,7 @@ import {
     getQuizResults,
     gradeWrittenAnswer,
     publishQuizGrades,
+    type QuizResultQuery,
 } from "@/api/quizzes"
 import { getAllStudentClasses } from "@/api/classes"
 import type {
@@ -12,11 +13,20 @@ import type {
     QuizSession,
 } from "@/api/types"
 import { ParticipantAnswersDialog } from "@/components/results/participant-answers-dialog"
-import { ResultCard, ResultFilters } from "@/components/results/result-card"
+import {
+    ResultCard,
+    ResultFilters,
+    type ResultFilterValues,
+} from "@/components/results/result-card"
 import { ResultDetailsDialog } from "@/components/results/result-details-dialog"
 import { ResultsExportDialog } from "@/components/results/results-export-dialog"
 import { ResultsSchedule } from "@/components/results/results-schedule"
-import { resultStart } from "@/components/results/results-utils"
+import {
+    addDays,
+    DAYS_PER_WEEK,
+    resultStart,
+    startOfWeek,
+} from "@/components/results/results-utils"
 import { Button } from "@/components/ui/button"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
 import { Pagination } from "@/components/ui/pagination"
@@ -30,6 +40,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocale } from "@/lib/locale"
 import { apiErrorMessage } from "@/lib/errors"
+import { formatScore } from "@/lib/grades"
 import { useAsyncAction } from "@/hooks/use-async-action"
 import { usePagedList } from "@/hooks/use-paged-list"
 import { useResource } from "@/hooks/use-resource"
@@ -56,18 +67,62 @@ type ResultsPanelProps = {
     onExportDialogOpenChange: (open: boolean) => void
 }
 
+function resultQuery(filters: ResultFilterValues): QuizResultQuery {
+    return { quizSearch: filters.quiz.trim(), classId: filters.class }
+}
+
 function loadResults(
     page: number,
-    filters: { quiz: string; class: string },
+    filters: ResultFilterValues,
     _focus: unknown,
     signal: AbortSignal
 ) {
-    return getQuizResults(
-        page,
-        filters.quiz.trim(),
-        filters.class.trim(),
-        signal
-    )
+    return getQuizResults(page, resultQuery(filters), undefined, signal)
+}
+
+/** The most results one week of the schedule shows (the API's page cap). */
+const WEEK_RESULT_LIMIT = 100
+
+type ScheduleWeek = {
+    weekStart: Date
+    results: QuizSession[]
+    hasEarlier: boolean
+    hasLater: boolean
+}
+
+/**
+ * The results of one week, the newest week holding any when `week` is
+ * null, loaded by date rather than taken from the page on screen.
+ */
+async function loadScheduleWeek(
+    filters: ResultFilterValues,
+    week: Date | null,
+    signal: AbortSignal
+): Promise<ScheduleWeek | null> {
+    const query = resultQuery(filters)
+    const newest = (await getQuizResults(1, query, 1, signal)).items[0]
+    if (!newest) return null
+    const latestWeek = startOfWeek(resultStart(newest))
+    const weekStart = week ?? latestWeek
+    const [weekResults, earlier] = await Promise.all([
+        getQuizResults(
+            1,
+            {
+                ...query,
+                startedFrom: weekStart,
+                startedBefore: addDays(weekStart, DAYS_PER_WEEK),
+            },
+            WEEK_RESULT_LIMIT,
+            signal
+        ),
+        getQuizResults(1, { ...query, startedBefore: weekStart }, 1, signal),
+    ])
+    return {
+        weekStart,
+        results: weekResults.items,
+        hasEarlier: earlier.total > 0,
+        hasLater: weekStart < latestWeek,
+    }
 }
 
 export function ResultsPanel({
@@ -81,6 +136,18 @@ export function ResultsPanel({
     const classList = useResource(getAllStudentClasses)
     const classes = classList.data ?? []
     const [viewMode, setViewMode] = useState<ResultsViewMode>(storedResultsView)
+    // The week the teacher moved to, or null for the newest one.
+    const [scheduleWeek, setScheduleWeek] = useState<Date | null>(null)
+    const resultFilters = resultList.filters
+    const schedule = useResource(
+        useCallback(
+            (signal: AbortSignal) =>
+                viewMode === "schedule"
+                    ? loadScheduleWeek(resultFilters, scheduleWeek, signal)
+                    : Promise.resolve(null),
+            [resultFilters, scheduleWeek, viewMode]
+        )
+    )
     const [selectedResult, setSelectedResult] = useState<QuizSession | null>(
         null
     )
@@ -132,6 +199,10 @@ export function ResultsPanel({
             (current) =>
                 current && { ...current, items: current.items.map(update) }
         )
+        schedule.setData(
+            (current) =>
+                current && { ...current, results: current.results.map(update) }
+        )
     }
 
     const dateFormatter = useMemo(
@@ -162,6 +233,7 @@ export function ResultsPanel({
         if (selectedResult?.id === resultToDelete.id) setSelectedResult(null)
         setResultToDelete(null)
         resultList.reload()
+        schedule.reload()
     }
 
     function openParticipantAnswers(participant: QuizParticipant): void {
@@ -175,8 +247,22 @@ export function ResultsPanel({
     async function handleGrade(answer: QuizAnswerReview): Promise<void> {
         if (!selectedResult || selectedResult.grades_published_at !== null)
             return
-        const score = Number(scoreDrafts[answer.id] ?? answer.score)
-        if (!Number.isFinite(score)) return
+        // Number("") is 0: an emptied field must not save a zero.
+        const draft = (scoreDrafts[answer.id] ?? String(answer.score)).trim()
+        const score = Number(draft)
+        if (
+            draft === "" ||
+            !Number.isFinite(score) ||
+            score < 0 ||
+            score > answer.max_score
+        ) {
+            setGradeError(
+                t("score-out-of-range", {
+                    max: formatScore(answer.max_score, locale),
+                })
+            )
+            return
+        }
         const feedback = feedbackDrafts[answer.id] ?? answer.feedback ?? ""
         setGradingAnswerId(answer.id)
         setGradeError(null)
@@ -215,7 +301,7 @@ export function ResultsPanel({
                 result.id === selectedResult.id ? updateSession(result) : result
             )
         } catch (caught) {
-            setGradeError(apiErrorMessage(caught, t, t("answers-load-error")))
+            setGradeError(apiErrorMessage(caught, t, t("grade-answer-error")))
         } finally {
             setGradingAnswerId(null)
         }
@@ -263,8 +349,14 @@ export function ResultsPanel({
                     filters={resultList.filters}
                     classes={classes}
                     areClassesLoading={classList.isLoading}
-                    onFilterChange={resultList.setFilter}
-                    onReset={resultList.resetFilters}
+                    onFilterChange={(name, value) => {
+                        setScheduleWeek(null)
+                        resultList.setFilter(name, value)
+                    }}
+                    onReset={() => {
+                        setScheduleWeek(null)
+                        resultList.resetFilters()
+                    }}
                 />
                 <div className="min-w-0">
                     <div className="mb-4 flex min-h-8 items-center justify-between gap-3">
@@ -319,14 +411,35 @@ export function ResultsPanel({
                     ) : (
                         <>
                             {viewMode === "schedule" ? (
-                                <ResultsSchedule
-                                    key={results
-                                        .map((result) => result.id)
-                                        .join(",")}
-                                    results={results}
-                                    locale={locale}
-                                    onSelect={setSelectedResult}
-                                />
+                                schedule.error ? (
+                                    <p
+                                        className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive"
+                                        role="alert"
+                                    >
+                                        {t("results-load-error")}
+                                    </p>
+                                ) : schedule.data ? (
+                                    <ResultsSchedule
+                                        weekStart={schedule.data.weekStart}
+                                        results={schedule.data.results}
+                                        hasEarlier={schedule.data.hasEarlier}
+                                        hasLater={schedule.data.hasLater}
+                                        locale={locale}
+                                        onWeekChange={setScheduleWeek}
+                                        onSelect={setSelectedResult}
+                                    />
+                                ) : (
+                                    <div
+                                        className="flex min-h-64 items-center justify-center"
+                                        role="status"
+                                        aria-label={t("page-loading")}
+                                    >
+                                        <LoaderCircle
+                                            className="size-8 animate-spin text-primary motion-reduce:animate-none"
+                                            aria-hidden="true"
+                                        />
+                                    </div>
+                                )
                             ) : (
                                 <div
                                     key={results
@@ -350,11 +463,13 @@ export function ResultsPanel({
                                     ))}
                                 </div>
                             )}
-                            <Pagination
-                                currentPage={resultList.page}
-                                totalPages={resultList.totalPages}
-                                onPageChange={resultList.showPage}
-                            />
+                            {viewMode === "cards" && (
+                                <Pagination
+                                    currentPage={resultList.page}
+                                    totalPages={resultList.totalPages}
+                                    onPageChange={resultList.showPage}
+                                />
+                            )}
                         </>
                     )}
                 </div>
