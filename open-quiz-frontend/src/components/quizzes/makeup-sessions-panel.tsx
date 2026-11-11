@@ -1,14 +1,9 @@
 import { getAllStudentClasses } from "@/api/classes"
-import { ApiError, getLiveAccessToken } from "@/api/client"
-import {
-    controlMakeupSession,
-    createMakeupSession,
-    getMakeupQuizOptions,
-} from "@/api/quizzes"
-import type { MakeupSession, Quiz, StudentClass } from "@/api/types"
-import { connectLiveUpdates } from "@/lib/live-updates"
+import { createMakeupSession, getMakeupQuizOptions } from "@/api/quizzes"
+import type { Quiz, StudentClass } from "@/api/types"
 import { formatClassName } from "@/lib/utils"
-import { ActiveQuizSessionDialog } from "@/components/quizzes/active-quiz-session-dialog"
+import { LiveSessionDialogs } from "@/components/quizzes/live-session-dialogs"
+import { useLiveMakeupSessions } from "@/components/quizzes/use-live-quiz-sessions"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -23,14 +18,11 @@ export function MakeupSessionsPanel() {
     const [classes, setClasses] = useState<StudentClass[]>([])
     const [quizOptions, setQuizOptions] = useState<Quiz[]>([])
     const [quizSearch, setQuizSearch] = useState("")
-    const [sessions, setSessions] = useState<MakeupSession[]>([])
+    const live = useLiveMakeupSessions()
     const [classId, setClassId] = useState("")
     const [quizIds, setQuizIds] = useState<number[]>([])
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [selectedSession, setSelectedSession] =
-        useState<MakeupSession | null>(null)
-    const [liveReconnecting, setLiveReconnecting] = useState(false)
 
     useEffect(() => {
         getAllStudentClasses()
@@ -62,29 +54,6 @@ export function MakeupSessionsPanel() {
               quiz.title.toLowerCase().includes(trimmedSearch)
           )
         : quizOptions
-    const activeSessions = sessions.filter(
-        (session) =>
-            session.status !== "finished" && session.status !== "cancelled"
-    )
-
-    useEffect(() => {
-        return connectLiveUpdates<MakeupSession[]>({
-            path: "/api/quizzes/live/teacher/makeup-sessions",
-            getToken: getLiveAccessToken,
-            onData: (items) => {
-                setSessions(items)
-                setSelectedSession((current) =>
-                    current
-                        ? (items.find((item) => item.id === current.id) ?? null)
-                        : null
-                )
-            },
-            onUnavailable: () => setError(t("makeup-load-error")),
-            onConnectionChange: (state) =>
-                setLiveReconnecting(state === "reconnecting"),
-        })
-    }, [t])
-
     function resetCreateForm() {
         setClassId("")
         setQuizIds([])
@@ -100,14 +69,7 @@ export function MakeupSessionsPanel() {
         setError(null)
         try {
             const created = await createMakeupSession(Number(classId), quizIds)
-            setSessions((current) =>
-                current.some((session) => session.id === created.id)
-                    ? current.map((session) =>
-                          session.id === created.id ? created : session
-                      )
-                    : [created, ...current]
-            )
-            setSelectedSession(created)
+            live.showLaunchedSession(created)
             resetCreateForm()
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("makeup-create-error")))
@@ -116,51 +78,14 @@ export function MakeupSessionsPanel() {
         }
     }
 
-    async function action(
-        item: MakeupSession,
-        value: "start" | "pause" | "resume" | "finish" | "cancel"
-    ) {
-        setBusy(true)
-        setError(null)
-        try {
-            const updated = await controlMakeupSession(item.id, value)
-            setSessions((current) =>
-                value === "cancel" || !updated
-                    ? current.filter((session) => session.id !== item.id)
-                    : current.map((session) =>
-                          session.id === updated.id ? updated : session
-                      )
-            )
-            if (!updated || value === "finish" || value === "cancel") {
-                setSelectedSession(null)
-            } else {
-                setSelectedSession(updated)
-            }
-        } catch (caught) {
-            setError(
-                apiErrorMessage(
-                    caught,
-                    t,
-                    caught instanceof ApiError && caught.status === 409
-                        ? value === "cancel"
-                            ? t("makeup-cancel-with-answers-error")
-                            : t("makeup-action-error")
-                        : t("makeup-action-error")
-                )
-            )
-        } finally {
-            setBusy(false)
-        }
-    }
-
     return (
         <div className="mt-6 grid gap-6">
-            {error && (
+            {(error || live.liveSessionsLoadFailed) && (
                 <p
                     role="alert"
                     className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
                 >
-                    {error}
+                    {error ?? t("makeup-load-error")}
                 </p>
             )}
             <section className="rounded-2xl border bg-card p-5 sm:p-6">
@@ -282,10 +207,10 @@ export function MakeupSessionsPanel() {
                 </form>
             </section>
             <div
-                key={activeSessions.map((session) => session.id).join(",")}
+                key={live.sessions.map((session) => session.id).join(",")}
                 className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
             >
-                {activeSessions.map((item) => (
+                {live.sessions.map((item) => (
                     <article
                         key={item.id}
                         className="rounded-2xl border bg-card p-5"
@@ -314,7 +239,7 @@ export function MakeupSessionsPanel() {
                                 disabled={busy}
                                 onClick={(event) => {
                                     event.stopPropagation()
-                                    setSelectedSession(item)
+                                    live.openSession(item)
                                 }}
                             >
                                 {t("open-waiting-room")}
@@ -323,30 +248,7 @@ export function MakeupSessionsPanel() {
                     </article>
                 ))}
             </div>
-            <ActiveQuizSessionDialog
-                session={selectedSession}
-                error={error}
-                reconnecting={liveReconnecting}
-                isStarting={busy}
-                action={busy ? "pause" : null}
-                onClose={() => setSelectedSession(null)}
-                onStart={() =>
-                    selectedSession && void action(selectedSession, "start")
-                }
-                onPause={() =>
-                    selectedSession && void action(selectedSession, "pause")
-                }
-                onResume={() =>
-                    selectedSession && void action(selectedSession, "resume")
-                }
-                onFinish={() =>
-                    selectedSession && void action(selectedSession, "finish")
-                }
-                onConfirmCancel={() =>
-                    selectedSession && void action(selectedSession, "cancel")
-                }
-                onConfirmDelete={() => setSelectedSession(null)}
-            />
+            <LiveSessionDialogs kind="makeup" live={live} />
         </div>
     )
 }

@@ -1846,6 +1846,10 @@ test("teacher creates and controls a retake session", async ({ page }) => {
     await sessionDialog.getByRole("button", { name: "Resume quiz" }).click()
     await expect(sessionDialog.getByText("Quiz started")).toBeVisible()
     await sessionDialog.getByRole("button", { name: "Finish quiz" }).click()
+    await page
+        .getByRole("dialog", { name: "Finish quiz" })
+        .getByRole("button", { name: "Finish quiz" })
+        .click()
     await expect(sessionDialog).toHaveCount(0)
 
     expect(
@@ -2524,4 +2528,132 @@ test("a new choice keeps its own code result when an earlier choice is removed",
     )
     await expect(dialog.getByText("third", { exact: true })).toHaveCount(1)
     await expect(dialog.getByText("third", { exact: true })).toBeVisible()
+})
+
+async function openNewRetake(page: Page) {
+    await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Retake", exact: true }).click()
+    await page.getByRole("combobox", { name: "Class" }).selectOption("11")
+    await page.getByText("Science checkpoint", { exact: true }).click()
+    await page.getByRole("button", { name: "Create session" }).click()
+    const dialog = page.getByRole("dialog", { name: "Retake" })
+    await expect(dialog.getByText("MAKE51")).toBeVisible()
+    return dialog
+}
+
+const retakeControls = (requests: Request[]) =>
+    requests
+        .filter((request) =>
+            new URL(request.url()).pathname.startsWith(
+                "/api/quizzes/makeup/sessions/51/"
+            )
+        )
+        .map((request) => new URL(request.url()).pathname.split("/").at(-1))
+
+test("a retake is cancelled only once the cancellation is confirmed", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    const dialog = await openNewRetake(page)
+
+    await dialog.getByRole("button", { name: "Cancel quiz" }).click()
+    const confirmation = page.getByRole("dialog", { name: "Cancel quiz" })
+    await expect(confirmation).toBeVisible()
+    expect(retakeControls(requests)).toEqual([])
+    await confirmation
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click()
+    await expect(confirmation).toBeHidden()
+    expect(retakeControls(requests)).toEqual([])
+
+    await dialog.getByRole("button", { name: "Cancel quiz" }).click()
+    await confirmation
+        .getByRole("button", { name: "Confirm cancellation" })
+        .click()
+    await expect(confirmation).toBeHidden()
+    await expect(dialog).toBeHidden()
+    expect(retakeControls(requests)).toEqual(["cancel"])
+})
+
+test("a retake action shows its own progress and keeps its error in the dialog", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    let releaseResume = () => {}
+    await page.route(
+        "http://127.0.0.1:4173/api/quizzes/makeup/sessions/51/resume",
+        async (route) => {
+            await new Promise<void>((resolve) => {
+                releaseResume = resolve
+            })
+            await route.fulfill({ status: 500, json: { detail: "boom" } })
+        }
+    )
+    const dialog = await openNewRetake(page)
+    await dialog.getByRole("button", { name: "Start quiz" }).click()
+    await dialog.getByRole("button", { name: "Pause quiz" }).click()
+    const resume = dialog.getByRole("button", { name: "Resume quiz" })
+    await resume.click()
+
+    await expect(resume.locator(".animate-spin")).toBeVisible()
+    await expect(
+        dialog.getByRole("button", { name: "Cancel quiz" })
+    ).toBeDisabled()
+    releaseResume()
+
+    await expect(
+        dialog.getByText("Unable to update the session.")
+    ).toBeVisible()
+    await expect(page.getByText("Unable to update the session.")).toHaveCount(1)
+    // The failing resume is answered by this test's route, not the mock.
+    expect(retakeControls(requests)).toEqual(["start", "pause"])
+})
+
+test("a finished retake never offers a Delete button that does nothing", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    let resolveSocket: (socket: WebSocketRoute) => void = () => undefined
+    const socketReady = new Promise<WebSocketRoute>((resolve) => {
+        resolveSocket = resolve
+    })
+    await page.routeWebSocket(
+        /\/api\/quizzes\/live\/teacher\/makeup-sessions$/,
+        (socket) => socket.onMessage(() => resolveSocket(socket))
+    )
+    const retake = {
+        id: 52,
+        class_id: 11,
+        class_name: "Class 8B",
+        join_code: "REMOTE52",
+        status: "in_progress",
+        quizzes: [
+            { id: 31, title: "Science checkpoint", duration_seconds: 1800 },
+        ],
+        participant_count: 1,
+        created_at: "2026-01-06T10:00:00Z",
+    }
+    await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Retake", exact: true }).click()
+    const socket = await socketReady
+    socket.send(JSON.stringify({ type: "makeup_sessions", data: [retake] }))
+    await page
+        .getByRole("article")
+        .filter({ hasText: "REMOTE52" })
+        .getByRole("button", { name: "Open waiting room" })
+        .click()
+    const dialog = page.getByRole("dialog", { name: "Retake" })
+    await expect(dialog.getByText("REMOTE52")).toBeVisible()
+
+    socket.send(
+        JSON.stringify({
+            type: "makeup_sessions",
+            data: [{ ...retake, status: "finished" }],
+        })
+    )
+
+    await expect(dialog).toBeHidden()
+    await expect(
+        page.getByRole("button", { name: "Delete session" })
+    ).toHaveCount(0)
 })

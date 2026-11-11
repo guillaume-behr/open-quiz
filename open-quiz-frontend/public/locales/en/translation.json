@@ -604,6 +604,8 @@
     "cancel-quiz": "Cancel quiz",
     "delete-session": "Delete session",
     "cancel-quiz-help": "Cancel this quiz? Students will no longer be able to answer. The session can then be deleted.",
+    "makeup-cancel-help": "Cancel this retake? Students will no longer be able to join or answer it.",
+    "makeup-finish-help": "Finish this retake now? Students will no longer be able to answer it.",
     "delete-session-help": "Permanently delete this session, its participants, and all their answers?",
     "confirm-cancellation": "Confirm cancellation",
     "quiz-session-action-error": "Unable to change this session’s status.",
