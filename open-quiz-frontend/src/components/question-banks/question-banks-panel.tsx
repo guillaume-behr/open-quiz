@@ -48,14 +48,16 @@ type QuestionBanksPanelProps = {
 function loadQuestionBanks(
     page: number,
     filters: { title: string; gradeLevel: string },
-    focus: number | null
+    focus: number | null,
+    signal: AbortSignal
 ) {
     return getQuestionBanks(
         page,
         filters.title.trim(),
         filters.gradeLevel,
         PAGE_SIZE,
-        focus
+        focus,
+        signal
     )
 }
 

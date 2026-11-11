@@ -31,15 +31,28 @@ import {
     UserX,
     Users,
 } from "lucide-react"
+import { useSectionParam } from "@/hooks/use-section-param"
 import { useState, type SyntheticEvent } from "react"
 import { useTranslation } from "react-i18next"
 
-function loadUsers(page: number) {
-    return getUsers(page)
+const adminSections = ["users", "reports"] as const
+
+function loadUsers(
+    page: number,
+    _filters: unknown,
+    _focus: unknown,
+    signal: AbortSignal
+) {
+    return getUsers(page, signal)
 }
 
-function loadReports(page: number) {
-    return getProblemReports(page)
+function loadReports(
+    page: number,
+    _filters: unknown,
+    _focus: unknown,
+    signal: AbortSignal
+) {
+    return getProblemReports(page, signal)
 }
 
 /** The administration space of a signed-in administrator. */
@@ -54,9 +67,7 @@ export function AdminWorkspace({
     const userList = usePagedList(loadUsers, {})
     const reportList = usePagedList(loadReports, {})
     const reportTotal = reportList.data?.total ?? 0
-    const [activeSection, setActiveSection] = useState<"users" | "reports">(
-        "users"
-    )
+    const [activeSection, setActiveSection] = useSectionParam(adminSections)
     const [success, setSuccess] = useState("")
     const [recoveryUser, setRecoveryUser] = useState<User | null>(null)
     const [deletingUser, setDeletingUser] = useState<User | null>(null)

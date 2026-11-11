@@ -1,6 +1,6 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { X } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
@@ -33,24 +33,15 @@ export function Dialog({
 }: DialogProps) {
     const { t } = useTranslation()
     const currentContent = { title, description, children, size, className }
-    const [openContent, setOpenContent] = useState(currentContent)
-    if (
-        open &&
-        (openContent.title !== title ||
-            openContent.description !== description ||
-            openContent.children !== children ||
-            openContent.size !== size ||
-            openContent.className !== className)
-    ) {
-        setOpenContent({
-            title,
-            description,
-            children,
-            size,
-            className,
-        })
-    }
-    const content = open ? currentContent : openContent
+    // What the dialog showed while open, kept for its closing animation: the
+    // parent often clears the content as it closes the dialog. A ref, not
+    // state, so a parent render while open costs a single render.
+    const openContent = useRef(currentContent)
+    useEffect(() => {
+        if (open) openContent.current = currentContent
+    })
+    // eslint-disable-next-line react-hooks/refs -- read only once closed, when the effect above no longer writes it
+    const content = open ? currentContent : openContent.current
 
     return (
         <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>

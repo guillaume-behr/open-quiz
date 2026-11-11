@@ -20,9 +20,13 @@ export function createProblemReport(
     )
 }
 
-export function getProblemReports(page = 1): Promise<Page<ProblemReport>> {
+export function getProblemReports(
+    page = 1,
+    signal?: AbortSignal
+): Promise<Page<ProblemReport>> {
     return requestPage<ProblemReport>(
-        `/api/problem-reports?page=${page}&page_size=${PAGE_SIZE}`
+        `/api/problem-reports?page=${page}&page_size=${PAGE_SIZE}`,
+        { signal }
     )
 }
 

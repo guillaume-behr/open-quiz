@@ -7,6 +7,7 @@ import { LoaderCircle, ShieldCheck } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { useState, type SyntheticEvent } from "react"
 import { useTranslation } from "react-i18next"
+import { TWO_FACTOR_CODE_PATTERN } from "@/lib/input-patterns"
 
 type TwoFactorFormProps = {
     challenge: TwoFactorChallenge
@@ -89,7 +90,7 @@ export function TwoFactorForm({
                         name="code"
                         inputMode="numeric"
                         autoComplete="one-time-code"
-                        pattern="[0-9]{6}"
+                        pattern={TWO_FACTOR_CODE_PATTERN}
                         minLength={6}
                         maxLength={6}
                         placeholder="000000"

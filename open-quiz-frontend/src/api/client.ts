@@ -1,10 +1,21 @@
 const API_URL = import.meta.env.VITE_API_URL ?? ""
 const REFRESH_PROOF_STORAGE_KEY = "open-quiz-refresh-proof"
 const REQUEST_TIMEOUT_MS = 30_000
-const LARGE_REQUEST_TIMEOUT_MS = 120_000
+/** For uploads, imports and downloads, which can take longer. */
+export const LARGE_REQUEST_TIMEOUT_MS = 120_000
 
-function requestSignal(signal?: AbortSignal | null): AbortSignal {
-    return signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+/**
+ * Options of a request. The timeout applies to each attempt, a retry after
+ * a token refresh included, and also when the caller passes its own signal.
+ */
+export type RequestOptions = RequestInit & { timeoutMs?: number }
+
+function requestSignal(
+    signal?: AbortSignal | null,
+    timeoutMs = REQUEST_TIMEOUT_MS
+): AbortSignal {
+    const timeout = AbortSignal.timeout(timeoutMs)
+    return signal ? AbortSignal.any([signal, timeout]) : timeout
 }
 
 let accessToken: string | null = null
@@ -181,12 +192,8 @@ export function refreshProofHeaders(): HeadersInit {
     return refreshProof ? { "X-Refresh-Proof": refreshProof } : {}
 }
 
-export function largeRequestSignal(): AbortSignal {
-    return AbortSignal.timeout(LARGE_REQUEST_TIMEOUT_MS)
-}
-
 function requestHeaders(
-    options: RequestInit,
+    options: RequestOptions,
     includeAccessToken = true
 ): HeadersInit {
     const isFormData = options.body instanceof FormData
@@ -203,13 +210,15 @@ function requestHeaders(
 
 async function authenticatedFetch(
     path: string,
-    options: RequestInit,
+    options: RequestOptions,
     allowRefresh: boolean,
     includeAccessToken = true
 ): Promise<Response> {
+    const { timeoutMs, ...init } = options
+    // Built for each attempt, so a retry gets a full timeout of its own.
     const response = await fetch(`${API_URL}${path}`, {
-        ...options,
-        signal: requestSignal(options.signal),
+        ...init,
+        signal: requestSignal(init.signal, timeoutMs),
         credentials: "include",
         headers: requestHeaders(options, includeAccessToken),
     })
@@ -228,7 +237,7 @@ async function authenticatedFetch(
 
 export async function request<T>(
     path: string,
-    options: RequestInit = {},
+    options: RequestOptions = {},
     allowRefresh = true
 ): Promise<T> {
     const response = await authenticatedFetch(path, options, allowRefresh)
@@ -240,7 +249,7 @@ export async function request<T>(
 
 export async function requestPage<T>(
     path: string,
-    options: RequestInit = {},
+    options: RequestOptions = {},
     allowRefresh = true
 ): Promise<import("./types").Page<T>> {
     const response = await authenticatedFetch(path, options, allowRefresh)
@@ -262,16 +271,13 @@ export async function requestPage<T>(
 
 export async function requestBlob(
     path: string,
-    options: RequestInit = {},
+    options: RequestOptions = {},
     allowRefresh = true,
     includeAccessToken = true
 ): Promise<Blob> {
-    const requestOptions = options.signal
-        ? options
-        : { ...options, signal: largeRequestSignal() }
     const response = await authenticatedFetch(
         path,
-        requestOptions,
+        { timeoutMs: LARGE_REQUEST_TIMEOUT_MS, ...options },
         allowRefresh,
         includeAccessToken
     )

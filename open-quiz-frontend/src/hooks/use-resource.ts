@@ -16,7 +16,7 @@ export type Resource<T> = {
 }
 
 type Settled<T> = {
-    load: () => Promise<T>
+    load: (signal: AbortSignal) => Promise<T>
     version: number
     data: T | undefined
     error: unknown
@@ -24,16 +24,20 @@ type Settled<T> = {
 
 /**
  * Loads the value `load` resolves to, again whenever `load` changes (memoize
- * it with useCallback) or `reload` is called. Results of superseded loads are
- * dropped, so a slow answer never overwrites a newer one.
+ * it with useCallback) or `reload` is called. A superseded load is aborted
+ * through the signal `load` receives, and its result dropped, so a slow
+ * answer never overwrites a newer one.
  */
-export function useResource<T>(load: () => Promise<T>): Resource<T> {
+export function useResource<T>(
+    load: (signal: AbortSignal) => Promise<T>
+): Resource<T> {
     const [version, setVersion] = useState(0)
     const [settled, setSettled] = useState<Settled<T> | null>(null)
 
     useEffect(() => {
         let active = true
-        load().then(
+        const controller = new AbortController()
+        load(controller.signal).then(
             (data) => {
                 if (active) setSettled({ load, version, data, error: null })
             },
@@ -49,6 +53,7 @@ export function useResource<T>(load: () => Promise<T>): Resource<T> {
         )
         return () => {
             active = false
+            controller.abort()
         }
     }, [load, version])
 

@@ -1,6 +1,11 @@
 import { PAGE_SIZE } from "@/lib/utils"
 
-import { largeRequestSignal, request, requestBlob, requestPage } from "./client"
+import {
+    LARGE_REQUEST_TIMEOUT_MS,
+    request,
+    requestBlob,
+    requestPage,
+} from "./client"
 import type {
     NewQuestion,
     NewQuestionBank,
@@ -19,7 +24,8 @@ export function getQuestionBanks(
     search = "",
     gradeLevel = "",
     pageSize = PAGE_SIZE,
-    focus: number | null = null
+    focus: number | null = null,
+    signal?: AbortSignal
 ): Promise<Page<QuestionBank>> {
     const params = new URLSearchParams({
         page: String(page),
@@ -28,7 +34,9 @@ export function getQuestionBanks(
     if (search) params.set("search", search)
     if (gradeLevel) params.set("grade_level", gradeLevel)
     if (focus !== null) params.set("focus", String(focus))
-    return requestPage<QuestionBank>(`/api/question-banks?${params}`)
+    return requestPage<QuestionBank>(`/api/question-banks?${params}`, {
+        signal,
+    })
 }
 
 export async function getAllQuestionBanks(): Promise<QuestionBank[]> {
@@ -94,7 +102,7 @@ export function createQuestion(
         {
             method: "POST",
             body: formData,
-            signal: largeRequestSignal(),
+            timeoutMs: LARGE_REQUEST_TIMEOUT_MS,
         }
     )
 }
@@ -112,7 +120,7 @@ export function updateQuestion(
         {
             method: "POST",
             body: formData,
-            signal: largeRequestSignal(),
+            timeoutMs: LARGE_REQUEST_TIMEOUT_MS,
         }
     )
 }
@@ -139,6 +147,6 @@ export async function importQuestionBatch(
     return request<QuestionBankImportResult>("/api/question-banks/import", {
         method: "POST",
         body: await readJsonImportFile(file),
-        signal: largeRequestSignal(),
+        timeoutMs: LARGE_REQUEST_TIMEOUT_MS,
     })
 }

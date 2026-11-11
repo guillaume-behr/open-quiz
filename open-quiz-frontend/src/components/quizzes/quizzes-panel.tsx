@@ -48,14 +48,16 @@ function loadSupportData() {
 function loadQuizzes(
     page: number,
     filters: { search: string; gradeLevel: string },
-    focus: number | null
+    focus: number | null,
+    signal: AbortSignal
 ) {
     return getQuizzes(
         page,
         filters.search.trim(),
         filters.gradeLevel,
         PAGE_SIZE,
-        focus
+        focus,
+        signal
     )
 }
 

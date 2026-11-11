@@ -7,7 +7,8 @@ export function getStudentClasses(
     page = 1,
     search = "",
     gradeLevel = "",
-    pageSize = PAGE_SIZE
+    pageSize = PAGE_SIZE,
+    signal?: AbortSignal
 ): Promise<Page<StudentClass>> {
     const params = new URLSearchParams({
         page: String(page),
@@ -15,7 +16,7 @@ export function getStudentClasses(
     })
     if (search) params.set("search", search)
     if (gradeLevel) params.set("grade_level", gradeLevel)
-    return requestPage<StudentClass>(`/api/classes?${params}`)
+    return requestPage<StudentClass>(`/api/classes?${params}`, { signal })
 }
 
 export async function getAllStudentClasses(): Promise<StudentClass[]> {

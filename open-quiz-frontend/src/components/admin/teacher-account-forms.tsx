@@ -12,6 +12,7 @@ import { PasswordInput } from "@/components/ui/password-input"
 import { LoaderCircle, KeyRound, UserPlus } from "lucide-react"
 import { type SyntheticEvent } from "react"
 import { useTranslation } from "react-i18next"
+import { USERNAME_PATTERN } from "@/lib/input-patterns"
 
 /** The form an administrator creates a teacher account with. */
 export function CreateTeacherForm({
@@ -63,7 +64,7 @@ export function CreateTeacherForm({
                         required
                         minLength={3}
                         maxLength={80}
-                        pattern="[a-zA-Z0-9._-]+"
+                        pattern={USERNAME_PATTERN}
                         autoComplete="off"
                     />
                 </Field>

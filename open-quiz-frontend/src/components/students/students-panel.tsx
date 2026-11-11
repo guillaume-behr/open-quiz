@@ -24,14 +24,17 @@ const STUDENTS_PAGE_SIZE = 12
 
 function loadStudents(
     page: number,
-    filters: { search: string; classId: string; status: string }
+    filters: { search: string; classId: string; status: string },
+    _focus: unknown,
+    signal: AbortSignal
 ) {
     return getStudents(
         page,
         filters.search.trim(),
         STUDENTS_PAGE_SIZE,
         filters.classId,
-        filters.status
+        filters.status,
+        signal
     )
 }
 

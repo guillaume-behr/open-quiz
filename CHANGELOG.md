@@ -74,6 +74,17 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- The browser now checks usernames and student identifiers before sending
+  them: their pattern was invalid under the `v` flag, so browsers ignored it.
+- The teacher and administrator dashboards keep their section in the URL
+  (`?section=`): a reload stays on it, Back returns to the previous one and a
+  section can be bookmarked.
+- A request keeps its timeout when the caller can also cancel it, a retry
+  after a token refresh gets a full timeout of its own, and a list superseded
+  by new filters or another page cancels its request.
+- A new grade level takes the place the API gives it, instead of one the
+  browser computed with different rules.
+- An open dialog no longer renders twice each time its parent renders.
 - Names and titles with an apostrophe, an ampersand or angle brackets show
   as typed instead of as HTML entities (“D'Artagnan”, not “D&#39;Artagnan”).
   The remaining hard-coded French or English texts now follow the chosen
