@@ -22,15 +22,27 @@ JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
 MANAGED_ADMIN_KEY = "managed_admin_user_id"
 
 
-def revoke_sessions_on_jwt_rotation(
-    session: Session, settings: Settings, now: int
-) -> None:
-    """Revoke every long session once JWT_SECRET has changed."""
-    fingerprint = hmac_new(
+def jwt_secret_fingerprint(settings: Settings) -> str:
+    """A fingerprint of JWT_SECRET alone, so other keys can rotate freely."""
+    return hmac_new(
+        settings.jwt_secret.encode(), b"jwt-secret-fingerprint", sha256
+    ).hexdigest()
+
+
+def former_jwt_secret_fingerprint(settings: Settings) -> str:
+    """The fingerprint earlier releases stored, keyed by TOTP_ENCRYPTION_KEY."""
+    return hmac_new(
         settings.totp_encryption_key.encode(),
         settings.jwt_secret.encode(),
         sha256,
     ).hexdigest()
+
+
+def revoke_sessions_on_jwt_rotation(
+    session: Session, settings: Settings, now: int
+) -> None:
+    """Revoke every long session once JWT_SECRET has changed."""
+    fingerprint = jwt_secret_fingerprint(settings)
     fingerprint_state = session.get(SecurityState, JWT_FINGERPRINT_KEY)
     if fingerprint_state is None:
         unmapped_session = session.scalar(
@@ -53,6 +65,9 @@ def revoke_sessions_on_jwt_rotation(
             )
             audit_event("security.legacy_sessions_revoked")
         session.add(SecurityState(key=JWT_FINGERPRINT_KEY, value=fingerprint))
+    elif fingerprint_state.value == former_jwt_secret_fingerprint(settings):
+        # Stored by an earlier release for the same secrets: carry it over.
+        fingerprint_state.value = fingerprint
     elif fingerprint_state.value != fingerprint:
         session.execute(
             update(RefreshSession)
@@ -77,6 +92,13 @@ def managed_administrator(session: Session, settings: Settings, now: int) -> Use
         administrators = list(
             session.scalars(select(User).where(User.is_admin.is_(True)))
         )
+        if configured_user is not None and not configured_user.is_admin:
+            # Adopting it would overwrite a teacher's password and lock them
+            # out of their quizzes and classes.
+            raise RuntimeError(
+                "ADMIN_USERNAME belongs to a teacher account; choose another "
+                "username before starting the application"
+            )
         if configured_user is not None:
             admin_user = configured_user
         elif len(administrators) == 1:

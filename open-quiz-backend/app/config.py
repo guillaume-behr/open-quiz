@@ -176,6 +176,13 @@ class Settings:
     def __post_init__(self) -> None:
         if not 1 <= len(self.admin_username) <= 80:
             raise ValueError("ADMIN_USERNAME must contain between 1 and 80 characters")
+        # The characters a teacher's username may use (UserCreate): sign-in
+        # strips spaces, so an administrator stored with one could never sign
+        # in.
+        if not re.fullmatch(r"[a-zA-Z0-9._-]+", self.admin_username):
+            raise ValueError(
+                "ADMIN_USERNAME may only contain letters, digits, '.', '_' and '-'"
+            )
         if len(self.jwt_secret) < 32:
             raise ValueError("JWT_SECRET must contain at least 32 characters")
         if self.jwt_secret.startswith("replace-with-"):

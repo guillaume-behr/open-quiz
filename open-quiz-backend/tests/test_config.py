@@ -310,6 +310,11 @@ def test_trusted_hosts_must_be_host_names(tmp_path: Path, hosts: str) -> None:
 def test_rejects_weak_or_insecure_production_configuration(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="ADMIN_USERNAME"):
         settings_for(tmp_path / "long-admin-username.db", admin_username="a" * 81)
+    # Sign-in strips spaces, so an administrator stored with one could never
+    # sign in; the name must use the characters a teacher's username can.
+    for username in (" root ", "root admin", "root/admin"):
+        with pytest.raises(ValueError, match="ADMIN_USERNAME"):
+            settings_for(tmp_path / "spaced-admin-username.db", admin_username=username)
 
     with pytest.raises(ValueError, match="ADMIN_PASSWORD"):
         settings_for(tmp_path / "long-admin-password.db", admin_password="aB1-" * 65)

@@ -155,6 +155,73 @@ def test_a_rotated_jwt_secret_revokes_every_session(tmp_path: Path) -> None:
         assert session.scalar(select(RefreshSession.revoked_at)) is not None
 
 
+def test_rotating_only_the_totp_key_keeps_the_sessions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = settings_for(tmp_path / "rotated-totp-key")
+    session_factory = build_session_factory(settings.database_url)
+    security_state.synchronize_security_state(session_factory, settings)
+    with session_factory() as session:
+        admin_id = session.scalar(select(User.id).where(User.is_admin.is_(True)))
+    seed_refresh_session(session_factory, admin_id, with_family=True)
+    events: list[str] = []
+    monkeypatch.setattr(
+        security_state, "audit_event", lambda name, **_: events.append(name)
+    )
+
+    rotated = settings_for(
+        tmp_path / "rotated-totp-key",
+        totp_encryption_key="a-fresh-totp-encryption-key-with-variety-2026",
+    )
+    security_state.synchronize_security_state(session_factory, rotated)
+
+    with session_factory() as session:
+        assert session.scalar(select(RefreshSession.revoked_at)) is None
+    assert "security.jwt_secret_rotated_sessions_revoked" not in events
+
+
+def test_the_former_fingerprint_does_not_revoke_sessions_on_upgrade(
+    tmp_path: Path,
+) -> None:
+    """A database fingerprinted the old way keeps its sessions on upgrade."""
+    settings = settings_for(tmp_path / "fingerprint-upgrade")
+    session_factory = build_session_factory(settings.database_url)
+    security_state.synchronize_security_state(session_factory, settings)
+    legacy = hmac_new(
+        settings.totp_encryption_key.encode(),
+        settings.jwt_secret.encode(),
+        sha256,
+    ).hexdigest()
+    with session_factory() as session:
+        session.get(SecurityState, security_state.JWT_FINGERPRINT_KEY).value = legacy
+        admin_id = session.scalar(select(User.id).where(User.is_admin.is_(True)))
+        session.commit()
+    seed_refresh_session(session_factory, admin_id, with_family=True)
+
+    security_state.synchronize_security_state(session_factory, settings)
+
+    with session_factory() as session:
+        assert session.scalar(select(RefreshSession.revoked_at)) is None
+        stored = session.get(SecurityState, security_state.JWT_FINGERPRINT_KEY)
+        assert stored.value != legacy
+
+
+def test_first_start_refuses_to_promote_an_existing_teacher(tmp_path: Path) -> None:
+    settings = settings_for(tmp_path / "teacher-named-admin")
+    session_factory = build_session_factory(settings.database_url)
+    teacher_id = add_user(session_factory, settings.admin_username, is_admin=False)
+    with session_factory() as session:
+        password_before = session.get(User, teacher_id).password_hash
+
+    with pytest.raises(RuntimeError, match="ADMIN_USERNAME belongs to a teacher"):
+        security_state.synchronize_security_state(session_factory, settings)
+
+    with session_factory() as session:
+        teacher = session.get(User, teacher_id)
+        assert teacher.is_admin is False
+        assert teacher.password_hash == password_before
+
+
 def test_a_single_unmanaged_administrator_takes_the_configured_name(
     tmp_path: Path,
 ) -> None:

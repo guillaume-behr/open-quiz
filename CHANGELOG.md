@@ -15,6 +15,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
+- `ADMIN_USERNAME` may now only contain letters, digits, `.`, `_` and `-`,
+  like a teacher's username: the backend refuses to start otherwise. A name
+  with a space could never sign in anyway.
 - In production the API now answers 400 to a request whose `Host` header is
   neither the name in `FRONTEND_ORIGIN` nor an internal one. Check that your
   reverse proxy forwards the name the browser asked for (`proxy_set_header
@@ -71,6 +74,13 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Rotating only `TOTP_ENCRYPTION_KEY` no longer revokes every session nor
+  logs a `JWT_SECRET` rotation: the secret's fingerprint now depends on
+  `JWT_SECRET` alone. The first start after this update recognises the
+  fingerprint stored by earlier releases and keeps the sessions.
+- The first start no longer turns an existing teacher whose username equals
+  `ADMIN_USERNAME` into the administrator (which overwrote their password and
+  hid their quizzes and classes); it refuses to start and says why.
 - A device signed out by the limit of ten sessions per account no longer
   raises a false “refresh token reuse” alarm that also revoked the account's
   other sessions; it is simply asked to sign in again.

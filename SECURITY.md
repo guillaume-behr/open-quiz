@@ -147,6 +147,12 @@ compte en l’enregistrant de nouveau. Borner ce qu’une même adresse peut env
 relève du reverse proxy (voir le
 [guide de déploiement](docs/deployment.md#-publier-lapplication-en-https)).
 
+Quand le budget global de connexions de l’instance est épuisé, les identifiants
+connus restent admis pour que les vrais utilisateurs puissent se connecter : un
+identifiant inconnu reçoit alors 429, un identifiant existant 401. Pendant cette
+saturation, la réponse révèle donc si un identifiant existe. C’est un compromis
+assumé en faveur des comptes légitimes.
+
 Les identifiants élèves sont uniques pour toute l’instance, puisqu’ils servent
 à se connecter : un enseignant qui en crée ou en importe un déjà pris apprend
 qu’il existe, sans rien savoir de son propriétaire.
@@ -188,7 +194,7 @@ l’historique Git ne suffit pas à rendre un secret sûr.
 2. changez `JWT_SECRET` pour révoquer toutes les sessions ;
 3. changez `ADMIN_PASSWORD` si le compte administrateur peut être concerné ;
 4. ne changez `TOTP_ENCRYPTION_KEY` qu’en acceptant de réinscrire tous les
-   comptes TOTP ;
+   comptes TOTP ; ce changement seul ne révoque pas les sessions ;
 5. ne changez `STUDENT_CREDENTIAL_ENCRYPTION_KEY` qu’en acceptant de
    réinitialiser les mots de passe élèves pour les rendre à nouveau
    consultables ;

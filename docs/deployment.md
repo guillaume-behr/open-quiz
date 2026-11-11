@@ -477,7 +477,7 @@ des trois rôles et les journaux du backend.
 | ----------------------------------- | --------------------------------------------------------------------------------- |
 | `JWT_SECRET`                        | invalide les jetons d’accès et révoque les sessions longues au prochain démarrage |
 | `ADMIN_PASSWORD`                    | remplace le mot de passe administrateur et révoque ses sessions                   |
-| `TOTP_ENCRYPTION_KEY`               | impose une nouvelle inscription TOTP à tous les comptes privilégiés               |
+| `TOTP_ENCRYPTION_KEY`               | réinscription TOTP de tous les comptes privilégiés ; sessions conservées          |
 | `STUDENT_CREDENTIAL_ENCRYPTION_KEY` | rend les mots de passe élèves déjà enregistrés irrécupérables                     |
 
 Conservez les deux clés de chiffrement tant que les données associées doivent
