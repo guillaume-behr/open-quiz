@@ -74,6 +74,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Live updates no longer freeze silently on a connection that died without
+  closing (a laptop waking up, a network change, a proxy dropping the
+  stream): a connection that has sent nothing for 60 seconds is replaced, at
+  once when the tab comes back to the foreground or the network returns. The
+  student's quiz and the teacher's supervision window say when they are
+  reconnecting, and a student's connection closes once the session is over.
 - A question prompt with many asterisks (pasted Markdown, an imported bank)
   no longer freezes the question editor and every student's tab: parsing the
   prompt's formatting took exponential time, and now takes about a

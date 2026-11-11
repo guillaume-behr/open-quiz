@@ -357,6 +357,7 @@
     "joined-students_few": "Підключено {{count}} студентів",
     "joined-students_many": "Підключено {{count}} студентів",
     "live-updates": "Оновлення в реальному часі",
+    "live-reconnecting": "З’єднання втрачено — перепідключення…",
     "enlarge-session": "Збільшити",
     "session-display-unavailable": "Немає вікторини для показу",
     "session-display-unavailable-help": "Відкрийте цей вигляд із запущеної вікторини на панелі викладача й не закривайте ту вкладку.",

@@ -369,6 +369,7 @@
     "joined-students_few": "{{count}} الطلاب متصلون",
     "joined-students_many": "{{count}} الطلاب متصلون",
     "live-updates": "تحديث مباشر",
+    "live-reconnecting": "انقطع الاتصال — جارٍ إعادة الاتصال…",
     "enlarge-session": "تكبير",
     "session-display-unavailable": "لا يوجد اختبار لعرضه",
     "session-display-unavailable-help": "افتح هذا العرض من اختبار جارٍ في لوحة المعلم، وأبقِ تلك العلامة مفتوحة.",

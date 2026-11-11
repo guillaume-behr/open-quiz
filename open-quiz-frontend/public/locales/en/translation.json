@@ -345,6 +345,7 @@
     "joined-students_one": "{{count}} student connected",
     "joined-students_other": "{{count}} students connected",
     "live-updates": "Live updates",
+    "live-reconnecting": "Connection lost — reconnecting…",
     "enlarge-session": "Enlarge",
     "session-display-unavailable": "No quiz to display",
     "session-display-unavailable-help": "Open this view from a running quiz in the teacher dashboard, and keep that tab open.",

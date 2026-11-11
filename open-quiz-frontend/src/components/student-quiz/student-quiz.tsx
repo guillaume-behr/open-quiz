@@ -78,6 +78,20 @@ export function StudentQuiz({
               ? "rtl"
               : "ltr"
     const liveJoinCode = session?.join_code
+    const isSessionOver = ["finished", "cancelled"].includes(
+        session?.status ?? ""
+    )
+    const liveConnection =
+        liveJoinCode && participantToken && !isSessionOver
+            ? `${liveJoinCode}:${participantToken}`
+            : null
+    // Which connection is reconnecting: a state left by an earlier one is
+    // ignored rather than reset from the effect.
+    const [reconnectingConnection, setReconnectingConnection] = useState<
+        string | null
+    >(null)
+    const liveReconnecting =
+        liveConnection !== null && reconnectingConnection === liveConnection
 
     // Show the question being opened with the draft kept for it, and fall back
     // to the answer already recorded by the server when there is none. An
@@ -168,14 +182,9 @@ export function StudentQuiz({
     }, [applySession, onSessionCleared, restoredSession, t])
 
     useEffect(() => {
-        if (
-            !liveJoinCode ||
-            !participantToken ||
-            ["finished", "cancelled"].includes(
-                liveSessionRef.current?.status ?? ""
-            )
-        )
-            return
+        // A finished session sends nothing more: close its connection.
+        if (!liveJoinCode || !participantToken || isSessionOver) return
+        const connection = `${liveJoinCode}:${participantToken}`
 
         return connectLiveUpdates<StudentQuizSession>({
             path: `/api/quizzes/live/student/sessions/${encodeURIComponent(liveJoinCode)}`,
@@ -199,8 +208,12 @@ export function StudentQuiz({
                 setSession(next)
             },
             onUnavailable: () => setError(t("student-session-error")),
+            onConnectionChange: (state) =>
+                setReconnectingConnection(
+                    state === "reconnecting" ? connection : null
+                ),
         })
-    }, [applyAnswerState, liveJoinCode, participantToken, t])
+    }, [applyAnswerState, isSessionOver, liveJoinCode, participantToken, t])
 
     async function handleJoin(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -445,6 +458,7 @@ export function StudentQuiz({
                 question={translation.question}
                 participantToken={participantToken}
                 title={translation.title}
+                liveReconnecting={liveReconnecting}
                 contentDirection={contentDirection}
                 selectedChoiceIds={selectedChoiceIds}
                 writtenAnswer={writtenAnswer}
