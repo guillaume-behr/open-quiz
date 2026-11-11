@@ -650,6 +650,8 @@
     "view-answers": "查看答案",
     "student-answers": "学生答案",
     "answers-load-error": "无法加载或批改答案。",
+    "grade-answer-error": "无法保存此评分。",
+    "score-out-of-range": "请输入 0 到 {{max}} 之间的分数。",
     "answers-pending-grading": "{{count}} 道待批改",
     "question-number": "第 {{number}} 题",
     "student-answer": "学生答案",

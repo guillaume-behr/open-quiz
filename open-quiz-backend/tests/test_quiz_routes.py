@@ -386,7 +386,7 @@ def test_results_and_answer_reviews_validate_their_targets(environment) -> None:
     filtered = client.get(
         "/api/quizzes/sessions/results",
         headers=headers,
-        params={"class_search": "nothing-matches"},
+        params={"class_id": 999999},
     )
     assert filtered.json() == []
     assert (
@@ -1377,3 +1377,65 @@ def test_reported_maximum_score_is_actually_reachable(tmp_path: Path) -> None:
                     f"allow_negative_points={allow_negative_points}: "
                     f"reported {reported}, reachable {reachable}"
                 )
+
+
+def test_results_filter_by_class_id_and_start_date(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    launched = finished_exam(client, environment)
+    class_id = environment["student_class"]["id"]
+    # A name that contains the first class's name: a substring search on
+    # "5e A" would also find this class's results.
+    longer = client.post(
+        "/api/classes",
+        headers=headers,
+        json={"name": "5e AB", "grade_level": "5e"},
+    )
+    assert longer.status_code == 201
+    other = finished_exam(client, environment)
+    started = datetime(2026, 3, 4, 10, 0, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(QuizSession)
+            .where(QuizSession.id == launched["id"])
+            .values(started_at=started)
+        )
+        session.execute(
+            update(QuizSession)
+            .where(QuizSession.id == other["id"])
+            .values(
+                class_id=longer.json()["id"],
+                class_name="5e AB",
+                started_at=started - timedelta(days=30),
+            )
+        )
+        session.commit()
+
+    def result_ids(**params: Any) -> list[int]:
+        response = client.get(
+            "/api/quizzes/sessions/results", headers=headers, params=params
+        )
+        assert response.status_code == 200
+        return [result["id"] for result in response.json()]
+
+    assert result_ids(class_id=class_id) == [launched["id"]]
+    assert result_ids(class_id=longer.json()["id"]) == [other["id"]]
+    # Another teacher's class, or none: nothing leaks, nothing fails.
+    assert result_ids(class_id=999999) == []
+    assert (
+        client.get(
+            "/api/quizzes/sessions/results",
+            headers=headers,
+            params={"class_id": 0},
+        ).status_code
+        == 422
+    )
+
+    assert result_ids(
+        started_from=(started - timedelta(days=1)).isoformat(),
+        started_before=(started + timedelta(days=1)).isoformat(),
+    ) == [launched["id"]]
+    # The range includes its start and excludes its end.
+    assert result_ids(started_from=started.isoformat()) == [launched["id"]]
+    assert result_ids(started_before=started.isoformat()) == [other["id"]]
+    assert result_ids(started_from=(started + timedelta(seconds=1)).isoformat()) == []

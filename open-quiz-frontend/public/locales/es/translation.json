@@ -651,6 +651,8 @@
     "view-answers": "Ver respuestas",
     "student-answers": "Respuestas del alumno",
     "answers-load-error": "No se pueden cargar o corregir las respuestas.",
+    "grade-answer-error": "No se puede guardar esta calificación.",
+    "score-out-of-range": "Introduce una puntuación entre 0 y {{max}}.",
     "answers-pending-grading": "{{count}} por corregir",
     "question-number": "Pregunta {{number}}",
     "student-answer": "Respuesta del alumno",

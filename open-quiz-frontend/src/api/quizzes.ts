@@ -187,15 +187,30 @@ export function selectMakeupQuiz(
     )
 }
 
+/** Filters of the results list; the start range is `[from, before)`. */
+export type QuizResultQuery = {
+    quizSearch?: string
+    classId?: string
+    startedFrom?: Date
+    startedBefore?: Date
+}
+
 export function getQuizResults(
     page = 1,
-    quizSearch = "",
-    classSearch = "",
+    query: QuizResultQuery = {},
+    pageSize = 8,
     signal?: AbortSignal
 ): Promise<Page<QuizSession>> {
-    const params = new URLSearchParams({ page: String(page), page_size: "8" })
-    if (quizSearch) params.set("quiz_search", quizSearch)
-    if (classSearch) params.set("class_search", classSearch)
+    const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+    })
+    if (query.quizSearch) params.set("quiz_search", query.quizSearch)
+    if (query.classId) params.set("class_id", query.classId)
+    if (query.startedFrom)
+        params.set("started_from", query.startedFrom.toISOString())
+    if (query.startedBefore)
+        params.set("started_before", query.startedBefore.toISOString())
     return requestPage<QuizSession>(`/api/quizzes/sessions/results?${params}`, {
         signal,
     })

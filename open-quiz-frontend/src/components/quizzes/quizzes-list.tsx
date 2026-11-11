@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
-import { naturalCompare } from "@/lib/utils"
 import {
     BookOpenText,
     Eye,
@@ -63,9 +62,8 @@ export function QuizzesList({
     onPageChange,
 }: QuizzesListProps) {
     const { t } = useTranslation()
-    const sortedQuizzes = [...quizzes].sort((first, second) =>
-        naturalCompare(first.title, second.title)
-    )
+    // The API orders quizzes by title across all pages: sorting one page
+    // here again would make the order differ from one page to the next.
     const activeSessions = sessions.filter((session) =>
         isActiveSessionStatus(session.status)
     )
@@ -124,12 +122,12 @@ export function QuizzesList({
                             >
                                 {loadError}
                             </p>
-                        ) : sortedQuizzes.length === 0 &&
+                        ) : quizzes.length === 0 &&
                           (quizFilter || gradeLevelFilter) ? (
                             <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                                 {t("no-quiz-filtered")}
                             </p>
-                        ) : sortedQuizzes.length === 0 ? (
+                        ) : quizzes.length === 0 ? (
                             <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center text-muted-foreground">
                                 <BookOpenText className="mb-2 size-8" />
                                 <p className="font-medium">{t("no-quiz")}</p>
@@ -140,12 +138,12 @@ export function QuizzesList({
                         ) : (
                             <>
                                 <ul
-                                    key={sortedQuizzes
+                                    key={quizzes
                                         .map((quiz) => quiz.id)
                                         .join(",")}
                                     className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
                                 >
-                                    {sortedQuizzes.map((quiz) => (
+                                    {quizzes.map((quiz) => (
                                         <QuizCard
                                             key={quiz.id}
                                             quiz={quiz}

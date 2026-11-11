@@ -680,6 +680,8 @@
     "view-answers": "Переглянути відповіді",
     "student-answers": "Відповіді учня",
     "answers-load-error": "Не вдалося завантажити або оцінити відповіді.",
+    "grade-answer-error": "Не вдалося зберегти цю оцінку.",
+    "score-out-of-range": "Введіть бал від 0 до {{max}}.",
     "answers-pending-grading": "{{count}} потрібно оцінити",
     "question-number": "Запитання {{number}}",
     "student-answer": "Відповідь учня",

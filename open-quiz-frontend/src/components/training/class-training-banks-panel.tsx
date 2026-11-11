@@ -17,6 +17,16 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
 
+/** The training question count of each assigned bank. */
+function questionCounts(banks: QuestionBank[]): Map<number, number> {
+    return new Map(
+        banks.map((bank) => [
+            bank.id,
+            bank.training_question_count ?? bank.question_count,
+        ])
+    )
+}
+
 export function ClassTrainingBanksPanel() {
     const { t } = useTranslation()
     const [classes, setClasses] = useState<StudentClass[]>([])
@@ -34,7 +44,10 @@ export function ClassTrainingBanksPanel() {
     const [error, setError] = useState<string | null>(null)
     const saveVersion = useRef(0)
     const saveQueue = useRef<Promise<void>>(Promise.resolve())
-    const confirmedBankIds = useRef(new Map<number, number[]>())
+    // What the API last confirmed for each class, restored after a failed save.
+    const confirmed = useRef(
+        new Map<number, { ids: number[]; counts: Map<number, number> }>()
+    )
 
     useEffect(() => {
         let active = true
@@ -62,17 +75,14 @@ export function ClassTrainingBanksPanel() {
             .then((assignedBanks) => {
                 if (!active) return
                 const ids = assignedBanks.map((bank) => bank.id)
-                confirmedBankIds.current.set(Number(selectedClassId), ids)
+                const assignedCounts = questionCounts(assignedBanks)
+                confirmed.current.set(Number(selectedClassId), {
+                    ids,
+                    counts: assignedCounts,
+                })
                 setSelectedBankIds(ids)
                 setSavedBankIds(ids)
-                setCounts(
-                    new Map(
-                        assignedBanks.map((bank) => [
-                            bank.id,
-                            bank.training_question_count ?? bank.question_count,
-                        ])
-                    )
-                )
+                setCounts(assignedCounts)
             })
             .catch(() => active && setError(t("training-settings-load-error")))
             .finally(() => active && setIsClassLoading(false))
@@ -109,23 +119,17 @@ export function ClassTrainingBanksPanel() {
                     }))
                 )
                 const ids = assigned.map((bank) => bank.id)
-                confirmedBankIds.current.set(classId, ids)
+                const assignedCounts = questionCounts(assigned)
+                confirmed.current.set(classId, { ids, counts: assignedCounts })
                 if (version !== saveVersion.current) return
                 setSelectedBankIds(ids)
                 setSavedBankIds(ids)
-                setCounts(
-                    new Map(
-                        assigned.map((bank) => [
-                            bank.id,
-                            bank.training_question_count ?? bank.question_count,
-                        ])
-                    )
-                )
+                setCounts(assignedCounts)
             } catch (caught) {
                 if (version !== saveVersion.current) return
-                setSelectedBankIds(
-                    confirmedBankIds.current.get(classId) ?? savedBankIds
-                )
+                const last = confirmed.current.get(classId)
+                setSelectedBankIds(last?.ids ?? savedBankIds)
+                if (last) setCounts(last.counts)
                 setError(
                     apiErrorMessage(
                         caught,

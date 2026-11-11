@@ -14,9 +14,10 @@ import {
     LoaderCircle,
     TriangleAlert,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocale } from "@/lib/locale"
+import { useResource } from "@/hooks/use-resource"
 
 const SCORE_TONE_CLASS_NAMES: Record<ScoreTone, string> = {
     success: "bg-success/10 text-success",
@@ -56,9 +57,13 @@ function QuestionScorePill({
 export function StudentQuizHistory({ token }: { token: string }) {
     const { t } = useTranslation()
     const locale = useLocale()
-    const [items, setItems] = useState<StudentQuizHistoryItem[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [hasError, setHasError] = useState(false)
+    // Reloads, and drops a stale answer, when the token changes.
+    const history = useResource(
+        useCallback(() => getStudentQuizHistory(token), [token])
+    )
+    const items = history.data ?? []
+    const isLoading = history.isLoading
+    const hasError = Boolean(history.error)
     const [provisionalNoticeItem, setProvisionalNoticeItem] =
         useState<StudentQuizHistoryItem | null>(null)
     const openSessionIdsRef = useRef<number[]>([])
@@ -69,13 +74,6 @@ export function StudentQuizHistory({ token }: { token: string }) {
             }),
         [locale]
     )
-
-    useEffect(() => {
-        getStudentQuizHistory(token)
-            .then(setItems)
-            .catch(() => setHasError(true))
-            .finally(() => setIsLoading(false))
-    }, [token])
 
     function handleAccordionValueChange(sessionIds: number[]) {
         const newlyOpenedIds = sessionIds.filter(

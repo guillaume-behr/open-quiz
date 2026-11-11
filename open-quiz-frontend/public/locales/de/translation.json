@@ -650,6 +650,8 @@
     "view-answers": "Antworten ansehen",
     "student-answers": "Antworten des Schülers",
     "answers-load-error": "Antworten konnten nicht geladen oder bewertet werden.",
+    "grade-answer-error": "Diese Bewertung konnte nicht gespeichert werden.",
+    "score-out-of-range": "Geben Sie eine Punktzahl zwischen 0 und {{max}} ein.",
     "answers-pending-grading": "{{count}} zu bewerten",
     "question-number": "Frage {{number}}",
     "student-answer": "Antwort des Schülers",
