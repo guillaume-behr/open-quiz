@@ -6,6 +6,7 @@ import jwt
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import delete, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.audit import audit_event
@@ -388,11 +389,25 @@ def begin_two_factor_setup(
         settings.totp_encryption_key,
     )
     if two_factor is None:
-        two_factor = TwoFactorCredential(
-            user_id=user.id,
-            encrypted_secret=encrypted_secret,
+        # Two first logins at once (a double click, two devices) both get
+        # here: the first one stores its secret, the other enrolls that same
+        # secret instead of failing on the duplicate.
+        session.execute(
+            insert(TwoFactorCredential)
+            .values(
+                user_id=user.id,
+                encrypted_secret=encrypted_secret,
+                confirmed=False,
+            )
+            .on_conflict_do_nothing(index_elements=[TwoFactorCredential.user_id])
         )
-        session.add(two_factor)
+        stored_secret = session.scalars(
+            select(TwoFactorCredential.encrypted_secret).where(
+                TwoFactorCredential.user_id == user.id
+            )
+        ).one()
+        if stored_secret != encrypted_secret:
+            secret = decrypt_totp_secret(stored_secret, settings.totp_encryption_key)
     else:
         two_factor.encrypted_secret = encrypted_secret
         two_factor.last_counter = None

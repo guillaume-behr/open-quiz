@@ -277,6 +277,9 @@ def verify_totp_code(
     code: str,
     last_counter: int | None,
 ) -> int | None:
+    # compare_digest raises on non-ASCII strings: such a code is just wrong.
+    if not (code.isascii() and code.isdigit()):
+        return None
     totp = pyotp.TOTP(secret)
     current_counter = totp.timecode(datetime.now(UTC))
     for counter in range(current_counter - 1, current_counter + 2):

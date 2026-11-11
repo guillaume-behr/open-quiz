@@ -13,7 +13,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.access_log import AccessLogMiddleware
 from app.config import Settings
 from app.dependencies import authenticated_user_from_token
-from app.errors import ErrorCode, api_error
+from app.errors import ApiError, ErrorCode, api_error
 from app.models import User
 
 # JSON imports base64-encode up to 64 MiB of decoded images. Reserve enough
@@ -21,8 +21,18 @@ from app.models import User
 LARGE_QUESTION_BODY_BYTES = 96 * 1024 * 1024
 
 
-class RequestBodyTooLargeError(Exception):
-    pass
+class RequestBodyTooLargeError(ApiError):
+    """A body that grew past the limit while it was being read.
+
+    It is raised from inside FastAPI's body parsing, which turns any other
+    exception into a bare 400. As an HTTPException it reaches the client as
+    413 with the usual error code.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            413, ErrorCode.REQUEST_BODY_TOO_LARGE, "Request body is too large"
+        )
 
 
 class RequestBodyLimitMiddleware:

@@ -121,4 +121,7 @@ def test_two_first_logins_at_once_both_get_a_setup(tmp_path: Path) -> None:
         # Both logins enroll the same secret, so either can confirm it.
         assert raced.json()["secret"] == other_secret
         with client.app.state.session_factory() as session:
-            assert session.query(TwoFactorCredential).count() == 1
+            assert (
+                session.query(TwoFactorCredential).filter_by(user_id=user_id).count()
+                == 1
+            )
