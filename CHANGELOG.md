@@ -74,6 +74,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- A question prompt with many asterisks (pasted Markdown, an imported bank)
+  no longer freezes the question editor and every student's tab: parsing the
+  prompt's formatting took exponential time, and now takes about a
+  millisecond for any prompt. Formatting is read exactly as before.
 - Rotating only `TOTP_ENCRYPTION_KEY` no longer revokes every session nor
   logs a `JWT_SECRET` rotation: the secret's fingerprint now depends on
   `JWT_SECRET` alone. The first start after this update recognises the
