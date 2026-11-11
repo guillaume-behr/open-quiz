@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { describePythonFailure, PythonRunnerError } from "./python-runner"
+import {
+    describePythonFailure,
+    nextRequestId,
+    PythonRunnerError,
+} from "./python-runner"
 
 const t = (key: string) => `translated:${key}`
 
@@ -19,5 +23,19 @@ describe("describePythonFailure", () => {
             "NameError: name 'x'"
         )
         expect(describePythonFailure("boom", t)).toBe("boom")
+    })
+})
+
+describe("nextRequestId", () => {
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it("works outside a secure context, where crypto.randomUUID is missing", () => {
+        // Plain HTTP on a LAN address: the browser hides randomUUID.
+        vi.stubGlobal("crypto", {})
+        const first = nextRequestId()
+        const second = nextRequestId()
+        expect(first).not.toBe(second)
     })
 })

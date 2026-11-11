@@ -1255,7 +1255,6 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
         for wildcard_search in (
             {"quiz_search": "%"},
             {"quiz_search": "_"},
-            {"class_search": "%"},
         ):
             wildcard_result = client.get(
                 "/api/quizzes/sessions/results",

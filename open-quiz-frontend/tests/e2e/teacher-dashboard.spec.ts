@@ -1925,14 +1925,16 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     ).toBeVisible()
     await page
         .getByRole("combobox", { name: "Class", exact: true })
-        .selectOption("Class 8B")
+        .selectOption({ label: "Grade 8 Class 8B" })
     await expect
         .poll(() =>
             requests.some((request) => {
                 const url = new URL(request.url())
                 return (
                     url.pathname === "/api/quizzes/sessions/results" &&
-                    url.searchParams.get("class_search") === "Class 8B"
+                    // The id: a name search would also match "Class 8BX".
+                    url.searchParams.get("class_id") === "11" &&
+                    !url.searchParams.has("class_search")
                 )
             })
         )
@@ -2730,4 +2732,188 @@ test("a created grade level takes the place the API gives it", async ({
     await expect(
         dialog.getByLabel("Grade level", { exact: true }).getByRole("option")
     ).toHaveText(["Choose a level", "Grade 8", "Alpha"])
+})
+
+test("the results schedule shows every session of its week, not one page", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    const weekRequests: URL[] = []
+    page.on("request", (request) => {
+        const url = new URL(request.url())
+        if (url.searchParams.has("started_from")) weekRequests.push(url)
+    })
+    // Page 1 of the list holds one session; another of the same week sits on
+    // a later page and only a request for the week returns both.
+    let first: Record<string, unknown> | undefined
+    page.on("response", async (response) => {
+        const url = new URL(response.url())
+        if (
+            url.pathname === "/api/quizzes/sessions/results" &&
+            !url.searchParams.has("started_from") &&
+            !url.searchParams.has("started_before")
+        )
+            first ??= ((await response.json()) as Record<string, unknown>[])[0]
+    })
+    await page.route("**/api/quizzes/sessions/results?**", async (route) => {
+        const url = new URL(route.request().url())
+        if (url.searchParams.has("started_from")) {
+            await expect.poll(() => first).toBeDefined()
+            const sameWeek = {
+                ...first,
+                id: 95,
+                quiz_title: "Later page checkpoint",
+                started_at: "2026-01-07T14:00:00Z",
+                ends_at: "2026-01-07T14:30:00Z",
+            }
+            return route.fulfill({
+                json: [sameWeek, first],
+                headers: {
+                    "X-Page": "1",
+                    "X-Page-Size": "100",
+                    "X-Total-Count": "2",
+                },
+            })
+        }
+        if (url.searchParams.has("started_before"))
+            return route.fulfill({
+                json: [],
+                headers: {
+                    "X-Page": "1",
+                    "X-Page-Size": "1",
+                    "X-Total-Count": "0",
+                },
+            })
+        return route.fallback()
+    })
+    await page.goto("/teacher/dashboard?section=results")
+    await page.getByRole("button", { name: "Schedule" }).click()
+
+    await expect(
+        page.getByRole("button", {
+            name: "Grade quiz — Later page checkpoint",
+        })
+    ).toBeVisible()
+    expect(weekRequests).toHaveLength(1)
+    const params = weekRequests[0].searchParams
+    expect(params.get("page_size")).toBe("100")
+    // Monday to Monday, whatever the time zone the browser runs in.
+    expect(
+        new Date(params.get("started_before") ?? "").getTime() -
+            new Date(params.get("started_from") ?? "").getTime()
+    ).toBe(7 * 24 * 60 * 60 * 1000)
+    await expect(
+        page.getByRole("button", { name: "Previous week" })
+    ).toBeDisabled()
+    await expect(page.getByRole("button", { name: "Next week" })).toBeDisabled()
+})
+
+test("an empty or out-of-range score is not saved", async ({ page }) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard?section=results")
+    await page
+        .getByRole("article")
+        .filter({ hasText: "Science checkpoint" })
+        .getByRole("button", { name: "Grade quiz" })
+        .click()
+    await page
+        .getByRole("dialog", { name: "Science checkpoint" })
+        .getByRole("button", { name: "View answers" })
+        .click()
+    const answersDialog = page.getByRole("dialog", { name: "Student answers" })
+    const confirm = answersDialog.getByRole("button", { name: "Confirm grade" })
+
+    for (const score of ["", "6"]) {
+        await answersDialog.getByLabel("Awarded score").fill(score)
+        await confirm.click()
+        await expect(answersDialog.getByRole("alert")).toHaveText(
+            "Enter a score between 0 and 5."
+        )
+    }
+    expect(
+        requests.some((request) =>
+            new URL(request.url()).pathname.endsWith("/answers/92/grade")
+        )
+    ).toBe(false)
+})
+
+test("a failed grade says so, not that answers failed to load", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.route("**/answers/92/grade", (route) =>
+        route.fulfill({ status: 500, json: {} })
+    )
+    await page.goto("/teacher/dashboard?section=results")
+    await page
+        .getByRole("article")
+        .filter({ hasText: "Science checkpoint" })
+        .getByRole("button", { name: "Grade quiz" })
+        .click()
+    await page
+        .getByRole("dialog", { name: "Science checkpoint" })
+        .getByRole("button", { name: "View answers" })
+        .click()
+    const answersDialog = page.getByRole("dialog", { name: "Student answers" })
+    await answersDialog.getByLabel("Awarded score").fill("3")
+    await answersDialog.getByRole("button", { name: "Confirm grade" }).click()
+    await expect(answersDialog.getByRole("alert")).toHaveText(
+        "Unable to save this grade."
+    )
+})
+
+test("the quiz duration can be cleared and typed again", async ({ page }) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard?section=exam-quizzes")
+    await page.getByRole("button", { name: "New exam quiz" }).click()
+    const dialog = page.getByRole("dialog", { name: "New exam quiz" })
+    await dialog.getByLabel("Quiz title").fill("Energy assessment")
+    await dialog.getByLabel("Grade level").selectOption("Grade 8")
+    await dialog.getByText("Matter and energy", { exact: true }).click()
+    await dialog.getByLabel("Easy", { exact: true }).fill("10")
+    const duration = dialog.getByLabel("Overall duration (minutes)")
+    await duration.clear()
+    await duration.pressSequentially("30")
+    await expect(duration).toHaveValue("30")
+    await dialog.getByRole("button", { name: "New quiz", exact: true }).click()
+
+    await expect(
+        page.getByRole("heading", { name: "Energy assessment" })
+    ).toBeVisible()
+    expect(
+        requests
+            .find(
+                (request) =>
+                    new URL(request.url()).pathname === "/api/quizzes" &&
+                    request.method() === "POST"
+            )
+            ?.postDataJSON()
+    ).toMatchObject({ duration_seconds: 1800 })
+})
+
+test("a failed training save restores the question count too", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.route(
+        "**/api/quizzes/training/classes/11/question-banks",
+        (route) =>
+            route.request().method() === "PUT"
+                ? route.fulfill({ status: 500, json: {} })
+                : route.fallback()
+    )
+    await page.goto("/teacher/dashboard?section=training-quizzes")
+    await expect(page.getByLabel("Class")).toHaveValue("11")
+    const configurationDialog = page.getByRole("dialog", {
+        name: "Configure question bank",
+    })
+    await page.getByText("Matter and energy", { exact: true }).click()
+    await configurationDialog.getByLabel("Number of questions").fill("4")
+    await configurationDialog.getByRole("button", { name: "Save" }).click()
+    await expect(page.getByRole("alert")).toBeVisible()
+
+    await page.getByText("Matter and energy", { exact: true }).click()
+    await expect(
+        configurationDialog.getByLabel("Number of questions")
+    ).toHaveValue("10")
 })
