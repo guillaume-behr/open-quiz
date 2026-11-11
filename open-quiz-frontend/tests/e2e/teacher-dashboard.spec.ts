@@ -2657,3 +2657,18 @@ test("a finished retake never offers a Delete button that does nothing", async (
         page.getByRole("button", { name: "Delete session" })
     ).toHaveCount(0)
 })
+
+test("names with apostrophes and ampersands are shown as typed", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.route("http://127.0.0.1:4173/api/users/me", (route) =>
+        route.fulfill({
+            json: { ...teacher, display_name: "D'Artagnan & Q<A>" },
+        })
+    )
+    await page.goto("/teacher/dashboard")
+    await expect(
+        page.getByRole("heading", { name: "Welcome, D'Artagnan & Q<A>" })
+    ).toBeVisible()
+})
