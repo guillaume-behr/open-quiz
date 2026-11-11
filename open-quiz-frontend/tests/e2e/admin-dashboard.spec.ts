@@ -234,3 +234,25 @@ test("administrator manages teachers and problem reports", async ({ page }) => {
         )
     ).toBe(true)
 })
+
+test("changing the language does not restore the administrator session again", async ({
+    page,
+}) => {
+    const requests = await mockAdminApi(page)
+    await page.goto("/admin/dashboard")
+    await expect(
+        page.getByText("Logged in as Site administrator")
+    ).toBeVisible()
+
+    await page.getByRole("button", { name: "Change language" }).click()
+    await page.getByRole("menuitem", { name: "Français" }).click()
+    await expect(
+        page.getByText("Connecté en tant que Site administrator")
+    ).toBeVisible()
+
+    expect(
+        requests.filter(
+            (request) => new URL(request.url()).pathname === "/api/auth/refresh"
+        )
+    ).toHaveLength(1)
+})
