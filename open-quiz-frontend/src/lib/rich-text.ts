@@ -20,79 +20,155 @@ export type RichTextNode =
     | { type: "bold" | "italic"; children: RichTextNode[] }
 
 const ESCAPABLE = new Set(["*", "`", "\\"])
+const NOT_SCANNED = 0
 
 function isSpace(character: string | undefined) {
     return character === undefined || /\s/.test(character)
 }
 
-/** Index just after a closing backtick, or -1 when the span never closes. */
-function codeSpanEnd(source: string, start: number) {
-    const close = source.indexOf("`", start + 1)
-    return close > start + 1 ? close + 1 : -1
-}
-
-function starRunLength(source: string, start: number) {
-    let end = start
-    while (source[end] === "*") end += 1
-    return end - start
-}
-
 /**
- * Index of the closing `marker` for an emphasis whose content starts at
- * `from`, or -1. Code spans and escapes are skipped, and a bold run inside an
- * italic one (or the reverse) is stepped over so it cannot close the outer.
- * In a shared run such as `***`, the inner emphasis closes on the stars next
- * to its text and the outer one on the last stars.
+ * One string being parsed, with what makes scanning it cheap.
+ *
+ * Emphasis is matched by scanning ahead for a closing star run, and a failed
+ * inner match used to be retried from every star and re-scan to the end of
+ * the string: exponential time on prompts such as `"***a ".repeat(25)`. Here
+ * every scan result is remembered for this string, and scans jump from one
+ * significant character (`*`, `` ` ``, `\`) to the next, so each starting
+ * point is scanned at most once per marker.
  */
-function findClosing(
-    source: string,
-    from: number,
-    marker: "*" | "**",
-    nested = false
-): number {
-    let index = from
-    while (index < source.length) {
-        const character = source[index]
-        if (character === "\\" && ESCAPABLE.has(source[index + 1] ?? "")) {
-            index += 2
-            continue
+class RichTextSource {
+    readonly text: string
+    private readonly nextSignificant: Int32Array
+    private readonly nextBacktick: Int32Array
+    private readonly starRunEnd: Int32Array
+    // The closing star run reached from each position, per marker, stored
+    // plus two: the zero a new array holds means "not scanned yet", and a
+    // stored one (-1 + 2) means there is none.
+    private readonly boldClosings: Int32Array
+    private readonly italicClosings: Int32Array
+
+    constructor(text: string) {
+        this.text = text
+        const length = text.length
+        this.nextSignificant = new Int32Array(length + 1)
+        this.nextBacktick = new Int32Array(length + 1)
+        this.starRunEnd = new Int32Array(length + 1)
+        this.boldClosings = new Int32Array(length)
+        this.italicClosings = new Int32Array(length)
+        this.nextSignificant[length] = length
+        this.nextBacktick[length] = length
+        this.starRunEnd[length] = length
+        for (let index = length - 1; index >= 0; index -= 1) {
+            const character = text[index]
+            this.starRunEnd[index] =
+                character === "*" ? this.starRunEnd[index + 1] : index
+            this.nextBacktick[index] =
+                character === "`" ? index : this.nextBacktick[index + 1]
+            this.nextSignificant[index] =
+                character === "*" || character === "`" || character === "\\"
+                    ? index
+                    : this.nextSignificant[index + 1]
         }
-        if (character === "`") {
-            const end = codeSpanEnd(source, index)
-            if (end !== -1) {
-                index = end
+    }
+
+    /** Index just after a closing backtick, or -1 when the span never closes. */
+    codeSpanEnd(start: number) {
+        const close =
+            start + 1 < this.text.length ? this.nextBacktick[start + 1] : -1
+        return close > start + 1 && close < this.text.length ? close + 1 : -1
+    }
+
+    starRunLength(start: number) {
+        return this.starRunEnd[start] - start
+    }
+
+    /**
+     * Index of the closing `marker` for an emphasis whose content starts at
+     * `from`, or -1. Code spans and escapes are skipped, and a bold run inside
+     * an italic one (or the reverse) is stepped over so it cannot close the
+     * outer. In a shared run such as `***`, the inner emphasis closes on the
+     * stars next to its text and the outer one on the last stars.
+     */
+    findClosing(from: number, marker: "*" | "**", nested = false): number {
+        const source = this.text
+        let start = this.skipTo(from)
+        // A star run right where the content starts cannot close it.
+        if (start === from && source[start] === "*")
+            start = this.afterStarRun(start, marker)
+        const run = this.closingRun(start, marker)
+        if (run === -1) return -1
+        return nested ? run : run + this.starRunLength(run) - marker.length
+    }
+
+    /**
+     * The star run that closes `marker` when scanning on from `start`, or -1.
+     *
+     * Past its first character, a scan's path depends only on where it is,
+     * not on where it began: every position on a path gets the path's
+     * result, so no stretch of the string is scanned twice for a marker.
+     */
+    private closingRun(start: number, marker: "*" | "**"): number {
+        const known = marker === "**" ? this.boldClosings : this.italicClosings
+        const source = this.text
+        const path: number[] = []
+        let index = start
+        let result = -1
+        while (index < source.length) {
+            const cached = known[index]
+            if (cached !== NOT_SCANNED) {
+                result = cached - 2
+                break
+            }
+            path.push(index)
+            const character = source[index]
+            if (character === "\\" && ESCAPABLE.has(source[index + 1] ?? "")) {
+                index = this.skipTo(index + 2)
                 continue
             }
+            if (character === "`") {
+                const end = this.codeSpanEnd(index)
+                index = this.skipTo(end !== -1 ? end : index + 1)
+                continue
+            }
+            if (character !== "*") {
+                index = this.skipTo(index + 1)
+                continue
+            }
+            const run = this.starRunLength(index)
+            const closes = marker === "**" ? run >= 2 : run % 2 === 1
+            if (!isSpace(source[index - 1]) && closes) {
+                result = index
+                break
+            }
+            index = this.afterStarRun(index, marker)
         }
-        if (character !== "*") {
-            index += 1
-            continue
-        }
-        const run = starRunLength(source, index)
-        const canClose = index > from && !isSpace(source[index - 1])
-        const closes = marker === "**" ? run >= 2 : run % 2 === 1
-        if (canClose && closes)
-            return nested ? index : index + run - marker.length
+        for (const visited of path) known[visited] = result + 2
+        return result
+    }
+
+    /** Where a scan for `marker` goes on after the star run at `index`. */
+    private afterStarRun(index: number, marker: "*" | "**"): number {
+        const run = this.starRunLength(index)
         const innerMarker = run >= 2 ? "**" : "*"
-        if (innerMarker !== marker && !isSpace(source[index + run])) {
-            const innerStart = index + innerMarker.length
-            const innerClose = findClosing(
-                source,
-                innerStart,
+        if (innerMarker !== marker && !isSpace(this.text[index + run])) {
+            const innerClose = this.findClosing(
+                index + innerMarker.length,
                 innerMarker,
                 true
             )
-            if (innerClose !== -1) {
-                index = innerClose + innerMarker.length
-                continue
-            }
+            if (innerClose !== -1)
+                return this.skipTo(innerClose + innerMarker.length)
         }
-        index += run
+        return this.skipTo(index + run)
     }
-    return -1
+
+    skipTo(index: number) {
+        return index < this.text.length ? this.nextSignificant[index] : index
+    }
 }
 
 export function parseRichText(source: string): RichTextNode[] {
+    const parsed = new RichTextSource(source)
     const nodes: RichTextNode[] = []
     let text = ""
 
@@ -110,7 +186,7 @@ export function parseRichText(source: string): RichTextNode[] {
             continue
         }
         if (character === "`") {
-            const end = codeSpanEnd(source, index)
+            const end = parsed.codeSpanEnd(index)
             if (end !== -1) {
                 flushText()
                 nodes.push({
@@ -125,7 +201,7 @@ export function parseRichText(source: string): RichTextNode[] {
             const marker = source[index + 1] === "*" ? "**" : "*"
             const contentStart = index + marker.length
             if (!isSpace(source[contentStart])) {
-                const close = findClosing(source, contentStart, marker)
+                const close = parsed.findClosing(contentStart, marker)
                 if (close !== -1) {
                     flushText()
                     nodes.push({
@@ -142,8 +218,10 @@ export function parseRichText(source: string): RichTextNode[] {
             index += marker.length
             continue
         }
-        text += character
-        index += 1
+        // Plain characters up to the next marker, escape or backtick.
+        const next = parsed.skipTo(index + 1)
+        text += source.slice(index, next)
+        index = next
     }
     flushText()
     return nodes
@@ -164,7 +242,13 @@ export function richTextToPlainText(source: string) {
     return nodesToPlainText(parseRichText(source))
 }
 
+/**
+ * Whether the prompt uses any formatting. It runs on every keystroke in the
+ * editor, so a prompt without a star or a backtick is answered without
+ * parsing.
+ */
 export function hasRichTextFormatting(source: string) {
+    if (!source.includes("*") && !source.includes("`")) return false
     return parseRichText(source).some((node) => node.type !== "text")
 }
 
