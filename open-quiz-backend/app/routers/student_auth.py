@@ -31,7 +31,7 @@ from app.security import (
     DUMMY_PASSWORD_HASH,
     access_token_version,
     create_student_access_token,
-    verify_password,
+    verify_password_and_update,
 )
 from app.student_accounts import student_account_response
 
@@ -65,15 +65,27 @@ def login_student(
             headers={"Retry-After": str(retry_after)},
         )
     encoded = account.password_hash if account else DUMMY_PASSWORD_HASH
+    # Hashing can wait for a free slot: end the transaction first, so the
+    # request does not hold a pooled connection meanwhile.
+    session.commit()
     # Always run the password verification, even for unknown identifiers, so
     # the response time does not reveal whether the account exists.
-    password_valid = verify_password(payload.password, encoded)
+    password_valid, upgraded_hash = verify_password_and_update(
+        payload.password, encoded
+    )
     if account is None or not account.is_active or not password_valid:
         audit_event("student_auth.login_failed")
         raise ApiError(
             401, ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
         )
-    limiter.clear_subject(subject)
+    # Give back only this attempt: clearing the whole bucket would hand
+    # whoever is guessing this identifier a fresh allowance at every sign-in.
+    limiter.release(subject)
+    if upgraded_hash is not None:
+        # The token is bound to the hash, so it is issued from the new one.
+        account.password_hash = upgraded_hash
+        session.commit()
+        audit_event("student_auth.password_hash_upgraded", account_id=account.id)
     token = create_student_access_token(
         account.id,
         request.app.state.settings.jwt_secret,

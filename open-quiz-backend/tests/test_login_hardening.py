@@ -101,7 +101,7 @@ def test_an_outdated_password_hash_is_upgraded_at_login(tmp_path: Path) -> None:
             stored = session.get(StudentAccount, account["id"])
             assert stored is not None
             assert stored.password_hash != weak_hash
-            assert not security.password_hash.hasher.check_needs_rehash(
+            assert not security.password_hash.current_hasher.check_needs_rehash(
                 stored.password_hash
             )
         # The new token works. Tokens are bound to the hash, so the ones

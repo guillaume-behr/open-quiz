@@ -52,7 +52,7 @@ from app.security import (
     provisioning_uri,
     refresh_request_proof,
     two_factor_trust_version,
-    verify_password,
+    verify_password_and_update,
     verify_totp_code,
 )
 
@@ -185,15 +185,8 @@ def issue_session(
         if expires_at is not None
         else now + settings.refresh_token_days * 86400
     )
-    expired_session_ids = select(RefreshSession.id).where(
-        RefreshSession.expires_at <= now
-    )
-    session.execute(
-        delete(RefreshSessionFamily).where(
-            RefreshSessionFamily.session_id.in_(expired_session_ids)
-        )
-    )
-    session.execute(delete(RefreshSession).where(RefreshSession.expires_at <= now))
+    # Expired sessions are swept by the hourly maintenance, not on every
+    # sign-in and refresh; an expired one is refused anyway.
     older_session_ids = list(
         session.scalars(
             select(RefreshSession.id)
@@ -206,10 +199,17 @@ def issue_session(
         )
     )
     if older_session_ids:
+        # Sessions past the cap are deleted, not revoked: a revoked token that
+        # comes back reads as a stolen cookie replayed, while the old device
+        # merely signing in again is no such thing. Unknown, it gets a plain
+        # 401.
         session.execute(
-            update(RefreshSession)
-            .where(RefreshSession.id.in_(older_session_ids))
-            .values(revoked_at=now)
+            delete(RefreshSessionFamily).where(
+                RefreshSessionFamily.session_id.in_(older_session_ids)
+            )
+        )
+        session.execute(
+            delete(RefreshSession).where(RefreshSession.id.in_(older_session_ids))
         )
     refresh_token = create_refresh_token()
     refresh_session = RefreshSession(
@@ -337,7 +337,12 @@ def password_user(payload: LoginRequest, request: Request, session: Session) -> 
             headers={"Retry-After": str(retry_after)},
         )
     encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
-    password_valid = verify_password(payload.password, encoded_password)
+    # Hashing can wait for a free slot: end the transaction first, so the
+    # request does not hold a pooled connection meanwhile.
+    session.commit()
+    password_valid, upgraded_hash = verify_password_and_update(
+        payload.password, encoded_password
+    )
     if user is None or not user.is_active or not password_valid:
         audit_event("auth.login_failed")
         raise ApiError(
@@ -345,7 +350,14 @@ def password_user(payload: LoginRequest, request: Request, session: Session) -> 
             ErrorCode.AUTH_INVALID_CREDENTIALS,
             "Identifiants invalides",
         )
-    limiter.clear_subject(rate_subject)
+    # Give back only this attempt: clearing the whole bucket would hand
+    # whoever is guessing this password a fresh allowance at every sign-in.
+    limiter.release(rate_subject)
+    if upgraded_hash is not None:
+        # Tokens are bound to the hash, so they are issued from the new one.
+        user.password_hash = upgraded_hash
+        session.commit()
+        audit_event("auth.password_hash_upgraded", user_id=user.id)
     return user
 
 

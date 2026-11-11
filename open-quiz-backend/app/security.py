@@ -38,6 +38,17 @@ def verify_password(password: str, encoded: str) -> bool:
         return password_hash.verify(password, encoded)
 
 
+def verify_password_and_update(password: str, encoded: str) -> tuple[bool, str | None]:
+    """Check a password; also return a new hash when ``encoded`` is outdated.
+
+    A hash made with weaker parameters than the current recommendation gets a
+    replacement, which the caller stores so the account catches up at its
+    next sign-in.
+    """
+    with password_hashing:
+        return password_hash.verify_and_update(password, encoded)
+
+
 def access_token_version(
     encoded_password: str,
     secret: str,

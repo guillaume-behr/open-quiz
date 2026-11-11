@@ -71,6 +71,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- A device signed out by the limit of ten sessions per account no longer
+  raises a false “refresh token reuse” alarm that also revoked the account's
+  other sessions; it is simply asked to sign in again.
+- Signing in no longer holds a database connection while it waits for the
+  password hash, and no longer sweeps every expired session of every account
+  (the hourly maintenance already does).
 - A two-factor code typed with non-ASCII digits (such as `١٢٣٤٥٦`) is refused
   with 422 instead of a server error, and no longer counts as an attempt.
 - A request body sent without `Content-Length` (chunked) that grows past the
@@ -137,6 +143,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Security
 
+- A successful sign-in gives back only its own attempt instead of resetting
+  the account's attempt counter, so the owner signing in no longer hands
+  whoever is guessing their password a fresh allowance.
+- Password hashes made with older, weaker parameters are upgraded at the
+  next sign-in. Because sessions are bound to the hash, an upgrade signs the
+  account out of its other devices, as a password change does (teachers'
+  other browsers renew their session on their own, but ask for the
+  two-factor code once more).
 - “Clear this device's data” (`/cookie-settings`) works from any tab: the
   logout route clears the refresh and two-factor trust cookies even without
   the session proof, which only the tab that signed in holds (it then leaves
