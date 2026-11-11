@@ -125,6 +125,15 @@ def answer_current(client, url: str, headers: dict[str, str], **payload: Any):
     return client.post(f"{url}/answer", headers=headers, json=payload)
 
 
+def test_exam_questions_show_their_total_points(environment) -> None:
+    client = environment["client"]
+    _, participant_headers, url = started(client, environment)
+    question = client.get(url, headers=participant_headers).json()["question"]
+    # The key is worth 2 points; the -3 distractor never raises the ceiling.
+    assert question["total_points"] == 2
+    assert all("points" not in choice for choice in question["choices"])
+
+
 def test_joining_rejects_unknown_codes_classes_and_draws(environment) -> None:
     client = environment["client"]
     headers = environment["teacher_headers"]

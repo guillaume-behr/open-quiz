@@ -50,6 +50,7 @@ from app.schemas import (
 from app.services.grading import (
     decoded_answer_data,
     participant_maximum_scores,
+    question_maximum_scores,
     rounded_score,
     training_result,
 )
@@ -403,6 +404,8 @@ def student_question_response(
     quiz_session: QuizSession,
     participant: QuizParticipant,
     session: DbSession,
+    *,
+    include_points: bool = False,
 ) -> StudentQuizQuestionResponse:
     questions_by_id, choices_by_question = load_question_records([question_id], session)
     question = questions_by_id.get(question_id)
@@ -446,6 +449,11 @@ def student_question_response(
             )
             for position, choice in enumerate(choices)
         ],
+        total_points=(
+            question_maximum_scores([question.id], session).get(question.id)
+            if include_points
+            else None
+        ),
     )
 
 
@@ -552,6 +560,7 @@ def student_state_response(
                 quiz_session,
                 participant,
                 session,
+                include_points=quiz.mode == QuizMode.EXAM,
             )
             if question_id is not None
             and quiz_session.status == SessionStatus.IN_PROGRESS

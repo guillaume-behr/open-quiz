@@ -36,6 +36,8 @@ const identicalTranslationAllowlist = new Set([
     "question-wording",
     "reported-page",
     "result-participants",
+    "student-question-points_one",
+    "student-question-points_other",
     "system",
 ])
 

@@ -54,13 +54,20 @@ export function StudentQuestionForm({
     return (
         <form className="space-y-6" onSubmit={onSubmit}>
             <div className="space-y-2">
-                <div className="flex items-baseline">
+                <div className="flex items-baseline justify-between gap-3">
                     <p className="text-sm font-semibold text-primary">
                         {t("student-question-progress", {
                             current: questionNumber,
                             total: session.total_questions,
                         })}
                     </p>
+                    {question.total_points != null && (
+                        <p className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-sm font-semibold text-primary tabular-nums">
+                            {t("student-question-points", {
+                                count: question.total_points,
+                            })}
+                        </p>
+                    )}
                 </div>
                 <div
                     className="h-2 overflow-hidden rounded-full bg-muted"

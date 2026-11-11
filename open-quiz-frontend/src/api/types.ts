@@ -344,6 +344,8 @@ export type StudentQuizQuestion = {
     code_language: CodeLanguage | null
     code_content: string | null
     choices: StudentQuizChoice[]
+    // The most this question is worth; sent in exam mode only.
+    total_points?: number | null
 }
 
 export type StudentQuizSession = {
