@@ -18,6 +18,7 @@ import { LoaderCircle, Pencil, UserRoundPlus } from "lucide-react"
 import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+import { USERNAME_PATTERN } from "@/lib/input-patterns"
 
 /**
  * Creates a student account, or edits one, with its class. Mount it while
@@ -172,7 +173,7 @@ export function StudentFormDialog({
                                                 event.target.value.toLowerCase()
                                             )
                                         }
-                                        pattern="[a-zA-Z0-9._-]+"
+                                        pattern={USERNAME_PATTERN}
                                         autoComplete="off"
                                         required
                                     />

@@ -23,7 +23,8 @@ export function getQuizzes(
     search = "",
     gradeLevel = "",
     pageSize = PAGE_SIZE,
-    focus: number | null = null
+    focus: number | null = null,
+    signal?: AbortSignal
 ): Promise<Page<Quiz>> {
     const params = new URLSearchParams({
         page: String(page),
@@ -33,7 +34,7 @@ export function getQuizzes(
     if (search) params.set("search", search)
     if (gradeLevel) params.set("grade_level", gradeLevel)
     if (focus !== null) params.set("focus", String(focus))
-    return requestPage<Quiz>(`/api/quizzes?${params}`)
+    return requestPage<Quiz>(`/api/quizzes?${params}`, { signal })
 }
 
 export async function getAllQuizzes(): Promise<Quiz[]> {
@@ -189,12 +190,15 @@ export function selectMakeupQuiz(
 export function getQuizResults(
     page = 1,
     quizSearch = "",
-    classSearch = ""
+    classSearch = "",
+    signal?: AbortSignal
 ): Promise<Page<QuizSession>> {
     const params = new URLSearchParams({ page: String(page), page_size: "8" })
     if (quizSearch) params.set("quiz_search", quizSearch)
     if (classSearch) params.set("class_search", classSearch)
-    return requestPage<QuizSession>(`/api/quizzes/sessions/results?${params}`)
+    return requestPage<QuizSession>(`/api/quizzes/sessions/results?${params}`, {
+        signal,
+    })
 }
 
 export function downloadQuizResults(

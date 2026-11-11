@@ -1,4 +1,5 @@
 import { usePageTitle } from "@/hooks/use-page-title"
+import { useSectionParam } from "@/hooks/use-section-param"
 import {
     createGradeLevel,
     deleteGradeLevel,
@@ -29,28 +30,17 @@ import { lazy, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 
-type DashboardSection =
-    | "students"
-    | "classes"
-    | "exam-quizzes"
-    | "makeup"
-    | "training-quizzes"
-    | "question-banks"
-    | "results"
+const dashboardSections = [
+    "students",
+    "classes",
+    "exam-quizzes",
+    "makeup",
+    "training-quizzes",
+    "question-banks",
+    "results",
+] as const
 
-const defaultGradeLevelOrder = new Map([
-    ["2nd", 0],
-    ["1ere", 1],
-    ["Tle", 2],
-])
-
-function compareGradeLevels(first: GradeLevel, second: GradeLevel): number {
-    const firstOrder = defaultGradeLevelOrder.get(first.name) ?? 3
-    const secondOrder = defaultGradeLevelOrder.get(second.name) ?? 3
-    return (
-        firstOrder - secondOrder || first.name.localeCompare(second.name, "fr")
-    )
-}
+type DashboardSection = (typeof dashboardSections)[number]
 
 const ClassesPanel = lazy(() =>
     import("@/components/classes/classes-panel").then((module) => ({
@@ -94,8 +84,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     const session = useStaffSession("professor")
     const currentUser =
         session.user && !session.user.is_admin ? session.user : null
-    const [activeSection, setActiveSection] =
-        useState<DashboardSection>("students")
+    const [activeSection, setActiveSection] = useSectionParam(dashboardSections)
     const [isQuestionBankCreationOpen, setIsQuestionBankCreationOpen] =
         useState(false)
     const [isQuizCreationOpen, setIsQuizCreationOpen] = useState(false)
@@ -209,11 +198,14 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
         if (existing) return existing
 
         const level = await createGradeLevel(normalizedName)
+        // Usable at once, then put where the API orders it: only the API
+        // knows the collation that sorts levels.
         setGradeLevels((current) =>
             current.some((item) => item.id === level.id)
                 ? current
-                : [...current, level].sort(compareGradeLevels)
+                : [...current, level]
         )
+        setGradeLevelsAttempt((attempt) => attempt + 1)
         return level
     }
 

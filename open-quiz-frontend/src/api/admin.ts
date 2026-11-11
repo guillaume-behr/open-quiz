@@ -3,9 +3,10 @@ import { PAGE_SIZE } from "@/lib/utils"
 import { request, requestPage } from "./client"
 import type { NewUser, Page, User } from "./types"
 
-export function getUsers(page = 1): Promise<Page<User>> {
+export function getUsers(page = 1, signal?: AbortSignal): Promise<Page<User>> {
     return requestPage<User>(
-        `/api/admin/users?page=${page}&page_size=${PAGE_SIZE}`
+        `/api/admin/users?page=${page}&page_size=${PAGE_SIZE}`,
+        { signal }
     )
 }
 

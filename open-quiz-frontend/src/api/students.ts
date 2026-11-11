@@ -11,7 +11,8 @@ export function getStudents(
     search = "",
     pageSize = 12,
     classFilter = "",
-    statusFilter = ""
+    statusFilter = "",
+    signal?: AbortSignal
 ): Promise<Page<StudentAccount>> {
     const params = new URLSearchParams({
         page: String(page),
@@ -21,7 +22,7 @@ export function getStudents(
     if (classFilter === "unassigned") params.set("unassigned", "true")
     else if (classFilter) params.set("class_id", classFilter)
     if (statusFilter) params.set("is_active", statusFilter)
-    return requestPage<StudentAccount>(`/api/students?${params}`)
+    return requestPage<StudentAccount>(`/api/students?${params}`, { signal })
 }
 
 export async function getAllStudents(): Promise<StudentAccount[]> {

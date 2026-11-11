@@ -56,8 +56,18 @@ type ResultsPanelProps = {
     onExportDialogOpenChange: (open: boolean) => void
 }
 
-function loadResults(page: number, filters: { quiz: string; class: string }) {
-    return getQuizResults(page, filters.quiz.trim(), filters.class.trim())
+function loadResults(
+    page: number,
+    filters: { quiz: string; class: string },
+    _focus: unknown,
+    signal: AbortSignal
+) {
+    return getQuizResults(
+        page,
+        filters.quiz.trim(),
+        filters.class.trim(),
+        signal
+    )
 }
 
 export function ResultsPanel({

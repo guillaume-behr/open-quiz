@@ -2672,3 +2672,62 @@ test("names with apostrophes and ampersands are shown as typed", async ({
         page.getByRole("heading", { name: "Welcome, D'Artagnan & Q<A>" })
     ).toBeVisible()
 })
+
+test("the dashboard section lives in the URL, across reloads and Back", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
+    await page
+        .getByRole("button", { name: "Exam quizzes", exact: true })
+        .click()
+    await expect(page).toHaveURL(/[?&]section=exam-quizzes\b/)
+
+    await page.reload()
+    await expect(
+        page.getByRole("button", { name: "Exam quizzes", exact: true })
+    ).toHaveAttribute("aria-current", "page")
+
+    await page.goBack()
+    await expect(page).toHaveURL(/[?&]section=classes\b/)
+    await expect(
+        page.getByRole("button", { name: "Classes", exact: true })
+    ).toHaveAttribute("aria-current", "page")
+
+    await page.goto("/teacher/dashboard?section=unknown")
+    await expect(
+        page.getByRole("button", { name: "Students", exact: true })
+    ).toHaveAttribute("aria-current", "page")
+})
+
+test("a created grade level takes the place the API gives it", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    // The API orders levels by database collation, which can differ from
+    // any order the browser would compute: here the new level comes last.
+    const levels = [{ id: 1, name: "Grade 8" }]
+    await page.route("**/api/classes/grade-levels", async (route) => {
+        const request = route.request()
+        if (request.method() === "POST") {
+            const created = {
+                id: 2,
+                name: (request.postDataJSON() as { name: string }).name,
+            }
+            levels.push(created)
+            return route.fulfill({ status: 201, json: created })
+        }
+        return route.fulfill({ json: levels })
+    })
+    await page.goto("/teacher/dashboard?section=classes")
+    await page.getByRole("button", { name: "New class" }).click()
+    const dialog = page.getByRole("dialog")
+    await dialog.getByRole("button", { name: "Add a level" }).click()
+    await dialog.getByPlaceholder("Ex.: 5th", { exact: true }).fill("Alpha")
+    await dialog.getByRole("button", { name: "Add", exact: true }).click()
+
+    await expect(
+        dialog.getByLabel("Grade level", { exact: true }).getByRole("option")
+    ).toHaveText(["Choose a level", "Grade 8", "Alpha"])
+})

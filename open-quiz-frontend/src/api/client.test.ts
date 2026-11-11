@@ -6,8 +6,10 @@ import {
     clearSessionTokens,
     getLiveAccessToken,
     onSessionExpired,
+    request,
     setSessionTokens,
 } from "@/api/client"
+import { importQuestionBatch } from "@/api/question-banks"
 
 const teacher = {
     id: 7,
@@ -82,5 +84,88 @@ describe("staff session restore", () => {
 
         expect(expired).toHaveBeenCalledTimes(1)
         unsubscribe()
+    })
+})
+
+describe("request timeouts", () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+        vi.unstubAllGlobals()
+        clearSessionTokens()
+    })
+
+    function stubFetchSignals(statuses: number[]) {
+        const signals: AbortSignal[] = []
+        vi.stubGlobal(
+            "fetch",
+            vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+                const path = new URL(String(input), "http://localhost").pathname
+                if (path === "/api/auth/refresh")
+                    return Promise.resolve(
+                        Response.json({
+                            access_token: jwtExpiringIn(900),
+                            refresh_proof: "next-proof",
+                        })
+                    )
+                if (init?.signal) signals.push(init.signal)
+                const status = statuses.shift() ?? 200
+                return Promise.resolve(
+                    status === 204
+                        ? new Response(null, { status })
+                        : Response.json({}, { status })
+                )
+            })
+        )
+        return signals
+    }
+
+    it("keeps the timeout when the caller passes its own signal", async () => {
+        const timeouts: AbortController[] = []
+        vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+            const controller = new AbortController()
+            timeouts.push(controller)
+            return controller.signal
+        })
+        const signals = stubFetchSignals([204])
+        const caller = new AbortController()
+
+        await request("/api/anything", { signal: caller.signal })
+
+        expect(signals[0]?.aborted).toBe(false)
+        timeouts[0]?.abort()
+        expect(signals[0]?.aborted).toBe(true)
+    })
+
+    it("still lets the caller abort", async () => {
+        const signals = stubFetchSignals([204])
+        const caller = new AbortController()
+
+        await request("/api/anything", { signal: caller.signal })
+
+        caller.abort()
+        expect(signals[0]?.aborted).toBe(true)
+    })
+
+    it("gives a retried request a timeout of its own", async () => {
+        const timeouts: AbortController[] = []
+        vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+            const controller = new AbortController()
+            timeouts.push(controller)
+            return controller.signal
+        })
+        setSessionTokens(jwtExpiringIn(900), "proof")
+        const signals = stubFetchSignals([401, 204])
+
+        await importQuestionBatch(
+            new File(['{"question_bank": {}}'], "bank.json", {
+                type: "application/json",
+            })
+        ).catch(() => undefined)
+
+        expect(signals).toHaveLength(2)
+        expect(signals[1]).not.toBe(signals[0])
+        // The first attempt's timer running out no longer matters.
+        timeouts[0]?.abort()
+        expect(signals[1]?.aborted).toBe(false)
     })
 })

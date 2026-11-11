@@ -30,9 +30,15 @@ export type PagedList<T, F extends Record<string, string>> = Resource<
  * A paged, filtered list loaded from the API. `load` must be stable (defined
  * at module level, or memoized with useCallback): a new function reloads.
  * When `load` accepts a focused item, `focus()` asks the API for its page.
+ * The signal aborts a load superseded by another page or filter.
  */
 export function usePagedList<T, F extends Record<string, string>>(
-    load: (page: number, filters: F, focus: number | null) => Promise<Page<T>>,
+    load: (
+        page: number,
+        filters: F,
+        focus: number | null,
+        signal: AbortSignal
+    ) => Promise<Page<T>>,
     initialFilters: F
 ): PagedList<T, F> {
     const [defaultFilters] = useState(initialFilters)
@@ -41,7 +47,7 @@ export function usePagedList<T, F extends Record<string, string>>(
     const [focusedId, setFocusedId] = useState<number | null>(null)
     const resource = useResource(
         useCallback(
-            () => load(page, filters, focusedId),
+            (signal: AbortSignal) => load(page, filters, focusedId, signal),
             [filters, focusedId, load, page]
         )
     )

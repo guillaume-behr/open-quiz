@@ -33,9 +33,17 @@ import { apiErrorMessage } from "@/lib/errors"
 
 function loadClasses(
     page: number,
-    filters: { search: string; gradeLevel: string }
+    filters: { search: string; gradeLevel: string },
+    _focus: unknown,
+    signal: AbortSignal
 ) {
-    return getStudentClasses(page, filters.search.trim(), filters.gradeLevel)
+    return getStudentClasses(
+        page,
+        filters.search.trim(),
+        filters.gradeLevel,
+        undefined,
+        signal
+    )
 }
 
 export function ClassesPanel({
