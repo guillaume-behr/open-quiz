@@ -69,8 +69,8 @@ export function ClassFormDialog({
             description={t("create-class-help")}
             size={editingClass ? "xl" : "md"}
         >
-            <form onSubmit={onSubmit}>
-                <FieldGroup>
+            <FieldGroup>
+                <form id="class-form" onSubmit={onSubmit}>
                     <div className="grid items-start gap-4 md:grid-cols-2">
                         <GradeLevelField
                             id="class-grade"
@@ -114,18 +114,20 @@ export function ClassFormDialog({
                             </datalist>
                         </Field>
                     </div>
-                    {editingClass && studentManagement}
-                    {error && <FieldError>{error}</FieldError>}
-                    <DialogFormActions
-                        isBusy={isBusy}
-                        isEditing={Boolean(editingClass)}
-                        submitLabel={t(
-                            editingClass ? "save-class" : "create-class"
-                        )}
-                        onClose={onClose}
-                    />
-                </FieldGroup>
-            </form>
+                </form>
+                {/* Outside the form: Enter in these inputs must not save it. */}
+                {editingClass && studentManagement}
+                {error && <FieldError>{error}</FieldError>}
+                <DialogFormActions
+                    form="class-form"
+                    isBusy={isBusy}
+                    isEditing={Boolean(editingClass)}
+                    submitLabel={t(
+                        editingClass ? "save-class" : "create-class"
+                    )}
+                    onClose={onClose}
+                />
+            </FieldGroup>
         </Dialog>
     )
 }

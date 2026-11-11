@@ -2321,3 +2321,207 @@ test("grade levels that fail to load say so and can be loaded again", async ({
         page.getByRole("dialog").getByRole("option", { name: "Grade 8" })
     ).toHaveCount(1)
 })
+
+test("Enter in the class dialog's student fields adds the student and keeps the dialog open", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+    await page.getByRole("button", { name: "Classes", exact: true }).click()
+    await page
+        .getByRole("article")
+        .filter({ hasText: "Class 8B" })
+        .getByRole("button", { name: "Edit class" })
+        .click()
+    const dialog = page.getByRole("dialog", { name: "Edit class" })
+    await dialog.getByLabel("First name").fill("Grace")
+    await dialog.getByLabel("Last name").fill("Hopper")
+    await dialog.getByLabel("Last name").press("Enter")
+
+    await expect
+        .poll(() =>
+            requests.some(
+                (request) =>
+                    new URL(request.url()).pathname === "/api/students" &&
+                    request.method() === "POST"
+            )
+        )
+        .toBe(true)
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByLabel("First name")).toHaveValue("")
+    expect(
+        requests.some(
+            (request) =>
+                new URL(request.url()).pathname === "/api/classes/11/update"
+        )
+    ).toBe(false)
+})
+
+test("Enter in a question filter keeps the question-bank dialog open", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Question banks", exact: true })
+        .click()
+    await page
+        .getByRole("listitem")
+        .filter({ hasText: "Matter and energy" })
+        .getByRole("button", { name: "Edit question bank" })
+        .click()
+    const dialog = page.getByRole("dialog", { name: "Edit question bank" })
+    await dialog.getByRole("button", { name: /Filters/ }).click()
+    await dialog.getByLabel("Minimum points").fill("1")
+    await dialog.getByLabel("Minimum points").press("Enter")
+
+    await expect(dialog.getByLabel("Minimum points")).toBeFocused()
+    await expect(dialog).toBeVisible()
+    expect(
+        requests.filter(
+            (request) =>
+                request.method() !== "GET" &&
+                /^\/api\/question-banks\/21(\/update)?$/.test(
+                    new URL(request.url()).pathname
+                )
+        )
+    ).toEqual([])
+})
+
+test("switching a question to written and back keeps its correct choice", async ({
+    page,
+}) => {
+    const requests = await mockTeacherApi(page)
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Question banks", exact: true })
+        .click()
+    await page
+        .getByRole("listitem")
+        .filter({ hasText: "Matter and energy" })
+        .getByRole("button", { name: "Edit question bank" })
+        .click()
+    await page
+        .getByRole("dialog", { name: "Edit question bank" })
+        .getByRole("button", { name: "Add a question" })
+        .click()
+    const dialog = page.getByRole("dialog", { name: "Add a question" })
+    await dialog.getByLabel("Question").fill("Which one is a noble gas?")
+    await dialog.getByRole("button", { name: "Add a choice" }).click()
+    await dialog.getByPlaceholder("Choice 1").fill("Oxygen")
+    await dialog.getByPlaceholder("Choice 2").fill("Nitrogen")
+    await dialog.getByPlaceholder("Choice 3").fill("Neon")
+    await dialog.getByLabel("Choice 3 is correct").check()
+
+    await dialog
+        .getByLabel("Answer type", { exact: true })
+        .selectOption("written")
+    await dialog
+        .getByLabel("Answer type", { exact: true })
+        .selectOption("single")
+
+    await expect(dialog.getByLabel("Choice 3 is correct")).toBeChecked()
+    await expect(dialog.getByLabel("Choice 1 is correct")).not.toBeChecked()
+    await dialog.getByRole("button", { name: "Save question" }).click()
+    await expect(dialog).toBeHidden()
+    const createRequest = requests.find(
+        (request) =>
+            new URL(request.url()).pathname ===
+                "/api/question-banks/21/questions" &&
+            request.method() === "POST"
+    )
+    const body = createRequest?.postData() ?? ""
+    const payload = JSON.parse(
+        body.slice(body.indexOf("{"), body.lastIndexOf("}") + 1)
+    ) as { choices: { label: string; is_correct: boolean }[] }
+    expect(
+        payload.choices.map(({ label, is_correct }) => ({ label, is_correct }))
+    ).toEqual([
+        { label: "Oxygen", is_correct: false },
+        { label: "Nitrogen", is_correct: false },
+        { label: "Neon", is_correct: true },
+    ])
+})
+
+test("a new choice keeps its own code result when an earlier choice is removed", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    const savedChoice = {
+        is_correct: false,
+        points: 0,
+        has_image: false,
+        code_language: null,
+        code_content: null,
+    }
+    await page.route(
+        "http://127.0.0.1:4173/api/question-banks/21/questions",
+        (route) =>
+            route.fulfill({
+                json: [
+                    {
+                        id: 81,
+                        question_bank_id: 21,
+                        prompt: "Which unit measures energy?",
+                        points: 1,
+                        difficulty: "easy",
+                        answer_mode: "single",
+                        answer_mode_disclosed: true,
+                        response_language: null,
+                        has_image: false,
+                        code_language: null,
+                        code_content: null,
+                        choices: [
+                            {
+                                ...savedChoice,
+                                id: 1,
+                                label: "Joule",
+                                is_correct: true,
+                                points: 1,
+                                position: 0,
+                            },
+                            {
+                                ...savedChoice,
+                                id: 2,
+                                label: "Metre",
+                                position: 1,
+                            },
+                        ],
+                        created_at: "2026-01-06T12:00:00Z",
+                    },
+                ],
+            })
+    )
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Question banks", exact: true })
+        .click()
+    await page
+        .getByRole("listitem")
+        .filter({ hasText: "Matter and energy" })
+        .getByRole("button", { name: "Edit question bank" })
+        .click()
+    await page
+        .getByRole("dialog", { name: "Edit question bank" })
+        .getByRole("button", { name: "Edit" })
+        .click()
+    const dialog = page.getByRole("dialog", { name: "Edit question" })
+    await dialog.getByRole("button", { name: "Add a choice" }).click()
+    await dialog.getByPlaceholder("Choice 3").fill("Watt")
+    await dialog.getByRole("button", { name: "Add code" }).last().click()
+    await dialog.getByLabel("Code language for choice 3").selectOption("python")
+    await dialog.getByLabel("Source code").last().fill("print('third')")
+    await dialog.getByRole("button", { name: "Run", exact: true }).click()
+    await expect(dialog.getByText("third", { exact: true })).toBeVisible({
+        timeout: 60_000,
+    })
+
+    await dialog.getByLabel("Remove choice 2").click()
+
+    await expect(dialog.getByPlaceholder("Choice 2")).toHaveValue("Watt")
+    await expect(dialog.getByLabel("Code language for choice 2")).toHaveValue(
+        "python"
+    )
+    await expect(dialog.getByText("third", { exact: true })).toHaveCount(1)
+    await expect(dialog.getByText("third", { exact: true })).toBeVisible()
+})

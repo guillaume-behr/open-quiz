@@ -9,6 +9,8 @@ type DialogFormActionsProps = {
     onClose: () => void
     submitDisabled?: boolean
     bordered?: boolean
+    /** The id of the form to submit, when the actions sit outside it. */
+    form?: string
 }
 
 export function DialogFormActions({
@@ -18,6 +20,7 @@ export function DialogFormActions({
     onClose,
     submitDisabled = false,
     bordered = true,
+    form,
 }: DialogFormActionsProps) {
     const { t } = useTranslation()
 
@@ -33,7 +36,11 @@ export function DialogFormActions({
             >
                 {t("cancel")}
             </Button>
-            <Button type="submit" disabled={isBusy || submitDisabled}>
+            <Button
+                type="submit"
+                form={form}
+                disabled={isBusy || submitDisabled}
+            >
                 {isBusy ? (
                     <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                 ) : isEditing ? (

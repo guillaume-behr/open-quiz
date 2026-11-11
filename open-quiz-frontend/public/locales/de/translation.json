@@ -417,6 +417,7 @@
     "answer-mode": "Antworttyp",
     "single-choice": "Einzelauswahl",
     "multiple-choice": "Multiple-Choice",
+    "single-choice-kept-first-correct": "Einfachauswahl erlaubt nur eine richtige Antwort: Nur die erste als richtig markierte Antwort wurde beibehalten.",
     "disclose-answer-mode": "Antworttyp den Schülern anzeigen",
     "answer-choices": "Vorgeschlagene Antworten",
     "written-answer": "Freitextantwort",

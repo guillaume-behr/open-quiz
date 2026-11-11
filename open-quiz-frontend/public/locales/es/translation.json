@@ -418,6 +418,7 @@
     "answer-mode": "Tipo de respuesta",
     "single-choice": "Opción única",
     "multiple-choice": "Opción múltiple",
+    "single-choice-kept-first-correct": "La opción única admite una sola respuesta correcta: solo se ha conservado la primera marcada como correcta.",
     "disclose-answer-mode": "Mostrar tipo de respuesta a los estudiantes",
     "answer-choices": "Respuestas sugeridas",
     "written-answer": "Respuesta escrita",

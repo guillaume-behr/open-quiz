@@ -13,6 +13,7 @@ import { FieldError, FieldGroup } from "@/components/ui/field"
 import { LoaderCircle, Pencil, Plus } from "lucide-react"
 import { type FormEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { fitChoicesToMode, nextChoiceUid } from "./answer-mode-choices"
 import { QuestionChoicesEditor } from "./question-choices-editor"
 import { QuestionContentFields } from "./question-content-fields"
 import type { EditableChoice } from "./question-form-types"
@@ -62,6 +63,7 @@ function encodeImage(file: File): Promise<EncodedImage> {
 function initialChoices(question?: Question): EditableChoice[] {
     return (
         question?.choices.map((choice) => ({
+            uid: nextChoiceUid(),
             id: choice.id,
             label: choice.label,
             is_correct: choice.is_correct,
@@ -77,6 +79,7 @@ function initialChoices(question?: Question): EditableChoice[] {
 
 function createEmptyChoice(isCorrect: boolean): EditableChoice {
     return {
+        uid: nextChoiceUid(),
         label: "",
         is_correct: isCorrect,
         points: isCorrect ? 1 : 0,
@@ -124,6 +127,7 @@ export function QuestionForm({
     const [codeContent, setCodeContent] = useState(question?.code_content ?? "")
     const [isCreating, setIsCreating] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [keptFirstCorrectOnly, setKeptFirstCorrectOnly] = useState(false)
 
     function selectCorrectChoice(index: number, checked: boolean): void {
         setChoices((current) => {
@@ -147,6 +151,7 @@ export function QuestionForm({
     function changeAnswerMode(mode: AnswerMode): void {
         const previousMode = answerMode
         setAnswerMode(mode)
+        setKeptFirstCorrectOnly(false)
 
         if (mode === "written") {
             if (previousMode !== "written") {
@@ -168,38 +173,21 @@ export function QuestionForm({
             return
         }
 
+        let target = choices
         if (previousMode === "written") {
             setAnswerModeDisclosed(
                 answerModeDisclosedBackup.current ?? answerModeDisclosed
             )
-            const restoredChoices = choiceModeBackup.current ?? [
+            target = choiceModeBackup.current ?? [
                 createEmptyChoice(true),
                 createEmptyChoice(false),
             ]
             choiceModeBackup.current = null
             answerModeDisclosedBackup.current = null
-            setChoices(
-                mode === "single"
-                    ? restoredChoices.map((choice, index) => ({
-                          ...choice,
-                          is_correct: index === 0,
-                      }))
-                    : restoredChoices
-            )
-            return
         }
-
-        if (mode === "single") {
-            const firstCorrectIndex = choices.findIndex(
-                (choice) => choice.is_correct
-            )
-            setChoices((current) =>
-                current.map((choice, index) => ({
-                    ...choice,
-                    is_correct: index === Math.max(0, firstCorrectIndex),
-                }))
-            )
-        }
+        const fitted = fitChoicesToMode(target, mode)
+        setChoices(fitted.choices)
+        setKeptFirstCorrectOnly(fitted.keptFirstCorrectOnly)
     }
 
     function removeChoice(index: number): void {
@@ -322,6 +310,11 @@ export function QuestionForm({
                     onCorrectChoiceChange={selectCorrectChoice}
                     onRemoveChoice={removeChoice}
                 />
+                {keptFirstCorrectOnly && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        {t("single-choice-kept-first-correct")}
+                    </p>
+                )}
                 {error && <FieldError>{error}</FieldError>}
                 <div className="flex justify-end gap-2 border-t pt-4">
                     <Button type="button" variant="outline" onClick={onCancel}>

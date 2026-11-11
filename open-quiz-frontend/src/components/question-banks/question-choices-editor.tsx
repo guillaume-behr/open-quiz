@@ -4,6 +4,7 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { QuestionChoiceEditor } from "./question-choice-editor"
+import { nextChoiceUid } from "./answer-mode-choices"
 import type { EditableChoice } from "./question-form-types"
 
 type QuestionChoicesEditorProps = {
@@ -37,6 +38,7 @@ export function QuestionChoicesEditor({
         onChoicesChange([
             ...choices,
             {
+                uid: nextChoiceUid(),
                 label: "",
                 is_correct: false,
                 points: 0,
@@ -62,7 +64,7 @@ export function QuestionChoicesEditor({
                 {choices.map((choice, index) =>
                     answerMode === "written" && index > 0 ? null : (
                         <QuestionChoiceEditor
-                            key={choice.id ?? index}
+                            key={choice.uid}
                             choice={choice}
                             index={index}
                             choiceCount={choices.length}

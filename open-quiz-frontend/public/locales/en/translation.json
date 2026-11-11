@@ -417,6 +417,7 @@
     "answer-mode": "Answer type",
     "single-choice": "Single choice",
     "multiple-choice": "Multiple choice",
+    "single-choice-kept-first-correct": "Single choice allows one correct answer: only the first one marked correct was kept.",
     "disclose-answer-mode": "Show the answer type to students",
     "answer-choices": "Answer choices",
     "written-answer": "Written answer",

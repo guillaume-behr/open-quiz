@@ -74,6 +74,13 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Pressing Enter in the student fields of the class dialog adds the student,
+  and pressing Enter in a question filter of the question-bank dialog no
+  longer saves and closes the dialog. Switching a question to written answer
+  and back restores its correct choice instead of moving it to the first one
+  (single choice keeps the first correct choice and says so when several were
+  marked). Choice rows keep their own state when a choice is added or removed.
+
 - Live updates no longer freeze silently on a connection that died without
   closing (a laptop waking up, a network change, a proxy dropping the
   stream): a connection that has sent nothing for 60 seconds is replaced, at
