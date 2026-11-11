@@ -271,6 +271,7 @@
     "two-factor-code-used": "此身份验证代码不正确或已被使用。",
     "admin-login": "管理",
     "admin-login-instructions": "使用配置的管理员帐户登录。",
+    "staff-session-expired": "你的会话已过期。请重新登录以继续。",
     "signing-in": "连接...",
     "sign-out": "退出",
     "admin-only": "该帐户没有管理员权限。",

@@ -1,78 +1,46 @@
-import { login, logout, restoreSession, verifyTwoFactor } from "@/api/auth"
-import type { TwoFactorChallenge, User } from "@/api/types"
 import { AdminWorkspace } from "@/components/admin/admin-workspace"
 import { DashboardAuthentication } from "@/components/forms/dashboard-authentication"
 import { PageLoader } from "@/components/ui/page-loader"
-import { useEffect, useState } from "react"
+import { useStaffSession } from "@/hooks/use-staff-session"
+import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
-
-async function requireAdmin(user: User, message: string): Promise<void> {
-    if (!user.is_admin) {
-        await logout()
-        throw new Error(message)
-    }
-}
+import { useNavigate } from "react-router"
 
 export function AdminDashboard() {
     const { t } = useTranslation()
-    const [currentUser, setCurrentUser] = useState<User | null>(null)
-    const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
+    const navigate = useNavigate()
+    const session = useStaffSession("admin")
+    const { user } = session
 
+    // A teacher who opens this page goes back to their own dashboard, still
+    // signed in.
     useEffect(() => {
-        restoreSession()
-            .then(async (user) => {
-                await requireAdmin(user, t("admin-only"))
-                setCurrentUser(user)
-            })
-            .catch(() => {
-                setCurrentUser(null)
-            })
-            .finally(() => setIsLoading(false))
-    }, [t])
+        if (user && !user.is_admin)
+            navigate("/teacher/dashboard", { replace: true })
+    }, [navigate, user])
 
-    async function handleLogin(username: string, password: string) {
-        const result = await login(username, password, "admin")
-        if (result.status === "authenticated") {
-            await completeSignIn(result.user)
-            return
-        }
-        setChallenge(result)
-    }
-
-    async function handleTwoFactor(code: string) {
-        if (!challenge) return
-        await completeSignIn(
-            await verifyTwoFactor(challenge.challenge_token, code)
-        )
-    }
-
-    async function completeSignIn(user: User) {
-        await requireAdmin(user, t("admin-only"))
-        setCurrentUser(user)
-        setChallenge(null)
-    }
-
-    function handleLogout() {
-        void logout().finally(() => setCurrentUser(null))
-    }
-
-    if (isLoading) {
+    if (session.isLoading || (user && !user.is_admin)) {
         return <PageLoader />
     }
 
-    if (!currentUser) {
+    if (!user) {
         return (
             <DashboardAuthentication
-                challenge={challenge}
+                challenge={session.challenge}
                 title={t("admin-login")}
                 instructions={t("admin-login-instructions")}
-                onLogin={handleLogin}
-                onVerify={handleTwoFactor}
-                onCancelChallenge={() => setChallenge(null)}
+                notice={session.expired ? t("staff-session-expired") : null}
+                onLogin={session.signIn}
+                onVerify={session.completeTwoFactor}
+                onCancelChallenge={session.cancelChallenge}
             />
         )
     }
 
-    return <AdminWorkspace currentUser={currentUser} onLogout={handleLogout} />
+    return (
+        <AdminWorkspace
+            currentUser={user}
+            onLogout={() => void session.signOut()}
+        />
+    )
 }

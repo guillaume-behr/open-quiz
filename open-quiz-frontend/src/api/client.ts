@@ -10,6 +10,19 @@ function requestSignal(signal?: AbortSignal | null): AbortSignal {
 let accessToken: string | null = null
 let refreshProof: string | null = readRefreshProof()
 let refreshPromise: Promise<boolean> | null = null
+const sessionExpiredListeners = new Set<() => void>()
+
+/**
+ * Run `listener` when the server refuses to renew the staff session (it
+ * expired, or was revoked elsewhere), so the open page can return to its
+ * sign-in form instead of failing every action. Returns the unsubscriber.
+ */
+export function onSessionExpired(listener: () => void): () => void {
+    sessionExpiredListeners.add(listener)
+    return () => {
+        sessionExpiredListeners.delete(listener)
+    }
+}
 
 type TokenResponse = {
     access_token: string
@@ -89,6 +102,7 @@ async function refreshAccessToken(): Promise<boolean> {
             .then(async (response) => {
                 if (response.status === 401 || response.status === 403) {
                     clearSessionTokens()
+                    for (const listener of sessionExpiredListeners) listener()
                     return false
                 }
                 if (!response.ok) throw await errorFrom(response)
@@ -103,7 +117,34 @@ async function refreshAccessToken(): Promise<boolean> {
     return refreshPromise
 }
 
+/** Seconds since the epoch at which a JWT expires, or null if unreadable. */
+function tokenExpiry(token: string): number | null {
+    try {
+        const payload = token.split(".")[1]
+        if (!payload) return null
+        const claims = JSON.parse(
+            atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+        ) as { exp?: unknown }
+        return typeof claims.exp === "number" ? claims.exp : null
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Make sure a staff session is usable, renewing it only when needed.
+ *
+ * Every renewal rotates the refresh token, and the server revokes the whole
+ * session if an old one comes back (another tab, a race): an access token
+ * still in memory is used as it is unless it is known to expire within a
+ * minute, and a 401 on the next request renews it then.
+ */
 export function restoreAccessToken(): Promise<boolean> {
+    if (accessToken) {
+        const expiry = tokenExpiry(accessToken)
+        if (expiry === null || expiry * 1000 - Date.now() > 60_000)
+            return Promise.resolve(true)
+    }
     return refreshAccessToken()
 }
 
