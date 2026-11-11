@@ -305,3 +305,42 @@ test("a user list that fails to load says so and can be loaded again", async ({
     await expect(page.getByText("2 accounts")).toBeVisible()
     await expect(page.getByRole("alert")).toHaveCount(0)
 })
+
+test("the browser blocks a username the API would refuse", async ({ page }) => {
+    const requests = await mockAdminApi(page)
+    await page.goto("/admin/dashboard")
+    await page.getByLabel("Display name").fill("Katherine Johnson")
+    await page.getByLabel("Username").fill("katherine johnson")
+    await page
+        .getByLabel("Password", { exact: true })
+        .fill("a-secure-password-2026")
+    await page.getByRole("button", { name: "Create user" }).click()
+
+    await expect
+        .poll(() =>
+            page
+                .getByLabel("Username")
+                .evaluate((input: HTMLInputElement) => input.validity.valid)
+        )
+        .toBe(false)
+    expect(
+        requests.some(
+            (request) =>
+                new URL(request.url()).pathname === "/api/admin/users" &&
+                request.method() === "POST"
+        )
+    ).toBe(false)
+})
+
+test("the admin section lives in the URL", async ({ page }) => {
+    await mockAdminApi(page)
+    await page.goto("/admin/dashboard")
+    await page.getByRole("button", { name: /Problem reports/ }).click()
+    await expect(page).toHaveURL(/[?&]section=reports\b/)
+    await page.reload()
+    await expect(
+        page.getByRole("heading", { name: "Problem reports", exact: true })
+    ).toBeVisible()
+    await page.goBack()
+    await expect(page.getByText("Grace Hopper")).toBeVisible()
+})
