@@ -97,7 +97,7 @@ if ! compose exec -T open-quiz-database sh -c '
         --command="COMMENT ON SCHEMA public IS '"'"'standard public schema'"'"'" \
         --file="$sql_file" >/dev/null
 ' <"$backup_file"; then
-    compose up --detach --wait --wait-timeout 120
+    compose up --detach --wait --wait-timeout "${OPEN_QUIZ_WAIT_TIMEOUT:-120}"
     fail "the restore failed and was rolled back; the previous data is unchanged"
 fi
 
@@ -107,7 +107,7 @@ step "Configuring the API's PostgreSQL role"
 configure_database_roles "$ENV_FILE"
 
 step 'Starting the containers'
-compose up --detach --wait --wait-timeout 120
+compose up --detach --wait --wait-timeout "${OPEN_QUIZ_WAIT_TIMEOUT:-120}"
 compose ps
 
 highlight "Restored $backup_file"

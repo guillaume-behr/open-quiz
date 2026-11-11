@@ -197,6 +197,59 @@ jobs:
           fi
           docker compose exec -T open-quiz-backend \
             /app/.venv/bin/python scripts/container_network_smoke.py
+      - name: Roll back an update whose migration fails
+        run: |
+          # The deployment above becomes the one to return to.
+          sh ./update.sh --no-pull --no-backup
+          previous=$(git rev-parse HEAD)
+          query() {
+            docker compose exec -T open-quiz-database psql --username=open_quiz \
+              --dbname=open_quiz --tuples-only --no-align --command="$1"
+          }
+          previous_head=$(query "SELECT version_num FROM alembic_version")
+          # Data written before the update must come back with the rollback.
+          query "CREATE TABLE written_before_update (id integer)"
+          # A new revision whose migration fails, as one meeting bad data would.
+          cat >open-quiz-backend/migrations/versions/9999_ci_failing.py <<EOF
+          """Fails on purpose, to test update.sh --rollback in CI."""
+
+          revision = "9999"
+          down_revision = "$previous_head"
+          branch_labels = None
+          depends_on = None
+
+
+          def upgrade() -> None:
+              raise RuntimeError("this migration fails on purpose")
+
+
+          def downgrade() -> None:
+              pass
+          EOF
+          git add open-quiz-backend/migrations/versions/9999_ci_failing.py
+          git -c user.name=CI -c user.email=ci@example.invalid \
+            commit --quiet --message "CI: a migration that fails"
+          if sh ./update.sh --no-pull --wait-timeout 60; then
+            echo "::error::an update whose migration fails reported success"
+            exit 1
+          fi
+
+          sh ./update.sh --rollback --yes
+
+          if [ "$(git rev-parse HEAD)" != "$previous" ]; then
+            echo "::error::the rollback did not check out the previous revision"
+            exit 1
+          fi
+          if [ "$(query "SELECT version_num FROM alembic_version")" != "$previous_head" ]; then
+            echo "::error::the rollback did not restore the previous schema"
+            exit 1
+          fi
+          if [ "$(query "SELECT count(*) FROM pg_tables WHERE tablename = 'written_before_update'")" != 1 ]; then
+            echo "::error::the rollback lost data written before the update"
+            exit 1
+          fi
+          docker compose exec -T open-quiz-backend \
+            /app/.venv/bin/python scripts/container_network_smoke.py
       - name: Stop smoke-test containers
         if: always()
         run: docker compose down --volumes

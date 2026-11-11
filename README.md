@@ -165,10 +165,13 @@ premier examen — se trouve dans [Premiers pas](#-premiers-pas).
 ### Mises à jour
 
 ```shell
-sh ./update.sh
+sh ./update.sh --version v1.0.0
 ```
 
-Le [guide de déploiement](docs/deployment.md#-mettre-à-jour-open-quiz) décrit le
+Sans `--version`, `update.sh` suit la branche du clone, changements non publiés
+compris. En cas de problème, `sh ./update.sh --rollback` revient au code, aux
+images et aux données d’avant la mise à jour. Le
+[guide de déploiement](docs/deployment.md#-mettre-à-jour-open-quiz) décrit le
 déroulement complet de la mise à jour, ainsi que l’option `--no-pull` pour
 reconstruire sans récupérer de nouvelle révision. Avant chaque mise à jour,
 lisez les **Upgrade actions** de la nouvelle version dans le
