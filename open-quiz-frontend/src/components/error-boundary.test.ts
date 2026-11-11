@@ -1,13 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import {
-    MemoryRouter,
-    Route,
-    Routes,
-    useNavigate,
-    type NavigateFunction,
-} from "react-router"
+import { Link, MemoryRouter, Route, Routes } from "react-router"
 import { afterEach, expect, it, vi } from "vitest"
 
 import { RouteErrorBoundary } from "./error-boundary"
@@ -32,11 +26,6 @@ function Broken(): never {
 it("clears an error shown on one route when navigating to another", () => {
     // React and the boundary both report the caught error.
     vi.spyOn(console, "error").mockImplementation(() => {})
-    let navigate: NavigateFunction | null = null
-    function Navigator() {
-        navigate = useNavigate()
-        return null
-    }
     const container = document.createElement("div")
     root = createRoot(container)
     act(() =>
@@ -44,7 +33,7 @@ it("clears an error shown on one route when navigating to another", () => {
             createElement(
                 MemoryRouter,
                 { initialEntries: ["/broken"] },
-                createElement(Navigator),
+                createElement(Link, { to: "/fine" }, "Go on"),
                 createElement(
                     RouteErrorBoundary,
                     null,
@@ -66,7 +55,13 @@ it("clears an error shown on one route when navigating to another", () => {
     )
     expect(container.textContent).toContain("error-page-title")
 
-    act(() => void navigate?.("/fine"))
+    act(() =>
+        container
+            .querySelector("a")
+            ?.dispatchEvent(
+                new MouseEvent("click", { bubbles: true, button: 0 })
+            )
+    )
 
     expect(container.textContent).toContain("Fine page")
     expect(container.textContent).not.toContain("error-page-title")
