@@ -50,6 +50,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   imports are unchanged.
 - In their results, students see each question's points at the top right of it,
   in a green, orange or red pill for full, partial or no credit.
+- During an exam, students see how many points the current question is worth,
+  next to the question number. The student API sends it as `total_points` on
+  the question, in exam mode only; training sessions are unchanged.
 
 ### Changed
 

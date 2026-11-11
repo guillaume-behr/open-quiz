@@ -559,6 +559,8 @@
     "student-answer-recorded": "Respuesta registrada",
     "student-waiting-next": "Espera a que el profesor pase a la siguiente pregunta.",
     "student-question-progress": "Pregunta {{current}} el {{total}}",
+    "student-question-points_one": "{{count}} punto",
+    "student-question-points_other": "{{count}} puntos",
     "student-submit-answer": "Validar mi respuesta",
     "teacher-student-progress_one": "Progreso: {{count}} pregunta el {{total}}",
     "teacher-student-progress_other": "Progreso: {{count}} preguntas el {{total}}",

@@ -756,6 +756,8 @@ class StudentQuizChoiceResponse(BaseModel):
 
 class StudentQuizQuestionResponse(QuestionContentResponse):
     choices: list[StudentQuizChoiceResponse]
+    # The most a student can earn on this question, sent in exam mode only.
+    total_points: float | None = None
 
 
 class TrainingFeedback(BaseModel):
