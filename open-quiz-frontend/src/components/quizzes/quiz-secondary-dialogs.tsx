@@ -13,6 +13,7 @@ import {
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { StaticCodeBlock } from "@/components/question-banks/code-block"
 import {
+    CircleCheck,
     LoaderCircle,
     Play,
     Printer,
@@ -21,6 +22,10 @@ import {
     XCircle,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import type {
+    ConfirmableSessionAction,
+    LiveSessionAction,
+} from "./use-live-sessions"
 
 export function QuizPreviewDialog({
     quiz,
@@ -272,30 +277,46 @@ export function PrintQuizDialog(props: QuizClassDialogProps) {
 }
 
 export function SessionActionDialog({
+    kind,
     actionToConfirm,
     currentAction,
     error,
     onClose,
     onConfirm,
 }: {
-    actionToConfirm: "cancel" | "delete" | null
-    currentAction: "pause" | "resume" | "cancel" | "delete" | null
+    kind: "class" | "makeup"
+    actionToConfirm: ConfirmableSessionAction | null
+    currentAction: LiveSessionAction | null
     error: string | null
     onClose: () => void
-    onConfirm: (action: "cancel" | "delete") => void
+    onConfirm: (action: ConfirmableSessionAction) => void
 }) {
     const { t } = useTranslation()
-    const isDelete = actionToConfirm === "delete"
+    const wording = {
+        delete: {
+            title: "delete-session",
+            help: "delete-session-help",
+            confirm: "delete",
+        },
+        cancel: {
+            title: "cancel-quiz",
+            help: kind === "makeup" ? "makeup-cancel-help" : "cancel-quiz-help",
+            confirm: "confirm-cancellation",
+        },
+        finish: {
+            title: "finish-quiz",
+            help: "makeup-finish-help",
+            confirm: "finish-quiz",
+        },
+    }[actionToConfirm ?? "cancel"]
     return (
         <Dialog
             open={actionToConfirm !== null}
             onOpenChange={(open) => {
                 if (!open && currentAction === null) onClose()
             }}
-            title={t(isDelete ? "delete-session" : "cancel-quiz")}
-            description={t(
-                isDelete ? "delete-session-help" : "cancel-quiz-help"
-            )}
+            title={t(wording.title)}
+            description={t(wording.help)}
             size="sm"
         >
             {error && <FieldError className="mb-4">{error}</FieldError>}
@@ -310,7 +331,9 @@ export function SessionActionDialog({
                 </Button>
                 <Button
                     type="button"
-                    variant="destructive"
+                    variant={
+                        actionToConfirm === "finish" ? "default" : "destructive"
+                    }
                     disabled={currentAction !== null}
                     onClick={() =>
                         actionToConfirm && onConfirm(actionToConfirm)
@@ -318,12 +341,14 @@ export function SessionActionDialog({
                 >
                     {currentAction !== null ? (
                         <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                    ) : isDelete ? (
+                    ) : actionToConfirm === "delete" ? (
                         <Trash2 />
+                    ) : actionToConfirm === "finish" ? (
+                        <CircleCheck />
                     ) : (
                         <XCircle />
                     )}
-                    {t(isDelete ? "delete" : "confirm-cancellation")}
+                    {t(wording.confirm)}
                 </Button>
             </div>
         </Dialog>

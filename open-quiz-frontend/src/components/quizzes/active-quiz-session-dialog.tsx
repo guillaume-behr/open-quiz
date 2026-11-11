@@ -26,24 +26,24 @@ import {
     XCircle,
 } from "lucide-react"
 import { useEffect } from "react"
+import type { LiveSessionAction } from "./use-live-sessions"
 import { useTranslation } from "react-i18next"
-
-type SessionAction = "pause" | "resume" | "cancel" | "delete" | null
 
 type ActiveQuizSessionDialogProps = {
     session: QuizSession | MakeupSession | null
     error: string | null
     /** Live updates stopped: what the dialog shows may be out of date. */
     reconnecting?: boolean
-    isStarting: boolean
-    action: SessionAction
+    /** The action running, if any: it shows progress, the others wait. */
+    action: LiveSessionAction | null
     onClose: () => void
     onStart: () => void
     onPause: () => void
     onResume: () => void
     onFinish?: () => void
     onConfirmCancel: () => void
-    onConfirmDelete: () => void
+    /** Offered on a finished session only when it can be deleted. */
+    onConfirmDelete?: () => void
 }
 
 function sessionStatusKey(status: QuizSession["status"]): string {
@@ -60,7 +60,6 @@ export function ActiveQuizSessionDialog({
     session,
     error,
     reconnecting = false,
-    isStarting,
     action,
     onClose,
     onStart,
@@ -104,12 +103,12 @@ export function ActiveQuizSessionDialog({
                                 type="button"
                                 size="lg"
                                 disabled={
-                                    isStarting ||
+                                    action !== null ||
                                     session.participant_count === 0
                                 }
                                 onClick={onStart}
                             >
-                                {isStarting ? (
+                                {action === "start" ? (
                                     <LoaderCircle className="animate-spin motion-reduce:animate-none" />
                                 ) : (
                                     <Play />
@@ -152,7 +151,11 @@ export function ActiveQuizSessionDialog({
                                 disabled={action !== null}
                                 onClick={onFinish}
                             >
-                                <CircleCheck />
+                                {action === "finish" ? (
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                                ) : (
+                                    <CircleCheck />
+                                )}
                                 {t("finish-quiz")}
                             </Button>
                         )}
@@ -160,24 +163,31 @@ export function ActiveQuizSessionDialog({
                             <Button
                                 type="button"
                                 variant="destructive"
-                                disabled={isStarting || action !== null}
+                                disabled={action !== null}
                                 onClick={onConfirmCancel}
                             >
-                                <XCircle />
+                                {action === "cancel" ? (
+                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                                ) : (
+                                    <XCircle />
+                                )}
                                 {t("cancel-quiz")}
                             </Button>
                         )}
-                        {["cancelled", "finished"].includes(session.status) && (
-                            <Button
-                                type="button"
-                                variant="destructive"
-                                disabled={action !== null}
-                                onClick={onConfirmDelete}
-                            >
-                                <Trash2 />
-                                {t("delete-session")}
-                            </Button>
-                        )}
+                        {onConfirmDelete &&
+                            ["cancelled", "finished"].includes(
+                                session.status
+                            ) && (
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={action !== null}
+                                    onClick={onConfirmDelete}
+                                >
+                                    <Trash2 />
+                                    {t("delete-session")}
+                                </Button>
+                            )}
                     </div>
                 </div>
             )}

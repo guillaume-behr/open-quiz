@@ -605,6 +605,8 @@
     "cancel-quiz": "Annuler le quiz",
     "delete-session": "Supprimer la session",
     "cancel-quiz-help": "Annuler ce quiz ? Les élèves ne pourront plus répondre. La session pourra ensuite être supprimée.",
+    "makeup-cancel-help": "Annuler ce rattrapage ? Les élèves ne pourront plus le rejoindre ni y répondre.",
+    "makeup-finish-help": "Terminer ce rattrapage maintenant ? Les élèves ne pourront plus y répondre.",
     "delete-session-help": "Supprimer définitivement cette session, ses participants et toutes leurs réponses ?",
     "confirm-cancellation": "Confirmer l’annulation",
     "quiz-session-action-error": "Impossible de modifier l’état de cette session.",

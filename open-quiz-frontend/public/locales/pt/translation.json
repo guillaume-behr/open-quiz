@@ -605,6 +605,8 @@
     "cancel-quiz": "Cancelar questionário",
     "delete-session": "Excluir sessão",
     "cancel-quiz-help": "Cancelar este questionário? Os alunos não poderão mais responder. Depois, a sessão poderá ser excluída.",
+    "makeup-cancel-help": "Cancelar esta recuperação? Os alunos não poderão mais entrar nem responder.",
+    "makeup-finish-help": "Encerrar esta recuperação agora? Os alunos não poderão mais responder.",
     "delete-session-help": "Excluir permanentemente esta sessão, seus participantes e todas as respostas?",
     "confirm-cancellation": "Confirmar cancelamento",
     "quiz-session-action-error": "Não foi possível alterar o estado desta sessão.",

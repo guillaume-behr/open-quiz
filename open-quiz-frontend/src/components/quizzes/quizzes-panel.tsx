@@ -394,7 +394,7 @@ export function QuizzesPanel({
                 onSubmit={(event) => void printing.run(event)}
             />
 
-            <LiveSessionDialogs live={live} />
+            <LiveSessionDialogs kind="class" live={live} />
 
             <ConfirmDeleteDialog
                 open={quizToDelete !== null}

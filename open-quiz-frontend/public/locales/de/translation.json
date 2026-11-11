@@ -604,6 +604,8 @@
     "cancel-quiz": "Quiz abbrechen",
     "delete-session": "Sitzung löschen",
     "cancel-quiz-help": "Dieses Quiz abbrechen? Die Schüler können danach nicht mehr antworten. Die Sitzung kann anschließend gelöscht werden.",
+    "makeup-cancel-help": "Diese Nachprüfung abbrechen? Die Schüler können ihr dann nicht mehr beitreten oder antworten.",
+    "makeup-finish-help": "Diese Nachprüfung jetzt beenden? Die Schüler können danach nicht mehr antworten.",
     "delete-session-help": "Diese Sitzung, ihre Teilnehmer und alle Antworten dauerhaft löschen?",
     "confirm-cancellation": "Abbruch bestätigen",
     "quiz-session-action-error": "Der Status dieser Sitzung konnte nicht geändert werden.",
