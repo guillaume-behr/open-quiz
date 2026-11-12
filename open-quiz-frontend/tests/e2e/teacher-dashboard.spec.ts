@@ -1811,7 +1811,7 @@ test("teacher creates and controls a retake session", async ({ page }) => {
     await expect(
         page.getByRole("button", { name: "New retake session" })
     ).toHaveCount(0)
-    await page.getByRole("combobox", { name: "Class" }).selectOption("11")
+    await selectRetakeClass(page)
     await page.getByText("Science checkpoint", { exact: true }).click()
     await page.getByRole("button", { name: "Create session" }).click()
 
@@ -2642,10 +2642,20 @@ test("a new choice keeps its own code result when an earlier choice is removed",
     await expect(dialog.getByText("third", { exact: true })).toBeVisible()
 })
 
+// The retake panel is loaded lazily: until it appears, the previous section,
+// with its own "Class" filter, is still on screen. Choosing a class before the
+// panel is there would pick it in that filter, and no quiz would be offered.
+async function selectRetakeClass(page: Page) {
+    await expect(
+        page.getByRole("heading", { name: "New retake session" })
+    ).toBeVisible()
+    await page.getByRole("combobox", { name: "Class" }).selectOption("11")
+}
+
 async function openNewRetake(page: Page) {
     await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Retake", exact: true }).click()
-    await page.getByRole("combobox", { name: "Class" }).selectOption("11")
+    await selectRetakeClass(page)
     await page.getByText("Science checkpoint", { exact: true }).click()
     await page.getByRole("button", { name: "Create session" }).click()
     const dialog = page.getByRole("dialog", { name: "Retake" })
