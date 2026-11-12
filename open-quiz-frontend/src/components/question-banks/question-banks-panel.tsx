@@ -18,7 +18,10 @@ import {
 } from "@/components/question-banks/question-bank-secondary-dialogs"
 import { useBankTransfer } from "@/components/question-banks/use-bank-transfer"
 import { QuestionBanksList } from "@/components/question-banks/question-banks-list"
-import { QuestionsManager } from "@/components/question-banks/questions-dialog"
+import {
+    QuestionsManager,
+    type QuestionsView,
+} from "@/components/question-banks/questions-dialog"
 import { type FormEvent, useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
@@ -95,6 +98,10 @@ export function QuestionBanksPanel({
         "questions" | "question-form" | "delete-question" | null
     >(null)
     const [editingQuestion, setEditingQuestion] = useState<Question | null>(
+        null
+    )
+    // Where the teacher was in the question list before its dialog gave way.
+    const [questionsView, setQuestionsView] = useState<QuestionsView | null>(
         null
     )
     const [questionToDelete, setQuestionToDelete] = useState<Question | null>(
@@ -216,6 +223,7 @@ export function QuestionBanksPanel({
         setTitle(bank.chapter)
         saving.setError(null)
         setPublishedSessionsKept(0)
+        setQuestionsView(null)
         setBankView("questions")
     }
 
@@ -318,6 +326,7 @@ export function QuestionBanksPanel({
                     onCreateDialogOpenChange(false)
                     setEditingBank(null)
                     setBankView(null)
+                    setQuestionsView(null)
                     setSelectedBankId(null)
                     setGradeLevel("")
                     setTitle("")
@@ -345,17 +354,21 @@ export function QuestionBanksPanel({
                                       })
                                     : null
                             }
-                            onAdd={() => {
+                            initialView={questionsView}
+                            onAdd={(view) => {
+                                setQuestionsView(view)
                                 setPublishedSessionsKept(0)
                                 setEditingQuestion(null)
                                 setBankView("question-form")
                             }}
-                            onEdit={(question) => {
+                            onEdit={(question, view) => {
+                                setQuestionsView(view)
                                 setPublishedSessionsKept(0)
                                 setEditingQuestion(question)
                                 setBankView("question-form")
                             }}
-                            onDelete={(question) => {
+                            onDelete={(question, view) => {
+                                setQuestionsView(view)
                                 deletingQuestion.setError(null)
                                 setQuestionToDelete(question)
                                 setBankView("delete-question")

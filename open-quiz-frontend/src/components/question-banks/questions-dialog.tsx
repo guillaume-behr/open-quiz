@@ -27,14 +27,39 @@ import { CodeBlock } from "./code-block"
 import { CODE_LANGUAGES } from "./code-languages"
 import { QuestionImage } from "./question-image"
 
+/**
+ * Where the teacher stood in the question list: its order, its filters and
+ * how far the list and its dialog were scrolled. The list unmounts while the
+ * form or the deletion of a question replaces its dialog, and gets it back
+ * on return.
+ */
+export type QuestionsView = {
+    sort: string
+    minimumPoints: string
+    maximumPoints: string
+    minimumDifficulty: string
+    maximumDifficulty: string
+    answerModes: AnswerMode[]
+    filtersOpen: boolean
+    listScrollTop: number
+    dialogScrollTop: number
+}
+
 type QuestionsManagerProps = {
     questions: Question[]
     isLoading: boolean
     error: string | null
     notice?: string | null
-    onAdd: () => void
-    onEdit: (question: Question) => void
-    onDelete: (question: Question) => void
+    /** The view to restore, as the list last reported it on leaving. */
+    initialView?: QuestionsView | null
+    onAdd: (view: QuestionsView) => void
+    onEdit: (question: Question, view: QuestionsView) => void
+    onDelete: (question: Question, view: QuestionsView) => void
+}
+
+/** The scrolling body of the dialog holding an element, if any. */
+function dialogBodyOf(element: HTMLElement | null) {
+    return element?.closest<HTMLElement>("[data-dialog-body]") ?? null
 }
 
 export function QuestionsManager({
@@ -42,19 +67,35 @@ export function QuestionsManager({
     isLoading,
     error,
     notice = null,
+    initialView = null,
     onAdd,
     onEdit,
     onDelete,
 }: QuestionsManagerProps) {
     const { t } = useTranslation()
-    const [sort, setSort] = useState("difficulty-asc")
+    const [sort, setSort] = useState(initialView?.sort ?? "difficulty-asc")
+    const sectionRef = useRef<HTMLElement>(null)
     const listRef = useRef<HTMLOListElement>(null)
-    const savedScrollTop = useRef<number | null>(null)
-    const [minimumPoints, setMinimumPoints] = useState("")
-    const [maximumPoints, setMaximumPoints] = useState("")
-    const [minimumDifficulty, setMinimumDifficulty] = useState("")
-    const [maximumDifficulty, setMaximumDifficulty] = useState("")
-    const [answerModes, setAnswerModes] = useState<AnswerMode[]>([])
+    // The scroll positions still to restore, once the list is shown.
+    const pendingScroll = useRef(initialView)
+    const [minimumPoints, setMinimumPoints] = useState(
+        initialView?.minimumPoints ?? ""
+    )
+    const [maximumPoints, setMaximumPoints] = useState(
+        initialView?.maximumPoints ?? ""
+    )
+    const [minimumDifficulty, setMinimumDifficulty] = useState(
+        initialView?.minimumDifficulty ?? ""
+    )
+    const [maximumDifficulty, setMaximumDifficulty] = useState(
+        initialView?.maximumDifficulty ?? ""
+    )
+    const [answerModes, setAnswerModes] = useState<AnswerMode[]>(
+        initialView?.answerModes ?? []
+    )
+    const [filtersOpen, setFiltersOpen] = useState(
+        initialView?.filtersOpen ?? false
+    )
     const visibleQuestions = useMemo(() => {
         const difficultyRank = new Map(
             QUESTION_DIFFICULTIES.map((difficulty, index) => [
@@ -120,10 +161,27 @@ export function QuestionsManager({
     )
 
     useLayoutEffect(() => {
-        if (savedScrollTop.current === null || !listRef.current) return
-        listRef.current.scrollTop = savedScrollTop.current
-        savedScrollTop.current = null
-    }, [questions])
+        const view = pendingScroll.current
+        if (!view || !listRef.current) return
+        listRef.current.scrollTop = view.listScrollTop
+        const dialogBody = dialogBodyOf(listRef.current)
+        if (dialogBody) dialogBody.scrollTop = view.dialogScrollTop
+        pendingScroll.current = null
+    }, [questions, isLoading])
+
+    function currentView(): QuestionsView {
+        return {
+            sort,
+            minimumPoints,
+            maximumPoints,
+            minimumDifficulty,
+            maximumDifficulty,
+            answerModes,
+            filtersOpen,
+            listScrollTop: listRef.current?.scrollTop ?? 0,
+            dialogScrollTop: dialogBodyOf(sectionRef.current)?.scrollTop ?? 0,
+        }
+    }
 
     function toggleAnswerMode(mode: AnswerMode) {
         setAnswerModes((current) =>
@@ -133,7 +191,7 @@ export function QuestionsManager({
         )
     }
     return (
-        <section className="border-t pt-5">
+        <section ref={sectionRef} className="border-t pt-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h3 className="font-semibold">{t("bank-questions")}</h3>
@@ -141,13 +199,15 @@ export function QuestionsManager({
                         {t("add-edit-questions")}
                     </p>
                 </div>
-                <Button type="button" onClick={onAdd}>
+                <Button type="button" onClick={() => onAdd(currentView())}>
                     <Plus />
                     {t("add-question")}
                 </Button>
             </div>
             <CollapsibleFilters
                 className="mt-5"
+                open={filtersOpen}
+                onOpenChange={setFiltersOpen}
                 activeCount={
                     Number(sort !== "difficulty-asc") +
                     Number(Boolean(minimumPoints)) +
@@ -325,12 +385,10 @@ export function QuestionsManager({
                                 key={question.id}
                                 question={question}
                                 index={index}
-                                onEdit={() => {
-                                    savedScrollTop.current =
-                                        listRef.current?.scrollTop ?? null
-                                    onEdit(question)
-                                }}
-                                onDelete={() => onDelete(question)}
+                                onEdit={() => onEdit(question, currentView())}
+                                onDelete={() =>
+                                    onDelete(question, currentView())
+                                }
                             />
                         ))}
                         {visibleQuestions.length === 0 && (
