@@ -70,7 +70,12 @@ async function advance(ms: number) {
 
 let disconnect: (() => void) | null = null
 
-function connect(overrides: { onDeleted?: () => void } = {}) {
+function connect(
+    overrides: {
+        onDeleted?: () => void
+        getToken?: (forceRefresh: boolean) => Promise<string | null>
+    } = {}
+) {
     const options = {
         path: "/api/quizzes/live/teacher/sessions",
         getToken: vi.fn(async () => "access-token"),
@@ -280,6 +285,91 @@ describe("connectLiveUpdates", () => {
         // Nothing reconnects afterwards.
         document.dispatchEvent(new Event("visibilitychange"))
         await advance(LIVENESS_TIMEOUT_MS)
+        expect(sockets()).toHaveLength(1)
+    })
+
+    it("retries a failed token request and stops without a token", async () => {
+        const getToken = vi
+            .fn<(forceRefresh: boolean) => Promise<string | null>>()
+            .mockRejectedValueOnce(new Error("offline"))
+            .mockResolvedValueOnce(null)
+        const options = connect({ getToken })
+        await advance(0)
+        expect(sockets()).toHaveLength(0)
+        expect(options.onConnectionChange).toHaveBeenLastCalledWith(
+            "reconnecting"
+        )
+        await advance(500)
+        expect(options.onUnavailable).toHaveBeenCalledOnce()
+        expect(sockets()).toHaveLength(0)
+    })
+
+    it("does nothing once unsubscribed while the token is on its way", async () => {
+        let deliver: (token: string) => void = () => undefined
+        connect({
+            getToken: () => new Promise((resolve) => (deliver = resolve)),
+        })
+        disconnect?.()
+        disconnect = null
+        deliver("late")
+        await advance(0)
+        expect(sockets()).toHaveLength(0)
+    })
+
+    it("retries when the WebSocket cannot even be created", async () => {
+        vi.stubGlobal(
+            "WebSocket",
+            vi.fn(() => {
+                throw new Error("blocked")
+            })
+        )
+        const options = connect()
+        await advance(0)
+        expect(options.onConnectionChange).toHaveBeenLastCalledWith(
+            "reconnecting"
+        )
+        vi.stubGlobal("WebSocket", FakeSocket)
+        await advance(500)
+        expect(sockets()).toHaveLength(1)
+    })
+
+    it("ignores unreadable messages and stops on a normal close", async () => {
+        const options = connect()
+        await advance(0)
+        lastSocket().open()
+        lastSocket().emit("message", { data: "{not json" })
+        expect(options.onConnectionChange).not.toHaveBeenCalledWith("connected")
+        lastSocket().receive({ type: "ping" })
+        lastSocket().serverClose(1000)
+        await advance(20_000)
+        expect(sockets()).toHaveLength(1)
+        lastSocket().emit("error")
+        expect(lastSocket().closeCalls).toEqual([undefined])
+    })
+
+    it("reconnects at once when the network returns during a backoff", async () => {
+        connect()
+        await advance(0)
+        handshake()
+        lastSocket().serverClose(1006)
+        await advance(0)
+        window.dispatchEvent(new Event("online"))
+        await advance(0)
+        expect(sockets()).toHaveLength(2)
+    })
+
+    it("abandons a socket whose close() throws and clears a pending backoff", async () => {
+        connect()
+        await advance(0)
+        handshake()
+        lastSocket().close = () => {
+            throw new Error("already closing")
+        }
+        await advance(LIVENESS_TIMEOUT_MS)
+        expect(sockets()).toHaveLength(1)
+        disconnect?.()
+        disconnect = null
+        await advance(20_000)
         expect(sockets()).toHaveLength(1)
     })
 })

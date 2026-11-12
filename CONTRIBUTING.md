@@ -219,11 +219,17 @@ cd open-quiz-frontend
 pnpm install --frozen-lockfile
 pnpm lint
 pnpm format:check
-pnpm test
+pnpm test:coverage
 pnpm typecheck
 pnpm build
 pnpm audit --audit-level low
 ```
+
+`pnpm test:coverage` lance `pnpm test` avec la couverture et ses seuils
+(`vite.config.ts`). Les tests unitaires sont placés à côté du fichier testé
+(`*.test.ts` ou `*.test.tsx`), sans réseau ni vraie horloge
+(`vi.useFakeTimers()`). Les traductions y renvoient leur clé suivie de leurs
+options (`src/test/setup.ts`). Le seuil global ne fait que monter.
 
 Pour un parcours utilisateur ou une modification du proxy HTTP/WebSocket,
 lancez aussi les tests Playwright, que le job `e2e` de la CI exécute de toute
