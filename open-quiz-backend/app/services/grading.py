@@ -22,8 +22,6 @@ from app.models import (
     QuizAnswer,
     QuizParticipant,
     QuizSession,
-    QuizSessionQuestion,
-    QuizSessionStudentQuestion,
 )
 from app.question_responses import load_question_records
 from app.services.question_assignments import session_question_ids
@@ -246,65 +244,6 @@ def question_maximum_scores(
         question_id: rounded_score(maximums.get(question_id))
         for question_id in question_ids
     }
-
-
-def participant_maximum_scores(
-    quiz_session: QuizSession,
-    participants: list[QuizParticipant],
-    session: Session,
-) -> dict[int, float]:
-    if not participants:
-        return {}
-
-    # Load assignments and choice totals once for the whole session. Calling
-    # session_question_points for every participant made result polling issue
-    # two or three additional queries per student, which quickly overwhelmed
-    # the database for full classrooms.
-    personalized_by_student: dict[int, list[int]] = defaultdict(list)
-    personalized_by_identifier: dict[str, list[int]] = defaultdict(list)
-    personalized_rows = list(
-        session.execute(
-            select(
-                QuizSessionStudentQuestion.student_id,
-                QuizSessionStudentQuestion.student_identifier,
-                QuizSessionStudentQuestion.question_id,
-            )
-            .where(QuizSessionStudentQuestion.session_id == quiz_session.id)
-            .order_by(QuizSessionStudentQuestion.position)
-        )
-    )
-    for student_id, student_identifier, question_id in personalized_rows:
-        if student_id is not None:
-            personalized_by_student[student_id].append(question_id)
-        personalized_by_identifier[student_identifier].append(question_id)
-
-    common_question_ids = list(
-        session.scalars(
-            select(QuizSessionQuestion.question_id)
-            .where(QuizSessionQuestion.session_id == quiz_session.id)
-            .order_by(QuizSessionQuestion.position)
-        )
-    )
-    used_question_ids = set(common_question_ids)
-    used_question_ids.update(row.question_id for row in personalized_rows)
-    maximums = question_maximum_scores(list(used_question_ids), session)
-
-    result: dict[int, float] = {}
-    for participant in participants:
-        question_ids = (
-            personalized_by_student.get(participant.student_id, [])
-            if participant.student_id is not None
-            else []
-        )
-        if not question_ids:
-            question_ids = personalized_by_identifier.get(
-                participant.student_identifier, common_question_ids
-            )
-        result[participant.id] = round(
-            sum(float(maximums.get(question_id) or 0) for question_id in question_ids),
-            2,
-        )
-    return result
 
 
 def session_question_points(

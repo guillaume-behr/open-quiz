@@ -62,13 +62,18 @@ class LiveQuizHub:
 
     @asynccontextmanager
     async def subscribe(
-        self, topic: str, principal: str | None = None
+        self,
+        topic: str,
+        principal: str | None = None,
+        *,
+        also: tuple[str, ...] = (),
     ) -> AsyncIterator[Queue[None]]:
-        """Follow a topic until the block exits.
+        """Follow a topic, and the ``also`` ones, until the block exits.
 
         ``principal`` names who holds the socket; LiveSocketLimitError is
         raised when they already follow this topic from too many.
         """
+        topics = (topic, *also)
         subscriber = _Subscriber(get_running_loop(), Queue(maxsize=1))
         feed = (topic, principal) if principal is not None else None
         with self._lock:
@@ -76,16 +81,18 @@ class LiveQuizHub:
                 if self._sockets[feed] >= self._max_sockets_per_feed:
                     raise LiveSocketLimitError
                 self._sockets[feed] += 1
-            self._subscribers[topic].add(subscriber)
+            for followed in topics:
+                self._subscribers[followed].add(subscriber)
         try:
             yield subscriber.queue
         finally:
             with self._lock:
-                subscribers = self._subscribers.get(topic)
-                if subscribers is not None:
-                    subscribers.discard(subscriber)
-                    if not subscribers:
-                        self._subscribers.pop(topic, None)
+                for followed in topics:
+                    subscribers = self._subscribers.get(followed)
+                    if subscribers is not None:
+                        subscribers.discard(subscriber)
+                        if not subscribers:
+                            self._subscribers.pop(followed, None)
                 if feed is not None:
                     self._sockets[feed] -= 1
                     if not self._sockets[feed]:
@@ -145,6 +152,11 @@ def active_quiz_sessions_topic(owner_id: int) -> str:
 
 def student_session_topic(join_code: str) -> str:
     return f"student-session:{join_code.strip().upper()}"
+
+
+def participant_topic(participant_id: int) -> str:
+    """Changes only that participant's own exam view shows."""
+    return f"quiz-participant:{participant_id}"
 
 
 def makeup_sessions_topic(owner_id: int) -> str:
