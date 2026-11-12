@@ -19,7 +19,7 @@ from sqlalchemy import delete, func, select
 
 from app.class_names import format_class_name
 from app.dependencies import DbSession, ProfessorUser, current_student
-from app.enums import SessionStatus
+from app.enums import AnswerMode, SessionStatus
 from app.errors import ApiError, ErrorCode
 from app.models import (
     ClassTrainingQuestionBank,
@@ -126,7 +126,10 @@ def update_class_training_question_banks(
     available = dict(
         session.execute(
             select(Question.question_bank_id, func.count(Question.id))
-            .where(Question.question_bank_id.in_(bank_ids))
+            .where(
+                Question.question_bank_id.in_(bank_ids),
+                Question.answer_mode != AnswerMode.WRITTEN,
+            )
             .group_by(Question.question_bank_id)
         ).all()
     )

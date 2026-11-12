@@ -27,6 +27,7 @@ const bank = {
     easy_question_count: 10,
     medium_question_count: 10,
     hard_question_count: 10,
+    trainable_question_count: 30,
 }
 
 function pageOf(json: unknown) {

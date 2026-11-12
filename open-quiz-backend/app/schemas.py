@@ -353,6 +353,8 @@ class QuestionBankResponse(BaseModel):
     easy_question_count: int = 0
     medium_question_count: int = 0
     hard_question_count: int = 0
+    # Questions training can draw: every question but the written ones.
+    trainable_question_count: int = 0
     training_question_count: int | None = None
 
 

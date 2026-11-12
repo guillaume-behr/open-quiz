@@ -15,7 +15,7 @@ from fastapi import status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.enums import Difficulty
+from app.enums import AnswerMode, Difficulty
 from app.errors import ApiError, ErrorCode
 from app.models import Question, Quiz, QuizQuestionBank
 from app.schemas import QuizCreate
@@ -150,8 +150,17 @@ def draw_unique_question_ids(
 
 
 def draw_training_question_ids(bank_id: int, session: Session) -> list[int]:
+    """Shuffle the bank's questions a training can use: never written ones.
+
+    A written answer needs a teacher's review, which a training never gets.
+    """
     question_ids = list(
-        session.scalars(select(Question.id).where(Question.question_bank_id == bank_id))
+        session.scalars(
+            select(Question.id).where(
+                Question.question_bank_id == bank_id,
+                Question.answer_mode != AnswerMode.WRITTEN,
+            )
+        )
     )
     randomizer.shuffle(question_ids)
     return question_ids[:MAX_TRAINING_QUESTIONS]

@@ -1,7 +1,7 @@
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from app.enums import Difficulty
+from app.enums import AnswerMode, Difficulty
 from app.models import Question, QuestionBank
 from app.schemas import QuestionBankResponse
 
@@ -14,6 +14,8 @@ def question_bank_summary_query():
         func.sum(case((Question.difficulty == Difficulty.EASY, 1), else_=0)),
         func.sum(case((Question.difficulty == Difficulty.MEDIUM, 1), else_=0)),
         func.sum(case((Question.difficulty == Difficulty.HARD, 1), else_=0)),
+        # Training never draws written questions: only the others count there.
+        func.sum(case((Question.answer_mode != AnswerMode.WRITTEN, 1), else_=0)),
     ).outerjoin(Question, Question.question_bank_id == QuestionBank.id)
 
 
@@ -23,6 +25,7 @@ def question_bank_summary_response(
     easy_count: int | None,
     medium_count: int | None,
     hard_count: int | None,
+    trainable_count: int | None,
 ) -> QuestionBankResponse:
     return QuestionBankResponse.model_validate(question_bank).model_copy(
         update={
@@ -30,6 +33,7 @@ def question_bank_summary_response(
             "easy_question_count": easy_count or 0,
             "medium_question_count": medium_count or 0,
             "hard_question_count": hard_count or 0,
+            "trainable_question_count": trainable_count or 0,
         }
     )
 

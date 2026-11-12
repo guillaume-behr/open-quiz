@@ -141,7 +141,7 @@ export function TrainingQuizzesPanel({ token }: { token: string }) {
                             <p className="mt-1 text-sm text-muted-foreground">
                                 {bank.grade_level} ·{" "}
                                 {t("training-quiz-summary", {
-                                    count: bank.question_count,
+                                    count: bank.trainable_question_count,
                                 })}
                             </p>
                             <p className="mt-3 text-xs text-muted-foreground">
@@ -152,7 +152,7 @@ export function TrainingQuizzesPanel({ token }: { token: string }) {
                                 onClick={() => void start(bank)}
                                 disabled={
                                     startingId !== null ||
-                                    bank.question_count === 0
+                                    bank.trainable_question_count === 0
                                 }
                             >
                                 {startingId === bank.id ? (
