@@ -1,5 +1,5 @@
 from asyncio import to_thread
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +7,7 @@ from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.datastructures import Headers
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.access_log import AccessLogMiddleware
@@ -43,7 +43,7 @@ class RequestBodyLimitMiddleware:
         app: ASGIApp,
         *,
         default_limit: int,
-        session_factory: Callable,
+        session_factory: sessionmaker[Session],
     ) -> None:
         self.app = app
         self.default_limit = default_limit
@@ -95,35 +95,45 @@ class RequestBodyLimitMiddleware:
         )
         await response(scope, receive, send)
 
+    async def _refused_elevated_caller(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> bool:
+        """Answer a request for the larger body limit that is not a teacher's.
+
+        Returns whether it was answered.
+        """
+        user = await to_thread(self._authenticated_user, scope)
+        if user is None:
+            await self._respond(
+                scope,
+                receive,
+                send,
+                401,
+                ErrorCode.AUTH_TOKEN_INVALID,
+                "Jeton d’authentification invalide ou expiré",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            return True
+        if user.is_admin:
+            await self._respond(
+                scope,
+                receive,
+                send,
+                403,
+                ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
+                "Accès enseignant requis",
+            )
+            return True
+        return False
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or scope.get("method") in {"GET", "HEAD", "OPTIONS"}:
             await self.app(scope, receive, send)
             return
 
         elevated = self._uses_elevated_limit(scope)
-        if elevated:
-            user = await to_thread(self._authenticated_user, scope)
-            if user is None:
-                await self._respond(
-                    scope,
-                    receive,
-                    send,
-                    401,
-                    ErrorCode.AUTH_TOKEN_INVALID,
-                    "Jeton d’authentification invalide ou expiré",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-                return
-            if user.is_admin:
-                await self._respond(
-                    scope,
-                    receive,
-                    send,
-                    403,
-                    ErrorCode.AUTH_PROFESSOR_ACCOUNT_REQUIRED,
-                    "Accès enseignant requis",
-                )
-                return
+        if elevated and await self._refused_elevated_caller(scope, receive, send):
+            return
 
         limit = (
             max(self.default_limit, LARGE_QUESTION_BODY_BYTES)
@@ -233,7 +243,9 @@ def add_middleware(
         )
 
     @app.middleware("http")
-    async def security_headers(request: Request, call_next):
+    async def security_headers(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"

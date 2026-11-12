@@ -10,6 +10,7 @@ one rounding rule for every score or maximum the API reports.
 
 import json
 from collections import defaultdict
+from typing import Any
 
 from sqlalchemy import and_, case, func, select, update
 from sqlalchemy.orm import Session
@@ -72,7 +73,7 @@ def selected_choice_score(
     )
 
 
-def decoded_answer_data(answer: QuizAnswer) -> dict:
+def decoded_answer_data(answer: QuizAnswer) -> dict[str, Any]:
     """Read a stored answer payload, treating an unreadable one as empty.
 
     The answer route only stores JSON objects, so this is a safeguard against
@@ -82,7 +83,7 @@ def decoded_answer_data(answer: QuizAnswer) -> dict:
     return decoded_answer_payload(answer.answer_data)
 
 
-def decoded_answer_payload(answer_data: str) -> dict:
+def decoded_answer_payload(answer_data: str) -> dict[str, Any]:
     try:
         submitted = json.loads(answer_data)
     except TypeError, ValueError:

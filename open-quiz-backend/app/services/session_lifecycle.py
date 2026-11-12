@@ -286,7 +286,7 @@ def discard_previous_training_sessions(
 
 
 def discard_active_training_sessions(
-    student_ids: Iterable[int] | Select,
+    student_ids: Iterable[int] | Select[int],
     bank_ids: Iterable[int],
     session: Session,
 ) -> None:

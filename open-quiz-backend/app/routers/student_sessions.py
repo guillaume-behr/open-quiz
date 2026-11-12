@@ -329,7 +329,7 @@ def join_quiz(
     payload: QuizJoin,
     request: Request,
     session: DbSession,
-    account: StudentAccount = Depends(current_student),
+    account: Annotated[StudentAccount, Depends(current_student)],
 ) -> StudentQuizJoinResponse:
     quiz_session, quiz, student, join_subject = joinable_session(
         payload, account, request, session

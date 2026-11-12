@@ -1540,7 +1540,7 @@ def test_unsigned_tokens_are_refused(decode) -> None:
 
 def test_a_tampered_access_token_is_refused() -> None:
     token = create_access_token(1, JWT_SECRET, 5, "version")
-    header, payload, signature = token.split(".")
+    header, _payload, signature = token.split(".")
     forged = jwt.encode(claims("access", sub="2"), OTHER_SECRET, algorithm="HS256")
     with pytest.raises(jwt.InvalidSignatureError):
         decode_access_token(f"{header}.{forged.split('.')[1]}.{signature}", JWT_SECRET)
