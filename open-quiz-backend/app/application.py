@@ -2,6 +2,7 @@
 
 import logging
 from asyncio import CancelledError, create_task
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -79,7 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         synchronize_security_state(session_factory, settings)
         warn_missing_public_information(settings)
         enforce_data_retention(session_factory, settings)

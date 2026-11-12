@@ -1,4 +1,4 @@
-from sqlalchemy import case, func, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
 from app.enums import AnswerMode, Difficulty
@@ -6,7 +6,9 @@ from app.models import Question, QuestionBank
 from app.schemas import QuestionBankResponse
 
 
-def question_bank_summary_query():
+def question_bank_summary_query() -> Select[
+    QuestionBank, int, int | None, int | None, int | None, int | None
+]:
     """Build the shared aggregate query used for question-bank summaries."""
     return select(
         QuestionBank,

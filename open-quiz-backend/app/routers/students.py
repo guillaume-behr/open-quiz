@@ -113,7 +113,7 @@ def list_student_accounts(
     professor: ProfessorUser,
     session: DbSession,
     paging: Paging,
-    search: str = Query("", max_length=120),
+    search: Annotated[str, Query(max_length=120)] = "",
     class_id: Annotated[int | None, Query(ge=1)] = None,
     unassigned: bool = False,
     is_active: bool | None = None,
