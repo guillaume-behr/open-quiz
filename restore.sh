@@ -10,6 +10,7 @@ DATABASE_ENV_FILE="$SCRIPT_DIR/open-quiz-backend/.env.database"
 
 backup_file=''
 confirmed=false
+force_key_mismatch=false
 
 usage() {
     printf 'Usage: sh ./restore.sh [--yes] BACKUP\n\n'
@@ -17,12 +18,16 @@ usage() {
     printf 'The current data is backed up first, then the API stops while the\n'
     printf 'backup is restored in a single transaction.\n\n'
     printf '  --yes       Do not ask for confirmation.\n'
+    printf '  --force-key-mismatch\n'
+    printf '              Restore although the encryption keys of\n'
+    printf '              open-quiz-backend/.env differ from the backup'"'"'s.\n'
     printf '  --help, -h  Show this message.\n'
 }
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --yes) confirmed=true ;;
+        --force-key-mismatch) force_key_mismatch=true ;;
         --help | -h)
             usage
             exit 0
@@ -52,14 +57,33 @@ open_quiz_banner 'Restoring your database'
 cd "$SCRIPT_DIR"
 require_commands docker
 setup_compose
+acquire_lock
+# Until the restore is confirmed, nothing is changed: only read and check.
 [ -f "$ENV_FILE" ] || fail "missing open-quiz-backend/.env"
-ensure_database_environment_file "$ENV_FILE" "$DATABASE_ENV_FILE"
-use_application_database_role "$ENV_FILE"
 database_is_running || fail "the open-quiz-database container is not running"
 
 step 'Checking the backup'
 compose exec -T open-quiz-database pg_restore --list <"$backup_file" >/dev/null \
     || fail "$backup_file is not a readable pg_dump backup"
+
+# Data encrypted with other keys would come back unreadable: two-factor
+# secrets and student passwords. backup.sh records the keys' fingerprints.
+if [ -f "$backup_file.meta" ]; then
+    expected_keys=$(grep '_KEY_fingerprint=' "$backup_file.meta" || true)
+    current_keys=$(encryption_key_fingerprints "$ENV_FILE")
+    if [ "$expected_keys" != "$current_keys" ]; then
+        printf '%sThe encryption keys of open-quiz-backend/.env are not the ones in use
+' "$OPEN_QUIZ_BOLD"
+        printf 'when this backup was taken: two-factor secrets and student passwords
+'
+        printf 'would not be readable. Put back the .env saved with the backup.%s
+' "$OPEN_QUIZ_RESET"
+        [ "$force_key_mismatch" = true ] \
+            || fail "the keys do not match the backup; re-run with --force-key-mismatch to restore anyway"
+    fi
+else
+    note "No $backup_file.meta: the encryption keys cannot be checked against the backup."
+fi
 
 if [ "$confirmed" != true ]; then
     [ -t 0 ] || fail "restoring replaces the current data; re-run with --yes to confirm"
@@ -70,9 +94,15 @@ if [ "$confirmed" != true ]; then
     [ "$answer" = restore ] || fail "restore cancelled"
 fi
 
+# Deployments from before the API had its own PostgreSQL role, as in
+# update.sh: only now that the restore is confirmed.
+ensure_database_environment_file "$ENV_FILE" "$DATABASE_ENV_FILE"
+use_application_database_role "$ENV_FILE"
+
 step 'Backing up the current data first'
 safety_backup=$(create_backup "$SCRIPT_DIR/backups")
 note "Current data saved to $safety_backup"
+prune_backups "$SCRIPT_DIR/backups" "$(backup_retention)" "$safety_backup" "$backup_file"
 
 step 'Stopping the API and the interface'
 compose stop open-quiz-backend open-quiz-frontend

@@ -114,6 +114,7 @@ roll_back() {
     open_quiz_banner 'Rolling back the last update'
     require_commands docker
     setup_compose
+    acquire_lock
     [ -f "$ENV_FILE" ] || fail "missing open-quiz-backend/.env"
 
     state_file=$(latest_rollback_state)
@@ -197,6 +198,7 @@ open_quiz_banner 'Updating your deployment'
 
 require_commands docker
 setup_compose
+acquire_lock
 
 [ -f "$ENV_FILE" ] \
     || fail "missing open-quiz-backend/.env; run 'sh ./install.sh' to create it"
@@ -270,6 +272,7 @@ elif database_is_running; then
     step 'Backing up the database'
     backup_file=$(create_backup "$BACKUP_DIRECTORY")
     note "Saved to $backup_file; restore it with: sh ./restore.sh $backup_file"
+    prune_backups "$BACKUP_DIRECTORY" "$(backup_retention)" "$backup_file"
 else
     step 'Skipping the database backup: the database is not running yet'
 fi

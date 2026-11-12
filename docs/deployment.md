@@ -393,18 +393,31 @@ Le script écrit une sauvegarde `pg_dump` au format personnalisé, cohérente sa
 arrêter l’application, dans `backups/open-quiz-AAAA-MM-JJTHHMMSSZ.dump`. Il la
 relit avec `pg_restore --list` avant de la conserver. Le dossier `backups/` est
 ignoré par Git, lisible par son seul propriétaire, et chaque fichier est en
-`0600` : une sauvegarde contient les données personnelles des élèves.
+`0600` : une sauvegarde contient les données personnelles des élèves. À côté,
+un fichier `.meta` note la révision d’Open Quiz, la révision du schéma et une
+empreinte non réversible des clés de chiffrement de `open-quiz-backend/.env`,
+jamais les clés elles-mêmes.
 
-`--keep N` supprime ensuite toutes les sauvegardes sauf les N plus récentes, et
-`--directory` choisit un autre dossier. Pour une sauvegarde quotidienne qui en
-garde quatorze, ajoutez une ligne à la crontab de l’utilisateur du déploiement :
+Seules les 14 sauvegardes les plus récentes du dossier sont conservées : les
+plus anciennes sont supprimées, ainsi les données effacées d’un élève ne
+survivent pas indéfiniment dans `backups/` et le disque ne se remplit pas.
+Réglez ce nombre avec `OPEN_QUIZ_BACKUP_KEEP` dans le fichier `.env` de la
+racine, ou pour une exécution avec `--keep N`. `--directory` choisit un autre
+dossier. Pour une sauvegarde quotidienne, ajoutez une ligne à la crontab de
+l’utilisateur du déploiement :
 
 ```shell
-30 2 * * * cd /srv/open-quiz && sh ./backup.sh --keep 14 >>backups/backup.log 2>&1
+30 2 * * * cd /srv/open-quiz && sh ./backup.sh >>backups/backup.log 2>&1
 ```
 
 `update.sh` sauvegarde aussi la base avant chaque mise à jour, sauf avec
-`--no-backup` ou lorsque la base ne tourne pas encore.
+`--no-backup` ou lorsque la base ne tourne pas encore, et `restore.sh` avant
+chaque restauration ; la même limite s’applique à ces sauvegardes.
+
+`install.sh`, `update.sh`, `backup.sh` et `restore.sh` ne s’exécutent jamais
+en même temps : chacun prend un verrou (`.open-quiz.lock`) et échoue
+immédiatement si un autre le tient, ce qu’une tâche planifiée signale. Un
+verrou laissé par un processus disparu est repris automatiquement.
 
 Copiez ensuite les sauvegardes vers un stockage distinct et protégé, et testez
 régulièrement une restauration dans une instance isolée.
@@ -429,8 +442,12 @@ age --recipient age1… --output sauvegarde.dump.age backups/open-quiz-2026-10-2
 sh ./restore.sh backups/open-quiz-2026-10-29T180000Z.dump
 ```
 
-Le script vérifie que le fichier est une sauvegarde lisible, puis demande de
-taper `restore`. `--yes` permet de s’en passer dans un script. Il
+Le script vérifie que le fichier est une sauvegarde lisible et, si son fichier
+`.meta` est présent, que les clés de chiffrement de `open-quiz-backend/.env`
+sont celles de la sauvegarde : sinon, les secrets TOTP et les mots de passe
+élèves restaurés seraient illisibles, et il refuse de continuer sans
+`--force-key-mismatch`. Il demande ensuite de taper `restore` ; `--yes` permet
+de s’en passer dans un script. Rien n’est modifié avant cette confirmation. Il
 sauvegarde d’abord les données actuelles dans `backups/`, arrête l’API et
 l’interface, puis restaure la sauvegarde en une seule transaction : en cas
 d’échec, la base reste dans son état précédent. La base devient exactement la

@@ -26,3 +26,6 @@ Thumbs.db
 
 # Database dumps: personal data, never committed.
 /backups/
+
+# Held while install.sh, update.sh, backup.sh or restore.sh runs.
+/.open-quiz.lock/
