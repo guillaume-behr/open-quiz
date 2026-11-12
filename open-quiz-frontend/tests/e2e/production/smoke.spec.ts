@@ -4,6 +4,12 @@ import { cspTest as test, expect } from "../fixtures"
 // the real API behind it: no request is mocked, and the page's Content
 // Security Policy and headers are the production ones.
 
+test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem("i18nextLng", "en")
+    })
+})
+
 test("the home page loads its scripts under the Content Security Policy", async ({
     page,
 }) => {
