@@ -1,5 +1,6 @@
 """Response bodies describing quiz sessions to teachers and students."""
 
+from collections.abc import Sequence
 from hashlib import sha256
 from statistics import median
 
@@ -46,16 +47,21 @@ from app.schemas import (
 )
 from app.services.grading import (
     decoded_answer_data,
-    participant_maximum_scores,
     question_maximum_scores,
     rounded_score,
     training_result,
 )
 from app.services.question_assignments import (
     accessible_question_positions,
+    assigned_question_ids,
     current_question_id,
-    session_question_count,
+    load_session_question_assignments,
     session_question_ids,
+)
+from app.services.results import (
+    AnswerStatistics,
+    answer_statistics,
+    students_and_classes,
 )
 from app.services.session_lifecycle import (
     answer_review_enabled,
@@ -128,67 +134,6 @@ def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse
 LiveAnswerCounts = dict[int, tuple[int, float, int]]
 
 
-def session_participants(
-    quiz_session: QuizSession, session: Session
-) -> tuple[list[QuizParticipant], LiveAnswerCounts]:
-    """Who a session lists, and per participant answers, score and pending.
-
-    A running session lists those present; a closed one also lists those who
-    left, except anyone who left the waiting room without ever answering.
-    """
-    participant_query = select(QuizParticipant).where(
-        QuizParticipant.session_id == quiz_session.id
-    )
-    if quiz_session.status in ACTIVE_SESSION_STATUSES:
-        participant_query = participant_query.where(QuizParticipant.left_at.is_(None))
-    participants = list(
-        session.scalars(
-            participant_query.order_by(QuizParticipant.joined_at, QuizParticipant.id)
-        )
-    )
-    answer_rows = list(
-        session.execute(
-            select(
-                QuizAnswer.participant_id,
-                func.count(QuizAnswer.id),
-                func.coalesce(func.sum(QuizAnswer.score), 0),
-                func.sum(case((QuizAnswer.is_graded.is_(False), 1), else_=0)),
-            )
-            .where(QuizAnswer.session_id == quiz_session.id)
-            .group_by(QuizAnswer.participant_id)
-        )
-    )
-    answers_by_student = {
-        participant_id: (answered_count, rounded_score(score), pending_count or 0)
-        for participant_id, answered_count, score, pending_count in answer_rows
-    }
-    if quiz_session.status not in ACTIVE_SESSION_STATUSES:
-        participants = [
-            p
-            for p in participants
-            if took_part(p, quiz_session, answers_by_student.get(p.id, (0, 0, 0))[0])
-        ]
-    return participants, answers_by_student
-
-
-def current_students(
-    participants: list[QuizParticipant], session: Session
-) -> dict[int, Student]:
-    student_ids = [
-        participant.student_id
-        for participant in participants
-        if participant.student_id is not None
-    ]
-    if not student_ids:
-        return {}
-    return {
-        student.id: student
-        for student in session.scalars(
-            select(Student).where(Student.id.in_(student_ids))
-        )
-    }
-
-
 def participant_has_finished(
     participant: QuizParticipant,
     answered_count: int,
@@ -242,46 +187,148 @@ def session_response(
     quiz: Quiz,
     session: DbSession,
 ) -> QuizSessionResponse:
-    participants, answers_by_student = session_participants(quiz_session, session)
-    maximum_scores = participant_maximum_scores(quiz_session, participants, session)
-    median_maximum_score = (
-        rounded_score(median(maximum_scores.values())) if maximum_scores else 0
+    return session_responses([(quiz_session, quiz)], session)[0]
+
+
+def listed_participants(
+    rows: Sequence[tuple[QuizSession, Quiz]],
+    statistics: AnswerStatistics,
+    session: Session,
+) -> dict[int, list[QuizParticipant]]:
+    """Who each session lists.
+
+    A running session lists those present; a closed one also lists those who
+    left, except anyone who left the waiting room without ever answering.
+    """
+    sessions_by_id = {quiz_session.id: quiz_session for quiz_session, _ in rows}
+    listed: dict[int, list[QuizParticipant]] = {
+        session_id: [] for session_id in sessions_by_id
+    }
+    for participant in session.scalars(
+        select(QuizParticipant)
+        .where(QuizParticipant.session_id.in_(sessions_by_id))
+        .order_by(QuizParticipant.joined_at, QuizParticipant.id)
+    ):
+        quiz_session = sessions_by_id[participant.session_id]
+        if quiz_session.status in ACTIVE_SESSION_STATUSES:
+            if participant.left_at is not None:
+                continue
+        elif not took_part(
+            participant,
+            quiz_session,
+            statistics.get((quiz_session.id, participant.id), (0, 0, 0))[0],
+        ):
+            continue
+        listed[quiz_session.id].append(participant)
+    return listed
+
+
+def session_responses(
+    rows: Sequence[tuple[QuizSession, Quiz]],
+    session: Session,
+) -> list[QuizSessionResponse]:
+    """Teacher views of several sessions, with a fixed number of queries."""
+    if not rows:
+        return []
+    session_ids = [quiz_session.id for quiz_session, _ in rows]
+    statistics = answer_statistics(session_ids, session)
+    participants_by_session = listed_participants(rows, statistics, session)
+    common, by_student, by_identifier = load_session_question_assignments(
+        session_ids, session
     )
-    total_questions = session_question_count(quiz_session, session)
-    review_enabled = answer_review_enabled(quiz_session, quiz)
-    students_by_id = current_students(participants, session)
-    participant_responses = []
-    for participant in participants:
-        counts = answers_by_student.get(participant.id, (0, 0, 0))
-        participant_responses.append(
-            live_participant_response(
-                participant,
-                quiz_session,
-                counts,
-                participant_has_finished(
-                    participant, counts[0], review_enabled, total_questions
+    maximums = question_maximum_scores(
+        list(
+            {
+                question_id
+                for question_ids in (*common.values(), *by_identifier.values())
+                for question_id in question_ids
+            }
+        ),
+        session,
+    )
+    personalized_counts: dict[int, int] = {}
+    for (session_id, _), question_ids in by_identifier.items():
+        personalized_counts[session_id] = max(
+            personalized_counts.get(session_id, 0), len(question_ids)
+        )
+    students_by_id, classes_by_id = students_and_classes(
+        rows,
+        [p for listed in participants_by_session.values() for p in listed],
+        session,
+    )
+
+    responses = []
+    for quiz_session, quiz in rows:
+        participants = participants_by_session[quiz_session.id]
+        maximum_scores = {
+            participant.id: round(
+                sum(
+                    float(maximums.get(question_id) or 0)
+                    for question_id in assigned_question_ids(
+                        quiz_session.id,
+                        participant.student_id,
+                        participant.student_identifier,
+                        common,
+                        by_student,
+                        by_identifier,
+                    )
                 ),
-                maximum_scores.get(participant.id, 0.0),
-                students_by_id,
+                2,
+            )
+            for participant in participants
+        }
+        total_questions = len(common[quiz_session.id]) or personalized_counts.get(
+            quiz_session.id, 0
+        )
+        review_enabled = answer_review_enabled(quiz_session, quiz)
+        participant_responses = []
+        for participant in participants:
+            counts = statistics.get((quiz_session.id, participant.id), (0, 0, 0))
+            participant_responses.append(
+                live_participant_response(
+                    participant,
+                    quiz_session,
+                    counts,
+                    participant_has_finished(
+                        participant, counts[0], review_enabled, total_questions
+                    ),
+                    maximum_scores[participant.id],
+                    students_by_id,
+                )
+            )
+        student_class = (
+            classes_by_id.get(quiz_session.class_id)
+            if quiz_session.class_id is not None
+            else None
+        )
+        responses.append(
+            QuizSessionResponse(
+                id=quiz_session.id,
+                quiz_id=quiz.id,
+                quiz_title=quiz_session.quiz_title or quiz.title,
+                class_id=quiz_session.class_id,
+                class_name=(
+                    format_class_name(student_class.grade_level, student_class.name)
+                    if student_class is not None
+                    else quiz_session.class_name
+                ),
+                join_code=quiz_session.join_code,
+                status=quiz_session.status,
+                participant_count=len(participants),
+                median_maximum_score=(
+                    rounded_score(median(maximum_scores.values()))
+                    if maximum_scores
+                    else 0
+                ),
+                participants=participant_responses,
+                total_questions=total_questions,
+                created_at=quiz_session.created_at,
+                started_at=quiz_session.started_at,
+                ends_at=quiz_ends_at(quiz_session, quiz),
+                grades_published_at=quiz_session.grades_published_at,
             )
         )
-    return QuizSessionResponse(
-        id=quiz_session.id,
-        quiz_id=quiz.id,
-        quiz_title=quiz_session.quiz_title or quiz.title,
-        class_id=quiz_session.class_id,
-        class_name=quiz_session_class_name(quiz_session, session),
-        join_code=quiz_session.join_code,
-        status=quiz_session.status,
-        participant_count=len(participants),
-        median_maximum_score=median_maximum_score,
-        participants=participant_responses,
-        total_questions=total_questions,
-        created_at=quiz_session.created_at,
-        started_at=quiz_session.started_at,
-        ends_at=quiz_ends_at(quiz_session, quiz),
-        grades_published_at=quiz_session.grades_published_at,
-    )
+    return responses
 
 
 def student_session_response(
@@ -573,79 +620,116 @@ def active_session_responses(
         .order_by(QuizSession.created_at.desc(), QuizSession.id.desc())
         .limit(20)
     )
-    return [
-        session_response(quiz_session, quiz, session) for quiz_session, quiz in rows
-    ]
+    return session_responses(
+        [(quiz_session, quiz) for quiz_session, quiz in rows], session
+    )
 
 
 def makeup_session_response(
     makeup: MakeupSession, session: DbSession
 ) -> MakeupSessionResponse:
-    quizzes = list(
-        session.scalars(
-            select(Quiz)
-            .join(MakeupSessionQuiz, MakeupSessionQuiz.quiz_id == Quiz.id)
-            .where(MakeupSessionQuiz.session_id == makeup.id)
-            .order_by(Quiz.title, Quiz.id)
-        )
-    )
-    child_sessions = list(
+    return makeup_responses([makeup], session)[0]
+
+
+def makeup_responses(
+    makeups: Sequence[MakeupSession], session: Session
+) -> list[MakeupSessionResponse]:
+    """Make-up views with a fixed number of queries, whatever their children."""
+    if not makeups:
+        return []
+    makeup_ids = [makeup.id for makeup in makeups]
+    quizzes_by_makeup: dict[int, list[Quiz]] = {
+        makeup_id: [] for makeup_id in makeup_ids
+    }
+    for makeup_id, quiz in session.execute(
+        select(MakeupSessionQuiz.session_id, Quiz)
+        .join(Quiz, Quiz.id == MakeupSessionQuiz.quiz_id)
+        .where(MakeupSessionQuiz.session_id.in_(makeup_ids))
+        .order_by(Quiz.title, Quiz.id)
+    ):
+        quizzes_by_makeup[makeup_id].append(quiz)
+    children = list(
         session.scalars(
             select(QuizSession)
-            .where(QuizSession.makeup_session_id == makeup.id)
+            .where(QuizSession.makeup_session_id.in_(makeup_ids))
             .order_by(QuizSession.id)
         )
     )
-    quizzes_by_id = {quiz.id: quiz for quiz in quizzes}
-    child_responses = [
-        session_response(child, quizzes_by_id[child.quiz_id], session)
-        for child in child_sessions
-        if child.quiz_id in quizzes_by_id
+    child_rows = [
+        (child, offered)
+        for child in children
+        for offered in quizzes_by_makeup[child.makeup_session_id or 0]
+        if offered.id == child.quiz_id
     ]
-    participants = [
-        MakeupParticipantResponse(
-            **participant.model_dump(),
-            quiz_title=child.quiz_title,
-            total_questions=child.total_questions,
+    child_responses = session_responses(child_rows, session)
+    children_by_makeup: dict[int, list[QuizSessionResponse]] = {
+        makeup_id: [] for makeup_id in makeup_ids
+    }
+    for (child, _), response in zip(child_rows, child_responses, strict=True):
+        children_by_makeup[child.makeup_session_id or 0].append(response)
+    class_ids = {makeup.class_id for makeup in makeups if makeup.class_id is not None}
+    classes_by_id = {
+        student_class.id: student_class
+        for student_class in session.scalars(
+            select(StudentClass).where(StudentClass.id.in_(class_ids))
         )
-        for child in child_responses
-        for participant in child.participants
-    ]
-    return MakeupSessionResponse(
-        id=makeup.id,
-        class_id=makeup.class_id,
-        class_name=(
-            format_class_name(student_class.grade_level, student_class.name)
-            if makeup.class_id is not None
-            and (student_class := session.get(StudentClass, makeup.class_id))
-            is not None
-            else makeup.class_name
-        ),
-        join_code=makeup.join_code,
-        status=makeup.status,
-        quizzes=[
-            MakeupQuizOption(
-                id=quiz.id,
-                title=quiz.title,
-                duration_seconds=quiz.duration_seconds,
+    }
+
+    responses = []
+    for makeup in makeups:
+        participants = [
+            MakeupParticipantResponse(
+                **participant.model_dump(),
+                quiz_title=child.quiz_title,
+                total_questions=child.total_questions,
             )
-            for quiz in quizzes
-        ],
-        participant_count=len(participants),
-        participants=participants,
-        created_at=makeup.created_at,
-    )
+            for child in children_by_makeup[makeup.id]
+            for participant in child.participants
+        ]
+        student_class = (
+            classes_by_id.get(makeup.class_id) if makeup.class_id is not None else None
+        )
+        responses.append(
+            MakeupSessionResponse(
+                id=makeup.id,
+                class_id=makeup.class_id,
+                class_name=(
+                    format_class_name(student_class.grade_level, student_class.name)
+                    if student_class is not None
+                    else makeup.class_name
+                ),
+                join_code=makeup.join_code,
+                status=makeup.status,
+                quizzes=[
+                    MakeupQuizOption(
+                        id=quiz.id,
+                        title=quiz.title,
+                        duration_seconds=quiz.duration_seconds,
+                    )
+                    for quiz in quizzes_by_makeup[makeup.id]
+                ],
+                participant_count=len(participants),
+                participants=participants,
+                created_at=makeup.created_at,
+            )
+        )
+    return responses
 
 
-def makeup_session_responses(
+def active_makeup_session_responses(
     professor: User, session: Session
 ) -> list[MakeupSessionResponse]:
-    """A teacher's makeup sessions, newest first."""
-    makeups = list(
-        session.scalars(
-            select(MakeupSession)
-            .where(MakeupSession.owner_id == professor.id)
-            .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
+    """A teacher's make-ups still open, newest first: what the live feed shows.
+
+    Finished ones only grow with time; they are listed, a page at a time, by
+    GET /makeup/sessions.
+    """
+    makeups = session.scalars(
+        select(MakeupSession)
+        .where(
+            MakeupSession.owner_id == professor.id,
+            MakeupSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
+        .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
     )
-    return [makeup_session_response(item, session) for item in makeups]
+    return makeup_responses(list(makeups), session)

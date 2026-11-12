@@ -181,10 +181,23 @@ def expire_due_quiz_sessions(
         return []
     now = now or datetime.now(UTC)
     finished: list[QuizSession] = []
+    # The deadline is computed by PostgreSQL, so only due sessions are read:
+    # long training sessions no longer make every tick scan them all.
+    deadline = QuizSession.started_at + func.make_interval(
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        func.coalesce(QuizSession.duration_seconds, Quiz.duration_seconds)
+        + QuizSession.paused_duration_seconds,
+    )
     for quiz_session, quiz in session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(QuizSession.status == SessionStatus.IN_PROGRESS)
+        .where(QuizSession.status == SessionStatus.IN_PROGRESS, deadline <= now)
+        .with_for_update(of=QuizSession, skip_locked=True)
     ).all():
         if not quiz_session_is_due(quiz_session, quiz, now):
             continue

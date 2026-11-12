@@ -15,7 +15,6 @@ from app.services import session_lifecycle
 
 from support import (
     choice_answer,
-    concurrent_writes,
     correct_choice_id,
     exam_environment,
     expire_due_sessions,
@@ -249,7 +248,7 @@ def test_shutdown_does_not_raise_what_a_background_task_raised(
     assert logged == [("Background task %s failed", "session expiry")]
 
 
-def test_a_tick_skips_a_session_finished_concurrently(tmp_path: Path) -> None:
+def test_a_tick_skips_a_session_another_request_holds(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "expiry-race")) as client:
         factory = client.app.state.session_factory
         with factory() as session:
@@ -265,16 +264,11 @@ def test_a_tick_skips_a_session_finished_concurrently(tmp_path: Path) -> None:
             )
             session.commit()
 
-        with concurrent_writes(
-            client,
-            (
-                "UPDATE quiz_sessions SET status",
-                lambda connection: connection.execute(
-                    update(QuizSession)
-                    .where(QuizSession.id == raced_id)
-                    .values(status="finished")
-                ),
-            ),
-        ) as fired:
+        # A request working on the session (an answer being saved) holds its
+        # row: the tick does not wait for it, and the next one finishes it.
+        with factory() as holder:
+            holder.execute(
+                select(QuizSession).where(QuizSession.id == raced_id).with_for_update()
+            )
             assert expire_due_sessions(client) == 0
-        assert fired
+        assert expire_due_sessions(client) == 1
