@@ -133,7 +133,7 @@ export function HomePage({
         const destination =
             section === "results" ? "/student/results" : "/student/dashboard"
         if (location.pathname !== destination) {
-            navigate(destination, {
+            void navigate(destination, {
                 replace: true,
                 state: { section },
             })
@@ -143,25 +143,25 @@ export function HomePage({
     useEffect(() => {
         if (!token) {
             if (page === "dashboard")
-                navigate("/student/login", { replace: true })
+                void navigate("/student/login", { replace: true })
             return
         }
         if (student) {
             if (page === "login")
-                navigate("/student/dashboard", { replace: true })
+                void navigate("/student/dashboard", { replace: true })
             return
         }
         restoreStudent(token)
             .then((restored) => {
                 setStudent(restored)
                 if (page === "login")
-                    navigate("/student/dashboard", { replace: true })
+                    void navigate("/student/dashboard", { replace: true })
             })
             .catch(() => {
                 clearStudentSession()
                 setToken(null)
                 if (page === "dashboard")
-                    navigate("/student/login", { replace: true })
+                    void navigate("/student/login", { replace: true })
             })
             .finally(() => setIsLoading(false))
     }, [navigate, page, student, token])
@@ -177,7 +177,7 @@ export function HomePage({
             setPassword("")
             setToken(result.token)
             setStudent(result.student)
-            navigate("/student/dashboard", { replace: true })
+            void navigate("/student/dashboard", { replace: true })
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("student-login-error")))
         } finally {
@@ -190,7 +190,7 @@ export function HomePage({
         clearStudentSession()
         setStudent(null)
         setToken(null)
-        navigate("/student/login", { replace: true })
+        void navigate("/student/login", { replace: true })
     }
 
     async function joinExam(event: FormEvent<HTMLFormElement>) {
@@ -204,7 +204,7 @@ export function HomePage({
                 joinCode: joined.join_code,
                 participantToken: joined.participant_token,
             })
-            navigate("/student/exam")
+            void navigate("/student/exam")
         } catch (caught) {
             setJoinError(apiErrorMessage(caught, t, t("join-quiz-error")))
         } finally {
@@ -226,13 +226,13 @@ export function HomePage({
                     error={error}
                     onIdentifierChange={setIdentifier}
                     onPasswordChange={setPassword}
-                    onSubmit={handleLogin}
+                    onSubmit={(event) => void handleLogin(event)}
                 />
             </div>
         )
     }
 
-    if (!student || !token) return null
+    if (!student || !token || !activeEntry) return null
 
     return (
         <DashboardShell
@@ -261,7 +261,7 @@ export function HomePage({
                             />
                             <Button
                                 className="h-12 w-full text-base"
-                                onClick={() => navigate("/student/exam")}
+                                onClick={() => void navigate("/student/exam")}
                             >
                                 <ClipboardPenLine />
                                 {t("resume-quiz")}
@@ -277,7 +277,7 @@ export function HomePage({
                                 setJoinCode(value)
                                 setJoinError(null)
                             }}
-                            onSubmit={joinExam}
+                            onSubmit={(event) => void joinExam(event)}
                         />
                     )}
                 </div>

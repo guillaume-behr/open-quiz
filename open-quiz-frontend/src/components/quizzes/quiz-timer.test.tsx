@@ -20,10 +20,14 @@ describe("QuizTimer", () => {
         render(<QuizTimer endsAt="2026-01-01T09:05:02Z" />)
         const timer = screen.getByRole("timer")
         expect(timer).toHaveTextContent("5:02")
-        act(() => vi.advanceTimersByTime(3000))
+        act(() => {
+            vi.advanceTimersByTime(3000)
+        })
         expect(timer).toHaveTextContent("4:59")
         expect(timer).toHaveTextContent('timer-minutes-left {"count":5}')
-        act(() => vi.advanceTimersByTime(240_000))
+        act(() => {
+            vi.advanceTimersByTime(240_000)
+        })
         expect(timer).toHaveTextContent("0:59")
         expect(timer.className).toContain("text-destructive")
     })

@@ -6,6 +6,7 @@ import {
     LIVENESS_TIMEOUT_MS,
     type LiveConnectionState,
 } from "./live-updates"
+import { first } from "@/test/first"
 
 /** A WebSocket the test drives by hand: nothing reaches the network. */
 class FakeSocket {
@@ -78,7 +79,7 @@ function connect(
 ) {
     const options = {
         path: "/api/quizzes/live/teacher/sessions",
-        getToken: vi.fn(async () => "access-token"),
+        getToken: vi.fn(() => Promise.resolve("access-token")),
         onData: vi.fn(),
         onUnavailable: vi.fn(),
         onConnectionChange: vi.fn<(state: LiveConnectionState) => void>(),
@@ -130,8 +131,8 @@ describe("connectLiveUpdates", () => {
 
         await advance(10_000)
 
-        expect(sockets()[0].closeCalls).toEqual([undefined])
-        sockets()[0].serverClose(1006)
+        expect(first(sockets()).closeCalls).toEqual([undefined])
+        first(sockets()).serverClose(1006)
         await advance(500)
         expect(sockets()).toHaveLength(2)
     })
@@ -147,7 +148,7 @@ describe("connectLiveUpdates", () => {
         }
 
         expect(sockets()).toHaveLength(1)
-        expect(sockets()[0].closeCalls).toEqual([])
+        expect(first(sockets()).closeCalls).toEqual([])
         expect(options.onConnectionChange.mock.calls).toEqual([["connected"]])
     })
 
@@ -157,10 +158,10 @@ describe("connectLiveUpdates", () => {
         handshake()
 
         await advance(LIVENESS_TIMEOUT_MS - 1)
-        expect(sockets()[0].closeCalls).toEqual([])
+        expect(first(sockets()).closeCalls).toEqual([])
         await advance(1)
 
-        expect(sockets()[0].closeCalls).toEqual([undefined])
+        expect(first(sockets()).closeCalls).toEqual([undefined])
         expect(options.onConnectionChange).toHaveBeenLastCalledWith(
             "reconnecting"
         )
@@ -170,7 +171,7 @@ describe("connectLiveUpdates", () => {
         handshake()
         expect(options.onConnectionChange).toHaveBeenLastCalledWith("connected")
         // The abandoned socket reporting its close later changes nothing.
-        sockets()[0].serverClose(1006)
+        first(sockets()).serverClose(1006)
         await advance(10_000)
         expect(sockets()).toHaveLength(2)
     })
@@ -232,7 +233,7 @@ describe("connectLiveUpdates", () => {
         document.dispatchEvent(new Event("visibilitychange"))
         await advance(0)
 
-        expect(sockets()[0].closeCalls).toEqual([undefined])
+        expect(first(sockets()).closeCalls).toEqual([undefined])
         expect(sockets()).toHaveLength(2)
     })
 
@@ -247,7 +248,7 @@ describe("connectLiveUpdates", () => {
         await advance(0)
 
         expect(sockets()).toHaveLength(1)
-        expect(sockets()[0].closeCalls).toEqual([])
+        expect(first(sockets()).closeCalls).toEqual([])
     })
 
     it("reconnects at once when the network returns to a stale connection", async () => {
@@ -273,7 +274,7 @@ describe("connectLiveUpdates", () => {
         disconnect = null
 
         expect(vi.getTimerCount()).toBe(0)
-        expect(sockets()[0].closeCalls).toEqual([1000])
+        expect(first(sockets()).closeCalls).toEqual([1000])
         expect(removeWindowListener).toHaveBeenCalledWith(
             "online",
             expect.any(Function)

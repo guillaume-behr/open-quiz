@@ -90,7 +90,7 @@ jobs:
       # The locale and error-code checks, then the unit tests with their
       # coverage thresholds (vite.config.ts).
       - run: pnpm test:coverage
-      - run: pnpm typecheck
+      # Type-checks everything first (tsc -b), as pnpm typecheck would.
       - run: pnpm build
       - run: pnpm audit --audit-level low
 

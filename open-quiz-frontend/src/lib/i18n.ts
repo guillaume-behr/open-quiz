@@ -6,7 +6,9 @@ import { availableLanguages, i18nOptions } from "./i18n-options"
 
 export { availableLanguages }
 
-i18n
+// init() only rejects when a backend fails, and i18next then falls back to
+// fallbackLng on its own (covered by the locale fallback e2e test).
+void i18n
     // load translation using http -> see /public/locales
     // learn more: https://github.com/i18next/i18next-http-backend
     .use(Backend)

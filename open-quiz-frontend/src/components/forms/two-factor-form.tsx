@@ -8,6 +8,7 @@ import { QRCodeSVG } from "qrcode.react"
 import { useState, type SyntheticEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { TWO_FACTOR_CODE_PATTERN } from "@/lib/input-patterns"
+import { formText } from "@/lib/form-data"
 
 type TwoFactorFormProps = {
     challenge: TwoFactorChallenge
@@ -31,7 +32,7 @@ export function TwoFactorForm({
         setIsSubmitting(true)
         const form = new FormData(event.currentTarget)
         try {
-            await onVerify(String(form.get("code")))
+            await onVerify(formText(form, "code"))
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("two-factor-error")))
         } finally {
@@ -41,7 +42,7 @@ export function TwoFactorForm({
 
     return (
         <form
-            onSubmit={handleSubmit}
+            onSubmit={(event) => void handleSubmit(event)}
             className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-8 py-10 shadow-lg"
         >
             <div className="flex flex-col items-center gap-2 text-center">

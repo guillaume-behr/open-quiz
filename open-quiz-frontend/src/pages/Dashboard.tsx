@@ -151,11 +151,11 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
     useEffect(() => {
         if (session.isLoading) return
         if (signedInUser?.is_admin) {
-            navigate("/admin/dashboard", { replace: true })
+            void navigate("/admin/dashboard", { replace: true })
         } else if (signedInUser && page === "login") {
-            navigate("/teacher/dashboard", { replace: true })
+            void navigate("/teacher/dashboard", { replace: true })
         } else if (!signedInUser && page === "dashboard") {
-            navigate("/teacher/login", { replace: true })
+            void navigate("/teacher/login", { replace: true })
         }
     }, [navigate, page, session.isLoading, signedInUser])
 
@@ -233,7 +233,7 @@ export function Dashboard({ page }: { page: "login" | "dashboard" }) {
         )
     }
 
-    if (!currentUser) return null
+    if (!currentUser || !activeEntry) return null
 
     return (
         <DashboardShell

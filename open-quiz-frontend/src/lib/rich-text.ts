@@ -36,6 +36,17 @@ function isSpace(character: string | undefined) {
  * significant character (`*`, `` ` ``, `\`) to the next, so each starting
  * point is scanned at most once per marker.
  */
+/**
+ * A cell of one of the scan tables below, which cover every index of the
+ * text and the one just past its end.
+ */
+function cell(table: Int32Array, index: number): number {
+    const value = table[index]
+    if (value === undefined)
+        throw new RangeError(`${index} is outside the scanned text`)
+    return value
+}
+
 class RichTextSource {
     readonly text: string
     private readonly nextSignificant: Int32Array
@@ -61,25 +72,27 @@ class RichTextSource {
         for (let index = length - 1; index >= 0; index -= 1) {
             const character = text[index]
             this.starRunEnd[index] =
-                character === "*" ? this.starRunEnd[index + 1] : index
+                character === "*" ? cell(this.starRunEnd, index + 1) : index
             this.nextBacktick[index] =
-                character === "`" ? index : this.nextBacktick[index + 1]
+                character === "`" ? index : cell(this.nextBacktick, index + 1)
             this.nextSignificant[index] =
                 character === "*" || character === "`" || character === "\\"
                     ? index
-                    : this.nextSignificant[index + 1]
+                    : cell(this.nextSignificant, index + 1)
         }
     }
 
     /** Index just after a closing backtick, or -1 when the span never closes. */
     codeSpanEnd(start: number) {
         const close =
-            start + 1 < this.text.length ? this.nextBacktick[start + 1] : -1
+            start + 1 < this.text.length
+                ? cell(this.nextBacktick, start + 1)
+                : -1
         return close > start + 1 && close < this.text.length ? close + 1 : -1
     }
 
     starRunLength(start: number) {
-        return this.starRunEnd[start] - start
+        return cell(this.starRunEnd, start) - start
     }
 
     /**
@@ -114,7 +127,7 @@ class RichTextSource {
         let index = start
         let result = -1
         while (index < source.length) {
-            const cached = known[index]
+            const cached = cell(known, index)
             if (cached !== NOT_SCANNED) {
                 result = cached - 2
                 break
@@ -163,7 +176,9 @@ class RichTextSource {
     }
 
     skipTo(index: number) {
-        return index < this.text.length ? this.nextSignificant[index] : index
+        return index < this.text.length
+            ? cell(this.nextSignificant, index)
+            : index
     }
 }
 
@@ -291,8 +306,8 @@ export function toggleRichTextMarker(
 ): RichTextSelection {
     let start = selectionStart
     let end = selectionEnd
-    while (start < end && /\s/.test(value[start])) start += 1
-    while (end > start && /\s/.test(value[end - 1])) end -= 1
+    while (start < end && /\s/.test(value[start] ?? "")) start += 1
+    while (end > start && /\s/.test(value[end - 1] ?? "")) end -= 1
 
     const before = value.slice(0, start)
     const selected = value.slice(start, end)

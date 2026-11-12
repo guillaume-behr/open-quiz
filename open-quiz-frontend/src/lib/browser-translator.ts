@@ -37,7 +37,7 @@ function translatorApi(): TranslatorApi | undefined {
 
 export function translationLanguage(language: string | undefined): string {
     const normalized = (language ?? "fr").replace("_", "-").toLowerCase()
-    const base = normalized.split("-")[0]
+    const [base = normalized] = normalized.split("-")
     return base === "zh" ? "zh" : base
 }
 

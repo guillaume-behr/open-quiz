@@ -97,7 +97,9 @@ test("problem report ignores a network-path source", async ({ page }) => {
     await page.goto("/report-a-problem")
     await page.evaluate(() => {
         history.replaceState({ usr: { from: "//example.test/phishing" } }, "")
-        dispatchEvent(new PopStateEvent("popstate", { state: history.state }))
+        dispatchEvent(
+            new PopStateEvent("popstate", { state: history.state as unknown })
+        )
     })
 
     await expect(page.getByText("/", { exact: true })).toBeVisible()
@@ -235,7 +237,8 @@ test("cookie settings clear local quiz and preference data", async ({
     const teacherLogout = page.waitForRequest(
         (request) =>
             new URL(request.url()).pathname === "/api/auth/logout" &&
-            request.postDataJSON()?.forget_browser === true
+            (request.postDataJSON() as { forget_browser?: boolean } | null)
+                ?.forget_browser === true
     )
     await page.goto("/cookie-settings")
     await expect(

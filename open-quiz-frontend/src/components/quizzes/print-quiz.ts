@@ -64,7 +64,11 @@ export async function printExamSubjects(
         const result = [...items]
         for (let index = result.length - 1; index > 0; index--) {
             const target = Math.floor(random() * (index + 1))
-            ;[result[index], result[target]] = [result[target], result[index]]
+            const current = result[index]
+            const other = result[target]
+            if (current === undefined || other === undefined) continue
+            result[index] = other
+            result[target] = current
         }
         return result
     }
@@ -126,6 +130,7 @@ export async function printExamSubjects(
                 const index = nextIndex
                 nextIndex += 1
                 const id = ids[index]
+                if (id === undefined) return
                 let blob: Blob
                 try {
                     blob = await loader(id)

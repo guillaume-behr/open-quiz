@@ -37,7 +37,10 @@ function stubFetch(answer: (path: string) => Response) {
     vi.stubGlobal(
         "fetch",
         vi.fn((input: RequestInfo | URL) => {
-            const path = new URL(String(input), "http://localhost").pathname
+            const path = new URL(
+                input instanceof Request ? input.url : input,
+                "http://localhost"
+            ).pathname
             calls.push(path)
             return Promise.resolve(answer(path))
         })
@@ -104,7 +107,10 @@ describe("request timeouts", () => {
         vi.stubGlobal(
             "fetch",
             vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-                const path = new URL(String(input), "http://localhost").pathname
+                const path = new URL(
+                    input instanceof Request ? input.url : input,
+                    "http://localhost"
+                ).pathname
                 if (path === "/api/auth/refresh")
                     return Promise.resolve(
                         Response.json({

@@ -16,7 +16,7 @@ export function AdminDashboard() {
     // signed in.
     useEffect(() => {
         if (user && !user.is_admin)
-            navigate("/teacher/dashboard", { replace: true })
+            void navigate("/teacher/dashboard", { replace: true })
     }, [navigate, user])
 
     if (session.isLoading || (user && !user.is_admin)) {

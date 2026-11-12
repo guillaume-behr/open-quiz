@@ -8,6 +8,7 @@ import { CircleCheck, LoaderCircle, MessageSquareWarning } from "lucide-react"
 import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useLocation } from "react-router"
+import { formText } from "@/lib/form-data"
 
 function sourcePath(state: unknown): string {
     if (
@@ -45,7 +46,7 @@ export function ReportProblemPage() {
         setSent(false)
         setIsSending(true)
         try {
-            await createProblemReport(String(data.get("message")), pagePath)
+            await createProblemReport(formText(data, "message"), pagePath)
             form.reset()
             setSent(true)
         } catch (caught) {
@@ -72,7 +73,10 @@ export function ReportProblemPage() {
                     </div>
                 </div>
 
-                <form className="space-y-5" onSubmit={handleSubmit}>
+                <form
+                    className="space-y-5"
+                    onSubmit={(event) => void handleSubmit(event)}
+                >
                     <Field>
                         <FieldLabel htmlFor="problem-message">
                             {t("problem-report-message")}

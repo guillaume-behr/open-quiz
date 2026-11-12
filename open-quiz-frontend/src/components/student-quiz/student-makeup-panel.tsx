@@ -56,7 +56,7 @@ export function StudentMakeupPanel({ token }: { token: string }) {
                 joinCode: joined.join_code,
                 participantToken: joined.participant_token,
             })
-            navigate("/student/exam")
+            void navigate("/student/exam")
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("makeup-select-error")))
         } finally {
@@ -117,7 +117,10 @@ export function StudentMakeupPanel({ token }: { token: string }) {
         )
 
     return (
-        <form onSubmit={join} className={STUDENT_ACCESS_CARD_CLASS_NAME}>
+        <form
+            onSubmit={(event) => void join(event)}
+            className={STUDENT_ACCESS_CARD_CLASS_NAME}
+        >
             <StudentAccessHeader
                 title={t("makeup-tab")}
                 description={t("makeup-code-help")}

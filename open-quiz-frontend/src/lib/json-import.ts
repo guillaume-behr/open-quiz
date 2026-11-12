@@ -42,8 +42,9 @@ function locateSyntaxError(
     const position = error.message.match(/position\s+(\d+)/i)
     if (position) return lineAndColumn(source, Number(position[1]))
     const unexpectedToken = error.message.match(/Unexpected token '([^']+)'/i)
-    if (unexpectedToken) {
-        const tokenPosition = source.indexOf(unexpectedToken[1])
+    const token = unexpectedToken?.[1]
+    if (token) {
+        const tokenPosition = source.indexOf(token)
         if (tokenPosition >= 0) return lineAndColumn(source, tokenPosition)
     }
     if (/unexpected end/i.test(error.message)) {

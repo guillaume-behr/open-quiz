@@ -96,8 +96,8 @@ export function ResultsSchedule({
         allStarts.length > 0
             ? Math.max(
                   dayStartHour + 1,
-                  ...weekResults.map((result, index) => {
-                      const end = endDate(result, allStarts[index])
+                  ...weekResults.map((result) => {
+                      const end = endDate(result, resultStart(result))
                       return Math.min(
                           24,
                           end.getHours() + (end.getMinutes() > 0 ? 1 : 0)
@@ -219,7 +219,10 @@ export function ResultsSchedule({
                             )
                             return (
                                 <div
-                                    key={days[dayIndex].toISOString()}
+                                    key={
+                                        days[dayIndex]?.toISOString() ??
+                                        dayIndex
+                                    }
                                     className="relative border-l"
                                 >
                                     {positioned.map(

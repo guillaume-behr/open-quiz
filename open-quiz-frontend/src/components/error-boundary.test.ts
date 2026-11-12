@@ -55,13 +55,13 @@ it("clears an error shown on one route when navigating to another", () => {
     )
     expect(container.textContent).toContain("error-page-title")
 
-    act(() =>
+    act(() => {
         container
             .querySelector("a")
             ?.dispatchEvent(
                 new MouseEvent("click", { bubbles: true, button: 0 })
             )
-    )
+    })
 
     expect(container.textContent).toContain("Fine page")
     expect(container.textContent).not.toContain("error-page-title")

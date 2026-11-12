@@ -88,7 +88,12 @@ describe("useBankTransfer", () => {
 
         const file = new File(["{}"], "bank.json")
         act(() => result.current.setImportFile(file))
-        await act(async () => result.current.handleImportSubmit(submit))
+        // The handler starts the import without awaiting it; the async act
+        // flushes the promise it leaves running.
+        await act(async () => {
+            result.current.handleImportSubmit(submit)
+            await Promise.resolve()
+        })
         expect(onImported).toHaveBeenCalled()
         expect(result.current.batchMessage).toBe(
             'questions-imported {"count":2}'
@@ -100,12 +105,22 @@ describe("useBankTransfer", () => {
         api.importQuestionBatch.mockRejectedValue(
             new ApiError("taken", 409, { code: "QUESTION_BANK_NAME_TAKEN" })
         )
-        await act(async () => result.current.handleImportSubmit(submit))
+        // The handler starts the import without awaiting it; the async act
+        // flushes the promise it leaves running.
+        await act(async () => {
+            result.current.handleImportSubmit(submit)
+            await Promise.resolve()
+        })
         expect(result.current.importError).toBeTruthy()
         expect(result.current.isImportDialogOpen).toBe(true)
 
         api.importQuestionBatch.mockRejectedValue(new SyntaxError("bad json"))
-        await act(async () => result.current.handleImportSubmit(submit))
+        // The handler starts the import without awaiting it; the async act
+        // flushes the promise it leaves running.
+        await act(async () => {
+            result.current.handleImportSubmit(submit)
+            await Promise.resolve()
+        })
         expect(result.current.importError).toBeTruthy()
         act(() => result.current.closeImportDialog())
         expect(result.current.importError).toBeNull()

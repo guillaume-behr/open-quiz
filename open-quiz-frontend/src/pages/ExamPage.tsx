@@ -22,16 +22,16 @@ export function ExamPage() {
     )
     const [isLoading, setIsLoading] = useState(Boolean(token && !student))
     const returnToDashboard = useCallback(() => {
-        navigate("/student/dashboard", { replace: true })
+        void navigate("/student/dashboard", { replace: true })
     }, [navigate])
 
     useEffect(() => {
         if (!readStoredQuizSession()) {
-            navigate("/student/dashboard", { replace: true })
+            void navigate("/student/dashboard", { replace: true })
             return
         }
         if (!token) {
-            navigate("/student/login", { replace: true })
+            void navigate("/student/login", { replace: true })
             return
         }
         if (student) return
@@ -39,7 +39,7 @@ export function ExamPage() {
             .then(setStudent)
             .catch(() => {
                 clearStudentSession()
-                navigate("/student/login", { replace: true })
+                void navigate("/student/login", { replace: true })
             })
             .finally(() => setIsLoading(false))
     }, [navigate, student, token])

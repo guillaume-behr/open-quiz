@@ -630,11 +630,12 @@ test("a student joins a retake room and selects an eligible quiz", async ({
     await expect(page).toHaveURL(/\/student\/exam$/)
     await expect
         .poll(() =>
-            page.evaluate(() =>
-                JSON.parse(
-                    sessionStorage.getItem("open-quiz-student-session") ??
-                        "null"
-                )
+            page.evaluate(
+                () =>
+                    JSON.parse(
+                        sessionStorage.getItem("open-quiz-student-session") ??
+                            "null"
+                    ) as unknown
             )
         )
         .toEqual({
