@@ -139,6 +139,8 @@ class Settings:
     quiz_result_retention_days: int = bounded(365, 1, 3650)
     training_result_retention_days: int = bounded(365, 1, 3650)
     abandoned_session_retention_days: int = bounded(7, 1, 90)
+    class_import_attempts: int = bounded(30, 1, 1000)
+    class_import_window_seconds: int = bounded(900, 60, 86400)
     problem_report_attempts: int = bounded(60, 1, 5000)
     problem_report_window_seconds: int = bounded(900, 60, 86400)
     problem_report_retention_days: int = bounded(90, 1, 365)

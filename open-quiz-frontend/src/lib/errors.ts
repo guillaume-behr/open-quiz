@@ -110,6 +110,7 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     AUTH_REFRESH_SESSION_INVALID: "error-session-expired",
     AUTH_REFRESH_PROOF_INVALID: "error-session-expired",
     PROBLEM_REPORT_RATE_LIMITED: "error-problem-report-rate-limited",
+    CLASS_IMPORT_RATE_LIMITED: "error-class-import-rate-limited",
     PROBLEM_REPORT_NOT_FOUND: "error-problem-report-not-found",
     TEACHER_NOT_FOUND: "error-teacher-not-found",
     TEACHER_IN_ACTIVE_EXAM: "error-teacher-in-active-exam",

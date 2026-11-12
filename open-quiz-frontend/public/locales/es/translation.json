@@ -841,6 +841,7 @@
     "error-training-question-count-exceeded": "El número de preguntas solicitado supera el que contiene el banco.",
     "error-session-expired": "Tu sesión ha caducado. Vuelve a iniciar sesión.",
     "error-problem-report-rate-limited": "Se han enviado demasiados avisos. Inténtalo más tarde.",
+    "error-class-import-rate-limited": "Demasiadas importaciones de clases. Inténtalo más tarde.",
     "error-problem-report-not-found": "No se encuentra este aviso. Es posible que ya se haya eliminado.",
     "error-teacher-not-found": "No se encuentra esta cuenta de docente. Es posible que se haya eliminado.",
     "error-teacher-in-active-exam": "Este docente está dirigiendo un examen ahora mismo. Inténtalo de nuevo cuando termine.",

@@ -40,13 +40,21 @@ def owned_question_bank(
     question_bank_id: int,
     professor: ProfessorUser,
     session: DbSession,
+    *,
+    for_update: bool = False,
 ) -> QuestionBank:
-    question_bank = session.scalar(
-        select(QuestionBank).where(
-            QuestionBank.id == question_bank_id,
-            QuestionBank.owner_id == professor.id,
-        )
+    """The professor's bank, locked until commit when ``for_update`` is set.
+
+    The lock makes check-then-insert writes, such as the question limit,
+    wait for one another instead of both passing the check.
+    """
+    statement = select(QuestionBank).where(
+        QuestionBank.id == question_bank_id,
+        QuestionBank.owner_id == professor.id,
     )
+    if for_update:
+        statement = statement.with_for_update()
+    question_bank = session.scalar(statement)
     if question_bank is None:
         raise ApiError(
             status.HTTP_404_NOT_FOUND,

@@ -840,6 +840,7 @@
     "error-training-question-count-exceeded": "Die gewünschte Anzahl an Fragen übersteigt den Inhalt der Bank.",
     "error-session-expired": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an.",
     "error-problem-report-rate-limited": "Zu viele Meldungen gesendet. Versuchen Sie es später erneut.",
+    "error-class-import-rate-limited": "Zu viele Klassenimporte. Versuchen Sie es später erneut.",
     "error-problem-report-not-found": "Diese Meldung wurde nicht gefunden. Möglicherweise wurde sie bereits gelöscht.",
     "error-teacher-not-found": "Dieses Lehrkraftkonto wurde nicht gefunden. Möglicherweise wurde es gelöscht.",
     "error-teacher-in-active-exam": "Diese Lehrkraft leitet gerade eine Prüfung. Versuchen Sie es nach deren Ende erneut.",

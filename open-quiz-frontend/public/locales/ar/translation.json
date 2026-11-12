@@ -904,6 +904,7 @@
     "error-training-question-count-exceeded": "يتجاوز عدد الأسئلة المطلوب ما يحتويه البنك.",
     "error-session-expired": "انتهت صلاحية جلستك. سجّل الدخول مرة أخرى.",
     "error-problem-report-rate-limited": "أُرسل عدد كبير جدًا من البلاغات. حاول مرة أخرى لاحقًا.",
+    "error-class-import-rate-limited": "عدد كبير جدًا من عمليات استيراد الفصول. حاول مرة أخرى لاحقًا.",
     "error-problem-report-not-found": "تعذّر العثور على هذا البلاغ. ربما تم حذفه بالفعل.",
     "error-teacher-not-found": "تعذّر العثور على حساب المعلم هذا. ربما تم حذفه.",
     "error-teacher-in-active-exam": "يدير هذا المعلم امتحانًا الآن. حاول مرة أخرى بعد انتهائه.",

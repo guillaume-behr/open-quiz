@@ -115,6 +115,8 @@ est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` 
 | `QUIZ_RESULT_RETENTION_DAYS`       | `365`   | 1 à 3 650 jours   |
 | `TRAINING_RESULT_RETENTION_DAYS`   | `365`   | 1 à 3 650 jours   |
 | `ABANDONED_SESSION_RETENTION_DAYS` | `7`     | 1 à 90 jours      |
+| `CLASS_IMPORT_ATTEMPTS`            | `30`    | 1 à 1 000         |
+| `CLASS_IMPORT_WINDOW_SECONDS`      | `900`   | 60 à 86 400       |
 | `PROBLEM_REPORT_ATTEMPTS`          | `60`    | 1 à 5 000         |
 | `PROBLEM_REPORT_WINDOW_SECONDS`    | `900`   | 60 à 86 400       |
 | `PROBLEM_REPORT_RETENTION_DAYS`    | `90`    | 1 à 365 jours     |

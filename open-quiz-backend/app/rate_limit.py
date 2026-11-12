@@ -212,6 +212,14 @@ def attach_rate_limiters(app: FastAPI, settings: Settings) -> None:
         settings.quiz_rate_window_seconds,
         "quiz-violation",
     )
+    # A class import says whether each identifier exists on the instance:
+    # this budget, per teacher, bounds how fast one account can probe them.
+    app.state.class_import_rate_limiter = FixedWindowRateLimiter(
+        limiter_sessions,
+        settings.class_import_attempts,
+        settings.class_import_window_seconds,
+        "class-import",
+    )
     app.state.problem_report_rate_limiter = FixedWindowRateLimiter(
         limiter_sessions,
         settings.problem_report_attempts,

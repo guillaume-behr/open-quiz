@@ -1,8 +1,8 @@
 """Images of questions and choices, stored once per distinct content.
 
 See models.StoredImage. Writing goes through store_image(), which needs no
-read of the image table: identical bytes map to the same key, and a
-concurrent insertion of the same image is simply skipped.
+read of the image table: identical bytes map to the same key, and an image
+already stored is locked instead of written again.
 """
 
 from collections.abc import Iterable
@@ -27,7 +27,13 @@ def store_image(
     session.execute(
         insert(StoredImage)
         .values(sha256=digest, content_type=content_type, data=data)
-        .on_conflict_do_nothing(index_elements=[StoredImage.sha256])
+        # A no-op update rather than DO NOTHING: it locks an existing row
+        # until the caller commits, so a concurrent purge cannot delete the
+        # image between this call and the write that references it.
+        .on_conflict_do_update(
+            index_elements=[StoredImage.sha256],
+            set_={"sha256": insert(StoredImage).excluded.sha256},
+        )
     )
     return digest
 
