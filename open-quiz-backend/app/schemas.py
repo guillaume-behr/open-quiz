@@ -86,11 +86,6 @@ class TwoFactorVerifyRequest(BaseModel):
             return None
         return value
 
-    @field_validator("code")
-    @classmethod
-    def trim_verify_code(cls, value: str) -> str:
-        return value.strip()
-
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")

@@ -242,7 +242,7 @@ def test_joining_survives_concurrent_session_changes(environment) -> None:
         )
 
     with concurrent_writes(
-        client, ("UPDATE quiz_sessions SET status", set_status("cancelled"))
+        client, ("UPDATE quiz_sessions SET status", set_status("finished"))
     ) as fired:
         assert (
             client.post("/api/quizzes/join", headers=student_headers, json=join)

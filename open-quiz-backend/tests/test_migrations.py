@@ -53,6 +53,20 @@ def assert_schema_matches_models(database_url: str) -> None:
         engine.dispose()
 
 
+def accept_current_models(connection: Any) -> None:
+    """Let today's models write rows into a schema older than 0011.
+
+    The columns 0011 drops have no default: the models no longer set them.
+    """
+    connection.execute(
+        text(
+            "ALTER TABLE quizzes ALTER easy_points SET DEFAULT 0, "
+            "ALTER medium_points SET DEFAULT 0, ALTER hard_points SET DEFAULT 0; "
+            "ALTER TABLE questions ALTER correction_mode SET DEFAULT 'automatic'"
+        )
+    )
+
+
 def test_migrations_build_the_schema_the_models_describe(tmp_path: Path) -> None:
     """A database migrated from empty matches the models exactly.
 
@@ -105,7 +119,6 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
                 prompt="Legacy question",
                 difficulty="easy",
                 answer_mode="single",
-                correction_mode="automatic",
             )
             session.add(question)
             session.flush()
@@ -138,6 +151,18 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
             )
             session.commit()
         with engine.begin() as connection:
+            # Columns 0.4.0 had and 0011 drops.
+            connection.exec_driver_sql(
+                "ALTER TABLE questions ADD correction_mode varchar(20) "
+                "NOT NULL DEFAULT 'automatic'"
+            )
+            for column in ("easy_points", "medium_points", "hard_points"):
+                connection.exec_driver_sql(
+                    f"ALTER TABLE quizzes ADD {column} float NOT NULL DEFAULT 0"
+                )
+            connection.exec_driver_sql(
+                "ALTER TABLE refresh_session_families ADD parent_session_id integer"
+            )
             connection.exec_driver_sql("ALTER TABLE quiz_answers DROP COLUMN feedback")
             connection.exec_driver_sql(
                 "ALTER TABLE quiz_participants DROP COLUMN submitted_at"
@@ -310,6 +335,7 @@ def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
         with engine.begin() as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "0007")
+            accept_current_models(connection)
         with DbSession(engine) as session:
             teacher = User(username="teacher", display_name="T", password_hash="x")
             session.add(teacher)
@@ -324,7 +350,6 @@ def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
                     prompt=prompt,
                     difficulty="easy",
                     answer_mode="single",
-                    correction_mode="automatic",
                 )
                 for prompt in ("Q1", "Q2")
             )
@@ -467,6 +492,7 @@ def test_upgrade_to_0010_lets_the_database_cascade_deletes(tmp_path: Path) -> No
         with engine.begin() as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "0009")
+            accept_current_models(connection)
         with DbSession(engine) as session:
             teacher = User(username="teacher", display_name="T", password_hash="x")
             session.add(teacher)
@@ -479,7 +505,6 @@ def test_upgrade_to_0010_lets_the_database_cascade_deletes(tmp_path: Path) -> No
                 prompt="Q",
                 difficulty="easy",
                 answer_mode="single",
-                correction_mode="automatic",
             )
             session.add(question)
             session.flush()

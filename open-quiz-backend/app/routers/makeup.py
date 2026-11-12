@@ -104,8 +104,9 @@ MAKEUP_TRANSITIONS: dict[
         (SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
         SessionStatus.FINISHED,
     ),
-    MakeupAction.CANCEL: ((SessionStatus.WAITING,), SessionStatus.CANCELLED),
 }
+# Cancelling deletes the make-up session instead of changing its status.
+CANCELLABLE_STATUSES = (SessionStatus.WAITING,)
 
 
 def owned_makeup_session(
@@ -331,7 +332,11 @@ def control_makeup_session(
     session: DbSession,
 ) -> MakeupSessionResponse | Response:
     makeup = owned_makeup_session(session_id, professor, session)
-    expected, target = MAKEUP_TRANSITIONS[action]
+    expected = (
+        CANCELLABLE_STATUSES
+        if action == MakeupAction.CANCEL
+        else MAKEUP_TRANSITIONS[action][0]
+    )
     if makeup.status not in expected:
         raise ApiError(
             409,
@@ -350,6 +355,7 @@ def control_makeup_session(
         return cancel_makeup_session(
             makeup, child_topics, request, professor.id, session
         )
+    target = MAKEUP_TRANSITIONS[action][1]
     transition = session.execute(
         update(MakeupSession)
         .where(

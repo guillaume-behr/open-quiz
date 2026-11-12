@@ -30,9 +30,6 @@ from app.models import (
     User,
 )
 from app.question_responses import load_question_records
-from app.quiz_session_records import (
-    delete_quiz_session_records,
-)
 from app.schemas import (
     MakeupParticipantResponse,
     MakeupQuizOption,
@@ -62,13 +59,9 @@ from app.services.question_assignments import (
 )
 from app.services.session_lifecycle import (
     answer_review_enabled,
-    delete_makeup_session_records,
     quiz_ends_at,
 )
 from app.session_status import ACTIVE_SESSION_STATUSES, took_part
-
-# Monitoring events no longer reported as alerts; one still stored is hidden.
-RETIRED_VIOLATION_TYPES = frozenset({"paste_attempt", "copy_attempt"})
 
 
 def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:
@@ -237,21 +230,9 @@ def live_participant_response(
         score=score if finished_session else 0,
         maximum_score=maximum_score,
         pending_manual_grading_count=pending if finished_session else 0,
-        violation_count=(
-            0
-            if participant.last_violation_type in RETIRED_VIOLATION_TYPES
-            else participant.violation_count
-        ),
-        last_violation_type=(
-            None
-            if participant.last_violation_type in RETIRED_VIOLATION_TYPES
-            else participant.last_violation_type
-        ),
-        last_violation_at=(
-            None
-            if participant.last_violation_type in RETIRED_VIOLATION_TYPES
-            else participant.last_violation_at
-        ),
+        violation_count=participant.violation_count,
+        last_violation_type=participant.last_violation_type,
+        last_violation_at=participant.last_violation_at,
         joined_at=participant.joined_at,
     )
 
@@ -579,20 +560,6 @@ def active_session_responses(
     professor: User,
     session: DbSession,
 ) -> list[QuizSessionResponse]:
-    obsolete_cancelled_ids = list(
-        session.scalars(
-            select(QuizSession.id)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                Quiz.owner_id == professor.id,
-                QuizSession.status == SessionStatus.CANCELLED,
-                ~QuizSession.id.in_(select(QuizAnswer.session_id)),
-            )
-        )
-    )
-    if obsolete_cancelled_ids:
-        delete_quiz_session_records(obsolete_cancelled_ids, session)
-        session.commit()
     rows = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
@@ -673,31 +640,11 @@ def makeup_session_response(
 def makeup_session_responses(
     professor: User, session: Session
 ) -> list[MakeupSessionResponse]:
-    """A teacher's makeup sessions, after dropping cancelled ones nobody used."""
-    obsolete_cancelled_ids = list(
-        session.scalars(
-            select(MakeupSession.id).where(
-                MakeupSession.owner_id == professor.id,
-                MakeupSession.status == SessionStatus.CANCELLED,
-                ~MakeupSession.id.in_(
-                    select(QuizSession.makeup_session_id)
-                    .join(QuizAnswer, QuizAnswer.session_id == QuizSession.id)
-                    .where(QuizSession.makeup_session_id.is_not(None))
-                ),
-            )
-        )
-    )
-    for makeup_session_id in obsolete_cancelled_ids:
-        delete_makeup_session_records(makeup_session_id, session)
-    if obsolete_cancelled_ids:
-        session.commit()
+    """A teacher's makeup sessions, newest first."""
     makeups = list(
         session.scalars(
             select(MakeupSession)
-            .where(
-                MakeupSession.owner_id == professor.id,
-                MakeupSession.status != SessionStatus.CANCELLED,
-            )
+            .where(MakeupSession.owner_id == professor.id)
             .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
         )
     )

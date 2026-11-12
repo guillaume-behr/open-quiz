@@ -16,7 +16,6 @@ class SessionStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     PAUSED = "paused"
     FINISHED = "finished"
-    CANCELLED = "cancelled"
 
 
 class QuizMode(StrEnum):
@@ -34,10 +33,6 @@ class Difficulty(StrEnum):
     EASY = "easy"
     MEDIUM = "medium"
     HARD = "hard"
-
-
-class CorrectionMode(StrEnum):
-    AUTOMATIC = "automatic"
 
 
 def allowed_values(column: str, vocabulary: type[StrEnum]) -> str:

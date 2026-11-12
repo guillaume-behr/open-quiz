@@ -156,21 +156,9 @@ def finished_participant_response(
         pending_manual_grading_count=statistics.get(
             (session_id, participant.id), (0, 0, 0)
         )[2],
-        violation_count=(
-            0
-            if participant.last_violation_type == "paste_attempt"
-            else participant.violation_count
-        ),
-        last_violation_type=(
-            None
-            if participant.last_violation_type == "paste_attempt"
-            else participant.last_violation_type
-        ),
-        last_violation_at=(
-            None
-            if participant.last_violation_type == "paste_attempt"
-            else participant.last_violation_at
-        ),
+        violation_count=participant.violation_count,
+        last_violation_type=participant.last_violation_type,
+        last_violation_at=participant.last_violation_at,
         joined_at=participant.joined_at,
     )
 
