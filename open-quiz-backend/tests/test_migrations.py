@@ -455,3 +455,49 @@ def test_upgrade_to_0009_merges_levels_and_renames_names_differing_by_case(
             ).all() == [("Tle", "Suites"), ("Tle", "suites (2)")]
     finally:
         engine.dispose()
+
+
+def test_upgrade_to_0010_lets_the_database_cascade_deletes(tmp_path: Path) -> None:
+    """Rows written before 0010 lose their children with them afterwards."""
+    database_url = database_url_for(tmp_path / "upgrade-0010")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0009")
+        with DbSession(engine) as session:
+            teacher = User(username="teacher", display_name="T", password_hash="x")
+            session.add(teacher)
+            session.flush()
+            bank = QuestionBank(owner_id=teacher.id, grade_level="5e", chapter="C")
+            session.add(bank)
+            session.flush()
+            question = Question(
+                question_bank_id=bank.id,
+                prompt="Q",
+                difficulty="easy",
+                answer_mode="single",
+                correction_mode="automatic",
+            )
+            session.add(question)
+            session.flush()
+            session.add(QuestionChoice(question_id=question.id, label="A", position=0))
+            session.commit()
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM users"))
+            for table in ("question_banks", "questions", "question_choices"):
+                assert (
+                    connection.execute(
+                        text(f"SELECT count(*) FROM {table}")  # noqa: S608 - constant
+                    ).scalar_one()
+                    == 0
+                )
+    finally:
+        engine.dispose()
