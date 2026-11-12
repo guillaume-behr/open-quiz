@@ -26,6 +26,8 @@ WORKDIR /app
 # The same base image and path as the build stage: the virtual environment's
 # scripts point at /app/.venv/bin/python, itself a link to the base's Python.
 COPY --from=build /app/.venv ./.venv
+# app/config.py reads the version from pyproject.toml.
+COPY pyproject.toml ./
 COPY app ./app
 COPY migrations ./migrations
 COPY alembic.ini main.py ./
