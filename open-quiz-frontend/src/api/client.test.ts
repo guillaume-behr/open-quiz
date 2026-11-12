@@ -3,10 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { restoreSession } from "@/api/auth"
 import {
+    ApiError,
+    apiWebSocketUrl,
     clearSessionTokens,
     getLiveAccessToken,
     onSessionExpired,
+    refreshProofHeaders,
     request,
+    requestBlob,
+    requestPage,
     setSessionTokens,
 } from "@/api/client"
 import { importQuestionBatch } from "@/api/question-banks"
@@ -167,5 +172,113 @@ describe("request timeouts", () => {
         // The first attempt's timer running out no longer matters.
         timeouts[0]?.abort()
         expect(signals[1]?.aborted).toBe(false)
+    })
+})
+
+describe("requests and errors", () => {
+    function json(body: unknown, status = 200, headers: HeadersInit = {}) {
+        return new Response(status === 204 ? null : JSON.stringify(body), {
+            status,
+            headers,
+        })
+    }
+
+    it("maps API errors to their status, code and message", async () => {
+        const answers = [
+            json({ detail: { code: "QUIZ_NOT_FOUND", message: "x" } }, 404),
+            json({ detail: "Plain message" }, 400),
+            json({ detail: [{ loc: ["body"], msg: "bad" }] }, 422),
+            new Response("not json", { status: 500 }),
+        ]
+        stubFetch(() => answers.shift() ?? json({}))
+        await expect(request("/api/a")).rejects.toMatchObject({
+            status: 404,
+            code: "QUIZ_NOT_FOUND",
+            message: "QUIZ_NOT_FOUND",
+        })
+        await expect(request("/api/a")).rejects.toMatchObject({
+            status: 400,
+            code: null,
+            message: "Plain message",
+        })
+        await expect(request("/api/a")).rejects.toMatchObject({
+            status: 422,
+            message: "Request failed with status 422",
+        })
+        await expect(request("/api/a")).rejects.toBeInstanceOf(ApiError)
+    })
+
+    it("returns nothing for 204, pages from headers and blobs", async () => {
+        const answers = [
+            json(null, 204),
+            json(["a", "b"], 200, {
+                "X-Page": "2",
+                "X-Page-Size": "2",
+                "X-Total-Count": "5",
+            }),
+            json(["a"]),
+            new Response("file"),
+        ]
+        stubFetch(() => answers.shift() ?? json({}))
+        await expect(request("/api/a")).resolves.toBeUndefined()
+        await expect(requestPage("/api/a")).resolves.toEqual({
+            items: ["a", "b"],
+            page: 2,
+            pageSize: 2,
+            total: 5,
+            totalPages: 3,
+        })
+        await expect(requestPage("/api/a")).resolves.toMatchObject({
+            page: 1,
+            pageSize: 1,
+            totalPages: 1,
+        })
+        await expect((await requestBlob("/api/a")).text()).resolves.toBe("file")
+    })
+
+    it("refreshes once on 401 for concurrent requests, then retries", async () => {
+        setSessionTokens("old", "proof")
+        let refreshes = 0
+        const calls = stubFetch((path) => {
+            if (path === "/api/auth/refresh") {
+                refreshes += 1
+                return json({ access_token: "new", refresh_proof: "proof2" })
+            }
+            return calls.filter((call) => call === path).length > 1
+                ? json({ ok: path })
+                : json({}, 401)
+        })
+        const results = await Promise.all([
+            request("/api/a"),
+            request("/api/b"),
+        ])
+        expect(results).toEqual([{ ok: "/api/a" }, { ok: "/api/b" }])
+        expect(refreshes).toBe(1)
+        expect(refreshProofHeaders()).toEqual({ "X-Refresh-Proof": "proof2" })
+    })
+
+    it("surfaces a failing refresh and works without session storage", async () => {
+        setSessionTokens("old", "proof")
+        stubFetch((path) =>
+            path === "/api/auth/refresh"
+                ? json({ detail: "down" }, 500)
+                : json({}, 401)
+        )
+        await expect(request("/api/a")).rejects.toMatchObject({ status: 500 })
+
+        vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+            throw new Error("blocked")
+        })
+        expect(() => setSessionTokens("a", "p")).not.toThrow()
+        expect(refreshProofHeaders()).toEqual({ "X-Refresh-Proof": "p" })
+        clearSessionTokens()
+        expect(refreshProofHeaders()).toEqual({})
+        await expect(request("/api/a")).rejects.toMatchObject({ status: 401 })
+    })
+
+    it("builds WebSocket URLs from the page's origin", () => {
+        expect(apiWebSocketUrl("/api/live")).toBe(
+            `ws://${window.location.host}/api/live`
+        )
     })
 })

@@ -159,6 +159,24 @@ describe("useLiveQuizSessions", () => {
     })
 })
 
+describe("useLiveQuizSessions actions", () => {
+    it("resumes, deletes, and refuses to finish a class session", async () => {
+        api.resumeQuizSession.mockResolvedValue(classSession("in_progress"))
+        api.deleteQuizSession.mockResolvedValue(undefined)
+        const live = mount<LiveQuizSessions>(useLiveQuizSessions)
+        act(() => live.current.openSession(classSession("paused")))
+        await act(() => live.current.runAction("resume"))
+        expect(live.current.activeSession?.status).toBe("in_progress")
+        // A class session ends with its timer: there is no finish request.
+        await act(() => live.current.runAction("finish"))
+        expect(live.current.activeSessionError).toBeTruthy()
+        expect(live.current.activeSession?.id).toBe(5)
+        await act(() => live.current.runAction("delete"))
+        expect(api.deleteQuizSession).toHaveBeenCalledWith(5)
+        expect(live.current.activeSession).toBeNull()
+    })
+})
+
 describe("useLiveMakeupSessions", () => {
     it("follows the list stream and closes a session that left it", () => {
         const live = mount<LiveMakeupSessions>(useLiveMakeupSessions)

@@ -39,3 +39,29 @@ describe("useResource", () => {
         expect(signals[1]?.aborted).toBe(true)
     })
 })
+
+describe("useResource results", () => {
+    it("keeps data across a failed reload and replaces it locally", async () => {
+        const { renderHook, waitFor } = await import("@testing-library/react")
+        let fail = false
+        let value = 1
+        const load = () =>
+            fail ? Promise.reject(new Error("down")) : Promise.resolve(value)
+        const { result } = renderHook(() => useResource(load))
+        await waitFor(() => expect(result.current.data).toBe(1))
+        expect(result.current.hasSettled).toBe(true)
+
+        fail = true
+        act(() => result.current.reload())
+        await waitFor(() => expect(result.current.error).toBeInstanceOf(Error))
+        expect(result.current.data).toBe(1)
+
+        act(() => result.current.setData((current) => (current ?? 0) + 10))
+        expect(result.current.data).toBe(11)
+        fail = false
+        value = 5
+        act(() => result.current.reload())
+        await waitFor(() => expect(result.current.data).toBe(5))
+        expect(result.current.error).toBeNull()
+    })
+})

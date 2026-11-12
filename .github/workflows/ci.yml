@@ -87,7 +87,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
-      - run: pnpm test
+      # The locale and error-code checks, then the unit tests with their
+      # coverage thresholds (vite.config.ts).
+      - run: pnpm test:coverage
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm audit --audit-level low
