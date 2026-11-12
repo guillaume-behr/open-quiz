@@ -126,7 +126,8 @@ printf '\n'
 step 'Configuration written to open-quiz-backend/.env and .env.database'
 highlight "Administrator username: $admin_username"
 highlight "Administrator password: $admin_password"
-note 'Save this password now. It is not stored anywhere else and will not be shown again.'
+note 'It is stored in open-quiz-backend/.env, which keeps controlling the admin account:'
+note 'protect that file and every copy of it. It will not be shown again.'
 printf '\n'
 
 # --no-pull: a fresh clone is already current, and pulling here would fail on a

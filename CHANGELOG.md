@@ -53,6 +53,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Added
 
+- The deployment guide describes upgrading PostgreSQL to a new major version
+  (backup, fresh volume, restore, and going back), which CI now runs; a
+  troubleshooting section on logs, health checks and common failures; and
+  `docs/architecture.md` gives an overview of services and state.
 - Each backup gets a `<dump>.meta` file: the revision, the schema revision
   and fingerprints of the encryption keys. `restore.sh` refuses a backup whose
   keys differ from `open-quiz-backend/.env` unless `--force-key-mismatch` is
@@ -82,6 +86,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- `docs/nginx.conf` enables HTTP/2, waits 150 s on question-bank imports and
+  exports as the frontend does, and explains how to size the per-address
+  connection limit. `install.sh` no longer claims the administrator password
+  is stored nowhere: it stays in `open-quiz-backend/.env`.
 - Backups are pruned to the 14 most recent (`OPEN_QUIZ_BACKUP_KEEP` in the
   root `.env`, or `backup.sh --keep N`) by `backup.sh`, `update.sh` and
   `restore.sh`, which used to keep them all.

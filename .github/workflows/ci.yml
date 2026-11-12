@@ -145,6 +145,15 @@ jobs:
             grep -q "^$variable=" .env.example \
               || { echo "::error::docker-compose.yml reads $variable, missing from .env.example"; exit 1; }
           done
+      - name: Check that both READMEs have the same sections
+        run: |
+          # Heading levels and their emoji, in order: the titles themselves
+          # are translated.
+          sections() { grep -o '^##* [^ ]*' "$1" | sed 's/ [A-Za-z0-9].*//'; }
+          if ! diff <(sections README.md) <(sections README.en.md); then
+            echo "::error::README.md and README.en.md have different sections"
+            exit 1
+          fi
       - name: Build backend with provenance and SBOM
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.0.0
         with:
