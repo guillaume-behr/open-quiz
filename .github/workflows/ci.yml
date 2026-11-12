@@ -259,6 +259,9 @@ jobs:
           fi
           docker compose exec -T open-quiz-backend \
             /app/.venv/bin/python scripts/container_network_smoke.py
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
       - name: Stop smoke-test containers
         if: always()
         run: docker compose down --volumes
