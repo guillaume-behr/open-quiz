@@ -246,6 +246,10 @@ jobs:
           trivyignores: .trivyignore
           # The first scan already downloaded the database.
           skip-setup-trivy: true
+      - name: Remove what the scans left in the checkout
+        # The Trivy action writes its cache and the merged ignore file into
+        # the working tree, which the deployment check below would flag.
+        run: rm -rf .cache trivyignores
       - name: Install with install.sh, as a new deployment would
         run: |
           # The domain the network smoke test sends as its Origin. install.sh
