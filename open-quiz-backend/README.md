@@ -240,7 +240,13 @@ workers se règle avec `WEB_CONCURRENCY`, alimentée sous Docker Compose par
   ouverte tant que toutes les copies présentes ne sont pas rendues ;
 - les questions rédactionnelles restent en attente d’une correction manuelle ;
 - les questions, leur ordre et le barème sont figés dans la session pour
-  préserver les résultats historiques.
+  préserver les résultats historiques ;
+- une banque reste entièrement modifiable après un examen : une question
+  supprimée que des examens ont posée quitte sa banque mais reste lue par ces
+  examens, et une question modifiée laisse aux sessions publiées une copie de
+  sa version d’origine (`app/question_history.py`). Seul un examen encore
+  ouvert bloque la modification ou la suppression des questions qu’il a
+  tirées.
 
 Les notes publiées sont verrouillées. Les alertes de surveillance envoyées par
 le navigateur sont informatives, non exhaustives et falsifiables ; elles ne

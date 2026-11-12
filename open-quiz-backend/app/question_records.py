@@ -69,8 +69,6 @@ def discard_training_sessions_using_questions(
     session: DbSession,
 ) -> None:
     """Drop every training attempt that drew any of these questions."""
-    if not question_ids:
-        return
     common_session_ids = select(QuizSessionQuestion.session_id).where(
         QuizSessionQuestion.question_id.in_(question_ids)
     )

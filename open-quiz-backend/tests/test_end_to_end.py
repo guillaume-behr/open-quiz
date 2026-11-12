@@ -1400,16 +1400,6 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
             {**result, "server_now": None} for result in graded_results
         ]
 
-        blocked_delete = client.delete(
-            f"/api/question-banks/questions/{regraded_question['id']}",
-            headers=teacher_headers,
-        )
-        assert blocked_delete.status_code == 409
-        assert blocked_delete.json()["detail"] == {
-            "code": "QUESTION_IN_LAUNCHED_QUIZ",
-            "message": "Cette question est utilisée par un quiz déjà lancé",
-        }
-
         makeup_created = client.post(
             "/api/quizzes/makeup/sessions",
             headers=teacher_headers,

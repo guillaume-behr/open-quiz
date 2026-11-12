@@ -721,7 +721,8 @@ pour transporter les images encodées.
 Les images des questions et des choix sont rangées dans la table
 `stored_images`, une seule fois par contenu identique : importer deux fois une banque ne
 recopie pas ses images, et lister des questions n’en lit aucune. La maintenance
-horaire supprime les images qu’aucune question n’utilise plus. Une passe de
+horaire supprime les questions retirées de leur banque qu’aucune session ne
+conserve plus, puis les images qu’aucune question n’utilise plus. Une passe de
 maintenance qui échoue est journalisée et reprise à l’heure suivante.
 
 ## 🛡️ Configurer les mentions RGPD et légales

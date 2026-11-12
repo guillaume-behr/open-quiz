@@ -646,3 +646,54 @@ def test_upgrade_to_0011_clears_legacy_rows_and_dead_columns(tmp_path: Path) -> 
             ).all() == [(None, 0, None, None)]
     finally:
         engine.dispose()
+
+
+def test_upgrade_to_0012_lets_a_question_leave_its_bank(tmp_path: Path) -> None:
+    """Existing questions keep their bank; a removed one may then have none."""
+    database_url = database_url_for(tmp_path / "upgrade-0012")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0011")
+        with DbSession(engine) as session:
+            teacher = User(username="teacher", display_name="T", password_hash="x")
+            session.add(teacher)
+            session.flush()
+            bank = QuestionBank(owner_id=teacher.id, grade_level="5e", chapter="C")
+            session.add(bank)
+            session.flush()
+            session.add_all(
+                Question(
+                    question_bank_id=bank.id,
+                    prompt=prompt,
+                    difficulty="easy",
+                    answer_mode="single",
+                )
+                for prompt in ("Kept", "Detached")
+            )
+            session.commit()
+            bank_id = bank.id
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with engine.begin() as connection:
+            assert connection.execute(
+                text("SELECT question_bank_id FROM questions ORDER BY prompt")
+            ).scalars().all() == [bank_id, bank_id]
+            connection.execute(
+                text(
+                    "UPDATE questions SET question_bank_id = NULL "
+                    "WHERE prompt = 'Detached'"
+                )
+            )
+            connection.execute(text("DELETE FROM question_banks"))
+            assert connection.execute(
+                text("SELECT prompt FROM questions")
+            ).scalars().all() == ["Detached"]
+    finally:
+        engine.dispose()

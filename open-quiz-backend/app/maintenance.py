@@ -23,6 +23,7 @@ from app.models import (
     RefreshSession,
     RefreshSessionFamily,
 )
+from app.question_history import delete_unused_detached_questions
 from app.quiz_session_records import delete_quiz_session_records
 from app.rate_limit import TWO_FACTOR_DAILY_WINDOW_SECONDS
 from app.services.session_lifecycle import expire_due_quiz_sessions
@@ -99,7 +100,9 @@ def enforce_data_retention(
                 LoginRateLimit.window_started_at <= limiter_cutoff
             )
         )
-        # Images of deleted or edited questions and choices.
+        # Questions kept only for the sessions deleted above, then the
+        # images of deleted or edited questions and choices.
+        detached_question_count = delete_unused_detached_questions(session)
         delete_unreferenced_images(session)
         session.commit()
 
@@ -112,6 +115,7 @@ def enforce_data_retention(
             expired_refresh_count,
             expired_challenge_count,
             expired_report_count,
+            detached_question_count,
         )
     ):
         audit_event(
@@ -123,6 +127,7 @@ def enforce_data_retention(
             refresh_sessions=expired_refresh_count,
             authentication_challenges=expired_challenge_count,
             problem_reports=expired_report_count,
+            detached_questions=detached_question_count,
         )
 
 

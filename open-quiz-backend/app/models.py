@@ -202,8 +202,10 @@ class Question(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    question_bank_id: Mapped[int] = mapped_column(
-        ForeignKey("question_banks.id", ondelete="CASCADE"), index=True
+    # NULL once detached: removed from its bank, but kept for the exam sessions
+    # that drew it (app/question_history.py).
+    question_bank_id: Mapped[int | None] = mapped_column(
+        ForeignKey("question_banks.id", ondelete="CASCADE"), nullable=True, index=True
     )
     prompt: Mapped[str] = mapped_column(Text)
     difficulty: Mapped[str] = mapped_column(String(20))

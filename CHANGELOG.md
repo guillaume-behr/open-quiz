@@ -15,6 +15,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
+- Migration 0012 lets a question exist without a bank, for the exams that
+  still need a deleted question. It changes no data.
 - Migration 0011 deletes legacy data no release has written since 0.4:
   cancelled sessions and make-up sessions (with their answers, if any),
   student memberships without an account (their past participations keep
@@ -97,6 +99,17 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- Question banks stay fully editable after exams used them. Deleting a
+  question or a bank used by a finished exam is no longer refused
+  (`QUESTION_IN_LAUNCHED_QUIZ` is gone): the exam keeps the questions it
+  asked, which leave the bank and are deleted with the last session that
+  needs them. A deleted bank is removed from the quizzes that drew from it.
+  Editing a question no longer changes what published sessions show: they
+  keep a copy of the question as it was, while unpublished sessions follow
+  the edit and are regraded, as before. Editing or deleting a question, or
+  deleting its bank, is still refused while an exam or make-up session that
+  drew from it is open (`QUESTION_IN_ACTIVE_SESSION`,
+  `QUESTION_BANK_IN_USE`).
 - Migration 0010 declares what deleting a row does to the rows referring to
   it (`ON DELETE CASCADE` or `SET NULL`): deleting a question, a bank, a
   class, a quiz, a session or an account lets PostgreSQL remove the
