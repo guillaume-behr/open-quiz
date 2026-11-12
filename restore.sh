@@ -127,7 +127,6 @@ if ! compose exec -T open-quiz-database sh -c '
         --command="DROP SCHEMA public CASCADE" \
         --command="CREATE SCHEMA public AUTHORIZATION pg_database_owner" \
         --command="GRANT USAGE ON SCHEMA public TO PUBLIC" \
-        # shellcheck disable=SC2016 # Expanded by the shell inside the container.
         --command="COMMENT ON SCHEMA public IS '"'"'standard public schema'"'"'" \
         --file="$sql_file" >/dev/null
 ' <"$backup_file"; then
