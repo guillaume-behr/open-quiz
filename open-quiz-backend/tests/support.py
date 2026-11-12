@@ -313,6 +313,7 @@ def exam_environment(client: TestClient) -> dict[str, Any]:
         },
     ).json()
     return {
+        "admin_headers": admin_headers,
         "teacher_headers": teacher_headers,
         "student_headers": student_headers,
         "student_class": student_class,
