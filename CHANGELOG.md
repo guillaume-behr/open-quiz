@@ -67,6 +67,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- Instances ask search engines not to index them (`robots.txt` and
+  `X-Robots-Tag: noindex`); see the deployment guide to change it. The
+  interface proxy no longer runs Caddy's admin API, and its CSP drops the
+  unused `manifest-src`.
 - The database container no longer has a process limit, which refused
   connections before `max_connections`; the API's limit counts threads and is
   now 256, set with `OPEN_QUIZ_API_PIDS` (about `100 × workers + 64`).
@@ -101,6 +105,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- After an update, a page opened from a bookmark or a link (such as
+  `/teacher/dashboard`) no longer stays blank: every application page is now
+  sent with `Cache-Control: no-cache`, as the home page already was.
+- The Python runner's files are served from `/pyodide/<version>/` and cached
+  for good, so a Pyodide update can no longer mix old and new files; the
+  source map is no longer shipped.
+- A missing file (a path with an extension) answers 404 instead of the
+  application page, and `/robots.txt` exists.
 - Saving, cancelling or deleting a question returns to the same place in
   the bank's question list, with its order and filters, instead of its top.
 - The deployment guide no longer says that `restore.sh` alone returns to the

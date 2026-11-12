@@ -2,10 +2,11 @@
 
 import type { loadPyodide as LoadPyodide } from "pyodide"
 
-// The loader is served from /pyodide/ with the rest of the runtime
+// The loader is served from /pyodide/<version>/ with the rest of the runtime
 // (scripts/copy-pyodide.mjs) rather than bundled: its Node.js code paths
-// would otherwise pull node: built-ins into the browser build.
-const PYODIDE_URL = "/pyodide/"
+// would otherwise pull node: built-ins into the browser build. The version
+// in the path lets the files be cached for good.
+const PYODIDE_URL = `/pyodide/${__PYODIDE_VERSION__}/`
 
 type RunRequest = {
     id: string
