@@ -1,0 +1,2 @@
+# Vulnerabilities the CI image scan accepts, one ID per line, each with the
+# reason and the date to look at it again. Empty: nothing is accepted.
