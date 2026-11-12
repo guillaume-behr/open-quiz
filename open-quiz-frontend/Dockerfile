@@ -5,9 +5,9 @@ FROM node:24.22.2-trixie@sha256:8c761eca2bf7eec965f946cf47b8090143cb41f45f2f8699
 
 WORKDIR /app
 
-# Corepack is installed from npm because newer Node majors no longer bundle
-# it. npm itself comes with the pinned base image, so its update check is off.
-RUN npm install --global --no-update-notifier corepack && corepack enable
+# Node 24 bundles Corepack, which installs the pnpm version that package.json
+# pins, and checks it against the hash given there.
+RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
