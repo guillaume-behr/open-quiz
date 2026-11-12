@@ -173,6 +173,17 @@ Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes, 5 po
 les limites de débit et 2 pour le relais. Restez sous `max_connections` (100
 par défaut) : au-delà de 4 workers, augmentez-le ou réduisez leur nombre.
 
+Le conteneur du backend est aussi limité en nombre de processus, threads
+compris : 256 par défaut. Chaque worker peut utiliser une centaine de threads
+(40 pour les requêtes, jusqu’à 32 pour les tâches de fond, plus quelques
+autres). Comptez environ `100 × workers + 64` et, à partir de 2 workers,
+augmentez la limite dans le même fichier `.env` racine :
+
+```shell
+OPEN_QUIZ_API_WORKERS=3
+OPEN_QUIZ_API_PIDS=384
+```
+
 ### Mémoire des conteneurs
 
 Le backend est limité à 2 Go de mémoire et le frontend à 512 Mo, sans swap :
@@ -189,8 +200,10 @@ OPEN_QUIZ_API_MEMORY=4g
 OPEN_QUIZ_PROXY_MEMORY=512m
 ```
 
-La base de données n’a volontairement aucune limite : l’interrompre en plein
-travail coûterait plus cher que la mémoire qu’elle prend.
+La base de données n’a volontairement aucune limite, ni de mémoire ni de
+processus : l’interrompre en plein travail coûterait plus cher que la mémoire
+qu’elle prend, et PostgreSQL lance un processus par connexion, si bien qu’une
+limite refuserait des connexions avant d’atteindre `max_connections`.
 
 ### Changer le sous-réseau interne
 

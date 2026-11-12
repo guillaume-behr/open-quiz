@@ -47,7 +47,8 @@ services:
             start_period: 10s
         restart: unless-stopped
         stop_grace_period: 60s
-        pids_limit: 128
+        # No pids_limit: PostgreSQL runs one process per connection, and a
+        # limit would refuse connections long before max_connections.
         logging:
             driver: json-file
             options:
@@ -98,7 +99,10 @@ services:
             start_period: 10s
         restart: unless-stopped
         stop_grace_period: 30s
-        pids_limit: 128
+        # The limit counts threads: each worker runs up to 40 request threads
+        # (AnyIO) and 32 more for asyncio.to_thread. About 100 per worker plus
+        # 64; raise OPEN_QUIZ_API_PIDS with OPEN_QUIZ_API_WORKERS.
+        pids_limit: ${OPEN_QUIZ_API_PIDS:-256}
         # The API decodes images and hashes passwords on request: bound its
         # memory so that a burst cannot take the database and the host down
         # with it. No swap on top: a thrashing API helps nobody.

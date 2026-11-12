@@ -15,6 +15,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
+- With 2 API workers or more (`OPEN_QUIZ_API_WORKERS`), also set
+  `OPEN_QUIZ_API_PIDS` to about `100 × workers + 64` in the root `.env`.
 - `ADMIN_USERNAME` may now only contain letters, digits, `.`, `_` and `-`,
   like a teacher's username: the backend refuses to start otherwise. A name
   with a space could never sign in anyway.
@@ -65,6 +67,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- The database container no longer has a process limit, which refused
+  connections before `max_connections`; the API's limit counts threads and is
+  now 256, set with `OPEN_QUIZ_API_PIDS` (about `100 × workers + 64`).
+- The backend image no longer ships uv: dependencies are installed in a
+  build stage. The frontend build uses Node's bundled Corepack, and
+  `package.json` pins pnpm with its hash.
 - Training never draws written questions, which need a teacher's review it
   never gets. The training question count of a class is checked against a
   bank's other questions, which question-bank summaries report as

@@ -172,6 +172,15 @@ jobs:
           docker compose up --build --wait --detach
           docker compose exec -T open-quiz-backend \
             /app/.venv/bin/python scripts/container_network_smoke.py
+          # For the record: image sizes, and the API's peak process and
+          # thread count against its pids_limit.
+          docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep open-quiz
+          echo "API pids.peak: $(docker compose exec -T open-quiz-backend cat /sys/fs/cgroup/pids.peak)"
+          # The runtime image holds no package manager.
+          if docker compose exec -T open-quiz-backend sh -c 'command -v uv || command -v uvx'; then
+            echo "::error::the backend image ships uv"
+            exit 1
+          fi
           # update.sh refuses to pull from a working tree with local changes:
           # the files a deployment writes must all be ignored by Git.
           if [ -n "$(git status --porcelain)" ]; then
@@ -250,6 +259,9 @@ jobs:
           fi
           docker compose exec -T open-quiz-backend \
             /app/.venv/bin/python scripts/container_network_smoke.py
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
       - name: Stop smoke-test containers
         if: always()
         run: docker compose down --volumes
