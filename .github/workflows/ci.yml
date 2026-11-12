@@ -188,6 +188,36 @@ jobs:
             echo "::error::a deployment file is not ignored by Git; update.sh would refuse to update"
             exit 1
           fi
+      - name: Check the frontend's caching and routing
+        run: |
+          base=http://127.0.0.1:7800
+          # Print the status line and headers of a response, lower-cased.
+          headers() {
+            curl -sS -o /dev/null -D - "$base$1" | tr -d '\r' | tr '[:upper:]' '[:lower:]'
+          }
+          expect() {
+            if ! printf '%s\n' "$2" | grep -q "$3"; then
+              printf '%s\n' "$2"
+              echo "::error::$1: expected $3"
+              exit 1
+            fi
+          }
+          page=$(headers /teacher/dashboard)
+          expect /teacher/dashboard "$page" '^http/1.1 200'
+          expect /teacher/dashboard "$page" '^content-type: text/html'
+          expect /teacher/dashboard "$page" '^cache-control: no-cache'
+          expect /teacher/dashboard "$page" '^x-robots-tag: noindex'
+          asset=$(curl -sS "$base/" | grep -o '/assets/[^"]*\.js' | head -n 1)
+          expect "$asset" "$(headers "$asset")" '^cache-control: public, max-age=31536000, immutable'
+          pyodide_version=$(sed -n 's/.*"pyodide": "\([^"]*\)".*/\1/p' open-quiz-frontend/package.json)
+          wasm=$(headers "/pyodide/$pyodide_version/pyodide.asm.wasm")
+          expect pyodide.asm.wasm "$wasm" '^http/1.1 200'
+          expect pyodide.asm.wasm "$wasm" '^content-type: application/wasm'
+          expect pyodide.asm.wasm "$wasm" '^cache-control: public, max-age=31536000, immutable'
+          robots=$(headers /robots.txt)
+          expect /robots.txt "$robots" '^http/1.1 200'
+          expect /robots.txt "$robots" '^content-type: text/plain'
+          expect /does-not-exist.js "$(headers /does-not-exist.js)" '^http/1.1 404'
       - name: Back up and restore the database
         run: |
           sh ./backup.sh --directory "$RUNNER_TEMP/backups"

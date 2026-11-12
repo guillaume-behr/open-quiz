@@ -1,4 +1,6 @@
 {
+	# Nothing uses the admin API: do not listen on localhost:2019.
+	admin off
 	servers {
 		# The public edge proxy sanitizes X-Forwarded-For before it reaches us.
 		trusted_proxies static private_ranges
@@ -12,7 +14,7 @@
 
 	header {
 		-Server
-		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' {env.API_ORIGIN}; manifest-src 'self'"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' {env.API_ORIGIN}"
 		Cross-Origin-Opener-Policy "same-origin"
 		Cross-Origin-Resource-Policy "same-origin"
 		X-Frame-Options "DENY"
@@ -39,28 +41,40 @@
 		}
 	}
 
-	@immutable_assets path /assets/*
-	header @immutable_assets Cache-Control "public, max-age=31536000, immutable"
-
-	@fresh_content path / /index.html /locales/*
-	header @fresh_content Cache-Control "no-cache"
-
+	# Hashed names: a new build never reuses one.
 	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 
-	@theme_favicon path /theme-init.js /favicon.svg
-	handle @theme_favicon {
+	# Versioned directory (scripts/copy-pyodide.mjs): a Pyodide update
+	# changes the path, so the loader and its runtime never mix.
+	handle /pyodide/* {
+		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 
-	@locales_pyodide path /locales/* /pyodide/*
-	handle @locales_pyodide {
+	handle /locales/* {
+		header Cache-Control "no-cache"
 		file_server
 	}
 
+	# Any other path with an extension is a file: a missing one is a 404,
+	# not the application page.
+	@files {
+		path_regexp \.[^/]+$
+		not path /index.html
+	}
+	handle @files {
+		file_server
+	}
+
+	# Every page of the application is index.html. Always revalidated: after
+	# an update, a cached copy would point at scripts that no longer exist.
 	handle {
-		try_files {path} /index.html
+		header Cache-Control "no-cache"
+		header X-Robots-Tag "noindex"
+		rewrite * /index.html
 		file_server
 	}
 }

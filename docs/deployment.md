@@ -304,6 +304,14 @@ Si le reverse proxy externe limite la taille des requêtes, prévoyez jusqu’à
 questions. Les requêtes ordinaires restent limitées par
 `MAX_REQUEST_BODY_BYTES`.
 
+### Moteurs de recherche
+
+L’instance demande aux moteurs de recherche de ne pas l’indexer : le fichier
+`/robots.txt` interdit toute exploration et chaque page porte l’en-tête
+`X-Robots-Tag: noindex`. Pour autoriser l’indexation, modifiez
+`open-quiz-frontend/public/robots.txt` et retirez cet en-tête du `Caddyfile`,
+puis relancez `sh ./update.sh`.
+
 ## 🩺 Vérifier et surveiller l’instance
 
 Le contrôle de disponibilité vérifie le processus HTTP et l’accès à la base :
