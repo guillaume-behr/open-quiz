@@ -2396,6 +2396,114 @@ test("Enter in a question filter keeps the question-bank dialog open", async ({
     ).toEqual([])
 })
 
+test("editing a question returns to the same place in the question list", async ({
+    page,
+}) => {
+    await mockTeacherApi(page)
+    let questions = Array.from({ length: 30 }, (_, index) => ({
+        id: 100 + index,
+        question_bank_id: 21,
+        prompt: `Question number ${index + 1}`,
+        points: 1,
+        difficulty: "easy",
+        answer_mode: "single",
+        answer_mode_disclosed: true,
+        response_language: null,
+        has_image: false,
+        code_language: null,
+        code_content: null,
+        choices: [
+            {
+                id: 1000 + index,
+                label: "Answer",
+                is_correct: true,
+                points: 1,
+                position: 0,
+                has_image: false,
+                code_language: null,
+                code_content: null,
+            },
+        ],
+        created_at: "2026-01-06T12:00:00Z",
+    }))
+    await page.route(
+        "http://127.0.0.1:4173/api/question-banks/21/questions",
+        (route) => route.fulfill({ json: questions })
+    )
+    await page.route(
+        /\/api\/question-banks\/questions\/\d+\/update$/,
+        (route) => {
+            const id = Number(
+                new URL(route.request().url()).pathname.split("/")[4]
+            )
+            questions = questions.map((question) =>
+                question.id === id
+                    ? { ...question, prompt: "Edited question" }
+                    : question
+            )
+            return route.fulfill({
+                json: {
+                    ...questions.find((question) => question.id === id),
+                    published_sessions_not_regraded: 0,
+                },
+            })
+        }
+    )
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "Question banks", exact: true })
+        .click()
+    await page
+        .getByRole("listitem")
+        .filter({ hasText: "Matter and energy" })
+        .getByRole("button", { name: "Edit question bank" })
+        .click()
+    const bankDialog = page.getByRole("dialog", { name: "Edit question bank" })
+    await bankDialog.getByRole("button", { name: /Filters/ }).click()
+    await bankDialog.getByLabel("Sort questions").selectOption("default")
+    const list = bankDialog.getByRole("list").filter({
+        hasText: "Question number 1",
+    })
+    const dialogBody = bankDialog.locator("[data-dialog-body]")
+    await expect(list.getByText("Question number 30")).toBeAttached()
+    await dialogBody.evaluate((element) => {
+        element.scrollTop = element.scrollHeight
+    })
+    await list.evaluate((element) => {
+        element.scrollTop = element.scrollHeight / 2
+    })
+    // Clicking scrolls the button into view: measure once it is in view.
+    const editButton = list
+        .getByRole("listitem")
+        .filter({ hasText: "Question number 16" })
+        .getByRole("button", { name: "Edit", exact: true })
+    await editButton.scrollIntoViewIfNeeded()
+    const listScrollTop = await list.evaluate((element) => element.scrollTop)
+    const dialogScrollTop = await dialogBody.evaluate(
+        (element) => element.scrollTop
+    )
+    expect(listScrollTop).toBeGreaterThan(0)
+    expect(dialogScrollTop).toBeGreaterThan(0)
+
+    await editButton.click()
+    const formDialog = page.getByRole("dialog", {
+        name: "Edit question",
+        exact: true,
+    })
+    await formDialog.getByRole("button", { name: "Save changes" }).click()
+    await expect(formDialog).toBeHidden()
+
+    await expect(list.getByText("Edited question")).toBeVisible()
+    await expect(bankDialog.getByLabel("Sort questions")).toHaveValue("default")
+    expect(await list.evaluate((element) => element.scrollTop)).toBeCloseTo(
+        listScrollTop,
+        -1
+    )
+    expect(
+        await dialogBody.evaluate((element) => element.scrollTop)
+    ).toBeCloseTo(dialogScrollTop, -1)
+})
+
 test("switching a question to written and back keeps its correct choice", async ({
     page,
 }) => {

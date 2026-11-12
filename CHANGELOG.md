@@ -93,6 +93,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Saving, cancelling or deleting a question returns to the same place in
+  the bank's question list, with its order and filters, instead of its top.
 - The deployment guide no longer says that `restore.sh` alone returns to the
   state before an update: it restores the data only, and the new backend
   re-applies its migrations.

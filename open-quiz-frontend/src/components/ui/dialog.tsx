@@ -72,7 +72,10 @@ export function Dialog({
                             <X className="size-5" />
                         </DialogPrimitive.Close>
                     </div>
-                    <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                    <div
+                        data-dialog-body
+                        className="min-h-0 flex-1 overflow-y-auto p-5"
+                    >
                         {content.children}
                     </div>
                 </DialogPrimitive.Popup>

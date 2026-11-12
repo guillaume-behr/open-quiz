@@ -9,11 +9,16 @@ export function CollapsibleFilters({
     children,
     activeCount = 0,
     defaultOpen = false,
+    open,
+    onOpenChange,
     className,
 }: {
     children: ReactNode
     activeCount?: number
     defaultOpen?: boolean
+    /** Set with onOpenChange to keep the open state outside. */
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
     className?: string
 }) {
     const { t } = useTranslation()
@@ -25,6 +30,8 @@ export function CollapsibleFilters({
                 className
             )}
             defaultOpen={defaultOpen}
+            open={open}
+            onOpenChange={onOpenChange}
         >
             <CollapsiblePrimitive.Trigger className="group flex w-full items-center gap-2 px-4 py-3 text-start font-semibold transition-colors select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset">
                 <SlidersHorizontal className="size-4 text-primary" />
