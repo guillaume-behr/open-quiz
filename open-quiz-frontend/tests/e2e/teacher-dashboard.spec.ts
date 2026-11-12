@@ -1395,13 +1395,13 @@ test("finished quiz sessions disappear from the active quiz list", async ({
         .getByRole("button", { name: "Exam quizzes", exact: true })
         .click()
     const socket = await socketReady
-    await socket.send(
+    socket.send(
         JSON.stringify({ type: "active_sessions", data: [waitingSession] })
     )
     await expect(
         page.getByRole("heading", { name: "Active quizzes" })
     ).toBeVisible()
-    await socket.send(
+    socket.send(
         JSON.stringify({
             type: "active_sessions",
             data: [],
@@ -1471,7 +1471,7 @@ test("teacher dialog tracks progress from the active sessions stream", async ({
         .getByRole("button", { name: "Exam quizzes", exact: true })
         .click()
     const sessionsSocket = await sessionsSocketReady
-    await sessionsSocket.send(
+    sessionsSocket.send(
         JSON.stringify({ type: "active_sessions", data: [runningSession] })
     )
     await page
@@ -1486,7 +1486,7 @@ test("teacher dialog tracks progress from the active sessions stream", async ({
     await expect(
         sessionDialog.getByText("Progress: 0 of 10 questions")
     ).toBeVisible()
-    await sessionsSocket.send(
+    sessionsSocket.send(
         JSON.stringify({
             type: "active_sessions",
             data: [
@@ -1528,15 +1528,16 @@ test("teacher assigns existing question banks to a training class", async ({
         page.getByText("Advanced matter", { exact: true })
     ).toHaveCount(0)
     await expect
-        .poll(() =>
-            requests
-                .find(
-                    (request) =>
-                        new URL(request.url()).pathname ===
-                            "/api/quizzes/training/classes/11/question-banks" &&
-                        request.method() === "PUT"
-                )
-                ?.postDataJSON()
+        .poll(
+            () =>
+                requests
+                    .find(
+                        (request) =>
+                            new URL(request.url()).pathname ===
+                                "/api/quizzes/training/classes/11/question-banks" &&
+                            request.method() === "PUT"
+                    )
+                    ?.postDataJSON() as unknown
         )
         .toEqual({
             question_banks: [{ question_bank_id: 21, question_count: 10 }],
@@ -1578,7 +1579,7 @@ test("teacher launches and controls a live quiz session", async ({ page }) => {
     const sessionSocket = await waitingSocketReady
     await sessionDialog.getByRole("button", { name: "Start quiz" }).click()
     await expect(sessionDialog.getByText("Quiz started")).toBeVisible()
-    await sessionSocket.send(
+    sessionSocket.send(
         JSON.stringify({
             type: "session",
             data: {
@@ -1713,7 +1714,7 @@ test("teacher waiting room updates when a student joins", async ({ page }) => {
         sessionDialog.getByText("No students have joined the quiz yet.")
     ).toBeVisible()
     const socket = await socketReady
-    await socket.send(
+    socket.send(
         JSON.stringify({
             type: "session",
             data: {
@@ -1889,7 +1890,7 @@ test("teacher receives a retake created while the local list is empty", async ({
     await page.goto("/teacher/dashboard")
     await page.getByRole("button", { name: "Retake", exact: true }).click()
     const socket = await socketReady
-    await socket.send(
+    socket.send(
         JSON.stringify({
             type: "makeup_sessions",
             data: [
@@ -2920,7 +2921,7 @@ test("the results schedule shows every session of its week, not one page", async
         })
     ).toBeVisible()
     expect(weekRequests).toHaveLength(1)
-    const params = weekRequests[0].searchParams
+    const params = weekRequests[0]?.searchParams ?? new URLSearchParams()
     expect(params.get("page_size")).toBe("100")
     // Monday to Monday, whatever the time zone the browser runs in.
     expect(

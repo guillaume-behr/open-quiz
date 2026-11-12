@@ -103,11 +103,12 @@ test("joining a waiting quiz immediately requests full screen", async ({
     ).toHaveAttribute("href", "/privacy")
     await expect
         .poll(() =>
-            page.evaluate(() =>
-                JSON.parse(
-                    sessionStorage.getItem("open-quiz-student-session") ??
-                        "null"
-                )
+            page.evaluate(
+                () =>
+                    JSON.parse(
+                        sessionStorage.getItem("open-quiz-student-session") ??
+                            "null"
+                    ) as unknown
             )
         )
         .toEqual({
@@ -798,7 +799,7 @@ test("student session state is updated through its live socket", async ({
         })
     ).toBeVisible()
     const socket = await socketReady
-    await socket.send(
+    socket.send(
         JSON.stringify({
             type: "session",
             data: {
@@ -972,8 +973,9 @@ test("student keeps a written answer when stepping back to an earlier question",
     await page.route(
         "**/api/quizzes/student/sessions/ABCD/navigate",
         async (route) => {
-            const target = route.request().postDataJSON()
-                .question_number as number
+            const { question_number: target } = route
+                .request()
+                .postDataJSON() as { question_number: number }
             await route.fulfill({
                 json:
                     target === 1
@@ -1203,8 +1205,9 @@ async function mockWrittenExam(page: Page, recordedFirstAnswer: string | null) {
     await page.route(
         "**/api/quizzes/student/sessions/ABCD/navigate",
         async (route) => {
-            const target = route.request().postDataJSON()
-                .question_number as number
+            const { question_number: target } = route
+                .request()
+                .postDataJSON() as { question_number: number }
             await route.fulfill({
                 json:
                     target === 1

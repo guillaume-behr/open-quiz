@@ -81,9 +81,9 @@ function denyCapability(target: object, capability: string) {
         writable: false,
     }
     for (
-        let owner: object | null = Object.getPrototypeOf(target);
+        let owner = Object.getPrototypeOf(target) as object | null;
         owner !== null && owner !== Object.prototype;
-        owner = Object.getPrototypeOf(owner)
+        owner = Object.getPrototypeOf(owner) as object | null
     ) {
         if (Object.hasOwn(owner, capability)) {
             Object.defineProperty(owner, capability, denied)
@@ -140,9 +140,11 @@ async function execute({ id, source }: RunRequest): Promise<void> {
         python.setStderr({ batched: appendOutput })
         const value = await python.runPythonAsync(source)
         if (value !== undefined) {
+            // A Pyodide proxy defines toString as Python's str().
+            // eslint-disable-next-line @typescript-eslint/no-base-to-string
             appendOutput(String(value))
             if (typeof value === "object" && value !== null) {
-                const disposable = value as { destroy?: unknown }
+                const disposable = value as { destroy?: () => void }
                 if (typeof disposable.destroy === "function") {
                     disposable.destroy()
                 }

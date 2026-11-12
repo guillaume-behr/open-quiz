@@ -38,6 +38,7 @@ import {
     useLiveMakeupSessions,
     useLiveQuizSessions,
 } from "./use-live-quiz-sessions"
+import { first } from "@/test/first"
 
 // React warns unless the environment says it supports act().
 ;(
@@ -94,7 +95,7 @@ describe("useLiveQuizSessions", () => {
         )
         expect(live.current.sessions.map((item) => item.id)).toEqual([5])
 
-        act(() => live.current.openSession(live.current.sessions[0]))
+        act(() => live.current.openSession(first(live.current.sessions)))
         const own = openStream(`${CLASS_LIST}/5`)
         act(() => own.onData(classSession("paused")))
         expect(live.current.activeSession?.status).toBe("paused")
@@ -182,7 +183,7 @@ describe("useLiveMakeupSessions", () => {
         const live = mount<LiveMakeupSessions>(useLiveMakeupSessions)
         const list = openStream(MAKEUP_LIST)
         act(() => list.onData([makeupSession("in_progress")]))
-        act(() => live.current.openSession(live.current.sessions[0]))
+        act(() => live.current.openSession(first(live.current.sessions)))
         expect(streams).toHaveLength(1)
         act(() => list.onConnectionChange?.("reconnecting"))
         expect(live.current.activeSessionReconnecting).toBe(true)

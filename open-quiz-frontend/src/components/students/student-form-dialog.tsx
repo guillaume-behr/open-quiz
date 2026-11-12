@@ -143,7 +143,7 @@ export function StudentFormDialog({
             )}
             size="md"
         >
-            <form onSubmit={submit}>
+            <form onSubmit={(event) => void submit(event)}>
                 <FieldGroup>
                     <div className="grid items-start gap-4 sm:grid-cols-2">
                         {student ? (

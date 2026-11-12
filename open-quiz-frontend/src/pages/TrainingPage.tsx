@@ -101,14 +101,14 @@ export function TrainingPage() {
     useEffect(() => {
         if (session || !stored || !participantToken) {
             if (!session && !stored)
-                navigate("/student/dashboard", { replace: true })
+                void navigate("/student/dashboard", { replace: true })
             return
         }
         getStudentQuizSession(stored.joinCode, participantToken)
             .then(setSession)
             .catch(() => {
                 clearStoredTraining()
-                navigate("/student/dashboard", { replace: true })
+                void navigate("/student/dashboard", { replace: true })
             })
             .finally(() => setIsBusy(false))
     }, [navigate, participantToken, session, stored])
@@ -173,7 +173,7 @@ export function TrainingPage() {
                 <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => navigate("/student/dashboard")}
+                    onClick={() => void navigate("/student/dashboard")}
                 >
                     <ArrowLeft />
                     {t("student-dashboard")}
@@ -255,7 +255,7 @@ export function TrainingPage() {
                             className="mx-auto mt-6"
                             size="lg"
                             onClick={() =>
-                                navigate("/student/dashboard", {
+                                void navigate("/student/dashboard", {
                                     replace: true,
                                 })
                             }
@@ -277,7 +277,7 @@ export function TrainingPage() {
                             onSelectedChoiceIdsChange={setSelectedChoiceIds}
                             onWrittenAnswerChange={setWrittenAnswer}
                             onNavigate={() => undefined}
-                            onSubmit={submit}
+                            onSubmit={(event) => void submit(event)}
                         />
                     </div>
                 ) : null}

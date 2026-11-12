@@ -6,6 +6,7 @@ import { apiErrorMessage } from "@/lib/errors"
 import { LoaderCircle } from "lucide-react"
 import { useState, type SyntheticEvent } from "react"
 import { useTranslation } from "react-i18next"
+import { formText } from "@/lib/form-data"
 
 type DashboardLoginProps = {
     onLogin: (username: string, password: string) => Promise<void>
@@ -28,10 +29,7 @@ export function DashboardLogin({
         setIsSubmitting(true)
         const form = new FormData(event.currentTarget)
         try {
-            await onLogin(
-                String(form.get("login")),
-                String(form.get("password"))
-            )
+            await onLogin(formText(form, "login"), formText(form, "password"))
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("login-error")))
         } finally {
@@ -41,7 +39,7 @@ export function DashboardLogin({
 
     return (
         <form
-            onSubmit={handleLogin}
+            onSubmit={(event) => void handleLogin(event)}
             className="flex w-full max-w-md flex-col gap-5 rounded-2xl border bg-secondary px-6 py-10 shadow-lg sm:px-10 sm:py-15"
         >
             <div className="flex flex-col gap-2">

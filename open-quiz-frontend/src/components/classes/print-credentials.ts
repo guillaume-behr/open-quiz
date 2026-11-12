@@ -56,7 +56,7 @@ export function writeCredentialCards(
                 t("login-password"),
                 credential.password ?? t("password-unavailable"),
             ],
-        ]) {
+        ] as const) {
             const term = document.createElement("dt")
             term.textContent = label
             const description = document.createElement("dd")

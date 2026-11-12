@@ -34,6 +34,7 @@ import {
 import { useSectionParam } from "@/hooks/use-section-param"
 import { useState, type SyntheticEvent } from "react"
 import { useTranslation } from "react-i18next"
+import { formText } from "@/lib/form-data"
 
 const adminSections = ["users", "reports"] as const
 
@@ -91,9 +92,9 @@ export function AdminWorkspace({
             setSuccess("")
             const form = new FormData(formElement)
             const newUser: NewUser = {
-                username: String(form.get("username")),
-                display_name: String(form.get("displayName")),
-                password: String(form.get("password")),
+                username: formText(form, "username"),
+                display_name: formText(form, "displayName"),
+                password: formText(form, "password"),
             }
             const created = await createUser(newUser)
             userList.showPage(1)
@@ -166,7 +167,7 @@ export function AdminWorkspace({
         event.preventDefault()
         if (!recoveryUser) return
         const form = new FormData(event.currentTarget)
-        void credentialReset.run(recoveryUser, String(form.get("password")))
+        void credentialReset.run(recoveryUser, formText(form, "password"))
     }
 
     return (

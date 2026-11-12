@@ -188,7 +188,7 @@ export function StudentQuiz({
 
         return connectLiveUpdates<StudentQuizSession>({
             path: `/api/quizzes/live/student/sessions/${encodeURIComponent(liveJoinCode)}`,
-            getToken: async () => participantToken,
+            getToken: () => Promise.resolve(participantToken),
             onData: (updated) => {
                 liveRevisionRef.current += 1
                 setError(null)
@@ -266,7 +266,7 @@ export function StudentQuiz({
         translation.reset()
         onSessionCleared?.()
         if (["finished", "cancelled"].includes(session.status))
-            navigate("/student/dashboard")
+            void navigate("/student/dashboard")
 
         if (document.fullscreenElement) {
             void document
@@ -415,7 +415,7 @@ export function StudentQuiz({
                 isBusy={isBusy}
                 error={error}
                 onJoinCodeChange={updateJoinCode}
-                onSubmit={handleJoin}
+                onSubmit={(event) => void handleJoin(event)}
             />
         )
     }
@@ -471,7 +471,7 @@ export function StudentQuiz({
                 onNavigate={(questionNumber) =>
                     void goToQuestion(questionNumber)
                 }
-                onSubmitAnswer={handleAnswer}
+                onSubmitAnswer={(event) => void handleAnswer(event)}
                 onBackToReview={() => void backToReview()}
                 onSubmitQuiz={() => void submitQuiz()}
                 onReturnHome={() => void leaveQuiz()}

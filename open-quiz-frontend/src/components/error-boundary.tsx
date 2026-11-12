@@ -48,7 +48,7 @@ class ErrorBoundary extends Component<
     { children: ReactNode; pathname: string },
     ErrorBoundaryState
 > {
-    state: ErrorBoundaryState = { hasError: false }
+    override state: ErrorBoundaryState = { hasError: false }
 
     static getDerivedStateFromError(): ErrorBoundaryState {
         return { hasError: true }
@@ -56,12 +56,12 @@ class ErrorBoundary extends Component<
 
     // The boundary stays mounted across navigations, so the pages under it
     // keep their state; an error shown on one page clears on the next one.
-    componentDidUpdate(previous: { pathname: string }) {
+    override componentDidUpdate(previous: { pathname: string }) {
         if (this.state.hasError && previous.pathname !== this.props.pathname)
             this.setState({ hasError: false })
     }
 
-    componentDidCatch(error: Error, info: ErrorInfo) {
+    override componentDidCatch(error: Error, info: ErrorInfo) {
         console.error("Uncaught application error", error, info.componentStack)
         if (isModuleLoadError(error)) {
             // Stale tab across a deploy: the server no longer serves the
@@ -71,7 +71,7 @@ class ErrorBoundary extends Component<
         }
     }
 
-    render() {
+    override render() {
         return this.state.hasError ? <ErrorBoundaryPage /> : this.props.children
     }
 }

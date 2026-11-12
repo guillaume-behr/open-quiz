@@ -43,9 +43,12 @@ function encodeImage(file: File): Promise<EncodedImage> {
         }
         const contentType = file.type as EncodedImage["content_type"]
         const reader = new FileReader()
-        reader.onerror = () => reject(reader.error)
+        reader.onerror = () =>
+            reject(reader.error ?? new Error("The file could not be read"))
         reader.onload = () => {
-            const result = String(reader.result)
+            // readAsDataURL always produces a string.
+            const result =
+                typeof reader.result === "string" ? reader.result : ""
             const separatorIndex = result.indexOf(",")
             if (separatorIndex < 0) {
                 reject(new Error("Invalid image"))
@@ -159,17 +162,22 @@ export function QuestionForm({
                 answerModeDisclosedBackup.current = answerModeDisclosed
             }
             setAnswerModeDisclosed(true)
-            setChoices((current) => [
-                {
-                    ...current[0],
-                    is_correct: true,
-                    image: undefined,
-                    has_image: false,
-                    remove_image: true,
-                    hasCode: false,
-                    codeContent: "",
-                },
-            ])
+            // Written mode keeps the first choice, as its model answer.
+            setChoices((current) => {
+                const [first] = current
+                if (!first) return current
+                return [
+                    {
+                        ...first,
+                        is_correct: true,
+                        image: undefined,
+                        has_image: false,
+                        remove_image: true,
+                        hasCode: false,
+                        codeContent: "",
+                    },
+                ]
+            })
             return
         }
 
@@ -270,7 +278,7 @@ export function QuestionForm({
     }
 
     return (
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={(event) => void handleSubmit(event)}>
             <FieldGroup className="gap-4">
                 <QuestionContentFields
                     question={question}

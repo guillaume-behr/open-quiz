@@ -7,6 +7,7 @@ import {
     PythonRunnerError,
     runPython,
 } from "./python-runner"
+import { first } from "@/test/first"
 
 type Reply = {
     id: string
@@ -83,7 +84,7 @@ describe("runPython", () => {
         const worker = current()
         const fatal = runPython("boom")
         const other = runPython("pass")
-        worker.reply({ id: worker.posted[0].id, error: "x" })
+        worker.reply({ id: first(worker.posted).id, error: "x" })
         worker.reply({
             id: worker.posted.at(-2)?.id ?? "",
             error: "dead",

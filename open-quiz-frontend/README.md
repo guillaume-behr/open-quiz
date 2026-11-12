@@ -64,18 +64,19 @@ Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 | ------------------- | ------------------------------------------------------------- |
 | `pnpm dev`          | démarre Vite avec le proxy de développement                   |
 | `pnpm build`        | vérifie les types puis produit `dist/`                        |
-| `pnpm preview`      | sert le build localement, sans le proxy de développement      |
+| `pnpm preview`      | sert le build localement, avec le même proxy `/api`           |
 | `pnpm lint`         | exécute ESLint                                                |
 | `pnpm format`       | applique Prettier aux sources et catalogues                   |
 | `pnpm format:check` | vérifie le formatage                                          |
 | `pnpm test`         | valide catalogues, étiquettes, codes d’erreur et lance Vitest |
-| `pnpm typecheck`    | vérifie `src/` et la configuration Vite                       |
+| `pnpm typecheck`    | vérifie `src/`, les tests e2e et la configuration Vite        |
 | `pnpm test:e2e`     | lance les parcours Playwright dans Chromium                   |
 | `pnpm test:e2e:ui`  | ouvre l’interface Playwright                                  |
+| `pnpm test:e2e:production` | smoke tests contre les conteneurs (`docker compose up`) |
 
-`pnpm preview` ne transmet pas `/api`. Pour tester un build complet, fournissez
-une valeur `VITE_API_URL` au moment de la compilation ou utilisez les
-conteneurs du projet.
+`pnpm preview` transmet `/api` comme `pnpm dev` (même `VITE_API_PROXY_TARGET`),
+mais sans les en-têtes de Caddy (CSP, cache) : pour les vérifier, utilisez les
+conteneurs du projet et `pnpm test:e2e:production`.
 
 ## 🗺️ Routes
 

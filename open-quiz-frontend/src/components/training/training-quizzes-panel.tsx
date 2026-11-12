@@ -58,7 +58,7 @@ export function TrainingQuizzesPanel({ token }: { token: string }) {
                 joinCode: session.join_code,
                 participantToken,
             })
-            navigate("/student/training")
+            void navigate("/student/training")
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("training-start-error")))
         } finally {
@@ -294,7 +294,7 @@ function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
                                 : chart.left +
                                   (index / (items.length - 1)) * chartWidth
                         return (
-                            <g key={items[index].session_id}>
+                            <g key={items[index]?.session_id ?? index}>
                                 <line
                                     x1={x}
                                     x2={x}
@@ -331,7 +331,7 @@ function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
                         const y = chart.bottom - (value / 100) * chartHeight
                         return (
                             <circle
-                                key={items[index].session_id}
+                                key={items[index]?.session_id ?? index}
                                 cx={x}
                                 cy={y}
                                 r="5"
@@ -364,7 +364,9 @@ function TrainingHistoryChart({ items }: { items: TrainingHistoryItem[] }) {
                                 t("training-history-score", {
                                     grade,
                                     scale,
-                                    percent: Math.round(percentages[index]),
+                                    percent: Math.round(
+                                        percentages[index] ?? 0
+                                    ),
                                 })
                             }
                         />

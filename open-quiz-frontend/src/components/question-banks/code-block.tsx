@@ -68,7 +68,7 @@ export function StaticCodeBlock({
                                     <span className="table-cell whitespace-pre">
                                         {line.length === 0 ||
                                         (line.length === 1 &&
-                                            line[0].content === "") ? (
+                                            line[0]?.content === "") ? (
                                             <span>&#8203;</span>
                                         ) : (
                                             line.map((token, tokenIndex) => (
@@ -227,7 +227,7 @@ export function CodeBlock({
                                         <span className="table-cell whitespace-pre">
                                             {line.length === 0 ||
                                             (line.length === 1 &&
-                                                line[0].content === "") ? (
+                                                line[0]?.content === "") ? (
                                                 <span>&#8203;</span>
                                             ) : (
                                                 line.map(

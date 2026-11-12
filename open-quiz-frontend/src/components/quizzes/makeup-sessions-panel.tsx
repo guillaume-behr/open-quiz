@@ -97,7 +97,7 @@ export function MakeupSessionsPanel() {
                         {t("makeup-professor-help")}
                     </p>
                 </div>
-                <form onSubmit={create}>
+                <form onSubmit={(event) => void create(event)}>
                     <FieldGroup>
                         <Field>
                             <FieldLabel htmlFor="makeup-class">

@@ -23,7 +23,9 @@ function setFullscreen(value: boolean) {
 }
 
 function reported(): string[] {
-    return api.reportStudentQuizViolation.mock.calls.map((call) => call[2])
+    return api.reportStudentQuizViolation.mock.calls.map(
+        (call) => call[2] as string
+    )
 }
 
 describe("useQuizMonitoring", () => {
@@ -40,10 +42,13 @@ describe("useQuizMonitoring", () => {
     afterEach(() => vi.useRealTimers())
 
     function monitor(leaving = false) {
-        return renderHook(
+        return renderHook<
+            ReturnType<typeof useQuizMonitoring>,
+            { session: StudentQuizSession | null }
+        >(
             ({ session }) =>
                 useQuizMonitoring(session, "token", { current: leaving }),
-            { initialProps: { session: running as StudentQuizSession | null } }
+            { initialProps: { session: running } }
         )
     }
 
