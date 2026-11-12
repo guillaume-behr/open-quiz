@@ -13,6 +13,9 @@ export default defineConfig({
     use: {
         baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:7800",
         locale: "en-US",
+        // What the TLS edge proxy in front of Caddy sends: without it, the
+        // API redirects plain HTTP to HTTPS.
+        extraHTTPHeaders: { "X-Forwarded-Proto": "https" },
         trace: "on-first-retry",
     },
     projects: [
