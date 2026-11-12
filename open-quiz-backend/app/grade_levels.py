@@ -6,12 +6,13 @@ the list a teacher picks from. The routes live with the classes, under
 """
 
 from fastapi import status
-from sqlalchemy import case, func, select
+from sqlalchemy import Select, case, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import ApiError, ErrorCode
-from app.models import GradeLevel, QuestionBank, StudentClass
+from app.models import GradeLevel, QuestionBank, StudentClass, utc_now
 
 DEFAULT_GRADE_LEVELS = ("2nd", "1ere", "Tle")
 
@@ -51,18 +52,22 @@ def grade_level_import_context(
     return names, comment
 
 
-def ensure_grade_level(owner_id: int, name: str, session: Session) -> GradeLevel:
-    with session.no_autoflush:
-        grade_level = session.scalar(
-            select(GradeLevel).where(
-                GradeLevel.owner_id == owner_id,
-                GradeLevel.name == name,
-            )
-        )
-    if grade_level is None:
-        grade_level = GradeLevel(owner_id=owner_id, name=name)
-        session.add(grade_level)
-    return grade_level
+def ensure_grade_level(owner_id: int, name: str, session: Session) -> str:
+    """The name of the teacher's level matching ``name`` ignoring case.
+
+    The level is created if it does not exist. A concurrent request creating
+    it first makes the insert do nothing: the re-read then finds that one.
+    Callers store the returned name, so a class and a bank of "tle" and "Tle"
+    share one level.
+    """
+    session.execute(
+        insert(GradeLevel)
+        .values(owner_id=owner_id, name=name, created_at=utc_now())
+        .on_conflict_do_nothing()
+    )
+    return session.execute(
+        _named(owner_id, name).with_only_columns(GradeLevel.name)
+    ).scalar_one()
 
 
 def ensure_default_grade_levels(owner_id: int, session: Session) -> None:
@@ -91,33 +96,19 @@ def list_grade_levels(owner_id: int, session: Session) -> list[GradeLevel]:
     return owned_grade_levels(owner_id, session)
 
 
-def _grade_level_named(owner_id: int, name: str, session: Session) -> GradeLevel | None:
-    return session.scalar(
-        select(GradeLevel).where(
-            GradeLevel.owner_id == owner_id,
-            func.lower(GradeLevel.name) == name.lower(),
-        )
+def _named(owner_id: int, name: str) -> Select[GradeLevel]:
+    # Both sides through PostgreSQL's lower(), as the unique index compares.
+    return select(GradeLevel).where(
+        GradeLevel.owner_id == owner_id,
+        func.lower(GradeLevel.name) == func.lower(name),
     )
 
 
 def create_grade_level(owner_id: int, name: str, session: Session) -> GradeLevel:
     """The level of that name, ignoring case, created if it does not exist."""
-    existing = _grade_level_named(owner_id, name, session)
-    if existing is not None:
-        return existing
-    grade_level = GradeLevel(owner_id=owner_id, name=name)
-    session.add(grade_level)
-    try:
-        session.commit()
-    except IntegrityError:
-        # A concurrent request created it first: answer with that one.
-        session.rollback()
-        existing = _grade_level_named(owner_id, name, session)
-        if existing is None:
-            raise
-        return existing
-    session.refresh(grade_level)
-    return grade_level
+    ensure_grade_level(owner_id, name, session)
+    session.commit()
+    return session.execute(_named(owner_id, name)).scalar_one()
 
 
 def delete_grade_level(owner_id: int, grade_level_id: int, session: Session) -> None:

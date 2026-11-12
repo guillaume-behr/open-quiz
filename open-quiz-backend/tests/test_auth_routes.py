@@ -16,7 +16,7 @@ from cryptography.fernet import InvalidToken
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text, update
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import maintenance, rate_limit, security, security_state
@@ -541,7 +541,8 @@ def test_grade_levels_survive_concurrent_creation(tmp_path: Path) -> None:
                     ),
                 ),
             ) as fired,
-            pytest.raises(Exception, match="uq_grade_level_owner_name"),
+            # Created and deleted by others in between: nothing to answer with.
+            pytest.raises(NoResultFound),
         ):
             client.post(
                 "/api/classes/grade-levels", headers=headers, json={"name": "CM1"}

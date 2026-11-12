@@ -7,7 +7,8 @@ student accounts and their memberships in one transaction, or nothing.
 import json
 
 from fastapi import APIRouter, Request, Response
-from sqlalchemy import func, select
+from sqlalchemy import String, func, literal, select
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
@@ -65,6 +66,13 @@ def download_class_import_example(
     )
 
 
+def lowered_names(names: list[str], session: DbSession) -> dict[str, str]:
+    """Each name lowered by PostgreSQL."""
+    values = func.unnest(literal(names, ARRAY(String))).table_valued("name")
+    rows = session.execute(select(values.c.name, func.lower(values.c.name)))
+    return dict(rows.all())
+
+
 @router.post("/import", response_model=ClassBatchImportResponse, status_code=201)
 def import_classes(
     payload: ClassBatchImport,
@@ -72,7 +80,14 @@ def import_classes(
     professor: ProfessorUser,
     session: DbSession,
 ) -> ClassBatchImportResponse:
-    class_names = [item.name.casefold() for item in payload.classes]
+    # PostgreSQL's lower(), as the unique indexes compare: Python's casefold()
+    # differs from it, for "ß" for instance.
+    lowered = lowered_names(
+        [item.name for item in payload.classes]
+        + [item.grade_level for item in payload.classes],
+        session,
+    )
+    class_names = [lowered[item.name] for item in payload.classes]
     identifiers = [
         student.identifier for item in payload.classes for student in item.students
     ]
@@ -82,13 +97,19 @@ def import_classes(
         raise ApiError(
             422, ErrorCode.CLASS_IMPORT_DUPLICATES, "Le fichier contient des doublons"
         )
-    existing_levels = set(
-        session.scalars(
-            select(GradeLevel.name).where(GradeLevel.owner_id == professor.id)
-        )
+    existing_levels: dict[str, str] = dict(
+        session.execute(
+            select(func.lower(GradeLevel.name), GradeLevel.name).where(
+                GradeLevel.owner_id == professor.id
+            )
+        ).all()
     )
     invalid_levels = sorted(
-        {item.grade_level for item in payload.classes} - existing_levels
+        {
+            item.grade_level
+            for item in payload.classes
+            if lowered[item.grade_level] not in existing_levels
+        }
     )
     if invalid_levels:
         raise ApiError(
@@ -125,7 +146,9 @@ def import_classes(
     try:
         for item in payload.classes:
             student_class = StudentClass(
-                owner_id=professor.id, name=item.name, grade_level=item.grade_level
+                owner_id=professor.id,
+                name=item.name,
+                grade_level=existing_levels[lowered[item.grade_level]],
             )
             session.add(student_class)
             session.flush()
