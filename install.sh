@@ -63,6 +63,15 @@ printf '%s\n' "$domain" | grep -Eq '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z
 # Confirm Docker is usable before writing any secret to disk.
 setup_compose
 
+# Docker Compose's own settings, from their example: an existing file is
+# kept as it is.
+if [ ! -e "$SCRIPT_DIR/.env" ]; then
+    compose_temporary_file=$(mktemp "$SCRIPT_DIR/.env.tmp.XXXXXX")
+    (umask 077 && cp "$SCRIPT_DIR/.env.example" "$compose_temporary_file")
+    chmod 600 "$compose_temporary_file"
+    mv "$compose_temporary_file" "$SCRIPT_DIR/.env"
+fi
+
 step 'Generating secrets'
 postgres_password=$(random_hex 32)
 database_password=$(random_hex 32)

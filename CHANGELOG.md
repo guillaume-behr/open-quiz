@@ -15,6 +15,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
+- Docker Compose settings (`OPEN_QUIZ_API_WORKERS`, `OPEN_QUIZ_API_MEMORY`…)
+  belong in the root `.env`, now listed in `.env.example`; `install.sh`
+  creates it on new installs. If you passed any of them on the command line,
+  add them to that file. `VITE_API_URL` is no longer read by the deployment:
+  the API is always served under the interface origin.
 - With 2 API workers or more (`OPEN_QUIZ_API_WORKERS`), also set
   `OPEN_QUIZ_API_PIDS` to about `100 × workers + 64` in the root `.env`.
 - `ADMIN_USERNAME` may now only contain letters, digits, `.`, `_` and `-`,
@@ -67,6 +72,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- The deployment no longer claims to support an API on another origin, which
+  `docker-compose.yml` never published: `VITE_API_URL` is a development
+  setting only, and the interface's CSP allows `'self'` alone. A root
+  `.env.example` lists the Docker Compose settings, and `update.sh` warns about
+  one set in the shell but not in `.env`.
 - Instances ask search engines not to index them (`robots.txt` and
   `X-Robots-Tag: noindex`); see the deployment guide to change it. The
   interface proxy no longer runs Caddy's admin API, and its CSP drops the

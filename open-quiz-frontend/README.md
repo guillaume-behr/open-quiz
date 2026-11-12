@@ -43,10 +43,11 @@ commençant par `/api` au backend local.
 
 | Variable                | Portée                        | Défaut                  | Usage                                       |
 | ----------------------- | ----------------------------- | ----------------------- | ------------------------------------------- |
-| `VITE_API_URL`          | navigateur, à la compilation  | vide                    | origine absolue d’une API servie séparément |
+| `VITE_API_URL`          | navigateur, à la compilation  | vide                    | développement : origine absolue d’une API   |
 | `VITE_API_PROXY_TARGET` | serveur Vite de développement | `http://localhost:8000` | cible du proxy HTTP et WebSocket            |
 
-Laissez `VITE_API_URL` vide avec le proxy Vite ou le déploiement Caddy fourni.
+Laissez `VITE_API_URL` vide avec le proxy Vite. Le déploiement Docker fourni
+ne la lit pas : il sert toujours l’API sous l’origine de l’interface.
 Pour utiliser un autre backend pendant le développement :
 
 ```shell

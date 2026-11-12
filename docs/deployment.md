@@ -51,7 +51,9 @@ les opérations nécessaires au premier démarrage :
 3. il définit l’origine du frontend en HTTPS et reprend tous les autres réglages
    de production depuis le fichier d’exemple ;
 4. il crée `open-quiz-backend/.env` et `open-quiz-backend/.env.database` avec
-   des permissions réservées au propriétaire ;
+   des permissions réservées au propriétaire, ainsi que le fichier `.env` de
+   la racine (réglages de Docker Compose) depuis `.env.example`, s’il n’existe
+   pas encore ;
 5. il lance `update.sh --no-pull`, qui démarre la base, crée le rôle
    PostgreSQL de l’API, construit les images, démarre les services et attend
    leur état sain. Le clone est déjà à jour, donc aucune
@@ -154,9 +156,13 @@ Le backend n’est pas publié sur l’hôte. Le frontend écoute uniquement sur
 ### Plusieurs workers
 
 Le backend démarre un seul processus Uvicorn par défaut. Pour en lancer
-davantage, définissez `OPEN_QUIZ_API_WORKERS` dans un fichier `.env` placé à la
+davantage, définissez `OPEN_QUIZ_API_WORKERS` dans le fichier `.env` de la
 racine du dépôt, à côté de `docker-compose.yml` (distinct de
-`open-quiz-backend/.env`), puis relancez `sh ./update.sh` :
+`open-quiz-backend/.env`), puis relancez `sh ./update.sh`. Ce fichier, créé
+par `install.sh`, contient les réglages de Docker Compose ; `.env.example`
+les liste tous avec leur valeur par défaut. Ne les passez jamais dans la
+ligne de commande : la mise à jour suivante ne les verrait pas, et `update.sh`
+le signale.
 
 ```shell
 OPEN_QUIZ_API_WORKERS=2
@@ -213,8 +219,8 @@ Les trois services communiquent sur le réseau interne `open-quiz`, en
 c’est ce qui lui permet de reconnaître une requête arrivée en HTTPS.
 
 Si ce sous-réseau entre en conflit avec un réseau de l’établissement,
-définissez `OPEN_QUIZ_SUBNET_PREFIX` dans un fichier `.env` placé à la racine
-du dépôt, à côté de `docker-compose.yml` (distinct de `open-quiz-backend/.env`) :
+définissez `OPEN_QUIZ_SUBNET_PREFIX` dans le fichier `.env` de la racine du
+dépôt, à côté de `docker-compose.yml` (distinct de `open-quiz-backend/.env`) :
 
 ```shell
 OPEN_QUIZ_SUBNET_PREFIX=10.42.0
@@ -280,24 +286,18 @@ L’API refuse aussi, par une réponse 400, toute requête dont l’en-tête `Ho
 n’est ni le nom de `FRONTEND_ORIGIN` ni un nom interne du déploiement : le
 reverse proxy doit donc transmettre le nom demandé par le navigateur
 (`proxy_set_header Host $host` pour Nginx ; Caddy le fait par défaut). Si
-l’API est publiée sous un autre nom que l’interface, ajoutez-le à
+l’instance répond aussi sous un autre nom, ajoutez-le à
 `open-quiz-backend/.env` :
 
 ```shell
 TRUSTED_HOSTS=api.example.com
 ```
 
-Par défaut, le frontend et l’API partagent la même origine. Si l’API est servie
-sur une autre origine, définissez `VITE_API_URL` lors de la construction :
-
-```shell
-VITE_API_URL=https://api.example.com docker compose up --detach --build
-```
-
-Conservez `FRONTEND_ORIGIN` égal à l’origine du frontend visible dans le
-navigateur, par exemple `https://quiz.example.com`. Le conteneur frontend ajoute
-`VITE_API_URL` à sa politique CSP et le backend autorise l’origine frontend par
-CORS.
+L’interface et l’API partagent toujours la même origine : le conteneur
+frontend transmet `/api` au backend, qui n’est publié nulle part ailleurs. Une
+API servie sur une autre origine n’est pas prise en charge par
+`docker-compose.yml`. Conservez `FRONTEND_ORIGIN` égal à l’origine visible dans
+le navigateur, par exemple `https://quiz.example.com`.
 
 Si le reverse proxy externe limite la taille des requêtes, prévoyez jusqu’à
 96 Mio pour les routes authentifiées de création, modification et import de
@@ -375,8 +375,8 @@ désactivé.
 Une sauvegarde exploitable comprend :
 
 1. une sauvegarde logique cohérente de la base PostgreSQL ;
-2. une copie protégée de `open-quiz-backend/.env` et de
-   `open-quiz-backend/.env.database` ;
+2. une copie protégée de `open-quiz-backend/.env`, de
+   `open-quiz-backend/.env.database` et du fichier `.env` de la racine ;
 3. la version ou le commit Open Quiz correspondant.
 
 `TOTP_ENCRYPTION_KEY` et `STUDENT_CREDENTIAL_ENCRYPTION_KEY` ne sont pas
@@ -752,9 +752,9 @@ personnelle.
 | Une migration échoue au démarrage    | lisez l’erreur Alembic dans les journaux du backend : la base est restée dans son état précédent                     |
 | Boucle de redirection HTTP/HTTPS     | vérifiez `FRONTEND_ORIGIN` et les en-têtes de protocole transmis par les proxies                                     |
 | Conflit avec le réseau local         | changez `OPEN_QUIZ_SUBNET_PREFIX`, voir « Changer le sous-réseau interne » plus haut                                 |
-| Le navigateur bloque les appels API  | faites correspondre l’origine visible, `FRONTEND_ORIGIN`, `VITE_API_URL`, CORS et CSP                                |
+| Le navigateur bloque les appels API  | faites correspondre l’origine visible et `FRONTEND_ORIGIN`                                                           |
 | Un conteneur reste `unhealthy`       | consultez `docker compose ps` puis les journaux des trois services                                                   |
-| Le frontend ne trouve pas le backend | vérifiez le réseau Compose et laissez `VITE_API_URL` vide pour le déploiement fourni                                 |
+| Le frontend ne trouve pas le backend | vérifiez le réseau Compose et l’état du conteneur `open-quiz-backend`                                                |
 | La traduction est indisponible       | utilisez un navigateur et une paire de langues compatibles avec l’API `Translator`                                   |
 | Un compte a perdu son TOTP           | utilisez **Récupérer l’accès** ou la commande de secours documentée plus haut                                        |
 | L’espace disque augmente             | contrôlez les journaux Docker, les sauvegardes et les durées de conservation                                         |
