@@ -96,7 +96,9 @@ def test_images_decode_without_holding_a_connection(
         created = client.post(
             f"/api/question-banks/{bank_id}/questions",
             headers=headers,
-            data={"payload": json.dumps(question_payload("Pictured", choice_image=True))},
+            data={
+                "payload": json.dumps(question_payload("Pictured", choice_image=True))
+            },
             files={"image": ("image.png", VALID_PNG, "image/png")},
         )
         assert created.status_code == 201

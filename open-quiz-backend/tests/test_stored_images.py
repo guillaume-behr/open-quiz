@@ -1,8 +1,8 @@
 """Question images live in stored_images, once per distinct content."""
 
 import json
-from collections.abc import Callable
 from base64 import b64decode, b64encode
+from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
 from threading import Thread
@@ -285,6 +285,12 @@ def test_images_are_revalidated_by_their_hash_without_loading_them(
             changed = client.get(url, headers={**headers, "If-None-Match": '"other"'})
             assert changed.status_code == 200
             assert changed.content == served.content
+        imageless = client.get(
+            f"/api/question-banks/questions/{environment['question']['id']}/image",
+            headers=headers,
+        )
+        assert imageless.status_code == 404
+        assert imageless.json()["detail"]["code"] == "IMAGE_NOT_FOUND"
         # Other API responses stay out of every cache.
         listed = client.get(f"/api/question-banks/{bank_id}/questions", headers=headers)
         assert listed.headers["Cache-Control"] == "no-store"

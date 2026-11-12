@@ -26,7 +26,7 @@ from app.schemas import (
     ClassBatchImport,
     ClassBatchImportResponse,
 )
-from app.security import encrypt_student_password, hash_password
+from app.security import encrypt_student_password, hash_passwords
 from app.student_accounts import generated_student_password
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
@@ -153,6 +153,11 @@ def import_classes(
             ErrorCode.STUDENT_IDENTIFIER_TAKEN,
             "Un identifiant élève est déjà utilisé",
         )
+    # Argon2 takes a while for each student: hash every password first, with
+    # the request's connection back in the pool (the commit releases it).
+    session.commit()
+    passwords = [generated_student_password() for _ in identifiers]
+    credentials = iter(zip(passwords, hash_passwords(passwords), strict=True))
     try:
         for item in payload.classes:
             student_class = StudentClass(
@@ -163,12 +168,12 @@ def import_classes(
             session.add(student_class)
             session.flush()
             for imported in item.students:
-                password = generated_student_password()
+                password, password_hash = next(credentials)
                 account = StudentAccount(
                     owner_id=professor.id,
                     identifier=imported.identifier,
                     display_name=imported.display_name,
-                    password_hash=hash_password(password),
+                    password_hash=password_hash,
                     encrypted_password=encrypt_student_password(
                         password,
                         request.app.state.settings.student_credential_encryption_key,
