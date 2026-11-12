@@ -99,6 +99,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- `scripts/reset_two_factor.py` now resets an account exactly like
+  **Recover access** with a 2FA reset: it also empties the account's password
+  attempt buckets, and revokes its sessions instead of deleting them. It no
+  longer migrates the database; run it once the backend has started. A
+  student sign-in refused by its attempt limit is now audited
+  (`student_auth.login_rate_limited`), like a teacher's.
 - Question banks stay fully editable after exams used them. Deleting a
   question or a bank used by a finished exam is no longer refused
   (`QUESTION_IN_LAUNCHED_QUIZ` is gone): the exam keeps the questions it

@@ -10,7 +10,19 @@ import jwt
 import pyotp
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
+from app.auth_guards import (
+    password_rate_subject,
+    trusted_password_rate_subject,
+    two_factor_rate_subject,
+)
+from app.models import (
+    AuthenticationChallenge,
+    LoginRateLimit,
+    RefreshSession,
+    TwoFactorCredential,
+)
 from app.routers.auth import TWO_FACTOR_TRUST_COOKIE, TWO_FACTOR_TRUST_COOKIE_PATH
 from app.schemas import TwoFactorVerifyRequest
 from app.security import (
@@ -377,6 +389,96 @@ def test_an_admin_credential_reset_clears_the_daily_cap(tmp_path: Path) -> None:
             complete_first_login(
                 client, "capped.teacher", "another-secure-edge-password"
             )
+
+
+def test_the_script_and_the_admin_route_reset_two_factor_alike(
+    tmp_path: Path,
+) -> None:
+    app_settings = settings_for(tmp_path / "test.db")
+    with make_client(app_settings) as admin_client:
+        admin_headers = login_admin(admin_client)
+        app_state = admin_client.app.state
+        teachers: dict[str, dict] = {}
+        for username in ("route.teacher", "script.teacher"):
+            with make_client(app_settings) as client:
+                teachers[username], _ = create_professor(
+                    client, admin_headers, username, "a-secure-edge-password"
+                )
+                # A pending challenge, and buckets someone filled.
+                forget_trusted_browser(client)
+                assert (
+                    log_in(client, username, "a-secure-edge-password").json()["status"]
+                    == "verification_required"
+                )
+            user_id = teachers[username]["id"]
+            for subject in (
+                password_rate_subject(username),
+                trusted_password_rate_subject(user_id),
+                two_factor_rate_subject(user_id),
+            ):
+                app_state.login_rate_limiter.reserve(subject)
+            app_state.two_factor_daily_rate_limiter.reserve(
+                two_factor_rate_subject(user_id)
+            )
+
+        assert (
+            admin_client.post(
+                f"/api/admin/users/{teachers['route.teacher']['id']}/credentials",
+                headers=admin_headers,
+                json={
+                    "password": "another-secure-edge-password",
+                    "reset_two_factor": True,
+                },
+            ).status_code
+            == 200
+        )
+        assert reset("script.teacher", app_settings)
+
+        def end_state(username: str) -> dict[str, object]:
+            user_id = teachers[username]["id"]
+            keys = [
+                app_state.login_rate_limiter._account_key(subject)
+                for subject in (
+                    password_rate_subject(username),
+                    trusted_password_rate_subject(user_id),
+                    two_factor_rate_subject(user_id),
+                )
+            ] + [
+                app_state.two_factor_daily_rate_limiter._account_key(
+                    two_factor_rate_subject(user_id)
+                )
+            ]
+            with app_state.session_factory() as session:
+                return {
+                    "refresh_sessions": session.scalar(
+                        select(func.count()).where(RefreshSession.user_id == user_id)
+                    ),
+                    "live_refresh_sessions": session.scalar(
+                        select(func.count()).where(
+                            RefreshSession.user_id == user_id,
+                            RefreshSession.revoked_at.is_(None),
+                        )
+                    ),
+                    "challenges": session.scalar(
+                        select(func.count()).where(
+                            AuthenticationChallenge.user_id == user_id
+                        )
+                    ),
+                    "two_factor": session.get(TwoFactorCredential, user_id),
+                    "buckets": session.scalar(
+                        select(func.count()).where(LoginRateLimit.limiter_key.in_(keys))
+                    ),
+                }
+
+        route_state = end_state("route.teacher")
+        assert route_state == end_state("script.teacher")
+        assert route_state == {
+            "refresh_sessions": 1,
+            "live_refresh_sessions": 0,
+            "challenges": 0,
+            "two_factor": None,
+            "buckets": 0,
+        }
 
 
 def test_the_trusted_day_ends_at_local_midnight() -> None:

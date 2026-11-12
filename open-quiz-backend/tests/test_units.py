@@ -638,6 +638,11 @@ def test_reset_two_factor_script_entry_point(
     monkeypatch.setattr(app.config, "get_settings", lambda: settings)
     script = Path(__file__).resolve().parent.parent / "scripts/reset_two_factor.py"
 
+    from app.database import build_session_factory
+    from app.models import User
+
+    # The script does not migrate: the application did when it started.
+    session_factory = build_session_factory(settings.database_url)
     monkeypatch.setattr("sys.argv", ["reset_two_factor.py", "nobody"])
     monkeypatch.setattr("builtins.input", lambda _prompt: "no")
     with pytest.raises(SystemExit) as aborted:
@@ -651,10 +656,7 @@ def test_reset_two_factor_script_entry_point(
     assert missing.value.code == 2
     assert "user not found" in capsys.readouterr().err
 
-    from app.database import build_session_factory
-    from app.models import User
-
-    with build_session_factory(settings.database_url)() as session:
+    with session_factory() as session:
         session.add(
             User(
                 username="reset.me",

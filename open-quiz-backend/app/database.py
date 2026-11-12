@@ -65,12 +65,20 @@ def migrate_database(engine: Engine) -> None:
         command.upgrade(config, "head")
 
 
-def build_session_factory(database_url: str) -> sessionmaker[Session]:
+def build_session_factory(
+    database_url: str, *, migrate: bool = True
+) -> sessionmaker[Session]:
+    """Sessions on the database, migrated first unless migrate is False.
+
+    The application migrates at startup; maintenance scripts pass
+    migrate=False, so that running one never changes the schema.
+    """
     engine = create_engine(
         postgres_url(database_url),
         pool_pre_ping=True,
     )
-    migrate_database(engine)
+    if migrate:
+        migrate_database(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 

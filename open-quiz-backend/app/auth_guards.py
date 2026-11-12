@@ -3,9 +3,11 @@
 from urllib.parse import urlparse
 
 from fastapi import Request, status
+from sqlalchemy.orm import Session
 
 from app.audit import audit_event
 from app.errors import ApiError, ErrorCode
+from app.security import DUMMY_PASSWORD_HASH, verify_password_and_update
 
 
 def validate_origin(request: Request) -> None:
@@ -99,3 +101,56 @@ def two_factor_rate_subject(user_id: int) -> str:
 
 def student_password_rate_subject(identifier: str) -> str:
     return f"student-password:identity:{identifier}"
+
+
+def check_password[Account](
+    password: str,
+    subject: str,
+    account: Account | None,
+    encoded_hash: str | None,
+    request: Request,
+    session: Session,
+    *,
+    audit_prefix: str,
+) -> tuple[Account, str | None]:
+    """Check a sign-in password within the attempt limits.
+
+    account is the active account the sign-in names, or None when there is
+    none, and encoded_hash its password hash: without one a dummy hash is
+    verified, so the response time does not reveal whether the account
+    exists. The global budget, the
+    account's bucket and the audit events (prefixed with audit_prefix) are
+    the same for teachers and students. Returns the account and the upgraded
+    hash to store, if the password was hashed with outdated parameters.
+    """
+    # Resolving the account before the budget check is what lets a real
+    # teacher or student still sign in while an anonymous flood holds the
+    # budget open.
+    enforce_global_auth_limit(request, known_identity=account is not None)
+    limiter = request.app.state.login_rate_limiter
+    retry_after = limiter.reserve(subject)
+    if retry_after:
+        audit_event(f"{audit_prefix}.login_rate_limited")
+        raise ApiError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            ErrorCode.AUTH_RATE_LIMITED,
+            "Trop de tentatives de connexion",
+            headers={"Retry-After": str(retry_after)},
+        )
+    # Hashing can wait for a free slot: end the transaction first, so the
+    # request does not hold a pooled connection meanwhile.
+    session.commit()
+    password_valid, upgraded_hash = verify_password_and_update(
+        password, encoded_hash or DUMMY_PASSWORD_HASH
+    )
+    if account is None or encoded_hash is None or not password_valid:
+        audit_event(f"{audit_prefix}.login_failed")
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_INVALID_CREDENTIALS,
+            "Identifiants invalides",
+        )
+    # Give back only this attempt: clearing the whole bucket would hand
+    # whoever is guessing this password a fresh allowance at every sign-in.
+    limiter.release(subject)
+    return account, upgraded_hash

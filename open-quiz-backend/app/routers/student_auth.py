@@ -5,7 +5,7 @@ from sqlalchemy import select, update
 
 from app.audit import audit_event
 from app.auth_guards import (
-    enforce_global_auth_limit,
+    check_password,
     student_password_rate_subject,
     validate_origin,
 )
@@ -14,7 +14,6 @@ from app.dependencies import (
     current_student,
 )
 from app.enums import QuizMode
-from app.errors import ApiError, ErrorCode
 from app.models import (
     Quiz,
     QuizParticipant,
@@ -28,10 +27,8 @@ from app.schemas import (
     StudentLoginResponse,
 )
 from app.security import (
-    DUMMY_PASSWORD_HASH,
     access_token_version,
     create_student_access_token,
-    verify_password_and_update,
 )
 from app.student_accounts import student_account_response
 
@@ -45,42 +42,21 @@ def login_student(
     session: DbSession,
 ) -> StudentLoginResponse:
     validate_origin(request)
-    account = session.scalar(
+    named_account = session.scalar(
         select(StudentAccount).where(StudentAccount.identifier == payload.identifier)
     )
-    # Resolving the account first keeps real students able to sign in while an
-    # anonymous flood holds the instance-wide budget open.
-    enforce_global_auth_limit(
+    active_account = (
+        named_account if named_account is not None and named_account.is_active else None
+    )
+    account, upgraded_hash = check_password(
+        payload.password,
+        student_password_rate_subject(payload.identifier),
+        active_account,
+        active_account.password_hash if active_account else None,
         request,
-        known_identity=account is not None and account.is_active,
+        session,
+        audit_prefix="student_auth",
     )
-    subject = student_password_rate_subject(payload.identifier)
-    limiter = request.app.state.login_rate_limiter
-    retry_after = limiter.reserve(subject)
-    if retry_after:
-        raise ApiError(
-            429,
-            ErrorCode.AUTH_RATE_LIMITED,
-            "Trop de tentatives de connexion",
-            headers={"Retry-After": str(retry_after)},
-        )
-    encoded = account.password_hash if account else DUMMY_PASSWORD_HASH
-    # Hashing can wait for a free slot: end the transaction first, so the
-    # request does not hold a pooled connection meanwhile.
-    session.commit()
-    # Always run the password verification, even for unknown identifiers, so
-    # the response time does not reveal whether the account exists.
-    password_valid, upgraded_hash = verify_password_and_update(
-        payload.password, encoded
-    )
-    if account is None or not account.is_active or not password_valid:
-        audit_event("student_auth.login_failed")
-        raise ApiError(
-            401, ErrorCode.AUTH_INVALID_CREDENTIALS, "Identifiants invalides"
-        )
-    # Give back only this attempt: clearing the whole bucket would hand
-    # whoever is guessing this identifier a fresh allowance at every sign-in.
-    limiter.release(subject)
     if upgraded_hash is not None:
         # The token is bound to the hash, so it is issued from the new one.
         account.password_hash = upgraded_hash
