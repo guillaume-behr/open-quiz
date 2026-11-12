@@ -219,11 +219,18 @@ jobs:
           sbom: true
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
+      - name: Unpack the images for the scan
+        run: |
+          # Trivy reads an OCI layout directory, not its tar archive.
+          for image in open-quiz-backend open-quiz-frontend; do
+            mkdir -p "$RUNNER_TEMP/$image-oci"
+            tar -xf "$RUNNER_TEMP/$image.tar" -C "$RUNNER_TEMP/$image-oci"
+          done
       - name: Scan the backend image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          input: ${{ runner.temp }}/open-quiz-backend.tar
+          input: ${{ runner.temp }}/open-quiz-backend-oci
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
@@ -232,7 +239,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          input: ${{ runner.temp }}/open-quiz-frontend.tar
+          input: ${{ runner.temp }}/open-quiz-frontend-oci
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
