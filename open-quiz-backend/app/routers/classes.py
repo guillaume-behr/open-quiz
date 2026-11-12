@@ -50,20 +50,19 @@ from app.student_memberships import (
     delete_student_membership,
     delete_unfinished_training_sessions,
 )
+from app.unique_names import write_unique_name
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
 
 
 def commit_unique_class(session: DbSession) -> None:
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.CLASS_NAME_TAKEN,
-            "Une classe porte déjà ce nom",
-        ) from None
+    write_unique_name(
+        session,
+        session.commit,
+        "uq_student_class_owner_name",
+        ErrorCode.CLASS_NAME_TAKEN,
+        "Une classe porte déjà ce nom",
+    )
 
 
 def class_has_active_exam_session(class_id: int, session: DbSession) -> bool:
@@ -339,10 +338,9 @@ def create_class(
     student_class = StudentClass(
         owner_id=professor.id,
         name=payload.name,
-        grade_level=payload.grade_level,
+        grade_level=ensure_grade_level(professor.id, payload.grade_level, session),
     )
     session.add(student_class)
-    ensure_grade_level(professor.id, payload.grade_level, session)
     commit_unique_class(session)
     session.refresh(student_class)
     return class_response(student_class, session)
@@ -509,7 +507,8 @@ def update_class(
     session: DbSession,
 ) -> StudentClassResponse:
     student_class = owned_class(class_id, professor, session)
-    if student_class.grade_level != payload.grade_level:
+    grade_level = ensure_grade_level(professor.id, payload.grade_level, session)
+    if student_class.grade_level != grade_level:
         mismatched_bank_ids = (
             select(QuestionBank.id)
             .join(
@@ -518,7 +517,7 @@ def update_class(
             )
             .where(
                 ClassTrainingQuestionBank.class_id == student_class.id,
-                QuestionBank.grade_level != payload.grade_level,
+                QuestionBank.grade_level != grade_level,
             )
         )
         session.execute(
@@ -528,8 +527,7 @@ def update_class(
             )
         )
     student_class.name = payload.name
-    student_class.grade_level = payload.grade_level
-    ensure_grade_level(professor.id, payload.grade_level, session)
+    student_class.grade_level = grade_level
     commit_unique_class(session)
     session.refresh(student_class)
     return class_response(student_class, session)

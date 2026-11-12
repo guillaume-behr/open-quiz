@@ -15,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import text
+from sqlalchemy.sql import func, text
 
 from app.database import Base
 from app.enums import (
@@ -50,7 +50,13 @@ class User(Base):
 class GradeLevel(Base):
     __tablename__ = "grade_levels"
     __table_args__ = (
-        UniqueConstraint("owner_id", "name", name="uq_grade_level_owner_name"),
+        # Names are unique per teacher ignoring case, here and below.
+        Index(
+            "uq_grade_level_owner_name",
+            "owner_id",
+            func.lower(text("name")),
+            unique=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -64,10 +70,11 @@ class GradeLevel(Base):
 class StudentClass(Base):
     __tablename__ = "student_classes"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_student_class_owner_name",
             "owner_id",
-            "name",
-            name="uq_student_class_owner_name",
+            func.lower(text("name")),
+            unique=True,
         ),
     )
 
@@ -121,11 +128,12 @@ class Student(Base):
 class QuestionBank(Base):
     __tablename__ = "question_banks"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_question_bank_owner_classification",
             "owner_id",
-            "grade_level",
-            "chapter",
-            name="uq_question_bank_owner_classification",
+            func.lower(text("grade_level")),
+            func.lower(text("chapter")),
+            unique=True,
         ),
     )
 

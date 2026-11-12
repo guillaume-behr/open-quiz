@@ -2,8 +2,15 @@
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
+import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.errors import ErrorCode
+from app.unique_names import write_unique_name
 
 from support import (
     concurrent_writes,
@@ -60,7 +67,7 @@ def test_a_level_differing_only_by_case_reuses_the_existing_one(
         assert [
             level for level in level_names(client, headers) if level.lower() == "tle"
         ] == ["Tle"]
-        listed = client.get("/api/classes", headers=headers).json()["items"]
+        listed = client.get("/api/classes", headers=headers).json()
         assert {item["grade_level"] for item in listed} == {"Tle"}
 
 
@@ -79,7 +86,7 @@ def test_names_differing_only_by_case_are_taken(tmp_path: Path) -> None:
             "/api/classes", headers=headers, json={"name": "tg1", "grade_level": "Tle"}
         )
         assert clash.status_code == 409
-        assert clash.json()["code"] == "CLASS_NAME_TAKEN"
+        assert clash.json()["detail"]["code"] == "CLASS_NAME_TAKEN"
         other = client.post(
             "/api/classes", headers=headers, json={"name": "TG2", "grade_level": "Tle"}
         ).json()
@@ -89,14 +96,14 @@ def test_names_differing_only_by_case_are_taken(tmp_path: Path) -> None:
             json={"name": "Tg1", "grade_level": "Tle"},
         )
         assert renamed.status_code == 409
-        assert renamed.json()["code"] == "CLASS_NAME_TAKEN"
+        assert renamed.json()["detail"]["code"] == "CLASS_NAME_TAKEN"
         imported = client.post(
             "/api/classes/import",
             headers=headers,
             json={"classes": [{"name": "tG1", "grade_level": "Tle", "students": []}]},
         )
         assert imported.status_code == 409
-        assert imported.json()["code"] == "CLASS_NAME_TAKEN"
+        assert imported.json()["detail"]["code"] == "CLASS_NAME_TAKEN"
         # Python's casefold() folds "ß" to "ss", PostgreSQL's lower() does not:
         # the import compares the way the database does.
         assert (
@@ -125,7 +132,7 @@ def test_names_differing_only_by_case_are_taken(tmp_path: Path) -> None:
                 json={"grade_level": grade_level, "chapter": chapter},
             )
         assert created.status_code == 409
-        assert created.json()["code"] == "QUESTION_BANK_NAME_TAKEN"
+        assert created.json()["detail"]["code"] == "QUESTION_BANK_NAME_TAKEN"
         imported_bank = client.post(
             "/api/question-banks/import",
             headers=headers,
@@ -136,7 +143,7 @@ def test_names_differing_only_by_case_are_taken(tmp_path: Path) -> None:
             },
         )
         assert imported_bank.status_code == 409
-        assert imported_bank.json()["code"] == "QUESTION_BANK_NAME_TAKEN"
+        assert imported_bank.json()["detail"]["code"] == "QUESTION_BANK_NAME_TAKEN"
 
 
 def test_a_concurrent_level_insert_is_not_a_name_clash(tmp_path: Path) -> None:
@@ -179,3 +186,22 @@ def test_a_concurrent_level_insert_is_not_a_name_clash(tmp_path: Path) -> None:
         assert fired
         assert bank.status_code == 201
         assert level_names(client, headers).count("CM2") == 1
+
+
+def test_other_integrity_errors_are_not_reported_as_a_taken_name() -> None:
+    session = Mock(spec=Session)
+    failure = IntegrityError("INSERT", {}, Exception("another constraint"))
+
+    def write() -> None:
+        raise failure
+
+    with pytest.raises(IntegrityError) as raised:
+        write_unique_name(
+            session,
+            write,
+            "uq_student_class_owner_name",
+            ErrorCode.CLASS_NAME_TAKEN,
+            "",
+        )
+    assert raised.value is failure
+    session.rollback.assert_called_once_with()

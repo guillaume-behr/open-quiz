@@ -6,7 +6,6 @@ from fastapi import (
     status,
 )
 from sqlalchemy import delete, func, select
-from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
 from app.errors import ApiError, ErrorCode
@@ -39,6 +38,7 @@ from app.schemas import (
     QuestionBankResponse,
     QuestionBankUpdate,
 )
+from app.unique_names import commit_unique_bank
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
 
@@ -117,20 +117,11 @@ def create_question_bank(
     """Create a question bank classified by grade level and chapter."""
     question_bank = QuestionBank(
         owner_id=professor.id,
-        grade_level=payload.grade_level,
+        grade_level=ensure_grade_level(professor.id, payload.grade_level, session),
         chapter=payload.chapter,
     )
     session.add(question_bank)
-    ensure_grade_level(professor.id, payload.grade_level, session)
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUESTION_BANK_NAME_TAKEN,
-            "Une banque existe déjà pour ce niveau et ce titre",
-        ) from None
+    commit_unique_bank(session)
     session.refresh(question_bank)
     return question_bank
 
@@ -148,10 +139,11 @@ def update_question_bank(
     another level.
     """
     question_bank = owned_question_bank(question_bank_id, professor, session)
-    if question_bank.grade_level != payload.grade_level:
+    grade_level = ensure_grade_level(professor.id, payload.grade_level, session)
+    if question_bank.grade_level != grade_level:
         mismatched_class_ids = select(StudentClass.id).where(
             StudentClass.owner_id == professor.id,
-            StudentClass.grade_level != payload.grade_level,
+            StudentClass.grade_level != grade_level,
         )
         session.execute(
             delete(ClassTrainingQuestionBank).where(
@@ -159,18 +151,9 @@ def update_question_bank(
                 ClassTrainingQuestionBank.class_id.in_(mismatched_class_ids),
             )
         )
-    question_bank.grade_level = payload.grade_level
+    question_bank.grade_level = grade_level
     question_bank.chapter = payload.chapter
-    ensure_grade_level(professor.id, payload.grade_level, session)
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUESTION_BANK_NAME_TAKEN,
-            "Une banque existe déjà pour ce niveau et ce titre",
-        ) from None
+    commit_unique_bank(session)
     session.refresh(question_bank)
     row = session.execute(
         question_bank_summary_query()

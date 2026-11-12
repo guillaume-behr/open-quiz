@@ -15,6 +15,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
+- Grade level, class and question bank names are now unique per teacher
+  ignoring case. Migration 0009 resolves existing names that differ only by
+  case: grade levels merge into the oldest one (their classes and banks take
+  its name), and a class or a bank of the same level whose name clashes with
+  an older one is renamed with a numbered suffix, such as `tg1 (2)`. Nothing
+  is deleted; check the renamed ones after updating.
 - `backups/` now keeps only the 14 most recent backups: copy older ones
   elsewhere before updating if you need them, or set `OPEN_QUIZ_BACKUP_KEEP`
   in the root `.env`.
@@ -136,6 +142,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- "tle" no longer creates a second level next to "Tle": classes, banks and
+  imports reuse the existing level, so training banks match their classes.
+  Class and bank names clash ignoring case through every route, imports
+  included, and a level created concurrently no longer reports the class or
+  bank name as taken.
 - Migration 0008 indexes running sessions, session creation dates and the
   foreign keys composite primary keys left unindexed; stores Unix timestamps
   in 64 bits, so sign-in and rate limiting keep working after 2038; makes

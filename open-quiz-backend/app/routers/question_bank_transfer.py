@@ -19,7 +19,6 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import Difficulty
@@ -44,6 +43,11 @@ from app.schemas import (
     QuestionBatchImport,
     QuestionBatchImportResponse,
     QuestionImportItem,
+)
+from app.unique_names import (
+    QUESTION_BANK_NAME_CONSTRAINT,
+    QUESTION_BANK_NAME_TAKEN_MESSAGE,
+    write_unique_name,
 )
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
@@ -231,20 +235,19 @@ def import_question_bank(
         decoded_choice_images.append(choice_images)
     question_bank = QuestionBank(
         owner_id=professor.id,
-        grade_level=payload.question_bank.grade_level,
+        grade_level=ensure_grade_level(
+            professor.id, payload.question_bank.grade_level, session
+        ),
         chapter=payload.question_bank.chapter,
     )
     session.add(question_bank)
-    ensure_grade_level(professor.id, payload.question_bank.grade_level, session)
-    try:
-        session.flush()
-    except IntegrityError:
-        session.rollback()
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUESTION_BANK_NAME_TAKEN,
-            "Une banque existe déjà pour ce niveau et ce titre",
-        ) from None
+    write_unique_name(
+        session,
+        session.flush,
+        QUESTION_BANK_NAME_CONSTRAINT,
+        ErrorCode.QUESTION_BANK_NAME_TAKEN,
+        QUESTION_BANK_NAME_TAKEN_MESSAGE,
+    )
 
     created = [
         add_question(
