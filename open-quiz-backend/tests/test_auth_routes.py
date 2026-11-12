@@ -20,7 +20,6 @@ from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import maintenance, rate_limit, security, security_state
-from app.application import create_app
 from app.config import PUBLIC_INFORMATION_VARIABLES, warn_missing_public_information
 from app.models import (
     AuthenticationChallenge,
@@ -68,6 +67,7 @@ from support import (
     JWT_SECRET,
     TEST_CLIENT_BACKEND_OPTIONS,
     TOTP_ENCRYPTION_KEY,
+    app_for,
     complete_first_login,
     concurrent_writes,
     create_professor,
@@ -938,7 +938,7 @@ def test_login_rate_limit_and_origin_check(tmp_path: Path) -> None:
         assert still_limited.status_code == 429
 
     with TestClient(
-        create_app(settings_for(tmp_path / "origin.db")),
+        app_for(settings_for(tmp_path / "origin.db")),
         backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     ) as client:
         missing = client.post(
@@ -962,7 +962,7 @@ def test_development_accepts_local_vite_origin_on_another_port(
         environment="development",
     )
     with TestClient(
-        create_app(app_settings),
+        app_for(app_settings),
         headers={"Origin": "http://localhost:5174"},
         backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     ) as client:
@@ -973,7 +973,7 @@ def test_development_accepts_local_vite_origin_on_another_port(
         assert accepted.status_code == 200
 
     with TestClient(
-        create_app(app_settings),
+        app_for(app_settings),
         headers={"Origin": "http://attacker.example"},
         backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     ) as client:

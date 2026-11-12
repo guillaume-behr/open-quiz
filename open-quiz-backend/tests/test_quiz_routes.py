@@ -12,7 +12,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import event, select, update
 
 from app import maintenance
-from app.application import create_app
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -42,6 +41,7 @@ from app.services.results import (
 )
 
 from support import (
+    app_for,
     choice_answer,
     complete_first_login,
     concurrent_writes,
@@ -1165,7 +1165,7 @@ def test_join_code_reservations_prevent_reuse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app_settings = settings_for(tmp_path / "join-code-reservations.db")
-    app = create_app(app_settings)
+    app = app_for(app_settings)
     monkeypatch.setattr("app.participants.randomizer.choice", lambda _: "A")
 
     with app.state.session_factory() as session:

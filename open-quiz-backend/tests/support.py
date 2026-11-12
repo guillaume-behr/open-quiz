@@ -14,6 +14,7 @@ from typing import Any
 
 import psycopg
 import pyotp
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection, create_engine, event, select, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -153,9 +154,25 @@ def settings_for(database: Path, **overrides: Any) -> Settings:
     return Settings(**values)
 
 
+def app_for(settings: Settings) -> FastAPI:
+    """create_app, its pools closed when the test ends.
+
+    The application closes them at shutdown, which a test that never enters
+    a TestClient context does not reach.
+    """
+    app = create_app(settings)
+    TEST_ENGINES.extend(
+        (
+            app.state.session_factory.kw["bind"],
+            app.state.rate_limiter_sessions.kw["bind"],
+        )
+    )
+    return app
+
+
 def make_client(settings: Settings) -> TestClient:
     return TestClient(
-        create_app(settings),
+        app_for(settings),
         headers={"Origin": FRONTEND_ORIGIN},
         backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     )
