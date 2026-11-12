@@ -9,7 +9,7 @@ from sqlalchemy import event, func, select, update
 
 from app import maintenance
 from app.models import Question, StoredImage
-from app.stored_images import delete_unreferenced_images
+from app.stored_images import delete_unreferenced_images, store_image
 
 from support import VALID_PNG, exam_environment, make_client, settings_for
 
@@ -144,6 +144,51 @@ def test_purging_skips_an_image_a_concurrent_save_reuses(tmp_path: Path) -> None
             # The rest of the purging transaction is still usable.
             purging.execute(select(1))
             purging.commit()
+        assert stored_image_count(client) == 1
+
+
+def test_reusing_an_image_keeps_it_from_a_concurrent_purge(tmp_path: Path) -> None:
+    """The other order: the save stores the image first, then the purge runs.
+
+    Storing an image that already exists must lock its row until the save
+    commits, or the purge deletes it and the save fails on the foreign key.
+    """
+    with make_client(settings_for(tmp_path / "stored-images-reuse")) as client:
+        environment = exam_environment(client)
+        created = client.post(
+            f"/api/question-banks/{environment['question']['question_bank_id']}/questions",
+            headers=environment["teacher_headers"],
+            data={"payload": question_payload("Illustrated")},
+            files={"image": ("image.png", VALID_PNG, "image/png")},
+        ).json()
+        session_factory = client.app.state.session_factory
+        with session_factory() as session:
+            question = session.get(Question, created["id"])
+            digest = question.image_sha256
+            stored = session.get(StoredImage, digest)
+            data, content_type = stored.data, stored.content_type
+            question.image_sha256 = None
+            session.commit()
+
+        with session_factory() as saving, session_factory() as purging:
+            assert store_image(saving, data, content_type) == digest
+            purged: list[int] = []
+
+            def purge() -> None:
+                purged.append(delete_unreferenced_images(purging))
+                purging.commit()
+
+            purger = Thread(target=purge)
+            purger.start()
+            sleep(0.3)
+            saving.execute(
+                update(Question)
+                .where(Question.id == created["id"])
+                .values(image_sha256=digest)
+            )
+            saving.commit()
+            purger.join(timeout=10)
+            assert purged == [0]
         assert stored_image_count(client) == 1
 
 
