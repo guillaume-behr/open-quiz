@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import * as v from "valibot"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -206,6 +207,46 @@ describe("connectLiveUpdates", () => {
 
         expect(options.onData).toHaveBeenCalledWith("state")
         expect(onDeleted).toHaveBeenCalledOnce()
+    })
+
+    it("ignores malformed messages and keeps the subscription", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        const options = connect()
+        await advance(0)
+        handshake()
+
+        lastSocket().receive({ type: "session" })
+        lastSocket().receive({ type: "unknown", data: "state" })
+        lastSocket().receive(["ping"])
+        lastSocket().emit("message", { data: "not json" })
+        lastSocket().receive({ type: "session", data: "next state" })
+
+        expect(warn).toHaveBeenCalledTimes(3)
+        expect(options.onData).toHaveBeenCalledExactlyOnceWith("next state")
+        expect(sockets()).toHaveLength(1)
+    })
+
+    it("drops an update that fails the feed's schema", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        const onData = vi.fn()
+        disconnect = connectLiveUpdates({
+            path: "/api/quizzes/live/student/sessions/ABCD",
+            getToken: () => Promise.resolve("participant-token"),
+            schema: v.object({ status: v.string() }),
+            onData,
+            onUnavailable: vi.fn(),
+        })
+        await advance(0)
+        handshake()
+
+        lastSocket().receive({ type: "session", data: { status: 3 } })
+        lastSocket().receive({
+            type: "session",
+            data: { status: "paused", extra: true },
+        })
+
+        expect(warn).toHaveBeenCalledOnce()
+        expect(onData).toHaveBeenCalledExactlyOnceWith({ status: "paused" })
     })
 
     it("refreshes the token once when the server refuses it", async () => {

@@ -846,5 +846,6 @@
     "error-username-taken": "This username is already used by another account.",
     "error-service-unavailable": "The service is temporarily unavailable. Try again in a moment.",
     "error-request-invalid": "The request sent is invalid. Reload the page and try again.",
+    "error-unexpected-response": "The server sent an unexpected response. Reload the page and try again.",
     "error-request-too-large": "The data sent is too large. Reduce the size of the images or the file."
 }

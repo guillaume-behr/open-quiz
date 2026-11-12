@@ -1,11 +1,17 @@
-export type User = {
-    id: number
-    username: string
-    display_name: string
-    is_admin: boolean
-    is_active: boolean
-    created_at: string
-}
+import type * as v from "valibot"
+
+import type {
+    CODE_LANGUAGES,
+    StudentAnswerSummarySchema,
+    StudentQuizJoinSchema,
+    StudentQuizQuestionSchema,
+    StudentQuizSessionSchema,
+    TrainingFeedbackSchema,
+    TwoFactorChallengeSchema,
+    UserSchema,
+} from "./schemas"
+
+export type User = v.InferOutput<typeof UserSchema>
 
 export type Page<T> = {
     items: T[]
@@ -103,18 +109,7 @@ export const QUESTION_DIFFICULTIES = ["easy", "medium", "hard"] as const
 export type QuestionDifficulty = (typeof QUESTION_DIFFICULTIES)[number]
 export const ANSWER_MODES = ["single", "multiple", "written"] as const
 export type AnswerMode = (typeof ANSWER_MODES)[number]
-export type CodeLanguage =
-    | "javascript"
-    | "typescript"
-    | "python"
-    | "java"
-    | "csharp"
-    | "cpp"
-    | "markup"
-    | "css"
-    | "sql"
-    | "bash"
-    | "json"
+export type CodeLanguage = (typeof CODE_LANGUAGES)[number]
 
 type QuestionChoice = {
     id: number
@@ -166,7 +161,9 @@ export type NewQuestion = {
         id?: number
         label: string
         is_correct: boolean
-        points: number
+        // Optional for the backend, which then splits one point across the
+        // correct choices (choice_points); the question form always sends it.
+        points?: number | null
         image?: EncodedImage | null
         remove_image?: boolean
         code_language: CodeLanguage | null
@@ -221,6 +218,18 @@ export type NewQuiz = {
     hard_question_count: number
 }
 
+/** A browser event a student's quiz reports to the teacher. */
+export type ReportedViolationType =
+    | "fullscreen_exit"
+    | "pointer_exit"
+    | "window_blur"
+    | "page_hidden"
+    | "context_menu"
+    | "print_attempt"
+
+/** A participant's last alert: one reported, or one the server recorded. */
+export type QuizViolationType = ReportedViolationType | "session_resumed"
+
 export type QuizParticipant = {
     id: number
     student_identifier: string
@@ -231,7 +240,7 @@ export type QuizParticipant = {
     maximum_score: number
     pending_manual_grading_count: number
     violation_count: number
-    last_violation_type: string | null
+    last_violation_type: QuizViolationType | null
     last_violation_at: string | null
     joined_at: string
 }
@@ -324,77 +333,6 @@ export type MakeupJoin = {
     quizzes: MakeupQuizOption[]
 }
 
-type StudentQuizChoice = {
-    // An opaque token of this participation, never the choice's real id.
-    id: string
-    label: string
-    position: number
-    has_image: boolean
-    code_language: CodeLanguage | null
-    code_content: string | null
-}
-
-export type StudentQuizQuestion = {
-    id: number
-    prompt: string
-    difficulty: QuestionDifficulty
-    answer_mode: AnswerMode
-    answer_mode_disclosed: boolean
-    response_language: CodeLanguage | null
-    allow_code_execution: boolean
-    has_image: boolean
-    code_language: CodeLanguage | null
-    code_content: string | null
-    choices: StudentQuizChoice[]
-    // The most this question is worth; sent in exam mode only.
-    total_points?: number | null
-}
-
-export type StudentQuizSession = {
-    quiz_title: string
-    source_language: string
-    class_name: string
-    student_name: string
-    join_code: string
-    status: "waiting" | "in_progress" | "paused" | "finished" | "cancelled"
-    ends_at: string | null
-    // The server's time when this state was built (QuizTimer).
-    server_now: string
-    question_number: number | null
-    total_questions: number
-    has_answered: boolean
-    answered_count: number
-    allow_previous_questions: boolean
-    allow_answer_review: boolean
-    awaiting_final_submission: boolean
-    answer_summaries: StudentAnswerSummary[]
-    accessible_question_numbers: number[]
-    selected_choice_ids: string[] | null
-    written_answer: string | null
-    question: StudentQuizQuestion | null
-    training_feedback: TrainingFeedback | null
-    potential_score: number | null
-    potential_maximum_score: number | null
-    pending_manual_review_count: number
-}
-
-export type StudentAnswerSummary = {
-    question_number: number
-    question_id: number
-    prompt: string
-    answer_mode: AnswerMode
-    submitted_answers: string[]
-}
-
-export type TrainingFeedback = {
-    question_id: number
-    is_correct: boolean | null
-    correct_choice_ids: string[]
-    expected_answer: string | null
-    submitted_answer: string | null
-    requires_manual_review: boolean
-}
-
 export type TrainingHistoryItem = {
     session_id: number
     question_bank_id: number
@@ -404,20 +342,20 @@ export type TrainingHistoryItem = {
     pending_manual_review_count: number
 }
 
-export type StudentQuizJoin = StudentQuizSession & {
-    participant_token: string
-}
+export type StudentQuizQuestion = v.InferOutput<
+    typeof StudentQuizQuestionSchema
+>
+export type StudentQuizSession = v.InferOutput<typeof StudentQuizSessionSchema>
+export type StudentAnswerSummary = v.InferOutput<
+    typeof StudentAnswerSummarySchema
+>
+export type TrainingFeedback = v.InferOutput<typeof TrainingFeedbackSchema>
+export type StudentQuizJoin = v.InferOutput<typeof StudentQuizJoinSchema>
+export type TwoFactorChallenge = v.InferOutput<typeof TwoFactorChallengeSchema>
 
 export type StudentQuizAnswer = {
     // The question on screen: the server refuses an answer for another one.
     question_id: number
     selected_choice_ids?: string[]
     written_answer?: string
-}
-
-export type TwoFactorChallenge = {
-    status: "setup_required" | "verification_required"
-    challenge_token: string
-    secret: string | null
-    provisioning_uri: string | null
 }

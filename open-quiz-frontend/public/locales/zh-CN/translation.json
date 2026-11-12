@@ -846,5 +846,6 @@
     "error-username-taken": "此用户名已被其他账户使用。",
     "error-service-unavailable": "服务暂时不可用，请稍后重试。",
     "error-request-invalid": "发送的请求无效，请刷新页面后重试。",
+    "error-unexpected-response": "服务器返回了意外的响应，请刷新页面后重试。",
     "error-request-too-large": "发送的数据过大，请缩小图片或文件。"
 }

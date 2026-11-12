@@ -846,5 +846,6 @@
     "error-username-taken": "Dieser Benutzername wird bereits von einem anderen Konto verwendet.",
     "error-service-unavailable": "Der Dienst ist vorübergehend nicht verfügbar. Versuchen Sie es gleich noch einmal.",
     "error-request-invalid": "Die gesendete Anfrage ist ungültig. Laden Sie die Seite neu und versuchen Sie es erneut.",
+    "error-unexpected-response": "Der Server hat eine unerwartete Antwort gesendet. Laden Sie die Seite neu und versuchen Sie es erneut.",
     "error-request-too-large": "Die gesendeten Daten sind zu groß. Verkleinern Sie die Bilder oder die Datei."
 }

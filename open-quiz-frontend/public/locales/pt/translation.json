@@ -847,5 +847,6 @@
     "error-username-taken": "Este nome de utilizador já é usado por outra conta.",
     "error-service-unavailable": "O serviço está temporariamente indisponível. Tente novamente dentro de instantes.",
     "error-request-invalid": "O pedido enviado é inválido. Recarregue a página e tente novamente.",
+    "error-unexpected-response": "O servidor enviou uma resposta inesperada. Recarregue a página e tente novamente.",
     "error-request-too-large": "Os dados enviados são demasiado grandes. Reduza o tamanho das imagens ou do ficheiro."
 }

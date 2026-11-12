@@ -81,8 +81,10 @@ test("successful credentials advance to two-factor authentication", async ({
             status: 200,
             contentType: "application/json",
             body: JSON.stringify({
-                status: "code_required",
+                status: "verification_required",
                 challenge_token: "challenge-token",
+                secret: null,
+                provisioning_uri: null,
             }),
         })
     })
