@@ -3,7 +3,7 @@ import { LiveReconnectingNotice } from "@/components/live-reconnecting-notice"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { Button } from "@/components/ui/button"
 import { ListChecks, LoaderCircle } from "lucide-react"
-import type { FormEvent } from "react"
+import { type FormEvent, memo } from "react"
 import { useTranslation } from "react-i18next"
 import { AnswerReview } from "./answer-review"
 import { StudentNameBadge } from "./fullscreen-prompt"
@@ -133,7 +133,8 @@ export function StudentQuizPage({
     )
 }
 
-function QuizHeader({
+// Memoised: the student's typing re-renders the page, not the timer.
+const QuizHeader = memo(function QuizHeader({
     session,
     title,
     contentDirection,
@@ -158,7 +159,7 @@ function QuizHeader({
             )}
         </div>
     )
-}
+})
 
 function QuizStatus({
     session,

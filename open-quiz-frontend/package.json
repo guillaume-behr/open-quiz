@@ -10,6 +10,7 @@
     "scripts": {
         "dev": "node scripts/copy-pyodide.mjs && vite",
         "build": "node scripts/copy-pyodide.mjs && tsc -b && vite build",
+        "check:bundle-size": "node scripts/check-bundle-size.mjs",
         "lint": "eslint . --max-warnings 0",
         "format": "prettier --write \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"public/locales/*/translation.json\" \"*.{js,json,ts}\" \"index.html\"",
         "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"public/locales/*/translation.json\" \"*.{js,json,ts}\" \"index.html\"",
