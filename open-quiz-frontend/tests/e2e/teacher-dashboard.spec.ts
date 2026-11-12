@@ -133,6 +133,7 @@ async function mockTeacherApi(page: Page) {
         easy_question_count: 10,
         medium_question_count: 10,
         hard_question_count: 10,
+        trainable_question_count: 30,
     }
     const otherGradeBank = {
         ...bank,
@@ -346,6 +347,7 @@ async function mockTeacherApi(page: Page) {
                     easy_question_count: 0,
                     medium_question_count: 0,
                     hard_question_count: 0,
+                    trainable_question_count: 0,
                 }
                 questionBanks = [...questionBanks, created]
                 return route.fulfill({ status: 201, json: created })

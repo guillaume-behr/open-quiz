@@ -818,10 +818,10 @@ def test_students_without_a_class_have_no_history_or_training(environment) -> No
     )
 
 
-def test_training_feedback_and_results_cover_written_and_empty_banks(
+def test_training_never_draws_written_questions(
     environment, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Keep the drawn order stable: the written question comes first.
+    # Keep the drawn order stable: the written question would come first.
     monkeypatch.setattr(question_draws.randomizer, "shuffle", lambda items: None)
     client = environment["client"]
     headers = environment["teacher_headers"]
@@ -845,10 +845,89 @@ def test_training_feedback_and_results_cover_written_and_empty_banks(
         choices=[{"label": "Because", "is_correct": True}],
     )
     add_question(client, written_environment)
+    only_written_bank = client.post(
+        "/api/question-banks",
+        headers=headers,
+        json={"grade_level": "5e", "chapter": "Only written"},
+    ).json()
+    add_question(
+        client,
+        {
+            **environment,
+            "question": {
+                **environment["question"],
+                "question_bank_id": only_written_bank["id"],
+            },
+        },
+        prompt="Explain",
+        answer_mode="written",
+        choices=[{"label": "Because", "is_correct": True}],
+    )
+    summaries = {
+        bank["id"]: bank
+        for bank in client.get("/api/question-banks", headers=headers).json()
+    }
+    assert summaries[written_bank["id"]]["question_count"] == 2
+    assert summaries[written_bank["id"]]["trainable_question_count"] == 1
+    assert summaries[only_written_bank["id"]]["trainable_question_count"] == 0
+
+    url = f"/api/quizzes/training/classes/{class_id}/question-banks"
+    # Written questions do not count towards what a training can ask.
+    too_many = client.put(
+        url, headers=headers, json=training_banks(written_bank["id"], question_count=2)
+    )
+    assert too_many.status_code == 422
+    assert (
+        client.put(
+            url,
+            headers=headers,
+            json=training_banks(only_written_bank["id"]),
+        ).status_code
+        == 422
+    )
+    assert (
+        client.put(
+            url, headers=headers, json=training_banks(written_bank["id"])
+        ).status_code
+        == 200
+    )
+
+    training = client.post(
+        f"/api/quizzes/training/{written_bank['id']}/start", headers=student_headers
+    )
+    assert training.status_code == 201
+    token_headers = {"X-Quiz-Token": training.json()["participant_token"]}
+    session_url = f"/api/quizzes/student/sessions/{training.json()['join_code']}"
+    state = client.get(session_url, headers=token_headers).json()
+    assert state["question"]["answer_mode"] != "written"
+    assert state["total_questions"] == 1
+
+
+def test_training_handles_questions_changed_after_it_started(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Keep the drawn order stable: the question made written comes first.
+    monkeypatch.setattr(question_draws.randomizer, "shuffle", lambda items: None)
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    student_headers = environment["student_headers"]
+    class_id = environment["student_class"]["id"]
+
+    bank = client.post(
+        "/api/question-banks",
+        headers=headers,
+        json={"grade_level": "5e", "chapter": "Changed training"},
+    ).json()
+    bank_environment = {
+        **environment,
+        "question": {**environment["question"], "question_bank_id": bank["id"]},
+    }
+    changed = add_question(client, bank_environment)
+    add_question(client, bank_environment)
     empty_bank = client.post(
         "/api/question-banks",
         headers=headers,
-        json={"grade_level": "5e", "chapter": "Empty training"},
+        json={"grade_level": "5e", "chapter": "Emptied training"},
     ).json()
     removed = add_question(
         client,
@@ -860,7 +939,7 @@ def test_training_feedback_and_results_cover_written_and_empty_banks(
             },
         },
     )
-    selection = training_banks(written_bank["id"], question_count=2)
+    selection = training_banks(bank["id"], question_count=2)
     selection["question_banks"] += training_banks(empty_bank["id"])["question_banks"]
     assert (
         client.put(
@@ -877,20 +956,30 @@ def test_training_feedback_and_results_cover_written_and_empty_banks(
         ).status_code
         == 204
     )
-
     assert (
         client.post(
             f"/api/quizzes/training/{empty_bank['id']}/start", headers=student_headers
         ).status_code
         == 409
     )
+
     training = client.post(
-        f"/api/quizzes/training/{written_bank['id']}/start", headers=student_headers
+        f"/api/quizzes/training/{bank['id']}/start", headers=student_headers
     )
     assert training.status_code == 201
+    # A question that becomes written during the training is still answered
+    # and reported as awaiting review, never as right or wrong.
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(Question)
+            .where(Question.id == changed["id"])
+            .values(answer_mode="written")
+        )
+        session.commit()
     token_headers = {"X-Quiz-Token": training.json()["participant_token"]}
     url = f"/api/quizzes/student/sessions/{training.json()['join_code']}"
     question = client.get(url, headers=token_headers).json()["question"]
+    assert question["id"] == changed["id"]
     assert question["answer_mode"] == "written"
     answered = client.post(
         f"{url}/answer",

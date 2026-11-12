@@ -22,7 +22,7 @@ function questionCounts(banks: QuestionBank[]): Map<number, number> {
     return new Map(
         banks.map((bank) => [
             bank.id,
-            bank.training_question_count ?? bank.question_count,
+            bank.training_question_count ?? bank.trainable_question_count,
         ])
     )
 }
@@ -146,7 +146,10 @@ export function ClassTrainingBanksPanel() {
     function openBankConfiguration(bank: QuestionBank) {
         setPendingBank(bank)
         setPendingCount(
-            String(counts.get(bank.id) ?? Math.min(bank.question_count, 10))
+            String(
+                counts.get(bank.id) ??
+                    Math.min(bank.trainable_question_count, 10)
+            )
         )
         setCountError(null)
     }
@@ -157,11 +160,11 @@ export function ClassTrainingBanksPanel() {
         if (
             !Number.isInteger(value) ||
             value < 1 ||
-            value > pendingBank.question_count
+            value > pendingBank.trainable_question_count
         ) {
             setCountError(
                 t("training-question-count-error", {
-                    count: pendingBank.question_count,
+                    count: pendingBank.trainable_question_count,
                 })
             )
             return
@@ -319,6 +322,11 @@ export function ClassTrainingBanksPanel() {
                                         type="checkbox"
                                         className="mt-1 accent-primary"
                                         checked={selected}
+                                        // Training skips written questions.
+                                        disabled={
+                                            !selected &&
+                                            bank.trainable_question_count === 0
+                                        }
                                         onChange={() =>
                                             openBankConfiguration(bank)
                                         }
@@ -346,7 +354,7 @@ export function ClassTrainingBanksPanel() {
                 title={t("training-question-count-title")}
                 description={t("training-question-count-help", {
                     bank: pendingBank?.chapter ?? "",
-                    count: pendingBank?.question_count ?? 0,
+                    count: pendingBank?.trainable_question_count ?? 0,
                 })}
             >
                 <Field>
@@ -357,7 +365,7 @@ export function ClassTrainingBanksPanel() {
                         id="training-question-count"
                         type="number"
                         min={1}
-                        max={pendingBank?.question_count}
+                        max={pendingBank?.trainable_question_count}
                         step={1}
                         value={pendingCount}
                         onChange={(event) =>

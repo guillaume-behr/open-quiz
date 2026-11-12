@@ -84,6 +84,8 @@ export type QuestionBank = {
     easy_question_count: number
     medium_question_count: number
     hard_question_count: number
+    /** Questions a training can draw: every question but the written ones. */
+    trainable_question_count: number
     training_question_count?: number | null
 }
 
