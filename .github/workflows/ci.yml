@@ -145,6 +145,15 @@ jobs:
             grep -q "^$variable=" .env.example \
               || { echo "::error::docker-compose.yml reads $variable, missing from .env.example"; exit 1; }
           done
+      - name: Check that both READMEs have the same sections
+        run: |
+          # Heading levels and their emoji, in order: the titles themselves
+          # are translated.
+          sections() { grep -o '^##* [^ ]*' "$1" | sed 's/ [A-Za-z0-9].*//'; }
+          if ! diff <(sections README.md) <(sections README.en.md); then
+            echo "::error::README.md and README.en.md have different sections"
+            exit 1
+          fi
       - name: Build backend with provenance and SBOM
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.0.0
         with:
@@ -356,6 +365,82 @@ jobs:
           fi
           docker compose exec -T open-quiz-backend \
             /app/.venv/bin/python scripts/container_network_smoke.py
+      - name: Upgrade PostgreSQL to a new major version
+        run: |
+          # The procedure of docs/deployment.md, from the previous major to
+          # the one docker-compose.yml pins, then back to the old volume.
+          previous_image=postgres:16-alpine
+          volume=$(docker volume ls --quiet --filter label=com.docker.compose.volume=open-quiz-postgres-data)
+          roles() {
+            SCRIPT_DIR=$PWD sh -c '. ./scripts/common.sh
+              compose() { docker compose "$@"; }
+              configure_database_roles open-quiz-backend/.env'
+          }
+          query() {
+            docker compose exec -T open-quiz-database psql --username=open_quiz \
+              --dbname=open_quiz --tuples-only --no-align --command="$1"
+          }
+          # Every table of the schema with its row count.
+          counts() {
+            query "SELECT string_agg(format('%s=%s', table_name, (xpath('/row/c/text()',
+              query_to_xml(format('SELECT count(*) AS c FROM public.%I', table_name), false, true, '')))[1]::text),
+              ' ' ORDER BY table_name) FROM information_schema.tables
+              WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
+          }
+          major() {
+            query "SHOW server_version_num" | cut -c1-2
+          }
+          # An instance installed on the previous major.
+          docker compose down
+          docker volume rm "$volume"
+          sed -i "s|^\( *image: *\)postgres:.*$|\1$previous_image|" docker-compose.yml
+          docker compose up --wait --detach open-quiz-database
+          roles
+          docker compose up --wait --detach
+          query "CREATE TABLE written_before_upgrade (id integer); INSERT INTO written_before_upgrade VALUES (1)"
+          old_major=$(major)
+          before=$(counts)
+
+          # 1. Back up. 2. Stop. 3. Pin the new image.
+          sh ./backup.sh --directory "$RUNNER_TEMP/postgres-upgrade"
+          backup_file=$(ls "$RUNNER_TEMP"/postgres-upgrade/*.dump)
+          docker compose down
+          git checkout docker-compose.yml
+          # 4. Keep the old data directory in another volume.
+          docker volume create "$volume-old"
+          docker run --rm --volume "$volume:/from:ro" --volume "$volume-old:/to" \
+            "$previous_image" cp -a /from/. /to/
+          docker volume rm "$volume"
+          # 5. A fresh database, its roles, then the backup.
+          docker compose up --wait --detach open-quiz-database
+          roles
+          sh ./restore.sh --yes "$backup_file"
+          # 6. Verify.
+          if [ "$(major)" = "$old_major" ]; then
+            echo "::error::the database still runs PostgreSQL $old_major"
+            exit 1
+          fi
+          if [ "$(counts)" != "$before" ]; then
+            printf 'before: %s\nafter:  %s\n' "$before" "$(counts)"
+            echo "::error::the upgraded database does not hold the same rows"
+            exit 1
+          fi
+          docker compose exec -T open-quiz-backend \
+            /app/.venv/bin/python scripts/container_network_smoke.py
+
+          # Going back: the old image on the old data directory.
+          docker compose down
+          docker volume rm "$volume"
+          sed -i "s|^\( *image: *\)postgres:.*$|\1$previous_image|" docker-compose.yml
+          docker compose create open-quiz-database
+          docker run --rm --volume "$volume-old:/from:ro" --volume "$volume:/to" \
+            "$previous_image" cp -a /from/. /to/
+          docker compose up --wait --detach
+          if [ "$(major)" != "$old_major" ] || [ "$(counts)" != "$before" ]; then
+            echo "::error::going back to the old volume did not restore the old database"
+            exit 1
+          fi
+          git checkout docker-compose.yml
       - name: Show container logs
         if: failure()
         run: docker compose logs --no-color --tail 200

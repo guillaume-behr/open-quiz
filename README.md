@@ -121,7 +121,7 @@ sh ./install.sh
 
 Le script demande le nom de domaine, sans `https://` ni `/` final. Il génère
 les secrets et le mot de passe administrateur, écrit
-`open-quiz-backend/.env`, puis construit et démarre les conteneurs. Passez
+`open-quiz-backend/.env` et `open-quiz-backend/.env.database`, puis construit et démarre les conteneurs. Passez
 `--domain quiz.example.com` pour une installation non interactive, et
 `--help` pour les autres options. Les réglages de Docker Compose (nombre de
 workers, mémoire, sous-réseau) vont dans le fichier `.env` de la racine, créé
@@ -130,7 +130,9 @@ commande, que la mise à jour suivante ne verrait pas.
 
 > [!IMPORTANT]
 > Le mot de passe administrateur n’est affiché qu’une seule fois. Enregistrez-le
-> avant de fermer le terminal.
+> avant de fermer le terminal. Il reste écrit en clair dans
+> `open-quiz-backend/.env`, qui continue de piloter le compte administrateur :
+> protégez ce fichier et ses copies.
 
 Sur un déploiement déjà installé, l’installation refuse d’écraser la
 configuration existante : utilisez `sh ./update.sh`. Le guide de déploiement
@@ -182,8 +184,9 @@ lisez les **Upgrade actions** de la nouvelle version dans le
 
 > [!CAUTION]
 > `update.sh` sauvegarde la base dans `backups/` avant de reconstruire les
-> conteneurs ; conservez vous-même une copie de `open-quiz-backend/.env`, sans
-> laquelle une sauvegarde restaurée n’est pas pleinement utilisable. Les
+> conteneurs ; conservez vous-même une copie de `open-quiz-backend/.env`,
+> `open-quiz-backend/.env.database` et du fichier `.env` de la racine, sans
+> lesquels une sauvegarde restaurée n’est pas pleinement utilisable. Les
 > procédures de sauvegarde, de restauration et de rotation des secrets sont
 > décrites dans le
 > [guide de déploiement](docs/deployment.md#-sauvegarder-les-données).

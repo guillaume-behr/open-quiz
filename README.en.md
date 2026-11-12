@@ -119,7 +119,7 @@ sh ./install.sh
 
 The script asks for the domain name, without `https://` or a trailing `/`. It
 generates the secrets and the administrator password, writes
-`open-quiz-backend/.env`, then builds and starts the containers. Pass
+`open-quiz-backend/.env` and `open-quiz-backend/.env.database`, then builds and starts the containers. Pass
 `--domain quiz.example.com` for a non-interactive installation, and `--help`
 for the other options. Docker Compose settings (API workers, memory, internal
 subnet) belong in the root `.env`, created from [`.env.example`](.env.example);
@@ -127,10 +127,13 @@ never pass them on the command line, where the next update would not see them.
 
 > [!IMPORTANT]
 > The administrator password is shown only once. Save it before closing the
-> terminal.
+> terminal. It stays in plain text in `open-quiz-backend/.env`, which keeps
+> controlling the administrator account: protect that file and its copies.
 
 On an existing deployment, the installation refuses to overwrite the
-configuration: use `sh ./update.sh` instead.
+configuration: use `sh ./update.sh` instead. The deployment guide
+[details each step of the script](docs/deployment.md#-préparer-linstance)
+(in French).
 
 ### 3. Publish the instance over HTTPS
 
@@ -145,8 +148,9 @@ quiz.example.com {
 ```
 
 An [Nginx configuration example](docs/nginx.conf) is also provided; replace
-its domain and certificate paths before enabling it. The proxy must forward
-WebSocket upgrades, which live updates rely on.
+its domain and certificate paths before enabling it. The
+[deployment guide](docs/deployment.md#-publier-lapplication-en-https) (in
+French) describes the headers to forward, notably for WebSocket connections.
 
 ### 4. Check the instance
 
@@ -156,23 +160,27 @@ curl --fail --show-error https://quiz.example.com/api/health
 
 The expected answer is `{"status":"ok"}`.
 
+The instance is installed. What comes next — first sign-in, privacy notices
+and first exam — is in [First steps](#-first-steps).
+
 ### Updates
 
 ```shell
 sh ./update.sh --version v1.0.0
 ```
 
-The script fetches the release, rebuilds the images and restarts the
-containers; the backend applies pending database migrations by itself at
-startup. Without `--version` it follows the clone's branch, unreleased changes
-included. If the update fails or misbehaves, `sh ./update.sh --rollback` returns
-to the previous code, images and data. `--no-pull` rebuilds without fetching a new revision. Before each
-update, read the **Upgrade actions** of the new version in the
-[changelog](CHANGELOG.md).
+Without `--version`, `update.sh` follows the clone's branch, unreleased changes
+included. If something goes wrong, `sh ./update.sh --rollback` returns to the
+code, images and data from before the update. The
+[deployment guide](docs/deployment.md#-mettre-à-jour-open-quiz) (in French)
+describes the whole update, as well as the `--no-pull` option to rebuild
+without fetching a new revision. Before each update, read the **Upgrade
+actions** of the new version in the [changelog](CHANGELOG.md).
 
 > [!CAUTION]
 > `update.sh` backs up the database to `backups/` before rebuilding the
-> containers; keep your own copy of `open-quiz-backend/.env`, without which a
+> containers; keep your own copy of `open-quiz-backend/.env`,
+> `open-quiz-backend/.env.database` and the root `.env`, without which a
 > restored backup cannot be fully used. The
 > [deployment guide](docs/deployment.md#-sauvegarder-les-données) describes
 > backup, restore and secret rotation.

@@ -30,6 +30,9 @@ d’éviter un travail incompatible avec la direction du projet.
 
 ## 🛠️ Préparer l’environnement de développement
 
+L’[architecture](docs/architecture.md) résume les services, leurs réseaux et
+l’endroit où vit chaque état.
+
 Cette procédure sert au développement et à l’évaluation du projet. Pour
 installer une instance à utiliser, suivez la procédure Docker du
 [README](README.md#-installation).
@@ -179,7 +182,8 @@ Toute nouvelle chaîne visible doit exister dans les huit catalogues de
 - documentez un fait au seul endroit qui en est responsable, et renvoyez-y
   depuis les autres.
 - `README.md` et `README.en.md` couvrent le même contenu : modifiez les deux
-  dans la même pull request.
+  dans la même pull request. La CI vérifie qu’ils ont les mêmes sections, dans
+  le même ordre.
 
 ## ✅ Vérifications
 

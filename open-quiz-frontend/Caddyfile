@@ -36,6 +36,7 @@
 		reverse_proxy open-quiz-backend:8000 {
 			transport http {
 				dial_timeout 2s
+				# docs/nginx.conf waits as long on /api/question-banks/.
 				response_header_timeout 150s
 			}
 		}

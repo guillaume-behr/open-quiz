@@ -383,6 +383,10 @@ Une sauvegarde exploitable comprend :
 stockées dans la base. Sans le fichier `.env` correspondant, une restauration
 de la base reste incomplète.
 
+`open-quiz-backend/.env` contient aussi `ADMIN_PASSWORD` en clair : cette
+valeur continue de définir le mot de passe du compte administrateur. Protégez
+ce fichier et chacune de ses copies comme le mot de passe lui-même.
+
 ### Sauvegarder avec `backup.sh`
 
 ```shell
@@ -542,6 +546,85 @@ docker compose exec open-quiz-backend /app/.venv/bin/alembic current
 
 Après la mise à jour, vérifiez `docker compose ps`, `/api/health`, la connexion
 des trois rôles et les journaux du backend.
+
+### Changer de version majeure de PostgreSQL
+
+Une nouvelle version majeure de PostgreSQL (17 → 18 par exemple) ne sait pas
+ouvrir le dossier de données d’une version précédente : changer la seule
+ligne `image:` empêcherait la base de démarrer. Dependabot ne propose donc
+jamais ce changement ; il se fait par sauvegarde et restauration. La CI
+exécute cette procédure à chaque modification, de PostgreSQL 16 vers la
+version épinglée, puis le retour en arrière.
+
+1. Sauvegardez la base, puis copiez la sauvegarde hors de l’hôte avec les
+   fichiers `.env` (voir [Sauvegarder les données](#-sauvegarder-les-données)) :
+
+    ```shell
+    sh ./backup.sh
+    ```
+
+2. Arrêtez les services :
+
+    ```shell
+    docker compose down
+    ```
+
+3. Dans `docker-compose.yml`, remplacez l’étiquette et l’empreinte de l’image
+   `postgres:` par celles de la nouvelle version. Notez l’ancienne ligne pour
+   un éventuel retour. Dans un fork qui garde la CI, faites le même changement
+   dans `.github/workflows/ci.yml` : la CI vérifie que les deux concordent.
+
+4. Mettez l’ancien dossier de données de côté, sans le supprimer : copiez le
+   volume dans un volume de réserve, puis retirez l’original pour que Docker
+   Compose en crée un vide. Remplacez `ANCIENNE_IMAGE` par l’ancienne image,
+   par exemple `postgres:17.11-alpine3.24` :
+
+    ```shell
+    volume=$(docker volume ls --quiet --filter label=com.docker.compose.volume=open-quiz-postgres-data)
+    docker volume create "$volume-old"
+    docker run --rm --volume "$volume:/from:ro" --volume "$volume-old:/to" ANCIENNE_IMAGE cp -a /from/. /to/
+    docker volume rm "$volume"
+    ```
+
+5. Démarrez la nouvelle base, qui recrée son superutilisateur à partir de
+   `open-quiz-backend/.env.database`, puis restaurez la sauvegarde.
+   `restore.sh` recrée aussi le rôle `open_quiz_app` de l’API et lui rend les
+   objets restaurés, comme `install.sh` :
+
+    ```shell
+    docker compose up --wait --detach open-quiz-database
+    sh ./restore.sh backups/open-quiz-AAAA-MM-JJTHHMMSSZ.dump
+    ```
+
+6. Vérifiez l’instance :
+    - `docker compose exec open-quiz-database psql --username=open_quiz --command="SHOW server_version"`
+      indique la nouvelle version ;
+    - `/api/health` répond `{"status":"ok"}` ;
+    - l’administrateur et un enseignant se connectent, un examen et ses
+      résultats s’affichent ;
+    - le nombre de lignes des principales tables (`users`, `quizzes`,
+      `quiz_results`…) est celui d’avant la mise à jour.
+
+    En cas de problème, revenez à l’ancienne version : arrêtez les services,
+    remettez l’ancienne ligne `image:`, puis replacez l’ancien dossier de
+    données dans le volume avant de redémarrer :
+
+    ```shell
+    docker compose down
+    docker volume rm "$volume"
+    docker compose create open-quiz-database
+    docker run --rm --volume "$volume-old:/from:ro" --volume "$volume:/to" ANCIENNE_IMAGE cp -a /from/. /to/
+    docker compose up --wait --detach
+    ```
+
+7. Gardez le volume de réserve tant que la nouvelle version n’a pas fonctionné
+   quelques jours, sauvegardes quotidiennes comprises, puis supprimez-le : il
+   contient les données personnelles des élèves telles qu’au jour de la mise à
+   jour.
+
+    ```shell
+    docker volume rm "$volume-old"
+    ```
 
 ## 🔑 Gérer les secrets et les accès
 
@@ -762,6 +845,42 @@ personnelle.
 > vous annoncez aux personnes concernées.
 
 ## 🔧 Dépannage
+
+Chaque service écrit sur sa sortie standard ; lisez-les séparément :
+
+```shell
+docker compose logs --tail 200 open-quiz-backend
+docker compose logs --tail 200 open-quiz-database
+docker compose logs --tail 200 open-quiz-frontend
+```
+
+Le backend y écrit le journal des requêtes, ses erreurs, et les événements
+d’audit et de sécurité (`auth.*`, `security.*`), une ligne JSON chacun :
+filtrez-les avec `docker compose logs open-quiz-backend | grep '"event"'`.
+
+Les contrôles de santé de `docker compose ps` vérifient :
+
+- `open-quiz-database` : PostgreSQL accepte les connexions (`pg_isready`) ;
+- `open-quiz-backend` : `/api/health` répond, ce qui exige une requête réussie
+  vers la base ;
+- `open-quiz-frontend` : Caddy répond sur `/healthz`, sans interroger l’API.
+
+Pannes fréquentes :
+
+- **Erreurs 500 ou 503 sous forte charge** : chaque worker de l’API dispose
+  d’un nombre limité de connexions à la base ; une requête qui en attend une
+  plus de 30 secondes échoue (`QueuePool limit … reached` dans les journaux),
+  et `/api/health` répond 503 tant que la base est injoignable. Vérifiez les
+  requêtes lentes côté PostgreSQL et la mémoire allouée avant d’augmenter
+  `OPEN_QUIZ_API_WORKERS` (voir [Plusieurs workers](#plusieurs-workers)).
+- **`can't start new thread` ou `fork: Resource temporarily unavailable`** :
+  l’API a atteint sa limite de processus. Réglez `OPEN_QUIZ_API_PIDS`
+  (environ `100 × workers + 64`) dans le fichier `.env` de la racine.
+- **Migration en échec** : l’API ne démarre pas et ses journaux montrent
+  l’erreur Alembic ; la migration s’exécute en une transaction, la base est
+  donc restée dans son état précédent. `sh ./update.sh --rollback` revient à
+  la version précédente (voir
+  [Revenir à la version précédente](#revenir-à-la-version-précédente)).
 
 | Symptôme                             | Vérifications                                                                                                        |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
