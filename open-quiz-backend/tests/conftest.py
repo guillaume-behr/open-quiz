@@ -15,14 +15,29 @@ TEST_ENVIRONMENT = {
 
 for name, value in TEST_ENVIRONMENT.items():
     os.environ.setdefault(name, value)
+# The local test database of CONTRIBUTING.md, unless TEST_DATABASE_URL names
+# another. The application reads DATABASE_URL at import: it gets the same.
+os.environ.setdefault(
+    "TEST_DATABASE_URL",
+    "postgresql+psycopg://open_quiz_test:open-quiz-test-password@127.0.0.1:5432/open_quiz_test",
+)
+os.environ.setdefault("DATABASE_URL", os.environ["TEST_DATABASE_URL"])
 
 import pytest  # noqa: E402
+from pwdlib import PasswordHash  # noqa: E402
+from pwdlib.hashers.argon2 import Argon2Hasher  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 
-from app import maintenance  # noqa: E402
+from app import maintenance, security  # noqa: E402
 from app.database import postgres_url  # noqa: E402
 
-from support import PREPARED_TEST_SCHEMAS, TEST_DATABASE_URL  # noqa: E402
+from support import PREPARED_TEST_SCHEMAS, TEST_DATABASE_URL, TEST_ENGINES  # noqa: E402
+
+# Password hashing at the production cost dominates many tests' runtime. The
+# hashes keep the Argon2id format; only the work factors are the minimum.
+security.password_hash = PasswordHash(
+    (Argon2Hasher(time_cost=1, memory_cost=8 * 1024, parallelism=1),)
+)
 
 # Tests finish expired sessions explicitly with expire_due_sessions(): a
 # background tick firing in the middle of a test would make it racy.
@@ -41,3 +56,10 @@ def cleanup_test_schemas():
                 connection.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
     finally:
         engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def dispose_test_engines():
+    yield
+    while TEST_ENGINES:
+        TEST_ENGINES.pop().dispose()

@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 from base64 import b64decode
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -14,13 +15,14 @@ from typing import Any
 import psycopg
 import pyotp
 from fastapi.testclient import TestClient
-from sqlalchemy import Connection, create_engine, event, select
+from sqlalchemy import Connection, create_engine, event, select, text
+from sqlalchemy.orm import Session, sessionmaker
 
 from app import maintenance
 from app.application import create_app
 from app.choice_tokens import CHOICE_HMAC_ENTRY
 from app.config import Settings
-from app.database import postgres_url
+from app.database import build_session_factory, postgres_url
 from app.models import (
     Question,
     QuestionBank,
@@ -70,10 +72,8 @@ TEST_CLIENT_BACKEND_OPTIONS = {"use_uvloop": True} if find_spec("uvloop") else {
 
 # install-dev.sh creates the role and database of this default; keep both in
 # step when changing it.
-TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "postgresql+psycopg://open_quiz_test:open-quiz-test-password@127.0.0.1:5432/open_quiz_test",
-)
+# Defaulted by conftest.py.
+TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
 
 
 PREPARED_TEST_SCHEMAS: set[str] = set()
@@ -458,6 +458,43 @@ def wrong_choice_id(question: dict[str, Any]) -> int:
     return next(
         choice["id"] for choice in question["choices"] if not choice["is_correct"]
     )
+
+
+# Engines the tests build directly, closed by conftest.py after each test.
+TEST_ENGINES: list[Any] = []
+
+
+def session_factory_for(database_url: str) -> sessionmaker[Session]:
+    """build_session_factory, its pool closed when the test ends."""
+    session_factory = build_session_factory(database_url)
+    TEST_ENGINES.append(session_factory.kw["bind"])
+    return session_factory
+
+
+def wait_until(condition: Callable[[], bool], timeout: float = 10.0) -> bool:
+    """Poll a condition until it holds or the deadline passes."""
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.005)
+    return True
+
+
+def backend_pid(session: Session) -> int:
+    """The PostgreSQL server process of a session's connection."""
+    return session.execute(text("SELECT pg_backend_pid()")).scalar_one()
+
+
+def waits_for_a_lock(client: TestClient, pid: int) -> bool:
+    """Whether that server process is blocked on a row or table lock."""
+    with client.app.state.session_factory() as session:
+        return session.execute(
+            text(
+                "SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = :pid"
+            ),
+            {"pid": pid},
+        ).scalar_one()
 
 
 @contextmanager

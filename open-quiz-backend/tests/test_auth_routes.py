@@ -6,8 +6,8 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from hmac import new as hmac_new
 from pathlib import Path
-from threading import Barrier
-from time import sleep, time
+from threading import Barrier, Event
+from time import time
 
 import jwt
 import pyotp
@@ -22,7 +22,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from app import maintenance, rate_limit, security, security_state
 from app.application import create_app
 from app.config import PUBLIC_INFORMATION_VARIABLES, warn_missing_public_information
-from app.database import build_session_factory
 from app.models import (
     AuthenticationChallenge,
     GradeLevel,
@@ -79,7 +78,9 @@ from support import (
     login_admin,
     make_client,
     refresh_headers,
+    session_factory_for,
     settings_for,
+    wait_until,
 )
 
 
@@ -127,7 +128,7 @@ def test_first_startup_revokes_sessions_that_predate_session_families(
     tmp_path: Path,
 ) -> None:
     settings = settings_for(tmp_path / "legacy-sessions")
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = session_factory_for(settings.database_url)
     user_id = add_user(session_factory, "root-admin", is_admin=True)
     seed_refresh_session(session_factory, user_id, with_family=False)
 
@@ -139,7 +140,7 @@ def test_first_startup_revokes_sessions_that_predate_session_families(
 
 def test_a_rotated_jwt_secret_revokes_every_session(tmp_path: Path) -> None:
     settings = settings_for(tmp_path / "rotated-secret")
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = session_factory_for(settings.database_url)
     security_state.synchronize_security_state(session_factory, settings)
     with session_factory() as session:
         admin_id = session.scalar(select(User.id).where(User.is_admin.is_(True)))
@@ -159,7 +160,7 @@ def test_rotating_only_the_totp_key_keeps_the_sessions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     settings = settings_for(tmp_path / "rotated-totp-key")
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = session_factory_for(settings.database_url)
     security_state.synchronize_security_state(session_factory, settings)
     with session_factory() as session:
         admin_id = session.scalar(select(User.id).where(User.is_admin.is_(True)))
@@ -185,7 +186,7 @@ def test_the_former_fingerprint_does_not_revoke_sessions_on_upgrade(
 ) -> None:
     """A database fingerprinted the old way keeps its sessions on upgrade."""
     settings = settings_for(tmp_path / "fingerprint-upgrade")
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = session_factory_for(settings.database_url)
     security_state.synchronize_security_state(session_factory, settings)
     legacy = hmac_new(
         settings.totp_encryption_key.encode(),
@@ -208,7 +209,7 @@ def test_the_former_fingerprint_does_not_revoke_sessions_on_upgrade(
 
 def test_first_start_refuses_to_promote_an_existing_teacher(tmp_path: Path) -> None:
     settings = settings_for(tmp_path / "teacher-named-admin")
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = session_factory_for(settings.database_url)
     teacher_id = add_user(session_factory, settings.admin_username, is_admin=False)
     with session_factory() as session:
         password_before = session.get(User, teacher_id).password_hash
@@ -226,7 +227,7 @@ def test_a_single_unmanaged_administrator_takes_the_configured_name(
     tmp_path: Path,
 ) -> None:
     settings = settings_for(tmp_path / "unmanaged-admin")
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = session_factory_for(settings.database_url)
     admin_id = add_user(session_factory, "legacy-admin", is_admin=True)
 
     security_state.synchronize_security_state(session_factory, settings)
@@ -247,7 +248,7 @@ def test_startup_refuses_an_inconsistent_managed_administrator(
     tmp_path: Path, managed_value: str, message: str
 ) -> None:
     settings = settings_for(tmp_path / "managed-admin")
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = session_factory_for(settings.database_url)
     if managed_value == "other":
         managed_value = str(add_user(session_factory, "managed", is_admin=True))
         add_user(session_factory, "root-admin", is_admin=False)
@@ -289,9 +290,7 @@ def test_retention_maintenance_runs_periodically(
     monkeypatch.setattr(maintenance, "RETENTION_MAINTENANCE_INTERVAL_SECONDS", 0.01)
     monkeypatch.setattr(maintenance, "enforce_data_retention", counting_enforce)
     with make_client(settings_for(tmp_path / "maintenance")) as client:
-        deadline = time() + 5
-        while len(runs) < 3 and time() < deadline:
-            sleep(0.01)
+        assert wait_until(lambda: len(runs) >= 3)
         assert client.get("/docs").headers.get("Cache-Control") != "no-store"
     assert len(runs) >= 3
 
@@ -992,13 +991,19 @@ def test_login_rate_limit_reserves_concurrent_attempts_atomically(
     app_settings = settings_for(tmp_path / "test.db", login_attempts=3)
     barrier = Barrier(8)
 
-    def slow_invalid_password(_: str, __: str) -> tuple[bool, None]:
-        sleep(0.1)
+    # Every admitted attempt is held in the password check until all eight
+    # have been admitted or refused, so that they all overlap.
+    release = Event()
+    admitted: list[int] = []
+
+    def held_invalid_password(_: str, __: str) -> tuple[bool, None]:
+        admitted.append(1)
+        release.wait(timeout=10)
         return False, None
 
     monkeypatch.setattr(
         "app.routers.auth.verify_password_and_update",
-        slow_invalid_password,
+        held_invalid_password,
     )
 
     with make_client(app_settings) as client:
@@ -1012,6 +1017,10 @@ def test_login_rate_limit_reserves_concurrent_attempts_atomically(
 
         with ThreadPoolExecutor(max_workers=8) as pool:
             futures = [pool.submit(attempt_login) for _ in range(8)]
+            assert wait_until(
+                lambda: len(admitted) + sum(future.done() for future in futures) == 8
+            )
+            release.set()
             statuses = [future.result() for future in futures]
 
     assert statuses.count(401) <= 3
@@ -1659,7 +1668,7 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
 @pytest.fixture
 def limiter_sessions(tmp_path: Path) -> sessionmaker[Session]:
-    return build_session_factory(settings_for(tmp_path / "limiters").database_url)
+    return session_factory_for(settings_for(tmp_path / "limiters").database_url)
 
 
 def stored_attempts(session: Session) -> list[int]:

@@ -201,9 +201,14 @@ uv sync --frozen --dev
 uv run --frozen ruff check app tests main.py scripts migrations
 uv run --frozen ruff format --check app tests main.py scripts migrations
 uv run --frozen mypy
-uv run --frozen pytest -q --cov --cov-report=term-missing
+uv run --frozen pytest -q --numprocesses auto --cov --cov-report=term-missing
 uv run --frozen pip-audit
 ```
+
+Les tests n’ont besoin que de la base `open_quiz_test` : `tests/conftest.py`
+fournit `DATABASE_URL` et les secrets de test. `--numprocesses auto` répartit
+la suite sur les cœurs disponibles ; un avertissement `ResourceWarning`
+(connexion laissée ouverte) fait échouer le test concerné.
 
 La suite backend doit couvrir 100 % des lignes et des branches de `app`,
 `main.py` et `scripts` : la commande de tests échoue en dessous. Les tests
