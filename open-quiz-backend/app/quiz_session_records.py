@@ -1,14 +1,7 @@
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import (
-    QuizAnswer,
-    QuizJoinCode,
-    QuizParticipant,
-    QuizSession,
-    QuizSessionQuestion,
-    QuizSessionStudentQuestion,
-)
+from app.models import QuizJoinCode, QuizSession
 
 
 def release_join_codes(codes: list[str], session: Session) -> None:
@@ -33,19 +26,6 @@ def delete_quiz_session_records(session_ids: list[int], session: Session) -> Non
             select(QuizSession.join_code).where(QuizSession.id.in_(session_ids))
         )
     )
-    session.execute(delete(QuizAnswer).where(QuizAnswer.session_id.in_(session_ids)))
-    session.execute(
-        delete(QuizParticipant).where(QuizParticipant.session_id.in_(session_ids))
-    )
-    session.execute(
-        delete(QuizSessionQuestion).where(
-            QuizSessionQuestion.session_id.in_(session_ids)
-        )
-    )
-    session.execute(
-        delete(QuizSessionStudentQuestion).where(
-            QuizSessionStudentQuestion.session_id.in_(session_ids)
-        )
-    )
+    # Participants, answers and drawn questions cascade.
     session.execute(delete(QuizSession).where(QuizSession.id.in_(session_ids)))
     release_join_codes(join_codes, session)

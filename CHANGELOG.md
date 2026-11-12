@@ -92,6 +92,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- Migration 0010 declares what deleting a row does to the rows referring to
+  it (`ON DELETE CASCADE` or `SET NULL`): deleting a question, a bank, a
+  class, a quiz, a session or an account lets PostgreSQL remove the
+  dependent rows, instead of each route listing them by hand. Deletes that
+  were refused stay refused.
 - `docs/nginx.conf` enables HTTP/2, waits 150 s on question-bank imports and
   exports as the frontend does, and explains how to size the per-address
   connection limit. `install.sh` no longer claims the administrator password

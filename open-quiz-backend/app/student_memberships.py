@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.enums import SessionStatus
 from app.models import (
-    MakeupSessionSelection,
     QuizParticipant,
     QuizSession,
     Student,
@@ -74,11 +73,6 @@ def delete_student_membership(membership_id: int, session: Session) -> None:
             access_token_hash=None,
             current_position=None,
             left_at=datetime.now(UTC),
-        )
-    )
-    session.execute(
-        delete(MakeupSessionSelection).where(
-            MakeupSessionSelection.student_id == membership_id
         )
     )
     session.execute(delete(Student).where(Student.id == membership_id))

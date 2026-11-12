@@ -20,8 +20,6 @@ from app.database import EXPIRY_LOCK_KEY, affected_rows
 from app.enums import QuizMode, SessionStatus
 from app.models import (
     MakeupSession,
-    MakeupSessionQuiz,
-    MakeupSessionSelection,
     Quiz,
     QuizAnswer,
     QuizParticipant,
@@ -255,16 +253,6 @@ def delete_makeup_session_records(
     delete_quiz_session_records(child_ids, session)
     makeup_join_code = session.scalar(
         select(MakeupSession.join_code).where(MakeupSession.id == makeup_session_id)
-    )
-    session.execute(
-        delete(MakeupSessionSelection).where(
-            MakeupSessionSelection.session_id == makeup_session_id
-        )
-    )
-    session.execute(
-        delete(MakeupSessionQuiz).where(
-            MakeupSessionQuiz.session_id == makeup_session_id
-        )
     )
     session.execute(delete(MakeupSession).where(MakeupSession.id == makeup_session_id))
     release_join_codes([makeup_join_code] if makeup_join_code else [], session)

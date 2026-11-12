@@ -14,8 +14,6 @@ from app.models import (
     ClassTrainingQuestionBank,
     Question,
     QuestionBank,
-    QuestionChoice,
-    QuestionCode,
     QuizQuestionBank,
     StudentClass,
 )
@@ -193,19 +191,6 @@ def delete_question_bank(
         )
     )
     discard_training_sessions_using_questions(question_ids, session)
-    session.execute(
-        delete(ClassTrainingQuestionBank).where(
-            ClassTrainingQuestionBank.question_bank_id == question_bank_id
-        )
-    )
-    session.execute(
-        delete(QuestionChoice).where(QuestionChoice.question_id.in_(question_ids))
-    )
-    session.execute(
-        delete(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
-    )
-    session.execute(
-        delete(Question).where(Question.question_bank_id == question_bank_id)
-    )
+    # Questions, their choices and code, and class training links cascade.
     session.execute(delete(QuestionBank).where(QuestionBank.id == question_bank_id))
     session.commit()

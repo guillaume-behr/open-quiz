@@ -26,7 +26,6 @@ from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 from app.security import (
     refresh_request_proof,
 )
-from app.user_records import ERASED_TABLES
 
 from support import (
     ADMIN_PASSWORD,
@@ -470,8 +469,22 @@ def test_admin_cannot_delete_a_professor_running_an_exam(tmp_path: Path) -> None
             assert session.get(User, teacher_id) is not None
 
 
-def test_account_erasure_covers_every_table_that_depends_on_users() -> None:
-    """A new table owned through users must be added to the erasure."""
+# Foreign keys on the way from users that do not cascade, on purpose: a
+# question or a bank still drawn by a session must not be deleted on its own.
+# Deleting a user still removes them, since the same statement cascades to
+# those sessions through the user's quizzes.
+KEPT_REFERENCES = frozenset(
+    {
+        ("quiz_answers", "question_id"),
+        ("quiz_session_questions", "question_id"),
+        ("quiz_session_student_questions", "question_id"),
+        ("quiz_sessions", "training_question_bank_id"),
+    }
+)
+
+
+def test_deleting_a_user_cascades_to_every_table_that_depends_on_it() -> None:
+    """A new table owned through users is erased by declaring its foreign key."""
     dependent = {"users"}
     grew = True
     while grew:
@@ -482,4 +495,11 @@ def test_account_erasure_covers_every_table_that_depends_on_users() -> None:
             ):
                 dependent.add(name)
                 grew = True
-    assert dependent == ERASED_TABLES
+    not_cascading = {
+        (name, key.parent.name)
+        for name in dependent
+        for key in Base.metadata.tables[name].foreign_keys
+        if key.column.table.name in dependent
+        and key.ondelete not in ("CASCADE", "SET NULL")
+    }
+    assert not_cascading == KEPT_REFERENCES

@@ -33,7 +33,6 @@ from app.models import (
     QuizSessionStudentQuestion,
     Student,
     StudentClass,
-    TrainingQuizProfile,
 )
 from app.pagination import (
     LIKE_ESCAPE_CHARACTER,
@@ -364,13 +363,8 @@ def delete_quiz(
             ErrorCode.QUIZ_USED_BY_MAKEUP,
             "Impossible de supprimer ce quiz car un rattrapage l’utilise",
         )
-    session.execute(delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz_id))
-    session.execute(
-        delete(TrainingQuizProfile).where(TrainingQuizProfile.quiz_id == quiz_id)
-    )
-    session.execute(
-        delete(MakeupSessionQuiz).where(MakeupSessionQuiz.quiz_id == quiz_id)
-    )
+    # Its bank links and training profile cascade; cancelled sessions too, but
+    # their join codes are released by hand.
     cancelled_session_ids = list(
         session.scalars(
             select(QuizSession.id).where(
