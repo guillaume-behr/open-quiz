@@ -270,7 +270,9 @@ export function StudentsPanel({
                                         size="icon-sm"
                                         variant="ghost"
                                         className="absolute end-12 top-4"
-                                        aria-label={t("edit-student")}
+                                        aria-label={t("edit-student-named", {
+                                            name: student.display_name,
+                                        })}
                                         title={t("edit-student")}
                                         onClick={() => edit(student)}
                                     >
@@ -281,7 +283,9 @@ export function StudentsPanel({
                                         size="icon-sm"
                                         variant="destructive"
                                         className="absolute end-4 top-4"
-                                        aria-label={t("delete-student")}
+                                        aria-label={t("delete-student-named", {
+                                            name: student.display_name,
+                                        })}
                                         title={t("delete-student")}
                                         onClick={() => {
                                             setDeleting(student)

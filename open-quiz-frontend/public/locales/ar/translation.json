@@ -782,7 +782,6 @@
     "allow-code-execution": "السماح بتنفيذ الشفرة",
     "allow-code-execution-help": "The student can run their Python answer in the browser.",
     "show-password": "إظهار كلمة المرور",
-    "hide-password": "إخفاء كلمة المرور",
     "saving": "جارٍ الحفظ",
     "training-history": "عرض السجل",
     "training-history-title": "السجل — {{bank}}",
@@ -910,6 +909,18 @@
     "error-username-taken": "اسم المستخدم هذا مستخدم بالفعل في حساب آخر.",
     "error-service-unavailable": "الخدمة غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل.",
     "error-request-invalid": "الطلب المُرسَل غير صالح. أعد تحميل الصفحة ثم حاول مرة أخرى.",
+    "error-request-too-large": "البيانات المُرسَلة كبيرة جدًا. قلّل حجم الصور أو الملف.",
     "error-unexpected-response": "أرسل الخادم استجابة غير متوقعة. أعد تحميل الصفحة ثم حاول مرة أخرى.",
-    "error-request-too-large": "البيانات المُرسَلة كبيرة جدًا. قلّل حجم الصور أو الملف."
+    "code-editor-keyboard-hint": "يضيف Tab مسافة بادئة ويزيلها Shift+Tab. اضغط Escape ثم Tab لمغادرة المحرر.",
+    "answer-partially-correct": "إجابة صحيحة جزئيًا",
+    "training-potential-score-about": "حول هذه الدرجة",
+    "edit-quiz-named": "تعديل الاختبار «{{title}}»",
+    "delete-quiz-named": "حذف الاختبار «{{title}}»",
+    "edit-question-bank-named": "تعديل بنك الأسئلة «{{name}}»",
+    "delete-question-bank-named": "حذف بنك الأسئلة «{{name}}»",
+    "edit-class-named": "تغيير الفصل «{{name}}»",
+    "delete-class-named": "حذف الفصل «{{name}}»",
+    "edit-student-named": "تحرير الطالب «{{name}}»",
+    "delete-student-named": "حذف الطالب «{{name}}»",
+    "delete-result-named": "حذف نتيجة «{{title}}»"
 }

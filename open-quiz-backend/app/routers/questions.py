@@ -10,6 +10,7 @@ through their participation (app/routers/student_sessions.py).
 """
 
 import json
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -163,8 +164,8 @@ def create_question(
     question_bank_id: int,
     professor: ProfessorUser,
     session: DbSession,
-    payload: str = Form(),
-    image: UploadFile | None = File(default=None),
+    payload: Annotated[str, Form()],
+    image: Annotated[UploadFile | None, File()] = None,
 ) -> QuestionResponse:
     """Create a choice or written question, optionally with a private image."""
     owned_question_bank(question_bank_id, professor, session, for_update=True)
@@ -481,8 +482,8 @@ def update_question(
     request: Request,
     professor: ProfessorUser,
     session: DbSession,
-    payload: str = Form(),
-    image: UploadFile | None = File(default=None),
+    payload: Annotated[str, Form()],
+    image: Annotated[UploadFile | None, File()] = None,
 ) -> QuestionUpdateResponse:
     """Update a professor's question and replace its answer configuration."""
     # Locked: two edits of one question would otherwise both freeze a copy.

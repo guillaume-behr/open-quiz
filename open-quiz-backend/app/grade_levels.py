@@ -9,7 +9,8 @@ from fastapi import status
 from sqlalchemy import Select, case, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Mapped, Session
+from sqlalchemy.sql.elements import Case
 
 from app.errors import ApiError, ErrorCode
 from app.models import GradeLevel, QuestionBank, StudentClass, utc_now
@@ -17,7 +18,7 @@ from app.models import GradeLevel, QuestionBank, StudentClass, utc_now
 DEFAULT_GRADE_LEVELS = ("2nd", "1ere", "Tle")
 
 
-def grade_level_order(column):
+def grade_level_order(column: Mapped[str]) -> Case[int]:
     """Sort the default lycée levels chronologically, then custom levels."""
     return case(
         {name: position for position, name in enumerate(DEFAULT_GRADE_LEVELS)},

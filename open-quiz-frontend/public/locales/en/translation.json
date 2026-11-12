@@ -722,7 +722,6 @@
     "allow-code-execution": "Allow code execution",
     "allow-code-execution-help": "The student can run their Python answer in the browser's secure environment.",
     "show-password": "Show password",
-    "hide-password": "Hide password",
     "saving": "Saving",
     "training-history": "View history",
     "training-history-title": "History — {{bank}}",
@@ -846,6 +845,18 @@
     "error-username-taken": "This username is already used by another account.",
     "error-service-unavailable": "The service is temporarily unavailable. Try again in a moment.",
     "error-request-invalid": "The request sent is invalid. Reload the page and try again.",
+    "error-request-too-large": "The data sent is too large. Reduce the size of the images or the file.",
     "error-unexpected-response": "The server sent an unexpected response. Reload the page and try again.",
-    "error-request-too-large": "The data sent is too large. Reduce the size of the images or the file."
+    "code-editor-keyboard-hint": "Tab indents and Shift+Tab outdents. Press Escape then Tab to leave the editor.",
+    "answer-partially-correct": "Partially correct answer",
+    "training-potential-score-about": "About this score",
+    "edit-quiz-named": "Edit quiz “{{title}}”",
+    "delete-quiz-named": "Delete quiz “{{title}}”",
+    "edit-question-bank-named": "Edit question bank “{{name}}”",
+    "delete-question-bank-named": "Delete question bank “{{name}}”",
+    "edit-class-named": "Edit class “{{name}}”",
+    "delete-class-named": "Delete class “{{name}}”",
+    "edit-student-named": "Edit student “{{name}}”",
+    "delete-student-named": "Delete student “{{name}}”",
+    "delete-result-named": "Delete the result of “{{title}}”"
 }

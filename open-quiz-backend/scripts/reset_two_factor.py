@@ -5,7 +5,7 @@ from sqlalchemy import delete, select
 from app.audit import audit_event
 from app.auth_guards import two_factor_rate_subject
 from app.config import Settings, get_settings
-from app.database import build_session_factory
+from app.database import database_sessions
 from app.models import (
     AuthenticationChallenge,
     RefreshSession,
@@ -22,8 +22,10 @@ from app.rate_limit import (
 
 def reset(username: str, settings: Settings | None = None) -> bool:
     settings = settings or get_settings()
-    session_factory = build_session_factory(settings.database_url)
-    with session_factory() as session:
+    with (
+        database_sessions(settings.database_url) as session_factory,
+        session_factory() as session,
+    ):
         user = session.scalar(select(User).where(User.username == username))
         if user is None:
             return False

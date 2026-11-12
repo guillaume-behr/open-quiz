@@ -5,7 +5,7 @@ from dataclasses import Field, dataclass, fields
 from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 from dotenv import load_dotenv
 from pydantic import Field as PydanticField
@@ -97,6 +97,15 @@ def bounded(default: int, minimum: int, maximum: int | None = None) -> Any:
     return dataclass_field(default=default, metadata={BOUNDS: (minimum, maximum)})
 
 
+def require_secret(name: str, value: str) -> None:
+    """A long, non-example, unpredictable key."""
+    if len(value) < 32:
+        raise ValueError(f"{name} must contain at least 32 characters")
+    if value.startswith("replace-with-"):
+        raise ValueError(f"{name} is still set to its example value")
+    reject_predictable_secret(name, value, minimum_unique_characters=10)
+
+
 def check_bounds(settings: Any) -> None:
     """Refuse any bounded setting outside its range, naming its variable."""
     for setting in fields(settings):
@@ -176,6 +185,15 @@ class Settings:
         return [frontend_host, *INTERNAL_HOSTS, *(name for name in extra if name)]
 
     def __post_init__(self) -> None:
+        self._validate_admin_username()
+        self._validate_secrets()
+        self._validate_admin_password()
+        check_bounds(self)
+        self._validate_trusted_hosts()
+        origin = self._validate_frontend_origin()
+        self._validate_deployment(origin)
+
+    def _validate_admin_username(self) -> None:
         if not 1 <= len(self.admin_username) <= 80:
             raise ValueError("ADMIN_USERNAME must contain between 1 and 80 characters")
         # The characters a teacher's username may use (UserCreate): sign-in
@@ -185,38 +203,14 @@ class Settings:
             raise ValueError(
                 "ADMIN_USERNAME may only contain letters, digits, '.', '_' and '-'"
             )
-        if len(self.jwt_secret) < 32:
-            raise ValueError("JWT_SECRET must contain at least 32 characters")
-        if self.jwt_secret.startswith("replace-with-"):
-            raise ValueError("JWT_SECRET is still set to its example value")
-        reject_predictable_secret(
-            "JWT_SECRET",
-            self.jwt_secret,
-            minimum_unique_characters=10,
-        )
-        if len(self.totp_encryption_key) < 32:
-            raise ValueError("TOTP_ENCRYPTION_KEY must contain at least 32 characters")
-        if self.totp_encryption_key.startswith("replace-with-"):
-            raise ValueError("TOTP_ENCRYPTION_KEY is still set to its example value")
-        reject_predictable_secret(
-            "TOTP_ENCRYPTION_KEY",
-            self.totp_encryption_key,
-            minimum_unique_characters=10,
-        )
+
+    def _validate_secrets(self) -> None:
+        require_secret("JWT_SECRET", self.jwt_secret)
+        require_secret("TOTP_ENCRYPTION_KEY", self.totp_encryption_key)
         if self.jwt_secret == self.totp_encryption_key:
             raise ValueError("JWT_SECRET and TOTP_ENCRYPTION_KEY must be distinct")
-        if len(self.student_credential_encryption_key) < 32:
-            raise ValueError(
-                "STUDENT_CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters"
-            )
-        if self.student_credential_encryption_key.startswith("replace-with-"):
-            raise ValueError(
-                "STUDENT_CREDENTIAL_ENCRYPTION_KEY is still set to its example value"
-            )
-        reject_predictable_secret(
-            "STUDENT_CREDENTIAL_ENCRYPTION_KEY",
-            self.student_credential_encryption_key,
-            minimum_unique_characters=10,
+        require_secret(
+            "STUDENT_CREDENTIAL_ENCRYPTION_KEY", self.student_credential_encryption_key
         )
         if self.student_credential_encryption_key in {
             self.jwt_secret,
@@ -225,6 +219,8 @@ class Settings:
             raise ValueError(
                 "STUDENT_CREDENTIAL_ENCRYPTION_KEY must be distinct from other secrets"
             )
+
+    def _validate_admin_password(self) -> None:
         if len(self.admin_password) < 16:
             raise ValueError("ADMIN_PASSWORD must contain at least 16 characters")
         if len(self.admin_password) > 256:
@@ -236,13 +232,15 @@ class Settings:
             self.admin_password,
             minimum_unique_characters=6,
         )
-        check_bounds(self)
+
+    def _validate_trusted_hosts(self) -> None:
         for name in self.trusted_hosts.split(","):
             if name.strip() and not TRUSTED_HOST_PATTERN.match(name.strip()):
                 raise ValueError(
                     "TRUSTED_HOSTS must list host names separated by commas"
                 )
 
+    def _validate_frontend_origin(self) -> ParseResult:
         origin = urlparse(self.frontend_origin)
         if origin.scheme not in {"http", "https"} or not origin.netloc:
             raise ValueError("FRONTEND_ORIGIN must be an HTTP(S) origin")
@@ -257,6 +255,9 @@ class Settings:
                 "FRONTEND_ORIGIN must not contain a trailing slash, path, "
                 "parameters, query, or fragment"
             )
+        return origin
+
+    def _validate_deployment(self, origin: ParseResult) -> None:
         if self.environment not in {"development", "test", "production"}:
             raise ValueError("APP_ENV must be development, test, or production")
         database = urlparse(self.database_url)

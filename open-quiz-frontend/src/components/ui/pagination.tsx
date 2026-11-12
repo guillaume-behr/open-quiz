@@ -30,7 +30,7 @@ export function Pagination({
                 aria-label={t("previous-page")}
                 onClick={() => onPageChange(currentPage - 1)}
             >
-                <ChevronLeft aria-hidden="true" />
+                <ChevronLeft className="rtl:rotate-180" aria-hidden="true" />
             </Button>
             <p
                 className="min-w-28 text-center text-sm text-muted-foreground"
@@ -50,7 +50,7 @@ export function Pagination({
                 aria-label={t("next-page")}
                 onClick={() => onPageChange(currentPage + 1)}
             >
-                <ChevronRight aria-hidden="true" />
+                <ChevronRight className="rtl:rotate-180" aria-hidden="true" />
             </Button>
         </nav>
     )

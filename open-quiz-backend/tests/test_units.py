@@ -651,10 +651,11 @@ def test_reset_two_factor_script_entry_point(
     assert missing.value.code == 2
     assert "user not found" in capsys.readouterr().err
 
-    from app.database import build_session_factory
     from app.models import User
 
-    with build_session_factory(settings.database_url)() as session:
+    from support import session_factory_for
+
+    with session_factory_for(settings.database_url)() as session:
         session.add(
             User(
                 username="reset.me",
@@ -676,11 +677,12 @@ def test_rotate_local_secrets_replaces_secrets_and_revokes_sessions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     import scripts.rotate_local_secrets as rotation
-    from app.database import build_session_factory
     from app.models import RefreshSession, User
 
+    from support import session_factory_for
+
     settings = settings_for(tmp_path / "rotate-secrets")
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = session_factory_for(settings.database_url)
     with session_factory() as session:
         user = User(username="teacher", display_name="T", password_hash="unused")
         session.add(user)
@@ -803,3 +805,12 @@ def test_search_patterns_for_empty_or_wildcard_only_input() -> None:
     assert contains_pattern("") == "%%"
     assert contains_pattern("%%") == r"%\%\%%"
     assert contains_pattern("\\%") == r"%\\\%%"
+
+
+def test_a_session_without_a_class_keeps_its_recorded_class_name() -> None:
+    from types import SimpleNamespace
+
+    from app.session_responses import quiz_session_class_name
+
+    detached = SimpleNamespace(class_id=None, class_name="2nde B")
+    assert quiz_session_class_name(detached, None) == "2nde B"

@@ -3,6 +3,9 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
+  # Weekly, so that a new vulnerability in an image surfaces without a push.
+  schedule:
+    - cron: "17 4 * * 1"
   push:
     branches:
       - master
@@ -11,7 +14,42 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run it supersedes; every commit
+# on the default branch is still validated.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  lint-infra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
+      - name: Check the shell scripts
+        run: |
+          # POSIX sh scripts: parsed by dash (the runner's sh), then linted
+          # as sh. shellcheck ships with the runner image.
+          scripts="install.sh install-dev.sh update.sh backup.sh restore.sh scripts/*.sh"
+          for script in $scripts; do
+            sh -n "$script"
+          done
+          # shellcheck disable=SC2086 # One word per script.
+          shellcheck --shell=sh $scripts
+      - name: Lint the Dockerfiles
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: open-quiz-backend/Dockerfile
+      - name: Lint the frontend Dockerfile
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: open-quiz-frontend/Dockerfile
+      - name: Lint the workflows
+        run: |
+          # The download script of the release pinned below, by commit.
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/914e7df21a07ef503a81201c76d2b11c789d3fca/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -62,7 +100,7 @@ jobs:
           ADMIN_PASSWORD: ci-test-admin-password-2026
           DATABASE_URL: postgresql+psycopg://open_quiz_test:ci-test-postgres-password-2026@127.0.0.1:5432/open_quiz_test
           TEST_DATABASE_URL: postgresql+psycopg://open_quiz_test:ci-test-postgres-password-2026@127.0.0.1:5432/open_quiz_test
-        run: uv run --frozen pytest -q --cov --cov-report=term-missing
+        run: uv run --frozen pytest -q --numprocesses auto --cov --cov-report=term-missing
       - run: uv run --frozen pip-audit
 
   frontend:
@@ -139,14 +177,17 @@ jobs:
           # every Compose setting listed there, at its default.
           cp .env.example .env
           docker compose config --quiet
-          for variable in $(sed -n 's/^\([A-Z_]*\)=.*/\1/p' .env.example); do
+          while read -r variable; do
             grep -q "$variable" docker-compose.yml scripts/common.sh \
               || { echo "::error::.env.example lists $variable, read neither by docker-compose.yml nor by the scripts"; exit 1; }
-          done
-          for variable in $(grep -o '\${[A-Z_]*' docker-compose.yml | sort -u | cut -c3-); do
+          done < <(sed -n 's/^\([A-Z_]*\)=.*/\1/p' .env.example)
+          # shellcheck disable=SC2016 # A literal ${ to find in the file.
+          while read -r variable; do
             grep -q "^$variable=" .env.example \
               || { echo "::error::docker-compose.yml reads $variable, missing from .env.example"; exit 1; }
-          done
+          done < <(grep -o '\${[A-Z_]*' docker-compose.yml | sort -u | cut -c3-)
+          # install.sh writes these itself below.
+          rm open-quiz-backend/.env .env
       - name: Check that both READMEs have the same sections
         run: |
           # Heading levels and their emoji, in order: the titles themselves
@@ -165,6 +206,8 @@ jobs:
           outputs: type=oci,dest=${{ runner.temp }}/open-quiz-backend.tar
           provenance: mode=max
           sbom: true
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
       - name: Build frontend with provenance and SBOM
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.0.0
         with:
@@ -174,25 +217,60 @@ jobs:
           outputs: type=oci,dest=${{ runner.temp }}/open-quiz-frontend.tar
           provenance: mode=max
           sbom: true
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+      - name: Unpack the images for the scan
+        run: |
+          # Trivy reads an OCI layout directory, not its tar archive.
+          for image in open-quiz-backend open-quiz-frontend; do
+            mkdir -p "$RUNNER_TEMP/$image-oci"
+            tar -xf "$RUNNER_TEMP/$image.tar" -C "$RUNNER_TEMP/$image-oci"
+          done
+      - name: Scan the backend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          input: ${{ runner.temp }}/open-quiz-backend-oci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+      - name: Scan the frontend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          input: ${{ runner.temp }}/open-quiz-frontend-oci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+          # The first scan already downloaded the database.
+          skip-setup-trivy: true
+      - name: Remove what the scans left in the checkout
+        # The Trivy action writes its cache and the merged ignore file into
+        # the working tree, which the deployment check below would flag.
+        run: rm -rf .cache trivyignores
+      - name: Install with install.sh, as a new deployment would
+        run: |
+          # The domain the network smoke test sends as its Origin. install.sh
+          # generates the secrets, validates them, then runs update.sh.
+          sh ./install.sh --domain quiz.example.com >"$RUNNER_TEMP/install.log" 2>&1 \
+            || { grep -v 'Administrator password' "$RUNNER_TEMP/install.log"; exit 1; }
+          # A second run refuses, and changes nothing.
+          before=$(sha256sum .env open-quiz-backend/.env open-quiz-backend/.env.database)
+          if sh ./install.sh --domain quiz.example.com >"$RUNNER_TEMP/out" 2>&1; then
+            echo "::error::a second install.sh run went on"
+            exit 1
+          fi
+          grep -q 'already exists' "$RUNNER_TEMP/out"
+          if [ "$(sha256sum .env open-quiz-backend/.env open-quiz-backend/.env.database)" != "$before" ]; then
+            echo "::error::a second install.sh run changed the configuration"
+            exit 1
+          fi
+          # An update of an installed deployment.
+          sh ./update.sh --no-pull
       - name: Run container HTTP and WebSocket smoke test
         run: |
-          sed -i \
-            -e 's|replace-with-a-long-random-value-of-at-least-32-characters|ci-network-jwt-secret-2026-ABCDEFGHIJKLMNOPQRSTUVWXYZ|' \
-            -e 's|replace-with-a-different-random-value-of-at-least-32-characters|ci-network-totp-secret-2026-abcdefghijklmnopqrstuvwxyz|' \
-            -e 's|replace-with-another-random-value-of-at-least-32-characters|ci-network-student-secret-2026-0123456789-abcdef|' \
-            -e 's|replace-with-a-strong-password-of-at-least-16-characters|ci-network-admin-password-2026!|' \
-            -e 's|replace-with-a-strong-database-password|ci-network-database-password-2026|' \
-            open-quiz-backend/.env
-          # The same order as install.sh and update.sh: the database reads
-          # its superuser password from its own file, then the API's
-          # unprivileged role is created before the API starts.
-          printf 'POSTGRES_PASSWORD=%s\n' 'ci-network-postgres-password-2026!' \
-            > open-quiz-backend/.env.database
-          docker compose up --wait --detach open-quiz-database
-          SCRIPT_DIR=$PWD sh -c '. ./scripts/common.sh
-            compose() { docker compose "$@"; }
-            configure_database_roles open-quiz-backend/.env'
-          docker compose up --build --wait --detach
           docker compose exec -T open-quiz-backend \
             /app/.venv/bin/python scripts/container_network_smoke.py
           # For the record: image sizes, and the API's peak process and
@@ -465,5 +543,59 @@ jobs:
         if: failure()
         run: docker compose logs --no-color --tail 200
       - name: Stop smoke-test containers
+        if: always()
+        run: docker compose down --volumes
+
+  legacy-upgrade:
+    # A deployment from before the API's own PostgreSQL role: one .env with
+    # the superuser in DATABASE_URL and POSTGRES_PASSWORD, no .env.database.
+    # update.sh must move it to the application role and keep its data.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
+      - name: Start a database in the legacy layout, with data
+        run: |
+          superuser_password=ci-legacy-postgres-password-2026
+          sed \
+            -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql+psycopg://open_quiz@open-quiz-database:5432/open_quiz|" \
+            -e "s|^DATABASE_PASSWORD=.*|POSTGRES_PASSWORD=$superuser_password|" \
+            -e 's|replace-with-a-long-random-value-of-at-least-32-characters|ci-legacy-jwt-secret-2026-ABCDEFGHIJKLMNOPQRSTUVWXYZ|' \
+            -e 's|replace-with-a-different-random-value-of-at-least-32-characters|ci-legacy-totp-secret-2026-abcdefghijklmnopqrstuvwxyz|' \
+            -e 's|replace-with-another-random-value-of-at-least-32-characters|ci-legacy-student-secret-2026-0123456789-abcdef|' \
+            -e 's|replace-with-a-strong-password-of-at-least-16-characters|ci-legacy-admin-password-2026!|' \
+            open-quiz-backend/.env.production.example >open-quiz-backend/.env
+          cp .env.example .env
+          # The database volume such a deployment has: initialised with the
+          # superuser password, holding data. The file is removed again
+          # before the update, as a legacy deployment never had it.
+          printf 'POSTGRES_PASSWORD=%s\n' "$superuser_password" >open-quiz-backend/.env.database
+          docker compose up --wait --detach open-quiz-database
+          rm open-quiz-backend/.env.database
+          docker compose exec -T open-quiz-database psql --username=open_quiz --dbname=open_quiz \
+            --command="CREATE TABLE written_before_upgrade (id integer); INSERT INTO written_before_upgrade VALUES (1)"
+      - name: Update with update.sh
+        run: sh ./update.sh --no-pull
+      - name: Check the migration to the application role
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          env_file=open-quiz-backend/.env
+          grep -q '^DATABASE_URL=postgresql+psycopg://open_quiz_app@' "$env_file" \
+            || fail "DATABASE_URL still names the superuser"
+          grep -Eq '^DATABASE_PASSWORD=.{32,}' "$env_file" || fail "no DATABASE_PASSWORD was generated"
+          ! grep -q '^POSTGRES_PASSWORD=' "$env_file" || fail "the superuser password stayed in .env"
+          grep -q '^POSTGRES_PASSWORD=ci-legacy-postgres-password-2026$' open-quiz-backend/.env.database \
+            || fail ".env.database does not hold the superuser password"
+          [ "$(stat -c %a "$env_file") $(stat -c %a open-quiz-backend/.env.database)" = "600 600" ] \
+            || fail "the environment files are readable by others"
+          rows=$(docker compose exec -T open-quiz-database psql --username=open_quiz --dbname=open_quiz \
+            --tuples-only --no-align --command="SELECT count(*) FROM written_before_upgrade")
+          [ "$rows" = 1 ] || fail "the update lost data"
+          docker compose exec -T open-quiz-backend \
+            /app/.venv/bin/python scripts/container_network_smoke.py
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+      - name: Stop containers
         if: always()
         run: docker compose down --volumes

@@ -2,6 +2,7 @@
 
 set -eu
 
+# shellcheck disable=SC1007 # "CDPATH= cd" empties CDPATH for this cd only.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/scripts/common.sh"
 
@@ -28,6 +29,7 @@ dev_compose() {
 
 # Run psql inside the database container as the administrative role.
 database_psql() {
+    # shellcheck disable=SC2016 # Expanded by the shell inside the container.
     dev_compose exec -T open-quiz-database sh -c \
         'PGPASSWORD="$POSTGRES_PASSWORD" exec psql --host=127.0.0.1 \
             --username=open_quiz --dbname=open_quiz --no-psqlrc --quiet \
@@ -123,6 +125,7 @@ cd "$SCRIPT_DIR"
 step 'Starting PostgreSQL'
 dev_compose up --detach --wait open-quiz-database
 
+# shellcheck disable=SC2016 # Expanded by the shell inside the container.
 if ! dev_compose exec -T open-quiz-database sh -c \
     'PGPASSWORD="$POSTGRES_PASSWORD" psql --host=127.0.0.1 --username=open_quiz --dbname=open_quiz --command="SELECT 1"' \
     >/dev/null 2>&1; then

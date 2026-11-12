@@ -254,7 +254,7 @@ function QuizCard({
                 size="icon-sm"
                 variant="ghost"
                 className="absolute end-12 top-4 z-10"
-                aria-label={t("edit-quiz")}
+                aria-label={t("edit-quiz-named", { title: quiz.title })}
                 title={t("edit-quiz")}
                 onClick={onEdit}
             >
@@ -265,7 +265,7 @@ function QuizCard({
                 size="icon-sm"
                 variant="destructive"
                 className="absolute end-4 top-4"
-                aria-label={t("delete-quiz")}
+                aria-label={t("delete-quiz-named", { title: quiz.title })}
                 title={t("delete-quiz")}
                 onClick={onDelete}
             >

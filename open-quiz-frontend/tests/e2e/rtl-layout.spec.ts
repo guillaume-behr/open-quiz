@@ -135,6 +135,35 @@ test("long card titles clear the action buttons in Arabic", async ({
     }
 })
 
+test("pagination chevrons point along the reading direction in Arabic", async ({
+    page,
+}) => {
+    await mockArabicTeacher(page)
+    // Enough banks for a second page; registered last, so it wins.
+    await page.route(/\/api\/question-banks(\?|$)/, (route) =>
+        route.fulfill({
+            json: [bank],
+            headers: {
+                "X-Page": "1",
+                "X-Page-Size": "8",
+                "X-Total-Count": "20",
+            },
+        })
+    )
+    await page.goto("/teacher/dashboard")
+    await page
+        .getByRole("button", { name: "بنوك الأسئلة", exact: true })
+        .first()
+        .click()
+
+    // "Previous" points right and "next" points left in Arabic.
+    for (const name of ["الصفحة السابقة", "الصفحة التالية"]) {
+        await expect(
+            page.getByRole("button", { name }).locator("svg")
+        ).toHaveCSS("rotate", "180deg")
+    }
+})
+
 test("the password reveal button clears the field in Arabic", async ({
     page,
 }) => {
