@@ -177,14 +177,15 @@ jobs:
           # every Compose setting listed there, at its default.
           cp .env.example .env
           docker compose config --quiet
-          for variable in $(sed -n 's/^\([A-Z_]*\)=.*/\1/p' .env.example); do
+          while read -r variable; do
             grep -q "$variable" docker-compose.yml scripts/common.sh \
               || { echo "::error::.env.example lists $variable, read neither by docker-compose.yml nor by the scripts"; exit 1; }
-          done
-          for variable in $(grep -o '\${[A-Z_]*' docker-compose.yml | sort -u | cut -c3-); do
+          done < <(sed -n 's/^\([A-Z_]*\)=.*/\1/p' .env.example)
+          # shellcheck disable=SC2016 # A literal ${ to find in the file.
+          while read -r variable; do
             grep -q "^$variable=" .env.example \
               || { echo "::error::docker-compose.yml reads $variable, missing from .env.example"; exit 1; }
-          done
+          done < <(grep -o '\${[A-Z_]*' docker-compose.yml | sort -u | cut -c3-)
           # install.sh writes these itself below.
           rm open-quiz-backend/.env .env
       - name: Check that both READMEs have the same sections
