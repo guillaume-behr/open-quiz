@@ -1,2 +1,8 @@
 # Vulnerabilities the CI image scan accepts, one ID per line, each with the
 # reason and the date to look at it again. Empty: nothing is accepted.
+
+# golang.org/x/net/html denial of service, in the Caddy binary of the frontend
+# image. Caddy 2.11.9, the latest release, still links x/net 0.60.0. Only
+# Caddy's templates and markdown handlers parse HTML, and the Caddyfile uses
+# neither. Look again at the next Caddy release (after 2026-11-12).
+CVE-2026-78661
