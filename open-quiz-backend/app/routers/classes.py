@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,10 +20,8 @@ from app.models import (
     ClassTrainingQuestionBank,
     GradeLevel,
     MakeupSession,
-    MakeupSessionSelection,
     QuestionBank,
     Quiz,
-    QuizParticipant,
     QuizSession,
     Student,
     StudentAccount,
@@ -377,32 +375,8 @@ def delete_class(
         session.scalars(select(Student.id).where(Student.class_id == class_id))
     )
     delete_unfinished_training_sessions(student_ids, session)
-    session.execute(
-        update(QuizParticipant)
-        .where(QuizParticipant.student_id.in_(student_ids))
-        .values(student_id=None)
-    )
-    session.execute(
-        update(QuizSession)
-        .where(QuizSession.class_id == class_id)
-        .values(class_id=None)
-    )
-    session.execute(
-        update(MakeupSession)
-        .where(MakeupSession.class_id == class_id)
-        .values(class_id=None)
-    )
-    session.execute(
-        delete(ClassTrainingQuestionBank).where(
-            ClassTrainingQuestionBank.class_id == class_id
-        )
-    )
-    session.execute(
-        delete(MakeupSessionSelection).where(
-            MakeupSessionSelection.student_id.in_(student_ids)
-        )
-    )
-    session.execute(delete(Student).where(Student.class_id == class_id))
+    # Memberships and their make-up selections cascade; sessions, make-up
+    # sessions and participants keep their history without the class.
     session.execute(delete(StudentClass).where(StudentClass.id == class_id))
     session.commit()
 

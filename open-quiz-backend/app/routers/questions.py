@@ -573,10 +573,7 @@ def delete_question(
             "Cette question est utilisée par un quiz déjà lancé",
         )
     discard_training_sessions_using_questions([question_id], session)
-    session.execute(
-        delete(QuestionChoice).where(QuestionChoice.question_id == question_id)
-    )
-    session.execute(delete(QuestionCode).where(QuestionCode.question_id == question_id))
+    # Its choices and code cascade.
     session.execute(delete(Question).where(Question.id == question_id))
     session.commit()
 

@@ -60,7 +60,9 @@ class GradeLevel(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     name: Mapped[str] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
@@ -79,7 +81,9 @@ class StudentClass(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     name: Mapped[str] = mapped_column(String(120))
     grade_level: Mapped[str] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(
@@ -91,7 +95,9 @@ class StudentAccount(Base):
     __tablename__ = "student_accounts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     identifier: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
@@ -114,9 +120,14 @@ class Student(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    class_id: Mapped[int] = mapped_column(ForeignKey("student_classes.id"), index=True)
+    class_id: Mapped[int] = mapped_column(
+        ForeignKey("student_classes.id", ondelete="CASCADE"), index=True
+    )
     account_id: Mapped[int | None] = mapped_column(
-        ForeignKey("student_accounts.id"), nullable=True, unique=True, index=True
+        ForeignKey("student_accounts.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+        index=True,
     )
     identifier: Mapped[str] = mapped_column(String(80))
     display_name: Mapped[str] = mapped_column(String(120))
@@ -138,7 +149,9 @@ class QuestionBank(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     grade_level: Mapped[str] = mapped_column(String(80))
     chapter: Mapped[str] = mapped_column(String(160))
     created_at: Mapped[datetime] = mapped_column(
@@ -150,10 +163,12 @@ class ClassTrainingQuestionBank(Base):
     __tablename__ = "class_training_question_banks"
 
     class_id: Mapped[int] = mapped_column(
-        ForeignKey("student_classes.id"), primary_key=True
+        ForeignKey("student_classes.id", ondelete="CASCADE"), primary_key=True
     )
     question_bank_id: Mapped[int] = mapped_column(
-        ForeignKey("question_banks.id"), primary_key=True, index=True
+        ForeignKey("question_banks.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
     )
     question_count: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
@@ -194,7 +209,7 @@ class Question(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     question_bank_id: Mapped[int] = mapped_column(
-        ForeignKey("question_banks.id"), index=True
+        ForeignKey("question_banks.id", ondelete="CASCADE"), index=True
     )
     prompt: Mapped[str] = mapped_column(Text)
     difficulty: Mapped[str] = mapped_column(String(20))
@@ -218,7 +233,7 @@ class QuestionCode(Base):
     __tablename__ = "question_codes"
 
     question_id: Mapped[int] = mapped_column(
-        ForeignKey("questions.id"), primary_key=True
+        ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True
     )
     language: Mapped[str] = mapped_column(String(30))
     content: Mapped[str] = mapped_column(Text)
@@ -235,7 +250,9 @@ class QuestionChoice(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True)
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("questions.id", ondelete="CASCADE"), index=True
+    )
     label: Mapped[str] = mapped_column(Text)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False)
     points: Mapped[float] = mapped_column(Float, default=0.0)
@@ -255,7 +272,9 @@ class Quiz(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     mode: Mapped[str] = mapped_column(String(20), default=QuizMode.EXAM, index=True)
     title: Mapped[str] = mapped_column(String(160))
     source_language: Mapped[str] = mapped_column(String(35), default="fr")
@@ -284,18 +303,24 @@ class Quiz(Base):
 class QuizQuestionBank(Base):
     __tablename__ = "quiz_question_banks"
 
-    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(
+        ForeignKey("quizzes.id", ondelete="CASCADE"), primary_key=True
+    )
     question_bank_id: Mapped[int] = mapped_column(
-        ForeignKey("question_banks.id"), primary_key=True, index=True
+        ForeignKey("question_banks.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
     )
 
 
 class TrainingQuizProfile(Base):
     __tablename__ = "training_quiz_profiles"
 
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     quiz_id: Mapped[int] = mapped_column(
-        ForeignKey("quizzes.id"), unique=True, index=True
+        ForeignKey("quizzes.id", ondelete="CASCADE"), unique=True, index=True
     )
 
 
@@ -315,7 +340,9 @@ class QuizSession(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), index=True)
+    quiz_id: Mapped[int] = mapped_column(
+        ForeignKey("quizzes.id", ondelete="CASCADE"), index=True
+    )
     quiz_title: Mapped[str | None] = mapped_column(String(160), nullable=True)
     source_language: Mapped[str | None] = mapped_column(String(35), nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -327,7 +354,7 @@ class QuizSession(Base):
     allow_negative_points: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     same_questions_for_all: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     class_id: Mapped[int | None] = mapped_column(
-        ForeignKey("student_classes.id"), nullable=True, index=True
+        ForeignKey("student_classes.id", ondelete="SET NULL"), nullable=True, index=True
     )
     class_name: Mapped[str] = mapped_column(String(120))
     join_code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
@@ -347,7 +374,7 @@ class QuizSession(Base):
         DateTime(timezone=True), nullable=True
     )
     makeup_session_id: Mapped[int | None] = mapped_column(
-        ForeignKey("makeup_sessions.id"), nullable=True, index=True
+        ForeignKey("makeup_sessions.id", ondelete="CASCADE"), nullable=True, index=True
     )
     training_question_bank_id: Mapped[int | None] = mapped_column(
         ForeignKey("question_banks.id"), nullable=True, index=True
@@ -363,9 +390,11 @@ class MakeupSession(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     class_id: Mapped[int | None] = mapped_column(
-        ForeignKey("student_classes.id"), nullable=True, index=True
+        ForeignKey("student_classes.id", ondelete="SET NULL"), nullable=True, index=True
     )
     class_name: Mapped[str] = mapped_column(String(120))
     join_code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
@@ -379,10 +408,10 @@ class MakeupSessionQuiz(Base):
     __tablename__ = "makeup_session_quizzes"
 
     session_id: Mapped[int] = mapped_column(
-        ForeignKey("makeup_sessions.id"), primary_key=True
+        ForeignKey("makeup_sessions.id", ondelete="CASCADE"), primary_key=True
     )
     quiz_id: Mapped[int] = mapped_column(
-        ForeignKey("quizzes.id"), primary_key=True, index=True
+        ForeignKey("quizzes.id", ondelete="CASCADE"), primary_key=True, index=True
     )
 
 
@@ -390,10 +419,10 @@ class MakeupSessionSelection(Base):
     __tablename__ = "makeup_session_selections"
 
     session_id: Mapped[int] = mapped_column(
-        ForeignKey("makeup_sessions.id"), primary_key=True
+        ForeignKey("makeup_sessions.id", ondelete="CASCADE"), primary_key=True
     )
     student_id: Mapped[int] = mapped_column(
-        ForeignKey("students.id"), primary_key=True, index=True
+        ForeignKey("students.id", ondelete="CASCADE"), primary_key=True, index=True
     )
 
 
@@ -414,7 +443,7 @@ class QuizSessionQuestion(Base):
     )
 
     session_id: Mapped[int] = mapped_column(
-        ForeignKey("quiz_sessions.id"), primary_key=True
+        ForeignKey("quiz_sessions.id", ondelete="CASCADE"), primary_key=True
     )
     question_id: Mapped[int] = mapped_column(
         ForeignKey("questions.id"), primary_key=True, index=True
@@ -435,7 +464,7 @@ class QuizSessionStudentQuestion(Base):
     )
 
     session_id: Mapped[int] = mapped_column(
-        ForeignKey("quiz_sessions.id"), primary_key=True
+        ForeignKey("quiz_sessions.id", ondelete="CASCADE"), primary_key=True
     )
     student_id: Mapped[int | None] = mapped_column(
         ForeignKey("students.id", ondelete="SET NULL"), nullable=True, index=True
@@ -458,9 +487,11 @@ class QuizParticipant(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("quiz_sessions.id"), index=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_sessions.id", ondelete="CASCADE"), index=True
+    )
     student_id: Mapped[int | None] = mapped_column(
-        ForeignKey("students.id"), nullable=True, index=True
+        ForeignKey("students.id", ondelete="SET NULL"), nullable=True, index=True
     )
     student_identifier: Mapped[str] = mapped_column(String(80))
     student_display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -501,9 +532,11 @@ class QuizAnswer(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("quiz_sessions.id"), index=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_sessions.id", ondelete="CASCADE"), index=True
+    )
     participant_id: Mapped[int] = mapped_column(
-        ForeignKey("quiz_participants.id"), index=True
+        ForeignKey("quiz_participants.id", ondelete="CASCADE"), index=True
     )
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True)
     answer_data: Mapped[str] = mapped_column(Text)
@@ -520,7 +553,9 @@ class RefreshSession(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     expires_at: Mapped[int] = mapped_column(BigInteger)
     revoked_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -532,7 +567,7 @@ class RefreshSessionFamily(Base):
     __tablename__ = "refresh_session_families"
 
     session_id: Mapped[int] = mapped_column(
-        ForeignKey("refresh_sessions.id"), primary_key=True
+        ForeignKey("refresh_sessions.id", ondelete="CASCADE"), primary_key=True
     )
     family_id: Mapped[str] = mapped_column(String(64), index=True)
     parent_session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -541,7 +576,9 @@ class RefreshSessionFamily(Base):
 class TwoFactorCredential(Base):
     __tablename__ = "two_factor_credentials"
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     encrypted_secret: Mapped[str] = mapped_column(String(255))
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     last_counter: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -551,7 +588,9 @@ class AuthenticationChallenge(Base):
     __tablename__ = "authentication_challenges"
 
     token_id_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     purpose: Mapped[str] = mapped_column(String(40))
     expires_at: Mapped[int] = mapped_column(BigInteger, index=True)
     used_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
