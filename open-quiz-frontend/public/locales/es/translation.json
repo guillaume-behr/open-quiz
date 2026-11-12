@@ -847,6 +847,7 @@
     "error-service-unavailable": "El servicio no está disponible temporalmente. Inténtalo de nuevo en un momento.",
     "error-request-invalid": "La solicitud enviada no es válida. Recarga la página e inténtalo de nuevo.",
     "error-request-too-large": "Los datos enviados son demasiado grandes. Reduce el tamaño de las imágenes o del archivo.",
+    "error-unexpected-response": "El servidor envió una respuesta inesperada. Recarga la página e inténtalo de nuevo.",
     "code-editor-keyboard-hint": "Tab aplica sangría y Mayús+Tab la quita. Pulsa Escape y luego Tab para salir del editor.",
     "answer-partially-correct": "Respuesta parcialmente correcta",
     "training-potential-score-about": "Acerca de esta nota",

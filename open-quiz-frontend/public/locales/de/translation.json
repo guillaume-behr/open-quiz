@@ -846,6 +846,7 @@
     "error-service-unavailable": "Der Dienst ist vorübergehend nicht verfügbar. Versuchen Sie es gleich noch einmal.",
     "error-request-invalid": "Die gesendete Anfrage ist ungültig. Laden Sie die Seite neu und versuchen Sie es erneut.",
     "error-request-too-large": "Die gesendeten Daten sind zu groß. Verkleinern Sie die Bilder oder die Datei.",
+    "error-unexpected-response": "Der Server hat eine unerwartete Antwort gesendet. Laden Sie die Seite neu und versuchen Sie es erneut.",
     "code-editor-keyboard-hint": "Tab rückt ein, Umschalt+Tab rückt aus. Drücken Sie Esc und dann Tab, um den Editor zu verlassen.",
     "answer-partially-correct": "Teilweise richtige Antwort",
     "training-potential-score-about": "Hinweis zu dieser Punktzahl",

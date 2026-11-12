@@ -847,6 +847,7 @@
     "error-service-unavailable": "O serviço está temporariamente indisponível. Tente novamente dentro de instantes.",
     "error-request-invalid": "O pedido enviado é inválido. Recarregue a página e tente novamente.",
     "error-request-too-large": "Os dados enviados são demasiado grandes. Reduza o tamanho das imagens ou do ficheiro.",
+    "error-unexpected-response": "O servidor enviou uma resposta inesperada. Recarregue a página e tente novamente.",
     "code-editor-keyboard-hint": "Tab adiciona recuo e Shift+Tab remove-o. Pressione Escape e depois Tab para sair do editor.",
     "answer-partially-correct": "Resposta parcialmente correta",
     "training-potential-score-about": "Sobre esta nota",

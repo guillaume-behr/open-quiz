@@ -847,6 +847,7 @@
     "error-service-unavailable": "Le service est momentanément indisponible. Réessayez dans un instant.",
     "error-request-invalid": "La requête envoyée est invalide. Rechargez la page, puis réessayez.",
     "error-request-too-large": "Les données envoyées sont trop volumineuses. Réduisez la taille des images ou du fichier.",
+    "error-unexpected-response": "Le serveur a renvoyé une réponse inattendue. Rechargez la page, puis réessayez.",
     "code-editor-keyboard-hint": "Tab indente et Maj+Tab désindente. Appuyez sur Échap puis Tab pour quitter l’éditeur.",
     "answer-partially-correct": "Réponse partiellement correcte",
     "training-potential-score-about": "À propos de cette note",

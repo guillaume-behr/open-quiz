@@ -910,6 +910,7 @@
     "error-service-unavailable": "الخدمة غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل.",
     "error-request-invalid": "الطلب المُرسَل غير صالح. أعد تحميل الصفحة ثم حاول مرة أخرى.",
     "error-request-too-large": "البيانات المُرسَلة كبيرة جدًا. قلّل حجم الصور أو الملف.",
+    "error-unexpected-response": "أرسل الخادم استجابة غير متوقعة. أعد تحميل الصفحة ثم حاول مرة أخرى.",
     "code-editor-keyboard-hint": "يضيف Tab مسافة بادئة ويزيلها Shift+Tab. اضغط Escape ثم Tab لمغادرة المحرر.",
     "answer-partially-correct": "إجابة صحيحة جزئيًا",
     "training-potential-score-about": "حول هذه الدرجة",
