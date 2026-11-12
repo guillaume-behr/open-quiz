@@ -1,11 +1,12 @@
 """Questions of a bank: listing, creation, edits, deletion and images.
 
-Editing a question regrades the finished sessions that used it, except those
-whose grades are published, and is refused while an exam or make-up session
-that drew it is still open; a question that any exam session has drawn cannot
-be deleted. Uploaded images
-are normalized; these routes serve them only to the bank's owner, and students
-load them through their participation (app/routers/student_sessions.py).
+A question stays editable and deletable after exams used it: past sessions
+keep the version they need (app/question_history.py). Editing regrades the
+finished sessions that used it, except those whose grades are published,
+which keep a frozen copy; editing or deleting it is refused while an exam or
+make-up session that drew it is still open. Uploaded images are normalized;
+these routes serve them only to the bank's owner, and students load them
+through their participation (app/routers/student_sessions.py).
 """
 
 import json
@@ -20,12 +21,11 @@ from fastapi import (
     status,
 )
 from pydantic import ValidationError
-from sqlalchemy import CompoundSelect, delete, func, select, union
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
-from app.enums import QuizMode, SessionStatus
 from app.errors import ApiError, ErrorCode
 from app.images import (
     ALLOWED_IMAGE_TYPES,
@@ -44,18 +44,19 @@ from app.models import (
     QuestionBank,
     QuestionChoice,
     QuestionCode,
-    Quiz,
-    QuizAnswer,
     QuizSession,
-    QuizSessionQuestion,
-    QuizSessionStudentQuestion,
+)
+from app.question_history import (
+    active_exam_uses_questions,
+    freeze_for_published_sessions,
+    remove_questions,
+    sessions_using_questions,
 )
 from app.question_records import (
     MAX_IMPORT_IMAGE_BYTES,
     add_question,
     choice_points,
     decode_image_payload,
-    discard_training_sessions_using_questions,
     owned_question_bank,
 )
 from app.question_responses import load_question_responses, question_response
@@ -67,7 +68,6 @@ from app.schemas import (
     QuestionUpdateResponse,
 )
 from app.services.grading import regrade_question
-from app.session_status import ACTIVE_SESSION_STATUSES
 from app.stored_images import store_image, stored_image_sizes
 
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
@@ -106,8 +106,14 @@ def owned_question(
     question_id: int,
     professor: ProfessorUser,
     session: DbSession,
+    *,
+    for_update: bool = False,
 ) -> Question:
-    question = session.scalar(
+    """One of the professor's questions, locked until commit if asked.
+
+    A detached question belongs to no bank, so it is never found here.
+    """
+    statement = (
         select(Question)
         .join(QuestionBank, QuestionBank.id == Question.question_bank_id)
         .where(
@@ -115,6 +121,9 @@ def owned_question(
             QuestionBank.owner_id == professor.id,
         )
     )
+    if for_update:
+        statement = statement.with_for_update(of=Question)
+    question = session.scalar(statement)
     if question is None:
         raise ApiError(
             status.HTTP_404_NOT_FOUND,
@@ -122,35 +131,6 @@ def owned_question(
             "Question introuvable",
         )
     return question
-
-
-def question_is_in_launched_quiz(question_id: int, session: DbSession) -> bool:
-    common_assignment = session.scalar(
-        select(QuizSessionQuestion.session_id)
-        .join(QuizSession, QuizSession.id == QuizSessionQuestion.session_id)
-        .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(
-            QuizSessionQuestion.question_id == question_id,
-            Quiz.mode == QuizMode.EXAM,
-        )
-    )
-    if common_assignment is not None:
-        return True
-    return (
-        session.scalar(
-            select(QuizSessionStudentQuestion.session_id)
-            .join(
-                QuizSession,
-                QuizSession.id == QuizSessionStudentQuestion.session_id,
-            )
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                QuizSessionStudentQuestion.question_id == question_id,
-                Quiz.mode == QuizMode.EXAM,
-            )
-        )
-        is not None
-    )
 
 
 @router.get(
@@ -236,38 +216,15 @@ def create_question(
     return question_response(question, choices, code)
 
 
-def sessions_using_question(question_id: int) -> CompoundSelect:
-    """Every session that drew the question or holds an answer to it."""
-    return union(
-        select(QuizSessionQuestion.session_id).where(
-            QuizSessionQuestion.question_id == question_id
-        ),
-        select(QuizSessionStudentQuestion.session_id).where(
-            QuizSessionStudentQuestion.question_id == question_id
-        ),
-        select(QuizAnswer.session_id).where(QuizAnswer.question_id == question_id),
-    )
-
-
 def require_no_active_exam(question_id: int, session: DbSession) -> None:
     """Refuse to change a question under students who may be answering it.
 
     Exam and make-up sessions that drew the question and are still waiting,
     running or paused would otherwise show, accept and grade answers against a
     question that changed mid-way. Training attempts are disposable and do not
-    block an edit.
+    block a change.
     """
-    active_session_id = session.scalar(
-        select(QuizSession.id)
-        .join(Quiz, Quiz.id == QuizSession.quiz_id)
-        .where(
-            QuizSession.id.in_(sessions_using_question(question_id)),
-            QuizSession.status.in_(ACTIVE_SESSION_STATUSES),
-            Quiz.mode == QuizMode.EXAM,
-        )
-        .limit(1)
-    )
-    if active_session_id is not None:
+    if active_exam_uses_questions([question_id], session):
         raise ApiError(
             status.HTTP_409_CONFLICT,
             ErrorCode.QUESTION_IN_ACTIVE_SESSION,
@@ -278,26 +235,24 @@ def require_no_active_exam(question_id: int, session: DbSession) -> None:
 def regrade_affected_sessions(
     question: Question,
     choices: list[QuestionChoice],
+    published_session_ids: list[int],
     professor_id: int,
     request: Request,
     session: DbSession,
-) -> int:
-    """Regrade the edit and return how many published sessions it spared."""
+) -> None:
+    """Regrade the sessions that follow the edit and notify their views.
+
+    The published sessions already moved to a frozen copy of the question:
+    they are only recorded.
+    """
     affected_sessions = session.execute(
         select(
             QuizSession.id,
             QuizSession.join_code,
-            QuizSession.status,
-            QuizSession.grades_published_at,
             QuizSession.makeup_session_id,
-        ).where(QuizSession.id.in_(sessions_using_question(question.id)))
+        ).where(QuizSession.id.in_(sessions_using_questions([question.id])))
     ).all()
     regrade_question(question, choices, session)
-    published_session_ids = sorted(
-        session_id
-        for session_id, _, session_status, published_at, _ in affected_sessions
-        if session_status == SessionStatus.FINISHED and published_at is not None
-    )
     if published_session_ids:
         audit_event(
             "question.published_sessions_not_regraded",
@@ -308,14 +263,13 @@ def regrade_affected_sessions(
     session.commit()
 
     live_hub = request.app.state.live_quiz_hub
-    for session_id, join_code, _, _, _ in affected_sessions:
+    for session_id, join_code, _ in affected_sessions:
         live_hub.publish(quiz_session_topic(session_id))
         live_hub.publish(student_session_topic(join_code))
     if affected_sessions:
         live_hub.publish(active_quiz_sessions_topic(professor_id))
     if any(makeup_id is not None for *_, makeup_id in affected_sessions):
         live_hub.publish(makeup_sessions_topic(professor_id))
-    return len(published_session_ids)
 
 
 # Per submitted choice: new image bytes and type, or the key of the image kept.
@@ -531,9 +485,12 @@ def update_question(
     image: UploadFile | None = File(default=None),
 ) -> QuestionUpdateResponse:
     """Update a professor's question and replace its answer configuration."""
-    question = owned_question(question_id, professor, session)
+    # Locked: two edits of one question would otherwise both freeze a copy.
+    question = owned_question(question_id, professor, session, for_update=True)
     require_no_active_exam(question.id, session)
     question_payload = parsed_question_update(payload)
+    # Before any field changes: the copy keeps the question as it stands.
+    published_session_ids = freeze_for_published_sessions(question, session)
     uploaded_image = normalized_uploaded_image(image)
     apply_question_fields(question, question_payload, uploaded_image, session)
     existing_choices_by_id = parked_choices(question, session)
@@ -544,13 +501,13 @@ def update_question(
         question, question_payload, plans, existing_choices_by_id, session
     )
     session.flush()
-    published_sessions_not_regraded = regrade_affected_sessions(
-        question, choices, professor.id, request, session
+    regrade_affected_sessions(
+        question, choices, published_session_ids, professor.id, request, session
     )
     session.refresh(question)
     return QuestionUpdateResponse(
         **question_response(question, choices, code).model_dump(),
-        published_sessions_not_regraded=published_sessions_not_regraded,
+        published_sessions_not_regraded=len(published_session_ids),
     )
 
 
@@ -563,17 +520,13 @@ def delete_question(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    """Delete one question owned by the authenticated professor."""
+    """Delete one of the professor's questions from its bank.
+
+    Exam sessions that drew it keep it, detached from the bank.
+    """
     owned_question(question_id, professor, session)
-    if question_is_in_launched_quiz(question_id, session):
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUESTION_IN_LAUNCHED_QUIZ,
-            "Cette question est utilisée par un quiz déjà lancé",
-        )
-    discard_training_sessions_using_questions([question_id], session)
-    # Its choices and code cascade.
-    session.execute(delete(Question).where(Question.id == question_id))
+    require_no_active_exam(question_id, session)
+    remove_questions([question_id], session)
     session.commit()
 
 

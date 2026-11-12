@@ -142,13 +142,7 @@ export function QuestionBanksPanel({
     const deletingQuestion = useAsyncAction(
         deleteSelectedQuestion,
         (caughtError) =>
-            apiErrorMessage(
-                caughtError,
-                t,
-                caughtError instanceof ApiError && caughtError.status === 409
-                    ? t("question-in-use-error")
-                    : t("question-delete-error")
-            )
+            apiErrorMessage(caughtError, t, t("question-delete-error"))
     )
 
     function updateBanks(update: (banks: QuestionBank[]) => QuestionBank[]) {

@@ -3,15 +3,18 @@
 import io
 import json
 from base64 import b64encode
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from threading import Thread
+from time import sleep
 from typing import Any
 
 import pytest
 from PIL import Image
 from pydantic import ValidationError
-from sqlalchemy import event
+from sqlalchemy import delete, event, select
 
-from app import question_records
+from app import maintenance, question_history, question_records
 from app.images import (
     MAX_IMAGE_BYTES,
     MAX_IMAGE_DIMENSION,
@@ -21,9 +24,13 @@ from app.images import (
 )
 from app.models import (
     MakeupSession,
+    MakeupSessionQuiz,
+    Question,
+    QuestionChoice,
     QuizAnswer,
     QuizSession,
     QuizSessionQuestion,
+    QuizSessionStudentQuestion,
 )
 from app.routers import question_bank_transfer, questions
 from app.schemas import (
@@ -307,7 +314,7 @@ def test_question_updates_cover_every_branch(
     assert too_large.status_code == 413
 
 
-def test_shared_draw_questions_cannot_be_deleted_and_regrade_makeups(
+def test_shared_draw_questions_regrade_makeups_and_are_detached_on_deletion(
     environment,
 ) -> None:
     client = environment["client"]
@@ -342,11 +349,6 @@ def test_shared_draw_questions_cannot_be_deleted_and_regrade_makeups(
         )
         session.commit()
 
-    refused = client.delete(
-        f"/api/question-banks/questions/{question['id']}", headers=headers
-    )
-    assert refused.status_code == 409
-
     regraded = client.post(
         f"/api/question-banks/questions/{question['id']}/update",
         headers=headers,
@@ -366,6 +368,18 @@ def test_shared_draw_questions_cannot_be_deleted_and_regrade_makeups(
         },
     )
     assert regraded.status_code == 200
+
+    # The make-up drew it: deleting it detaches it instead.
+    assert (
+        client.delete(
+            f"/api/question-banks/questions/{question['id']}", headers=headers
+        ).status_code
+        == 204
+    )
+    with client.app.state.session_factory() as session:
+        detached = session.get(Question, question["id"])
+        assert detached is not None
+        assert detached.question_bank_id is None
 
 
 def test_question_batch_import_has_a_fixed_question_limit() -> None:
@@ -739,16 +753,28 @@ def test_update_question_in_used_bank_regrades_affected_sessions(
         assert export.status_code == 200
         assert "3.0" in export.text
 
-        # Deleting the question is still blocked because it is used in a launched quiz
+        # Deleting the question takes it out of its bank; the finished exam
+        # keeps it, with its regraded score and correction.
         delete_response = client.delete(
             f"/api/question-banks/questions/{environment['question']['id']}",
             headers=environment["teacher_headers"],
         )
-        assert delete_response.status_code == 409
-        assert delete_response.json()["detail"] == {
-            "code": "QUESTION_IN_LAUNCHED_QUIZ",
-            "message": "Cette question est utilisée par un quiz déjà lancé",
-        }
+        assert delete_response.status_code == 204
+        assert (
+            client.get(
+                f"/api/question-banks/{environment['question']['question_bank_id']}"
+                "/questions",
+                headers=environment["teacher_headers"],
+            ).json()
+            == []
+        )
+        assert (
+            client.get(
+                "/api/quizzes/student/results",
+                headers=environment["student_headers"],
+            ).json()[0]["answers"]
+            == regraded_history[0]["answers"]
+        )
 
 
 def test_listings_return_the_page_holding_a_focused_item(environment) -> None:
@@ -1122,3 +1148,445 @@ def test_turning_a_question_written_keeps_teacher_marks_and_zeroes_pending_ones(
     assert updated.status_code == 200
     assert stored_scores(client, graded["id"]) == [(1.5, True)]
     assert stored_scores(client, pending["id"]) == [(0.0, False)]
+
+
+def answer_reviews(client: Any, headers: dict[str, str], session_id: int) -> list:
+    """The teacher's correction of the one participant of a finished exam."""
+    participant = client.get(
+        f"/api/quizzes/sessions/{session_id}", headers=headers
+    ).json()["participants"][0]
+    return client.get(
+        f"/api/quizzes/sessions/{session_id}/participants/{participant['id']}/answers",
+        headers=headers,
+    ).json()
+
+
+def detached_question_ids(client: Any) -> list[int]:
+    with client.app.state.session_factory() as session:
+        return list(
+            session.scalars(
+                select(Question.id)
+                .where(Question.question_bank_id.is_(None))
+                .order_by(Question.id)
+            )
+        )
+
+
+def test_published_sessions_keep_the_question_as_they_asked_it(environment) -> None:
+    """An edit changes the bank and unpublished results, never published ones."""
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    url = f"/api/question-banks/questions/{question['id']}/update"
+    with_code = {
+        **swapped_key_payload(question),
+        "prompt": "One plus one?",
+        "code_language": "python",
+        "code_content": "print(1 + 1)",
+    }
+    for choice, (label, is_correct, points) in zip(
+        with_code["choices"],
+        [("Two", True, 2), ("Three", False, 0)],
+        strict=True,
+    ):
+        choice.update(label=label, is_correct=is_correct, points=points)
+    assert (
+        client.post(
+            url, headers=headers, data={"payload": json.dumps(with_code)}
+        ).status_code
+        == 200
+    )
+    assert detached_question_ids(client) == []
+
+    published = finished_exam_with_a_wrong_answer(environment)
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{published['id']}/publish-grades",
+            headers=headers,
+        ).status_code
+        == 200
+    )
+    unpublished = finished_exam_with_a_wrong_answer(environment)
+    published_before = answer_reviews(client, headers, published["id"])
+    student_before = client.get(
+        "/api/quizzes/student/results", headers=environment["student_headers"]
+    ).json()
+    edited = client.post(
+        url,
+        headers=headers,
+        data={
+            "payload": json.dumps(
+                {**swapped_key_payload(question), "prompt": "One plus one, edited?"}
+            )
+        },
+    )
+
+    assert edited.status_code == 200
+    assert edited.json()["id"] == question["id"]
+    assert edited.json()["published_sessions_not_regraded"] == 1
+    [frozen_id] = detached_question_ids(client)
+    published_after = answer_reviews(client, headers, published["id"])
+    assert [review["question_id"] for review in published_after] == [frozen_id]
+    assert [{**review, "question_id": None} for review in published_after] == [
+        {**review, "question_id": None} for review in published_before
+    ]
+    assert published_after[0]["prompt"] == "One plus one?"
+    assert published_after[0]["code_content"] == "print(1 + 1)"
+    assert published_after[0]["submitted_answers"] == ["Three"]
+    assert published_after[0]["expected_answers"] == ["Two"]
+    assert (published_after[0]["score"], published_after[0]["max_score"]) == (0, 2)
+
+    [unpublished_review] = answer_reviews(client, headers, unpublished["id"])
+    assert unpublished_review["question_id"] == question["id"]
+    assert unpublished_review["prompt"] == "One plus one, edited?"
+    assert unpublished_review["code_content"] is None
+    assert unpublished_review["expected_answers"] == ["Three"]
+    assert (unpublished_review["score"], unpublished_review["max_score"]) == (3, 3)
+
+    student_after = {
+        result["session_id"]: result
+        for result in client.get(
+            "/api/quizzes/student/results", headers=environment["student_headers"]
+        ).json()
+    }
+    student_published_before = next(
+        result for result in student_before if result["session_id"] == published["id"]
+    )
+    assert [
+        {**answer, "question_id": None}
+        for answer in student_after[published["id"]]["answers"]
+    ] == [
+        {**answer, "question_id": None}
+        for answer in student_published_before["answers"]
+    ]
+    assert student_after[published["id"]]["score"] == 0
+    assert student_after[unpublished["id"]]["score"] == 3
+
+    with client.app.state.session_factory() as session:
+        frozen_choices = {
+            choice.id: choice.label
+            for choice in session.scalars(
+                select(QuestionChoice).where(QuestionChoice.question_id == frozen_id)
+            )
+        }
+        answer = session.scalar(
+            select(QuizAnswer).where(QuizAnswer.session_id == published["id"])
+        )
+        assert answer is not None
+        assert [
+            frozen_choices[choice_id]
+            for choice_id in json.loads(answer.answer_data)["selected_choice_ids"]
+        ] == ["Three"]
+
+    # The bank lists the edited question alone.
+    [listed] = client.get(
+        f"/api/question-banks/{environment['bank_id']}/questions", headers=headers
+    ).json()
+    assert (listed["id"], listed["prompt"]) == (question["id"], "One plus one, edited?")
+
+    # A session published since, where nobody answered.
+    with client.app.state.session_factory() as session:
+        unanswered = QuizSession(
+            quiz_id=environment["quiz"]["id"],
+            class_id=environment["student_class"]["id"],
+            class_name=environment["student_class"]["name"],
+            join_code="NOANSWR1",
+            status="finished",
+            grades_published_at=datetime.now(UTC),
+        )
+        session.add(unanswered)
+        session.flush()
+        session.add(
+            QuizSessionQuestion(
+                session_id=unanswered.id, question_id=question["id"], position=0
+            )
+        )
+        session.commit()
+        unanswered_id = unanswered.id
+
+    # A further edit leaves the session already frozen on its copy, and
+    # freezes another for the session published since, which has no answer.
+    again = client.post(
+        url,
+        headers=headers,
+        data={"payload": json.dumps(swapped_key_payload(question))},
+    )
+    assert again.status_code == 200
+    assert again.json()["published_sessions_not_regraded"] == 1
+    [_, second_frozen_id] = detached_question_ids(client)
+    assert answer_reviews(client, headers, published["id"]) == published_after
+    with client.app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(QuizSessionQuestion.question_id).where(
+                    QuizSessionQuestion.session_id == unanswered_id
+                )
+            )
+            == second_frozen_id
+        )
+        frozen = session.get(Question, second_frozen_id)
+        assert frozen is not None
+        assert frozen.prompt == "One plus one, edited?"
+
+
+@pytest.mark.parametrize(
+    ("answer_data", "expected"),
+    [
+        ('{"selected_choice_ids": [1, 2, true, "3", 9]}', None),
+        ('{"written_answer": "x"}', '{"written_answer": "x"}'),
+        ('{"selected_choice_ids": 1}', '{"selected_choice_ids": 1}'),
+        ("[1, 2]", "[1, 2]"),
+        ("not json", "not json"),
+    ],
+)
+def test_frozen_answers_rename_only_the_choice_ids_they_hold(
+    answer_data: str, expected: str | None
+) -> None:
+    remapped = question_history.remapped_answer_data(answer_data, {1: 11, 2: 12})
+    if expected is None:
+        assert json.loads(remapped) == {"selected_choice_ids": [11, 12, True, "3", 9]}
+    else:
+        assert remapped == expected
+
+
+def test_a_deleted_question_stays_with_past_exams_until_they_go(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    finished = finished_exam_with_a_wrong_answer(environment)
+    reviews = answer_reviews(client, headers, finished["id"])
+
+    deleted = client.delete(
+        f"/api/question-banks/questions/{question['id']}", headers=headers
+    )
+
+    assert deleted.status_code == 204
+    assert detached_question_ids(client) == [question["id"]]
+    [bank] = client.get("/api/question-banks", headers=headers).json()
+    assert bank["question_count"] == 0
+    assert answer_reviews(client, headers, finished["id"]) == reviews
+    # Detached, it is no longer the teacher's to edit or delete.
+    assert (
+        client.post(
+            f"/api/question-banks/questions/{question['id']}/update",
+            headers=headers,
+            data={"payload": json.dumps(swapped_key_payload(question))},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.delete(
+            f"/api/question-banks/questions/{question['id']}", headers=headers
+        ).status_code
+        == 404
+    )
+
+    settings = client.app.state.settings
+    maintenance.enforce_data_retention(client.app.state.session_factory, settings)
+    assert detached_question_ids(client) == [question["id"]]
+    audit_events: list[tuple[str, dict[str, object]]] = []
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            maintenance,
+            "audit_event",
+            lambda event, **details: audit_events.append((event, details)),
+        )
+        maintenance.enforce_data_retention(
+            client.app.state.session_factory,
+            settings,
+            now=datetime.now(UTC)
+            + timedelta(days=settings.quiz_result_retention_days + 1),
+        )
+    assert detached_question_ids(client) == []
+    assert audit_events[0][1]["detached_questions"] == 1
+
+
+def test_an_open_exam_keeps_its_questions_and_their_bank(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    quiz_session, participant_headers = launch_and_join(client, environment)
+
+    refused_question = client.delete(
+        f"/api/question-banks/questions/{question['id']}", headers=headers
+    )
+    refused_bank = client.delete(
+        f"/api/question-banks/{environment['bank_id']}", headers=headers
+    )
+
+    assert refused_question.status_code == 409
+    assert refused_question.json()["detail"]["code"] == "QUESTION_IN_ACTIVE_SESSION"
+    assert refused_bank.status_code == 409
+    assert refused_bank.json()["detail"] == {
+        "code": "QUESTION_BANK_IN_USE",
+        "message": "Cette banque est utilisée par un examen en cours",
+    }
+    assert detached_question_ids(client) == []
+
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{quiz_session['id']}/start", headers=headers
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/quizzes/student/sessions/{quiz_session['join_code']}/answer",
+            headers=participant_headers,
+            json=choice_answer(client, participant_headers, wrong_choice_id(question)),
+        ).status_code
+        == 200
+    )
+    hand_in_quiz(client, quiz_session["join_code"], participant_headers)
+    assert (
+        client.delete(
+            f"/api/question-banks/{environment['bank_id']}", headers=headers
+        ).status_code
+        == 204
+    )
+
+
+def test_an_open_makeup_keeps_the_banks_of_its_quizzes(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    student_class = environment["student_class"]
+    owner_id = client.get("/api/users/me", headers=headers).json()["id"]
+    with client.app.state.session_factory() as session:
+        makeup = MakeupSession(
+            owner_id=owner_id,
+            class_id=student_class["id"],
+            class_name=student_class["name"],
+            join_code="MAKEUP04",
+            status="waiting",
+        )
+        session.add(makeup)
+        session.flush()
+        session.add(
+            MakeupSessionQuiz(session_id=makeup.id, quiz_id=environment["quiz"]["id"])
+        )
+        session.commit()
+
+    refused = client.delete(
+        f"/api/question-banks/{environment['bank_id']}", headers=headers
+    )
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "QUESTION_BANK_IN_USE"
+
+
+def test_deleting_a_used_bank_keeps_past_exams_and_unlinks_its_quizzes(
+    environment,
+) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    question = environment["question"]
+    unused = client.post(
+        f"/api/question-banks/{environment['bank_id']}/questions",
+        headers=headers,
+        # Never drawn: the quiz asks for one easy question.
+        data={"payload": json.dumps(question_payload(difficulty="hard"))},
+    ).json()
+    finished = finished_exam_with_a_wrong_answer(environment)
+    reviews = answer_reviews(client, headers, finished["id"])
+
+    deleted = client.delete(
+        f"/api/question-banks/{environment['bank_id']}", headers=headers
+    )
+
+    assert deleted.status_code == 204
+    assert client.get("/api/question-banks", headers=headers).json() == []
+    [quiz] = client.get("/api/quizzes", headers=headers).json()
+    assert quiz["question_banks"] == []
+    assert detached_question_ids(client) == [question["id"]]
+    with client.app.state.session_factory() as session:
+        assert session.get(Question, unused["id"]) is None
+    assert answer_reviews(client, headers, finished["id"]) == reviews
+
+    empty_bank = client.post(
+        "/api/question-banks",
+        headers=headers,
+        json={"grade_level": "5e", "chapter": "Empty"},
+    ).json()
+    assert (
+        client.delete(
+            f"/api/question-banks/{empty_bank['id']}", headers=headers
+        ).status_code
+        == 204
+    )
+
+
+def test_deleting_a_teacher_deletes_their_detached_questions(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    finished_exam_with_a_wrong_answer(environment)
+    assert (
+        client.delete(
+            f"/api/question-banks/questions/{environment['question']['id']}",
+            headers=headers,
+        ).status_code
+        == 204
+    )
+    assert detached_question_ids(client) == [environment["question"]["id"]]
+    teacher_id = client.get("/api/users/me", headers=headers).json()["id"]
+
+    assert (
+        client.delete(
+            f"/api/admin/users/{teacher_id}", headers=environment["admin_headers"]
+        ).status_code
+        == 204
+    )
+
+    assert detached_question_ids(client) == []
+
+
+def test_the_sweep_skips_a_detached_question_a_launch_still_draws(
+    environment,
+) -> None:
+    """A launch that read the question before its removal may commit after.
+
+    Its reference holds a lock the sweep's deletion waits for, then the
+    foreign key refuses it: the sweep gives up on that question only.
+    """
+    client = environment["client"]
+    finished = finished_exam_with_a_wrong_answer(environment)
+    assert (
+        client.delete(
+            f"/api/question-banks/questions/{environment['question']['id']}",
+            headers=environment["teacher_headers"],
+        ).status_code
+        == 204
+    )
+    session_factory = client.app.state.session_factory
+    with session_factory() as session:
+        session.execute(
+            delete(QuizAnswer).where(QuizAnswer.session_id == finished["id"])
+        )
+        for table in (QuizSessionQuestion, QuizSessionStudentQuestion):
+            session.execute(delete(table).where(table.session_id == finished["id"]))
+        session.commit()
+    assert detached_question_ids(client) == [environment["question"]["id"]]
+
+    with session_factory() as launching, session_factory() as sweeping:
+        launching.add(
+            QuizSessionQuestion(
+                session_id=finished["id"],
+                question_id=environment["question"]["id"],
+                position=0,
+            )
+        )
+        launching.flush()
+        swept: list[int] = []
+
+        def sweep() -> None:
+            swept.append(question_history.delete_unused_detached_questions(sweeping))
+            # The rest of the sweeping transaction is still usable.
+            sweeping.execute(select(1))
+            sweeping.commit()
+
+        sweeper = Thread(target=sweep)
+        sweeper.start()
+        sleep(0.3)
+        launching.commit()
+        sweeper.join(timeout=10)
+        assert swept == [0]
+    assert detached_question_ids(client) == [environment["question"]["id"]]

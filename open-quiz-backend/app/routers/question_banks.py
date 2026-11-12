@@ -14,7 +14,6 @@ from app.models import (
     ClassTrainingQuestionBank,
     Question,
     QuestionBank,
-    QuizQuestionBank,
     StudentClass,
 )
 from app.pagination import (
@@ -27,10 +26,12 @@ from app.question_bank_summaries import (
     question_bank_summary_query,
     question_bank_summary_response,
 )
-from app.question_records import (
-    discard_training_sessions_using_questions,
-    owned_question_bank,
+from app.question_history import (
+    active_exam_uses_questions,
+    open_makeup_draws_from_bank,
+    remove_questions,
 )
+from app.question_records import owned_question_bank
 from app.schemas import (
     QuestionBankCreate,
     QuestionBankResponse,
@@ -170,27 +171,27 @@ def delete_question_bank(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    """Delete a question bank and every question it contains."""
+    """Delete a question bank and every question it contains.
+
+    Quizzes stop drawing from it, and exam sessions keep the questions they
+    drew, detached from it (app/question_history.py). Refused while an open
+    exam drew from it or an open make-up may still draw from it.
+    """
     owned_question_bank(question_bank_id, professor, session)
-    if (
-        session.scalar(
-            select(QuizQuestionBank.quiz_id).where(
-                QuizQuestionBank.question_bank_id == question_bank_id
-            )
-        )
-        is not None
-    ):
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUESTION_BANK_IN_USE,
-            "Cette banque est utilisée par un quiz",
-        )
     question_ids = list(
         session.scalars(
             select(Question.id).where(Question.question_bank_id == question_bank_id)
         )
     )
-    discard_training_sessions_using_questions(question_ids, session)
-    # Questions, their choices and code, and class training links cascade.
+    if active_exam_uses_questions(question_ids, session) or open_makeup_draws_from_bank(
+        question_bank_id, session
+    ):
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_IN_USE,
+            "Cette banque est utilisée par un examen en cours",
+        )
+    remove_questions(question_ids, session)
+    # Quiz and class training links cascade.
     session.execute(delete(QuestionBank).where(QuestionBank.id == question_bank_id))
     session.commit()

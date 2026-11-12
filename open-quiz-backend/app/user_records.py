@@ -9,6 +9,7 @@ from app.models import (
     StudentClass,
     User,
 )
+from app.question_history import delete_unused_detached_questions
 from app.quiz_session_records import (
     delete_quiz_session_records,
     release_join_codes,
@@ -46,3 +47,5 @@ def delete_user_records(user_id: int, session: Session) -> None:
     delete_quiz_session_records(session_ids, session)
     session.execute(delete(User).where(User.id == user_id))
     release_join_codes(makeup_join_codes, session)
+    # Questions their banks detached for the sessions just deleted.
+    delete_unused_detached_questions(session)

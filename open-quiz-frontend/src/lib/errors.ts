@@ -60,7 +60,6 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     QUESTION_BANK_FULL: "error-question-bank-full",
     QUESTION_NOT_FOUND: "error-question-not-found",
     QUESTION_INVALID: "error-question-invalid",
-    QUESTION_IN_LAUNCHED_QUIZ: "question-in-use-error",
     QUESTION_IN_ACTIVE_SESSION: "error-question-in-active-session",
     CHOICE_INVALID: "error-choice-invalid",
     CHOICE_CONTENT_REQUIRED: "error-choice-content-required",
