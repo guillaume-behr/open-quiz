@@ -30,6 +30,7 @@ def run_migrations(connection: Connection) -> None:
         connection=connection,
         target_metadata=Base.metadata,
         compare_type=True,
+        compare_server_default=True,
     )
     with context.begin_transaction():
         context.run_migrations()

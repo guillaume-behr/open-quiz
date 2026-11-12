@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -13,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import text
 
 from app.database import Base
 from app.enums import (
@@ -142,7 +145,7 @@ class ClassTrainingQuestionBank(Base):
         ForeignKey("student_classes.id"), primary_key=True
     )
     question_bank_id: Mapped[int] = mapped_column(
-        ForeignKey("question_banks.id"), primary_key=True
+        ForeignKey("question_banks.id"), primary_key=True, index=True
     )
     question_count: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
@@ -275,7 +278,7 @@ class QuizQuestionBank(Base):
 
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), primary_key=True)
     question_bank_id: Mapped[int] = mapped_column(
-        ForeignKey("question_banks.id"), primary_key=True
+        ForeignKey("question_banks.id"), primary_key=True, index=True
     )
 
 
@@ -293,6 +296,13 @@ class QuizSession(Base):
     __table_args__ = (
         CheckConstraint(
             allowed_values("status", SessionStatus), name="ck_quiz_sessions_status"
+        ),
+        # The expiry loop looks for running sessions every few seconds, among
+        # finished ones kept for a year.
+        Index(
+            "ix_quiz_sessions_active",
+            "id",
+            postgresql_where=text("status IN ('waiting', 'in_progress', 'paused')"),
         ),
     )
 
@@ -314,8 +324,9 @@ class QuizSession(Base):
     class_name: Mapped[str] = mapped_column(String(120))
     join_code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default=SessionStatus.WAITING)
+    # Retention selects finished sessions by age, every hour.
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now
+        DateTime(timezone=True), default=utc_now, index=True
     )
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -362,7 +373,9 @@ class MakeupSessionQuiz(Base):
     session_id: Mapped[int] = mapped_column(
         ForeignKey("makeup_sessions.id"), primary_key=True
     )
-    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(
+        ForeignKey("quizzes.id"), primary_key=True, index=True
+    )
 
 
 class MakeupSessionSelection(Base):
@@ -371,7 +384,9 @@ class MakeupSessionSelection(Base):
     session_id: Mapped[int] = mapped_column(
         ForeignKey("makeup_sessions.id"), primary_key=True
     )
-    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id"), primary_key=True, index=True
+    )
 
 
 class QuizJoinCode(Base):
@@ -394,7 +409,7 @@ class QuizSessionQuestion(Base):
         ForeignKey("quiz_sessions.id"), primary_key=True
     )
     question_id: Mapped[int] = mapped_column(
-        ForeignKey("questions.id"), primary_key=True
+        ForeignKey("questions.id"), primary_key=True, index=True
     )
     position: Mapped[int] = mapped_column(Integer)
 
@@ -402,9 +417,10 @@ class QuizSessionQuestion(Base):
 class QuizSessionStudentQuestion(Base):
     __tablename__ = "quiz_session_student_questions"
     __table_args__ = (
+        # By identifier: rows without a student account have no student_id.
         UniqueConstraint(
             "session_id",
-            "student_id",
+            "student_identifier",
             "position",
             name="uq_quiz_session_student_question_position",
         ),
@@ -413,10 +429,12 @@ class QuizSessionStudentQuestion(Base):
     session_id: Mapped[int] = mapped_column(
         ForeignKey("quiz_sessions.id"), primary_key=True
     )
-    student_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    student_id: Mapped[int | None] = mapped_column(
+        ForeignKey("students.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     student_identifier: Mapped[str] = mapped_column(String(80), primary_key=True)
     question_id: Mapped[int] = mapped_column(
-        ForeignKey("questions.id"), primary_key=True
+        ForeignKey("questions.id"), primary_key=True, index=True
     )
     position: Mapped[int] = mapped_column(Integer)
 
@@ -495,8 +513,8 @@ class RefreshSession(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    expires_at: Mapped[int] = mapped_column(Integer)
-    revoked_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+    revoked_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
@@ -527,15 +545,15 @@ class AuthenticationChallenge(Base):
     token_id_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     purpose: Mapped[str] = mapped_column(String(40))
-    expires_at: Mapped[int] = mapped_column(Integer, index=True)
-    used_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    expires_at: Mapped[int] = mapped_column(BigInteger, index=True)
+    used_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
 class LoginRateLimit(Base):
     __tablename__ = "login_rate_limits"
 
     limiter_key: Mapped[str] = mapped_column(String(96), primary_key=True)
-    window_started_at: Mapped[int] = mapped_column(Integer, index=True)
+    window_started_at: Mapped[int] = mapped_column(BigInteger, index=True)
     attempts: Mapped[int] = mapped_column(Integer)
 
 
