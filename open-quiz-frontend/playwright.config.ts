@@ -4,7 +4,10 @@ export default defineConfig({
     testDir: "./tests/e2e",
     fullyParallel: true,
     forbidOnly: Boolean(process.env.CI),
+    // Retries keep a trace of a failure, but a test that only passes on a
+    // retry still fails the run: otherwise a flaky test stays green.
     retries: process.env.CI ? 2 : 0,
+    failOnFlakyTests: Boolean(process.env.CI),
     workers: process.env.CI ? 1 : undefined,
     reporter: process.env.CI ? "github" : "list",
     use: {
