@@ -903,6 +903,107 @@ def test_training_never_draws_written_questions(
     assert state["total_questions"] == 1
 
 
+def test_training_handles_questions_changed_after_it_started(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Keep the drawn order stable: the question made written comes first.
+    monkeypatch.setattr(question_draws.randomizer, "shuffle", lambda items: None)
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    student_headers = environment["student_headers"]
+    class_id = environment["student_class"]["id"]
+
+    bank = client.post(
+        "/api/question-banks",
+        headers=headers,
+        json={"grade_level": "5e", "chapter": "Changed training"},
+    ).json()
+    bank_environment = {
+        **environment,
+        "question": {**environment["question"], "question_bank_id": bank["id"]},
+    }
+    changed = add_question(client, bank_environment)
+    add_question(client, bank_environment)
+    empty_bank = client.post(
+        "/api/question-banks",
+        headers=headers,
+        json={"grade_level": "5e", "chapter": "Emptied training"},
+    ).json()
+    removed = add_question(
+        client,
+        {
+            **environment,
+            "question": {
+                **environment["question"],
+                "question_bank_id": empty_bank["id"],
+            },
+        },
+    )
+    selection = training_banks(bank["id"], question_count=2)
+    selection["question_banks"] += training_banks(empty_bank["id"])["question_banks"]
+    assert (
+        client.put(
+            f"/api/quizzes/training/classes/{class_id}/question-banks",
+            headers=headers,
+            json=selection,
+        ).status_code
+        == 200
+    )
+    # The bank empties once configured: it stays listed, but cannot start.
+    assert (
+        client.delete(
+            f"/api/question-banks/questions/{removed['id']}", headers=headers
+        ).status_code
+        == 204
+    )
+    assert (
+        client.post(
+            f"/api/quizzes/training/{empty_bank['id']}/start", headers=student_headers
+        ).status_code
+        == 409
+    )
+
+    training = client.post(
+        f"/api/quizzes/training/{bank['id']}/start", headers=student_headers
+    )
+    assert training.status_code == 201
+    # A question that becomes written during the training is still answered
+    # and reported as awaiting review, never as right or wrong.
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(Question)
+            .where(Question.id == changed["id"])
+            .values(answer_mode="written")
+        )
+        session.commit()
+    token_headers = {"X-Quiz-Token": training.json()["participant_token"]}
+    url = f"/api/quizzes/student/sessions/{training.json()['join_code']}"
+    question = client.get(url, headers=token_headers).json()["question"]
+    assert question["id"] == changed["id"]
+    assert question["answer_mode"] == "written"
+    answered = client.post(
+        f"{url}/answer",
+        headers=token_headers,
+        json={"question_id": question["id"], "written_answer": "Because"},
+    )
+    assert answered.status_code == 200
+    assert answered.json()["training_feedback"]["requires_manual_review"] is True
+    # Leaving the second question unanswered still produces a result.
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(QuizSession)
+            .where(QuizSession.join_code == training.json()["join_code"])
+            .values(started_at=datetime.now(UTC) - timedelta(days=1))
+        )
+        session.commit()
+    expire_due_sessions(client)
+    finished = client.get(url, headers=token_headers).json()
+    assert finished["status"] == "finished"
+    assert finished["potential_score"] == 0
+    assert finished["potential_maximum_score"] == 1
+    assert finished["pending_manual_review_count"] == 1
+
+
 def test_a_repeated_last_training_answer_returns_the_same_feedback(
     environment,
 ) -> None:
