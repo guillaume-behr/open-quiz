@@ -19,8 +19,8 @@ RUN pnpm build
 FROM caddy:2.11.8@sha256:4fcafa98afd1c2e642e353e3c5cf9ddbe892fcee14bc990e7ba2c5b78e51f9cf
 
 RUN setcap -r /usr/bin/caddy \
-    && addgroup -S openquiz \
-    && adduser -S -D -H -G openquiz openquiz
+    && addgroup -S -g 10001 openquiz \
+    && adduser -S -D -H -u 10001 -G openquiz openquiz
 
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
@@ -31,6 +31,7 @@ RUN caddy fmt /etc/caddy/Caddyfile > /dev/null \
     && mkdir -p /config /data \
     && chown -R openquiz:openquiz /config /data
 
-USER openquiz
+# Numeric, as the backend image: resolvable without the image's passwd.
+USER 10001:10001
 
 EXPOSE 8080
