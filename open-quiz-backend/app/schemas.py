@@ -551,12 +551,6 @@ class QuestionUpdate(QuestionCreate):
     remove_image: bool = False
 
 
-class QuestionUpdateResponse(QuestionResponse):
-    # Finished sessions whose grades were already published: an edit never
-    # regrades them, so the interface can tell the teacher.
-    published_sessions_not_regraded: int
-
-
 class QuestionImportItem(QuestionCreate):
     image: QuestionImportImage | None = None
 

@@ -3,18 +3,17 @@
 selected_choice_score is the single scoring rule for choice questions;
 question_maximum_scores derives each question's reachable maximum from that
 same rule, compute_final_scores applies it to every answer of a session,
-regrade_question applies it to every unpublished answer to one edited
-question, and training_result totals a training attempt. rounded_score is the
+and training_result totals a training attempt. rounded_score is the
 one rounding rule for every score or maximum the API reports.
 """
 
 import json
 from collections import defaultdict
 
-from sqlalchemy import and_, case, func, select, update
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
-from app.enums import AnswerMode, SessionStatus
+from app.enums import AnswerMode
 from app.models import (
     Question,
     QuestionChoice,
@@ -147,59 +146,6 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
                 allow_negative_points=bool(quiz_session.allow_negative_points),
             )
             answer.is_graded = True
-
-
-def regrade_question(
-    question: Question,
-    choices: list[QuestionChoice],
-    session: Session,
-) -> None:
-    """Rescore the answers to one edited question, in one read and one write.
-
-    Only finished sessions whose grades are not published yet are rescored:
-    published marks never change as a side effect of an edit. Each answer is
-    scored with the same rule compute_final_scores applies, but only this
-    question's answers are touched, so the cost follows the number of answers
-    rather than one round of queries per session.
-    """
-    rows = session.execute(
-        select(
-            QuizAnswer.id,
-            QuizAnswer.answer_data,
-            QuizAnswer.is_graded,
-            QuizSession.allow_negative_points,
-        )
-        .join(QuizSession, QuizSession.id == QuizAnswer.session_id)
-        .where(
-            QuizAnswer.question_id == question.id,
-            QuizSession.status == SessionStatus.FINISHED,
-            QuizSession.grades_published_at.is_(None),
-        )
-    ).all()
-    if question.answer_mode == AnswerMode.WRITTEN:
-        # A written answer keeps the mark a teacher gave it; one still waiting
-        # for a mark counts as zero, as compute_final_scores does.
-        changes = [
-            {"id": answer_id, "score": 0.0, "is_graded": False}
-            for answer_id, _, is_graded, _ in rows
-            if not is_graded
-        ]
-    else:
-        changes = [
-            {
-                "id": answer_id,
-                "score": selected_choice_score(
-                    choices,
-                    stored_choice_ids(answer_data),
-                    allow_negative_points=bool(allow_negative_points),
-                ),
-                "is_graded": True,
-            }
-            for answer_id, answer_data, _, allow_negative_points in rows
-        ]
-    if changes:
-        # ORM bulk UPDATE by primary key: a single executemany.
-        session.execute(update(QuizAnswer), changes)
 
 
 def question_maximum_scores(

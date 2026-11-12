@@ -9,7 +9,7 @@ from fastapi import (
 from sqlalchemy import select
 
 from app.dependencies import DbSession, ProfessorUser
-from app.enums import CorrectionMode, QuizMode
+from app.enums import CorrectionMode
 from app.errors import ApiError, ErrorCode
 from app.images import (
     MAX_IMAGE_BYTES,
@@ -22,12 +22,7 @@ from app.models import (
     QuestionBank,
     QuestionChoice,
     QuestionCode,
-    Quiz,
-    QuizSession,
-    QuizSessionQuestion,
-    QuizSessionStudentQuestion,
 )
-from app.quiz_session_records import delete_quiz_session_records
 from app.schemas import (
     QuestionChoiceCreate,
     QuestionCreate,
@@ -54,34 +49,6 @@ def owned_question_bank(
             "Banque de questions introuvable",
         )
     return question_bank
-
-
-def discard_training_sessions_using_questions(
-    question_ids: list[int],
-    session: DbSession,
-) -> None:
-    """Drop every training attempt that drew any of these questions."""
-    if not question_ids:
-        return
-    common_session_ids = select(QuizSessionQuestion.session_id).where(
-        QuizSessionQuestion.question_id.in_(question_ids)
-    )
-    personalized_session_ids = select(QuizSessionStudentQuestion.session_id).where(
-        QuizSessionStudentQuestion.question_id.in_(question_ids)
-    )
-    training_session_ids = list(
-        session.scalars(
-            select(QuizSession.id)
-            .join(Quiz, Quiz.id == QuizSession.quiz_id)
-            .where(
-                Quiz.mode == QuizMode.TRAINING,
-                QuizSession.id.in_(common_session_ids.union(personalized_session_ids)),
-            )
-        )
-    )
-    if not training_session_ids:
-        return
-    delete_quiz_session_records(training_session_ids, session)
 
 
 MAX_IMPORT_IMAGE_BYTES = 64 * 1024 * 1024

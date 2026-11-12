@@ -15,9 +15,8 @@ from app.models import (
     ClassTrainingQuestionBank,
     Question,
     QuestionBank,
-    QuestionChoice,
-    QuestionCode,
     QuizQuestionBank,
+    QuizSession,
     StudentClass,
 )
 from app.pagination import (
@@ -30,10 +29,8 @@ from app.question_bank_summaries import (
     question_bank_summary_query,
     question_bank_summary_response,
 )
-from app.question_records import (
-    discard_training_sessions_using_questions,
-    owned_question_bank,
-)
+from app.question_records import owned_question_bank
+from app.quiz_session_records import delete_quiz_session_records
 from app.schemas import (
     QuestionBankCreate,
     QuestionBankResponse,
@@ -189,37 +186,31 @@ def delete_question_bank(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    """Delete a question bank and every question it contains."""
+    """Delete a question bank and every question it contains.
+
+    Sessions keep the copies they drew. Quizzes stop drawing from the bank,
+    and the trainings started on it, which are listed by bank, go with it.
+    """
     owned_question_bank(question_bank_id, professor, session)
-    if (
-        session.scalar(
-            select(QuizQuestionBank.quiz_id).where(
-                QuizQuestionBank.question_bank_id == question_bank_id
+    delete_quiz_session_records(
+        list(
+            session.scalars(
+                select(QuizSession.id).where(
+                    QuizSession.training_question_bank_id == question_bank_id
+                )
             )
-        )
-        is not None
-    ):
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUESTION_BANK_IN_USE,
-            "Cette banque est utilisée par un quiz",
-        )
-    question_ids = list(
-        session.scalars(
-            select(Question.id).where(Question.question_bank_id == question_bank_id)
+        ),
+        session,
+    )
+    session.execute(
+        delete(QuizQuestionBank).where(
+            QuizQuestionBank.question_bank_id == question_bank_id
         )
     )
-    discard_training_sessions_using_questions(question_ids, session)
     session.execute(
         delete(ClassTrainingQuestionBank).where(
             ClassTrainingQuestionBank.question_bank_id == question_bank_id
         )
-    )
-    session.execute(
-        delete(QuestionChoice).where(QuestionChoice.question_id.in_(question_ids))
-    )
-    session.execute(
-        delete(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
     )
     session.execute(
         delete(Question).where(Question.question_bank_id == question_bank_id)

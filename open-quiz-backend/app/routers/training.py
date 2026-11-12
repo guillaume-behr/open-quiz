@@ -51,6 +51,7 @@ from app.services.session_lifecycle import (
     active_exam_bank_ids_for_class,
     discard_previous_training_sessions,
 )
+from app.session_questions import copy_questions_into_session
 from app.session_responses import student_state_response
 from app.student_accounts import owned_class
 
@@ -314,10 +315,11 @@ def start_training_quiz(
     )
     session.add(quiz_session)
     session.flush()
+    copies = copy_questions_into_session(quiz_session.id, question_ids, session)
     session.add_all(
         QuizSessionQuestion(
             session_id=quiz_session.id,
-            question_id=question_id,
+            question_id=copies[question_id],
             position=position,
         )
         for position, question_id in enumerate(question_ids)

@@ -24,7 +24,7 @@ type QuestionFormProps = {
     questionBankId: number
     question?: Question
     /** The second argument counts the published sessions an edit spared. */
-    onSaved: (question: Question, publishedSessionsKept: number) => void
+    onSaved: (question: Question) => void
     onCancel: () => void
 }
 
@@ -241,17 +241,15 @@ export function QuestionForm({
                 choices: encodedChoices,
             }
             if (question) {
-                const updatedQuestion = await updateQuestion(
-                    question.id,
-                    { ...payload, remove_image: removeImage },
-                    image
-                )
                 onSaved(
-                    updatedQuestion,
-                    updatedQuestion.published_sessions_not_regraded
+                    await updateQuestion(
+                        question.id,
+                        { ...payload, remove_image: removeImage },
+                        image
+                    )
                 )
             } else {
-                onSaved(await createQuestion(questionBankId, payload, image), 0)
+                onSaved(await createQuestion(questionBankId, payload, image))
             }
         } catch (caughtError) {
             setError(

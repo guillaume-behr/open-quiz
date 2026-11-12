@@ -182,11 +182,25 @@ class Question(Base):
             allowed_values("correction_mode", CorrectionMode),
             name="ck_questions_correction_mode",
         ),
+        # A question belongs either to a bank, or to the session that drew it.
+        CheckConstraint(
+            "(question_bank_id IS NULL) <> (quiz_session_id IS NULL)",
+            name="ck_questions_bank_or_session",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    question_bank_id: Mapped[int] = mapped_column(
-        ForeignKey("question_banks.id"), index=True
+    question_bank_id: Mapped[int | None] = mapped_column(
+        ForeignKey("question_banks.id"), nullable=True, index=True
+    )
+    # A drawn question is a copy owned by its session (app/session_questions.py):
+    # the bank stays freely editable, and the copy goes with the session.
+    quiz_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("quiz_sessions.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # The bank question a copy was made from, while it still exists.
+    source_question_id: Mapped[int | None] = mapped_column(
+        ForeignKey("questions.id", ondelete="SET NULL"), nullable=True, index=True
     )
     prompt: Mapped[str] = mapped_column(Text)
     difficulty: Mapped[str] = mapped_column(String(20))
@@ -210,7 +224,7 @@ class QuestionCode(Base):
     __tablename__ = "question_codes"
 
     question_id: Mapped[int] = mapped_column(
-        ForeignKey("questions.id"), primary_key=True
+        ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True
     )
     language: Mapped[str] = mapped_column(String(30))
     content: Mapped[str] = mapped_column(Text)
@@ -227,7 +241,9 @@ class QuestionChoice(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True)
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("questions.id", ondelete="CASCADE"), index=True
+    )
     label: Mapped[str] = mapped_column(Text)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False)
     points: Mapped[float] = mapped_column(Float, default=0.0)

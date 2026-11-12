@@ -70,6 +70,7 @@ from app.services.session_lifecycle import (
     discard_active_training_sessions,
     expire_quiz_session,
 )
+from app.session_questions import copy_questions_into_session
 from app.session_responses import (
     active_session_responses,
     quiz_responses,
@@ -661,30 +662,38 @@ def launch_quiz(
     session.flush()
     pool = question_draw_pool(quiz, session)
     if quiz.same_questions_for_all:
+        drawn_ids = pool.draw()
+        copies = copy_questions_into_session(quiz_session.id, drawn_ids, session)
         session.add_all(
             QuizSessionQuestion(
                 session_id=quiz_session.id,
-                question_id=question_id,
+                question_id=copies[question_id],
                 position=position,
             )
-            for position, question_id in enumerate(pool.draw())
+            for position, question_id in enumerate(drawn_ids)
         )
     else:
-        assignments: list[QuizSessionStudentQuestion] = []
         used_draws: set[tuple[int, ...]] = set()
-        for student in students:
-            student_question_ids = draw_unique_question_ids(pool, used_draws)
-            assignments.extend(
-                QuizSessionStudentQuestion(
-                    session_id=quiz_session.id,
-                    student_id=student.id,
-                    student_identifier=student.identifier,
-                    question_id=question_id,
-                    position=position,
-                )
-                for position, question_id in enumerate(student_question_ids)
+        draws = [
+            (student, draw_unique_question_ids(pool, used_draws))
+            for student in students
+        ]
+        copies = copy_questions_into_session(
+            quiz_session.id,
+            (question_id for _, drawn_ids in draws for question_id in drawn_ids),
+            session,
+        )
+        session.add_all(
+            QuizSessionStudentQuestion(
+                session_id=quiz_session.id,
+                student_id=student.id,
+                student_identifier=student.identifier,
+                question_id=copies[question_id],
+                position=position,
             )
-        session.add_all(assignments)
+            for student, drawn_ids in draws
+            for position, question_id in enumerate(drawn_ids)
+        )
     session.commit()
     session.refresh(quiz_session)
     publish_active_quiz_sessions_update(request, professor.id)

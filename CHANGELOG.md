@@ -53,6 +53,15 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Added
 
+- Each session now works on its own copy of the questions it drew, linked to
+  it and deleted with it. Question banks are fully editable: a question can
+  be edited or deleted, and a bank deleted, even while a quiz uses it or an
+  exam is running. Sessions already launched keep the questions they showed,
+  their answers and their grades; the edit only applies to future draws, and
+  no longer regrades finished sessions. A deleted bank is removed from the
+  quizzes that drew from it. The update copies the questions of existing
+  sessions (migration 0009); `QUESTION_IN_LAUNCHED_QUIZ`,
+  `QUESTION_IN_ACTIVE_SESSION` and `QUESTION_BANK_IN_USE` are gone.
 - The deployment guide describes upgrading PostgreSQL to a new major version
   (backup, fresh volume, restore, and going back), which CI now runs; a
   troubleshooting section on logs, health checks and common failures; and

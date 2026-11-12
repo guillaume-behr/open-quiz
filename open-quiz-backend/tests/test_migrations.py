@@ -1,5 +1,6 @@
 """Schema migrations: fresh databases, pre-migration ones and concurrency."""
 
+import json
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -11,7 +12,15 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import CheckConstraint, create_engine, inspect, text
+from sqlalchemy import (
+    CheckConstraint,
+    create_engine,
+    delete,
+    func,
+    inspect,
+    select,
+    text,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
@@ -21,13 +30,17 @@ from app.models import (
     Question,
     QuestionBank,
     QuestionChoice,
+    QuestionCode,
     Quiz,
+    QuizAnswer,
     QuizParticipant,
     QuizSession,
+    QuizSessionQuestion,
     QuizSessionStudentQuestion,
     RefreshSession,
     User,
 )
+from app.quiz_session_records import delete_quiz_session_records
 
 from support import (
     VALID_PNG,
@@ -293,6 +306,24 @@ def test_every_foreign_key_leads_an_index(tmp_path: Path) -> None:
         engine.dispose()
 
 
+def legacy_question(
+    session: DbSession, bank_id: int, prompt: str, answer_mode: str = "single"
+) -> int:
+    """Insert a bank question into a database migrated to before 0009.
+
+    The model now has columns 0009 adds, so the ORM cannot insert it there.
+    """
+    return session.execute(
+        text(
+            "INSERT INTO questions (question_bank_id, prompt, difficulty, "
+            "answer_mode, answer_mode_disclosed, allow_code_execution, "
+            "correction_mode, created_at) VALUES (:bank_id, :prompt, 'easy', "
+            ":answer_mode, true, false, 'automatic', now()) RETURNING id"
+        ),
+        {"bank_id": bank_id, "prompt": prompt, "answer_mode": answer_mode},
+    ).scalar_one()
+
+
 def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
     tmp_path: Path,
 ) -> None:
@@ -317,32 +348,25 @@ def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
             bank = QuestionBank(owner_id=teacher.id, grade_level="5e", chapter="C")
             session.add_all([quiz, bank])
             session.flush()
-            question, other_question = (
-                Question(
-                    question_bank_id=bank.id,
-                    prompt=prompt,
-                    difficulty="easy",
-                    answer_mode="single",
-                    correction_mode="automatic",
-                )
-                for prompt in ("Q1", "Q2")
+            question_id, other_question_id = (
+                legacy_question(session, bank.id, prompt) for prompt in ("Q1", "Q2")
             )
             quiz_session = QuizSession(
                 quiz_id=quiz.id, class_name="C", join_code="ORPHAN", status="finished"
             )
-            session.add_all([question, other_question, quiz_session])
+            session.add(quiz_session)
             session.flush()
             session.add(
                 QuizSessionStudentQuestion(
                     session_id=quiz_session.id,
                     student_id=424242,
                     student_identifier="gone.student",
-                    question_id=question.id,
+                    question_id=question_id,
                     position=0,
                 )
             )
             session.commit()
-            session_id, other_question_id = quiz_session.id, other_question.id
+            session_id = quiz_session.id
             teacher_id = teacher.id
 
         with engine.begin() as connection:
@@ -374,5 +398,228 @@ def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
                 )
             )
             session.commit()
+    finally:
+        engine.dispose()
+
+
+def test_upgrade_to_0009_gives_each_session_copies_of_its_questions(
+    tmp_path: Path,
+) -> None:
+    """Existing sessions move to copies of the questions they drew.
+
+    Each session gets one copy per question it drew or answered, with its
+    choices and its code. Assignments and answers follow, choice ids recorded
+    in answers too, so the bank questions can then change freely. A downgrade
+    points everything back at the bank, and a copy goes with its session.
+    """
+    database_url = database_url_for(tmp_path / "upgrade-0009")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0008")
+        with DbSession(engine) as session:
+            teacher = User(username="teacher", display_name="T", password_hash="x")
+            session.add(teacher)
+            session.flush()
+            quiz = Quiz(owner_id=teacher.id, title="Quiz", question_count=2)
+            bank = QuestionBank(owner_id=teacher.id, grade_level="5e", chapter="C")
+            session.add_all([quiz, bank])
+            session.flush()
+            choice_question = legacy_question(session, bank.id, "Pick")
+            written_question = legacy_question(session, bank.id, "Write", "written")
+            wrong, right = (
+                QuestionChoice(
+                    question_id=choice_question,
+                    label=label,
+                    is_correct=label == "right",
+                    points=1.0 if label == "right" else 0.0,
+                    position=position,
+                )
+                for position, label in enumerate(("wrong", "right"))
+            )
+            session.add_all([right, wrong])
+            session.add(
+                QuestionCode(
+                    question_id=choice_question, language="python", content="x"
+                )
+            )
+            common, personal = (
+                QuizSession(
+                    quiz_id=quiz.id, class_name="C", join_code=code, status="finished"
+                )
+                for code in ("COMMON", "PERSON")
+            )
+            session.add_all([common, personal])
+            session.flush()
+            session.add_all(
+                QuizSessionQuestion(
+                    session_id=common.id, question_id=question_id, position=position
+                )
+                for position, question_id in enumerate(
+                    (choice_question, written_question)
+                )
+            )
+            session.add(
+                QuizSessionStudentQuestion(
+                    session_id=personal.id,
+                    student_identifier="ada",
+                    question_id=choice_question,
+                    position=0,
+                )
+            )
+            participants = [
+                QuizParticipant(session_id=quiz_session.id, student_identifier="ada")
+                for quiz_session in (common, personal)
+            ]
+            session.add_all(participants)
+            session.flush()
+            session.add_all(
+                QuizAnswer(
+                    session_id=participant.session_id,
+                    participant_id=participant.id,
+                    question_id=choice_question,
+                    answer_data=json.dumps({"selected_choice_ids": [right.id, "x"]}),
+                    score=1.0,
+                )
+                for participant in participants
+            )
+            session.add(
+                QuizAnswer(
+                    session_id=common.id,
+                    participant_id=participants[0].id,
+                    question_id=written_question,
+                    answer_data=json.dumps({"text": "écrit"}),
+                )
+            )
+            session.commit()
+            common_id, personal_id, right_id = common.id, personal.id, right.id
+            bank_id = bank.id
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        def references(session: DbSession) -> list[tuple[str, int, int]]:
+            return sorted(
+                session.execute(
+                    text(
+                        "SELECT 'common', session_id, question_id "
+                        "FROM quiz_session_questions UNION ALL "
+                        "SELECT 'personal', session_id, question_id "
+                        "FROM quiz_session_student_questions UNION ALL "
+                        "SELECT 'answer', session_id, question_id FROM quiz_answers"
+                    )
+                ).all()
+            )
+
+        with DbSession(engine) as session:
+            copies = {
+                (copy.quiz_session_id, copy.source_question_id): copy
+                for copy in session.scalars(
+                    select(Question).where(Question.quiz_session_id.is_not(None))
+                )
+            }
+            assert sorted(copies) == sorted(
+                [
+                    (common_id, choice_question),
+                    (common_id, written_question),
+                    (personal_id, choice_question),
+                ]
+            )
+            assert all(copy.question_bank_id is None for copy in copies.values())
+            common_choice = copies[(common_id, choice_question)]
+            assert common_choice.prompt == "Pick"
+            assert references(session) == sorted(
+                [
+                    ("common", common_id, common_choice.id),
+                    ("common", common_id, copies[(common_id, written_question)].id),
+                    (
+                        "personal",
+                        personal_id,
+                        copies[(personal_id, choice_question)].id,
+                    ),
+                    ("answer", common_id, common_choice.id),
+                    ("answer", common_id, copies[(common_id, written_question)].id),
+                    ("answer", personal_id, copies[(personal_id, choice_question)].id),
+                ]
+            )
+            for (session_id, source_id), copy in copies.items():
+                if source_id != choice_question:
+                    continue
+                copied_right = session.scalar(
+                    select(QuestionChoice.id).where(
+                        QuestionChoice.question_id == copy.id,
+                        QuestionChoice.label == "right",
+                    )
+                )
+                assert copied_right not in (None, right_id)
+                assert json.loads(
+                    session.scalar(
+                        select(QuizAnswer.answer_data).where(
+                            QuizAnswer.session_id == session_id,
+                            QuizAnswer.question_id == copy.id,
+                        )
+                    )
+                ) == {"selected_choice_ids": [copied_right, "x"]}
+                assert (
+                    session.scalar(
+                        select(QuestionCode.content).where(
+                            QuestionCode.question_id == copy.id
+                        )
+                    )
+                    == "x"
+                )
+            upgraded_references = references(session)
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.downgrade(config, "0008")
+        with DbSession(engine) as session:
+            assert {question_id for _, _, question_id in references(session)} == {
+                choice_question,
+                written_question,
+            }
+            assert set(
+                session.scalars(
+                    text(
+                        "SELECT answer_data FROM quiz_answers "
+                        "WHERE question_id = :question_id"
+                    ),
+                    {"question_id": choice_question},
+                )
+            ) == {json.dumps({"selected_choice_ids": [right_id, "x"]})}
+            assert session.scalar(text("SELECT count(*) FROM questions")) == 2
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with DbSession(engine) as session:
+            assert len(references(session)) == len(upgraded_references)
+            # The bank questions go; the sessions keep their copies.
+            session.execute(
+                delete(Question).where(Question.question_bank_id == bank_id)
+            )
+            session.commit()
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(Question)
+                    .where(Question.source_question_id.is_(None))
+                )
+                == 3
+            )
+            delete_quiz_session_records([common_id], session)
+            session.commit()
+            remaining = session.execute(
+                select(Question.quiz_session_id, func.count(QuestionChoice.id))
+                .outerjoin(QuestionChoice, QuestionChoice.question_id == Question.id)
+                .group_by(Question.id)
+            ).all()
+            assert remaining == [(personal_id, 2)]
+            assert session.scalar(select(func.count()).select_from(QuestionCode)) == 1
     finally:
         engine.dispose()

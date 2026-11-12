@@ -148,11 +148,6 @@ export type Question = {
     created_at: string
 }
 
-export type UpdatedQuestion = Question & {
-    // Finished sessions with published grades, which an edit never regrades.
-    published_sessions_not_regraded: number
-}
-
 export type NewQuestion = {
     prompt: string
     difficulty: QuestionDifficulty

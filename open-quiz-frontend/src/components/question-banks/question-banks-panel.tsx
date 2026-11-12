@@ -108,8 +108,6 @@ export function QuestionBanksPanel({
         null
     )
     const [bankToDelete, setBankToDelete] = useState<QuestionBank | null>(null)
-    // Published sessions the last question edit left unchanged, if any.
-    const [publishedSessionsKept, setPublishedSessionsKept] = useState(0)
 
     const transfer = useBankTransfer({
         onImported: async (imported) => {
@@ -131,24 +129,12 @@ export function QuestionBanksPanel({
         )
     )
     const deletingBank = useAsyncAction(deleteSelectedBank, (caughtError) =>
-        apiErrorMessage(
-            caughtError,
-            t,
-            caughtError instanceof ApiError && caughtError.status === 409
-                ? t("question-bank-in-use-error")
-                : t("question-bank-delete-error")
-        )
+        apiErrorMessage(caughtError, t, t("question-bank-delete-error"))
     )
     const deletingQuestion = useAsyncAction(
         deleteSelectedQuestion,
         (caughtError) =>
-            apiErrorMessage(
-                caughtError,
-                t,
-                caughtError instanceof ApiError && caughtError.status === 409
-                    ? t("question-in-use-error")
-                    : t("question-delete-error")
-            )
+            apiErrorMessage(caughtError, t, t("question-delete-error"))
     )
 
     function updateBanks(update: (banks: QuestionBank[]) => QuestionBank[]) {
@@ -222,7 +208,6 @@ export function QuestionBanksPanel({
         setGradeLevel(bank.grade_level)
         setTitle(bank.chapter)
         saving.setError(null)
-        setPublishedSessionsKept(0)
         setQuestionsView(null)
         setBankView("questions")
     }
@@ -347,23 +332,14 @@ export function QuestionBanksPanel({
                                     ? t("questions-load-error")
                                     : null
                             }
-                            notice={
-                                publishedSessionsKept > 0
-                                    ? t("question-published-sessions-kept", {
-                                          count: publishedSessionsKept,
-                                      })
-                                    : null
-                            }
                             initialView={questionsView}
                             onAdd={(view) => {
                                 setQuestionsView(view)
-                                setPublishedSessionsKept(0)
                                 setEditingQuestion(null)
                                 setBankView("question-form")
                             }}
                             onEdit={(question, view) => {
                                 setQuestionsView(view)
-                                setPublishedSessionsKept(0)
                                 setEditingQuestion(question)
                                 setBankView("question-form")
                             }}
@@ -431,8 +407,7 @@ export function QuestionBanksPanel({
                             setEditingQuestion(null)
                             setBankView("questions")
                         }}
-                        onSaved={(savedQuestion, publishedSessionsKept) => {
-                            setPublishedSessionsKept(publishedSessionsKept)
+                        onSaved={(savedQuestion) => {
                             if (!editingQuestion)
                                 changeQuestionCount(selectedBank.id, 1)
                             questionList.setData((current = []) =>

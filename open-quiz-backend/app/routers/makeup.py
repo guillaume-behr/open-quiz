@@ -73,6 +73,7 @@ from app.services.session_lifecycle import (
     discard_active_training_sessions,
     finish_session,
 )
+from app.session_questions import copy_questions_into_session, source_question_ids
 from app.session_responses import (
     makeup_session_response,
     makeup_session_responses,
@@ -593,21 +594,28 @@ def draw_makeup_questions(
             )
         )
     )
+    # Each session holds its own copies: compare draws by bank question.
+    sources = source_question_ids(
+        (question_id for _, question_id in existing_draw_rows), session
+    )
     questions_by_session: dict[int, list[int]] = defaultdict(list)
     for existing_session_id, question_id in existing_draw_rows:
-        questions_by_session[existing_session_id].append(question_id)
+        questions_by_session[existing_session_id].append(
+            sources.get(question_id, -question_id)
+        )
     used_draws = {
         tuple(sorted(question_ids)) for question_ids in questions_by_session.values()
     }
     question_ids = draw_unique_question_ids(
         question_draw_pool(quiz, session), used_draws
     )
+    copies = copy_questions_into_session(child.id, question_ids, session)
     session.add_all(
         QuizSessionStudentQuestion(
             session_id=child.id,
             student_id=membership.id,
             student_identifier=membership.identifier,
-            question_id=question_id,
+            question_id=copies[question_id],
             position=position,
         )
         for position, question_id in enumerate(question_ids)
