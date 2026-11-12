@@ -12,7 +12,8 @@ usage() {
     printf 'Usage: sh ./backup.sh [--directory DIR] [--keep N] [--help]\n\n'
     printf 'Back up the Open Quiz database to a timestamped pg_dump file.\n\n'
     printf '  --directory DIR  Write the backup to DIR (default: backups/).\n'
-    printf '  --keep N         Then delete all but the N most recent backups.\n'
+    printf '  --keep N         Then delete all but the N most recent backups\n'
+    printf '                   (default: OPEN_QUIZ_BACKUP_KEEP in .env, or 14).\n'
     printf '  --help, -h       Show this message.\n\n'
     printf 'A restored database also needs the encryption keys of\n'
     printf 'open-quiz-backend/.env. Keep a copy of that file, but not next to the\n'
@@ -51,22 +52,18 @@ open_quiz_banner 'Backing up your database'
 cd "$SCRIPT_DIR"
 require_commands docker
 setup_compose
+# A backup taken during an update or a restore could catch the database
+# half-way: fail instead, so that a scheduled run reports it.
+acquire_lock
 database_is_running || fail "the open-quiz-database container is not running"
 
 step 'Dumping PostgreSQL'
 backup_file=$(create_backup "$backup_directory")
 highlight "Backup written to $backup_file"
 
-if [ -n "$keep" ]; then
-    step "Keeping the $keep most recent backups"
-    # Newest first, by modification time: two backups of the same second
-    # differ only by a suffix, which does not sort chronologically.
-    ls -1t "$backup_directory"/open-quiz-*.dump | tail -n "+$((keep + 1))" \
-        | while IFS= read -r old_backup; do
-            rm -f "$old_backup"
-            note "Removed $old_backup"
-        done
-fi
+keep=${keep:-$(backup_retention)}
+step "Keeping the $keep most recent backups"
+prune_backups "$backup_directory" "$keep" "$backup_file"
 
 note 'Copy it to separate protected storage. Keep open-quiz-backend/.env and'
 note '.env.database too, but apart from the backups: they hold the keys.'

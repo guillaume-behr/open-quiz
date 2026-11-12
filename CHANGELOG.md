@@ -15,6 +15,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
+- `backups/` now keeps only the 14 most recent backups: copy older ones
+  elsewhere before updating if you need them, or set `OPEN_QUIZ_BACKUP_KEEP`
+  in the root `.env`.
 - Docker Compose settings (`OPEN_QUIZ_API_WORKERS`, `OPEN_QUIZ_API_MEMORY`…)
   belong in the root `.env`, now listed in `.env.example`; `install.sh`
   creates it on new installs. If you passed any of them on the command line,
@@ -50,6 +53,13 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Added
 
+- Each backup gets a `<dump>.meta` file: the revision, the schema revision
+  and fingerprints of the encryption keys. `restore.sh` refuses a backup whose
+  keys differ from `open-quiz-backend/.env` unless `--force-key-mismatch` is
+  given.
+- `install.sh`, `update.sh`, `backup.sh` and `restore.sh` take a lock
+  (`.open-quiz.lock`): a second one fails at once instead of running
+  alongside; a lock left by a dead process is taken over.
 - `update.sh --version vX.Y.Z` installs a release; without it the script still
   follows the branch, and now says that it deploys unreleased changes.
 - `update.sh --rollback` returns to the code, images and data of the
@@ -72,6 +82,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- Backups are pruned to the 14 most recent (`OPEN_QUIZ_BACKUP_KEEP` in the
+  root `.env`, or `backup.sh --keep N`) by `backup.sh`, `update.sh` and
+  `restore.sh`, which used to keep them all.
 - The deployment no longer claims to support an API on another origin, which
   `docker-compose.yml` never published: `VITE_API_URL` is a development
   setting only, and the interface's CSP allows `'self'` alone. A root
@@ -115,6 +128,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- A cancelled `restore.sh` no longer rewrites `open-quiz-backend/.env` or
+  creates `.env.database` on a deployment from before the API's own role.
 - After an update, a page opened from a bookmark or a link (such as
   `/teacher/dashboard`) no longer stays blank: every application page is now
   sent with `Cache-Control: no-cache`, as the home page already was.

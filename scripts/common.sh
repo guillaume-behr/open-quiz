@@ -170,7 +170,115 @@ create_backup() {
         fail "the new backup cannot be read back; it was discarded"
     fi
     mv "$partial_file" "$backup_file"
+    write_backup_metadata "$backup_file"
     printf '%s\n' "$backup_file"
+}
+
+# Print a fingerprint of an encryption key: enough to tell two keys apart,
+# never enough to recover one. Empty for an empty key.
+key_fingerprint() {
+    [ -n "$1" ] || return 0
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf 'open-quiz-key-fingerprint:%s' "$1" | sha256sum | cut -c1-16
+    elif command -v shasum >/dev/null 2>&1; then
+        printf 'open-quiz-key-fingerprint:%s' "$1" | shasum -a 256 | cut -c1-16
+    else
+        printf 'open-quiz-key-fingerprint:%s' "$1" | openssl dgst -sha256 -r | cut -c1-16
+    fi
+}
+
+# The keys a restored database needs, as KEY=fingerprint lines, from the
+# API's .env ($1).
+encryption_key_fingerprints() {
+    for key_name in TOTP_ENCRYPTION_KEY STUDENT_CREDENTIAL_ENCRYPTION_KEY; do
+        key_value=$(environment_value "$1" "$key_name" 2>/dev/null || true)
+        printf '%s_fingerprint=%s\n' "$key_name" "$(key_fingerprint "$key_value")"
+    done
+}
+
+# Write <backup>.meta next to a backup: the revision and schema it was taken
+# from, and fingerprints of the encryption keys its data needs.
+write_backup_metadata() {
+    alembic_head=$(compose exec -T open-quiz-database psql --username=open_quiz \
+        --dbname=open_quiz --tuples-only --no-align \
+        --command="SELECT version_num FROM alembic_version" 2>/dev/null || true)
+    (
+        umask 077
+        {
+            printf 'revision=%s\n' "$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+            printf 'alembic_head=%s\n' "${alembic_head:-unknown}"
+            printf 'created_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            encryption_key_fingerprints "$SCRIPT_DIR/open-quiz-backend/.env"
+        } >"$1.meta"
+    )
+}
+
+# How many automatic backups to keep: OPEN_QUIZ_BACKUP_KEEP from the
+# environment or the root .env, 14 by default.
+backup_retention() {
+    retention=${OPEN_QUIZ_BACKUP_KEEP:-$(environment_value "$SCRIPT_DIR/.env" OPEN_QUIZ_BACKUP_KEEP 2>/dev/null || true)}
+    retention=${retention:-14}
+    case "$retention" in
+        '' | *[!0-9]* | 0) fail "OPEN_QUIZ_BACKUP_KEEP must be a positive whole number" ;;
+    esac
+    printf '%s\n' "$retention"
+}
+
+# Delete all but the $2 newest backups of directory $1, with their .meta
+# files, never one of the files named after them.
+prune_backups() {
+    prune_directory=$1
+    prune_keep=$2
+    shift 2
+    # Newest first, by modification time: two backups of the same second
+    # differ only by a suffix, which does not sort chronologically.
+    # shellcheck disable=SC2012 # the names are ours: open-quiz-<date>.dump
+    ls -1t "$prune_directory"/open-quiz-*.dump 2>/dev/null \
+        | tail -n "+$((prune_keep + 1))" \
+        | while IFS= read -r old_backup; do
+            for protected_backup in "$@"; do
+                [ "$old_backup" != "$protected_backup" ] || continue 2
+            done
+            rm -f "$old_backup" "$old_backup.meta"
+            note "Removed the old backup $old_backup"
+        done
+}
+
+# Take the lock that keeps two Open Quiz operations (install, update,
+# backup, restore) from running at once, or fail. A script started by the
+# one holding the lock shares it. The lock goes when the script ends.
+acquire_lock() {
+    lock_directory="$SCRIPT_DIR/.open-quiz.lock"
+    if [ -n "${OPEN_QUIZ_LOCK_OWNER:-}" ] \
+        && [ "$(cat "$lock_directory/pid" 2>/dev/null || true)" = "$OPEN_QUIZ_LOCK_OWNER" ]; then
+        return 0
+    fi
+    if ! mkdir "$lock_directory" 2>/dev/null; then
+        lock_holder=$(cat "$lock_directory/pid" 2>/dev/null || true)
+        [ -n "$lock_holder" ] \
+            || fail "another Open Quiz operation is starting; if none is, remove $lock_directory"
+        if ps -p "$lock_holder" >/dev/null 2>&1; then
+            fail "another Open Quiz operation is running (process $lock_holder); try again once it has finished"
+        fi
+        note "Removing a stale lock: process $lock_holder is no longer running."
+        rm -rf "$lock_directory"
+        mkdir "$lock_directory" 2>/dev/null \
+            || fail "another Open Quiz operation has just started; try again once it has finished"
+    fi
+    printf '%s\n' "$$" >"$lock_directory/pid"
+    OPEN_QUIZ_LOCK_OWNER=$$
+    export OPEN_QUIZ_LOCK_OWNER
+    trap release_lock EXIT
+    trap 'release_lock; exit 129' HUP
+    trap 'release_lock; exit 130' INT
+    trap 'release_lock; exit 143' TERM
+}
+
+# Remove the lock if this process holds it.
+release_lock() {
+    if [ "$(cat "$SCRIPT_DIR/.open-quiz.lock/pid" 2>/dev/null || true)" = "$$" ]; then
+        rm -rf "$SCRIPT_DIR/.open-quiz.lock"
+    fi
 }
 
 database_is_running() {

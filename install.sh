@@ -62,6 +62,7 @@ printf '%s\n' "$domain" | grep -Eq '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z
 
 # Confirm Docker is usable before writing any secret to disk.
 setup_compose
+acquire_lock
 
 # Docker Compose's own settings, from their example: an existing file is
 # kept as it is.
@@ -82,7 +83,7 @@ admin_password=$(random_hex 24)
 
 umask 077
 temporary_file=$(mktemp "$SCRIPT_DIR/open-quiz-backend/.env.tmp.XXXXXX")
-trap 'rm -f "$temporary_file"' EXIT HUP INT TERM
+trap 'rm -f "$temporary_file"; release_lock' EXIT HUP INT TERM
 
 sed \
     -e "s|^DATABASE_PASSWORD=.*$|DATABASE_PASSWORD=$database_password|" \
@@ -104,7 +105,7 @@ if [ -f "$DATABASE_ENV_FILE" ]; then
     note "Keeping the existing $DATABASE_ENV_FILE"
 else
     database_temporary_file=$(mktemp "$SCRIPT_DIR/open-quiz-backend/.env.database.tmp.XXXXXX")
-    trap 'rm -f "$temporary_file" "$database_temporary_file"' EXIT HUP INT TERM
+    trap 'rm -f "$temporary_file" "$database_temporary_file"; release_lock' EXIT HUP INT TERM
     {
         printf '# Read by the PostgreSQL container only: the superuser password.\n'
         printf '# The API connects with its own role (DATABASE_PASSWORD in .env).\n'
@@ -115,7 +116,10 @@ else
 fi
 
 mv "$temporary_file" "$ENV_FILE"
-trap - EXIT HUP INT TERM
+trap release_lock EXIT
+trap 'release_lock; exit 129' HUP
+trap 'release_lock; exit 130' INT
+trap 'release_lock; exit 143' TERM
 chmod 600 "$ENV_FILE"
 
 printf '\n'
