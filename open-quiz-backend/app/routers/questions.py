@@ -187,7 +187,7 @@ def create_question(
     image: UploadFile | None = File(default=None),
 ) -> QuestionResponse:
     """Create a choice or written question, optionally with a private image."""
-    owned_question_bank(question_bank_id, professor, session)
+    owned_question_bank(question_bank_id, professor, session, for_update=True)
     question_count = session.scalar(
         select(func.count())
         .select_from(Question)

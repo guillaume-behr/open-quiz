@@ -841,6 +841,7 @@
     "error-training-question-count-exceeded": "Le nombre de questions demandé dépasse celui que contient la banque.",
     "error-session-expired": "Votre session a expiré. Reconnectez-vous.",
     "error-problem-report-rate-limited": "Trop de signalements envoyés. Réessayez plus tard.",
+    "error-class-import-rate-limited": "Trop d’imports de classes. Réessayez plus tard.",
     "error-problem-report-not-found": "Ce signalement est introuvable. Il a peut-être déjà été supprimé.",
     "error-teacher-not-found": "Ce compte enseignant est introuvable. Il a peut-être été supprimé.",
     "error-teacher-in-active-exam": "Cet enseignant anime un examen en cours. Réessayez une fois l’examen terminé.",

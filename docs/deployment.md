@@ -680,6 +680,8 @@ Les valeurs ci-dessous sont fournies dans les fichiers `.env` d’exemple.
 | `QUIZ_RESULT_RETENTION_DAYS`       | conservation des résultats terminés                     | `365`                                           |
 | `TRAINING_RESULT_RETENTION_DAYS`   | conservation des entraînements terminés                 | `365`                                           |
 | `ABANDONED_SESSION_RETENTION_DAYS` | délai avant de solder une session jamais clôturée       | `7`                                             |
+| `CLASS_IMPORT_ATTEMPTS`            | imports de classes par fenêtre et par enseignant        | `30`                                            |
+| `CLASS_IMPORT_WINDOW_SECONDS`      | fenêtre du quota d’imports de classes                   | `900`                                           |
 | `PROBLEM_REPORT_ATTEMPTS`          | signalements anonymes par fenêtre pour toute l’instance | `60` en local, `5` dans l’exemple de production |
 | `PROBLEM_REPORT_WINDOW_SECONDS`    | fenêtre du quota de signalements                        | `900`                                           |
 | `PROBLEM_REPORT_RETENTION_DAYS`    | conservation des signalements                           | `90`                                            |

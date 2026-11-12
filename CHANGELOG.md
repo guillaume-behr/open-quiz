@@ -147,6 +147,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Saving a question that reuses an image no longer fails with a 500 when the
+  unused-image purge runs at the same moment; two questions created at once
+  can no longer push a bank past 500 questions; a class import refuses a
+  student name made only of spaces.
 - "tle" no longer creates a second level next to "Tle": classes, banks and
   imports reuse the existing level, so training banks match their classes.
   Class and bank names clash ignoring case through every route, imports
@@ -322,6 +326,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Security
 
+- Class imports are limited per teacher (`CLASS_IMPORT_ATTEMPTS` per
+  `CLASS_IMPORT_WINDOW_SECONDS`, 30 per 15 minutes by default), since an
+  import tells whether a student identifier exists on the instance.
+  `SECURITY.md` documents that trade-off.
 - A successful sign-in gives back only its own attempt instead of resetting
   the account's attempt counter, so the owner signing in no longer hands
   whoever is guessing their password a fresh allowance.

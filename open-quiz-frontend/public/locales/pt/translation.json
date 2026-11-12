@@ -841,6 +841,7 @@
     "error-training-question-count-exceeded": "O número de perguntas pedido excede o que o banco contém.",
     "error-session-expired": "A sua sessão expirou. Inicie sessão novamente.",
     "error-problem-report-rate-limited": "Foram enviados demasiados relatórios. Tente novamente mais tarde.",
+    "error-class-import-rate-limited": "Demasiadas importações de turmas. Tente novamente mais tarde.",
     "error-problem-report-not-found": "Este relatório não foi encontrado. Talvez já tenha sido eliminado.",
     "error-teacher-not-found": "Esta conta de professor não foi encontrada. Talvez tenha sido eliminada.",
     "error-teacher-in-active-exam": "Este professor está a conduzir um exame neste momento. Tente novamente quando terminar.",

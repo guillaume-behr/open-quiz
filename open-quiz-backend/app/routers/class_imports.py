@@ -80,6 +80,16 @@ def import_classes(
     professor: ProfessorUser,
     session: DbSession,
 ) -> ClassBatchImportResponse:
+    retry_after = request.app.state.class_import_rate_limiter.reserve(
+        f"class-import:{professor.id}"
+    )
+    if retry_after:
+        raise ApiError(
+            429,
+            ErrorCode.CLASS_IMPORT_RATE_LIMITED,
+            "Trop d’imports de classes. Réessayez plus tard.",
+            headers={"Retry-After": str(retry_after)},
+        )
     # PostgreSQL's lower(), as the unique indexes compare: Python's casefold()
     # differs from it, for "ß" for instance.
     lowered = lowered_names(

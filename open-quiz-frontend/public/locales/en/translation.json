@@ -840,6 +840,7 @@
     "error-training-question-count-exceeded": "The requested number of questions exceeds what the bank holds.",
     "error-session-expired": "Your session has expired. Sign in again.",
     "error-problem-report-rate-limited": "Too many reports sent. Try again later.",
+    "error-class-import-rate-limited": "Too many class imports. Try again later.",
     "error-problem-report-not-found": "This report cannot be found. It may already have been deleted.",
     "error-teacher-not-found": "This teacher account cannot be found. It may have been deleted.",
     "error-teacher-in-active-exam": "This teacher is running an exam right now. Try again once it has ended.",

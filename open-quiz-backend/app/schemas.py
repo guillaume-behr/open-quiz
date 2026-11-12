@@ -309,7 +309,11 @@ class ClassImportStudent(BaseModel):
     @field_validator("display_name")
     @classmethod
     def normalize_name(cls, value: str) -> str:
-        return " ".join(value.split())
+        # min_length runs first: "   " passes it and normalizes to "".
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("display_name must not be blank")
+        return normalized
 
 
 class ClassImportItem(StudentClassCreate):

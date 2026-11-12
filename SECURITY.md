@@ -154,8 +154,15 @@ saturation, la réponse révèle donc si un identifiant existe. C’est un compr
 assumé en faveur des comptes légitimes.
 
 Les identifiants élèves sont uniques pour toute l’instance, puisqu’ils servent
-à se connecter : un enseignant qui en crée ou en importe un déjà pris apprend
-qu’il existe, sans rien savoir de son propriétaire.
+à se connecter : un enseignant qui en importe un déjà pris apprend qu’il
+existe, sans rien savoir de son propriétaire, et le suffixe qu’ajoute la
+création d’un compte (`prenom.nom2`) révèle de même que les précédents sont
+pris. C’est un compromis assumé : un identifiant est un nom de connexion, pas
+un secret, et le cloisonner par enseignant obligerait chaque élève à désigner
+son établissement ou son enseignant à la connexion. Pour qu’un compte
+enseignant ne puisse pas sonder les identifiants en masse, les imports de
+classes sont limités par enseignant (`CLASS_IMPORT_ATTEMPTS` par
+`CLASS_IMPORT_WINDOW_SECONDS`).
 
 Les mots de passe élèves sont volontairement réversibles : l’enseignant doit
 pouvoir réimprimer une carte d’identifiants sans réinitialiser le compte. Ils

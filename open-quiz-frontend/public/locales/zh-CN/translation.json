@@ -840,6 +840,7 @@
     "error-training-question-count-exceeded": "请求的题目数量超过了题库中的题目数。",
     "error-session-expired": "您的会话已过期，请重新登录。",
     "error-problem-report-rate-limited": "提交的反馈过多，请稍后重试。",
+    "error-class-import-rate-limited": "导入班级的次数过多，请稍后重试。",
     "error-problem-report-not-found": "找不到此反馈，它可能已被删除。",
     "error-teacher-not-found": "找不到此教师账户，它可能已被删除。",
     "error-teacher-in-active-exam": "该教师正在主持考试，请在考试结束后重试。",
