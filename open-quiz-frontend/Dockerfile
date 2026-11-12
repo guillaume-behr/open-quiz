@@ -1,7 +1,7 @@
 # Base images are pinned by version and digest so a rebuild is reproducible;
 # Dependabot proposes the updates (.github/dependabot.yml). Node follows the
 # major version CI builds with.
-FROM node:24.22.2-trixie@sha256:8c761eca2bf7eec965f946cf47b8090143cb41f45f2f8699af0cc0298d2d2d19 AS build
+FROM node:24.22.2-trixie@sha256:5c6e2e57d7dd6652ce6f087ba0328312059d7c77f93baa8751865dbf103f1acb AS build
 
 WORKDIR /app
 
