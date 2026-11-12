@@ -170,6 +170,7 @@ function ChoiceValueField({
                 onChange={(event) => onUpdate({ label: event.target.value })}
                 maxLength={4000}
                 placeholder={t("expected-written-answer-placeholder")}
+                aria-label={t("choice-placeholder", { number: index + 1 })}
                 required
             />
         )
@@ -181,6 +182,7 @@ function ChoiceValueField({
             onChange={(event) => onUpdate({ label: event.target.value })}
             maxLength={500}
             placeholder={t("choice-placeholder", { number: index + 1 })}
+            aria-label={t("choice-placeholder", { number: index + 1 })}
             required={!hasImage && !hasCode}
         />
     )

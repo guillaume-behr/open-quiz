@@ -4,7 +4,7 @@ import type {
     QuizAnswerReview,
     QuizParticipant,
 } from "@/api/types"
-import { formatScore } from "@/lib/grades"
+import { answerOutcomeKey, formatScore } from "@/lib/grades"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -293,7 +293,7 @@ function AnswerText({
                 {label}
                 {style && score !== undefined && maxScore !== undefined && (
                     <span className="sr-only">
-                        {` — ${t(score >= maxScore ? "training-correct" : "training-incorrect")}`}
+                        {` — ${t(answerOutcomeKey(score, maxScore))}`}
                     </span>
                 )}
             </p>

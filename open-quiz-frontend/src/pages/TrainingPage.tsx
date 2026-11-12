@@ -10,6 +10,7 @@ import { StudentQuestionForm } from "@/components/student-quiz/student-question-
 import { TranslationNotice } from "@/components/student-quiz/translation-notice"
 import { useQuizTranslation } from "@/components/student-quiz/use-quiz-translation"
 import { Button } from "@/components/ui/button"
+import { Popover } from "@base-ui/react/popover"
 import { Grade } from "@/components/ui/grade"
 import { PageLoader } from "@/components/ui/page-loader"
 import { NavbarAction } from "@/components/navigation/navbar-action"
@@ -175,7 +176,7 @@ export function TrainingPage() {
                     size="sm"
                     onClick={() => void navigate("/student/dashboard")}
                 >
-                    <ArrowLeft />
+                    <ArrowLeft className="rtl:rotate-180" />
                     {t("student-dashboard")}
                 </Button>
             </NavbarAction>
@@ -239,16 +240,28 @@ export function TrainingPage() {
                                         })
                                     }
                                 />
-                                <button
-                                    type="button"
-                                    className="rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                    aria-label={t(
-                                        "training-potential-score-help"
-                                    )}
-                                    title={t("training-potential-score-help")}
-                                >
-                                    <Info className="size-4" />
-                                </button>
+                                <Popover.Root>
+                                    <Popover.Trigger
+                                        className="rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                        aria-label={t(
+                                            "training-potential-score-about"
+                                        )}
+                                    >
+                                        <Info className="size-4" />
+                                    </Popover.Trigger>
+                                    <Popover.Portal>
+                                        <Popover.Positioner
+                                            className="z-50"
+                                            sideOffset={4}
+                                        >
+                                            <Popover.Popup className="max-w-xs rounded-lg bg-popover p-3 text-start text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none">
+                                                {t(
+                                                    "training-potential-score-help"
+                                                )}
+                                            </Popover.Popup>
+                                        </Popover.Positioner>
+                                    </Popover.Portal>
+                                </Popover.Root>
                             </div>
                         )}
                         <Button

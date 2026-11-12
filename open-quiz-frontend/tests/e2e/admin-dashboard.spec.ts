@@ -247,7 +247,7 @@ test("changing the language does not restore the administrator session again", a
     ).toBeVisible()
 
     await page.getByRole("button", { name: "Change language" }).click()
-    await page.getByRole("menuitem", { name: "Français" }).click()
+    await page.getByRole("menuitemradio", { name: "Français" }).click()
     await expect(
         page.getByText("Connecté en tant que Site administrator")
     ).toBeVisible()

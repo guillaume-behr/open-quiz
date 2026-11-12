@@ -95,7 +95,7 @@ export function ClassCard({
                 variant="ghost"
                 className="absolute end-12 top-4"
                 onClick={onEdit}
-                aria-label={t("edit-class")}
+                aria-label={t("edit-class-named", { name: studentClass.name })}
                 title={t("edit-class")}
             >
                 <Pencil />
@@ -106,7 +106,9 @@ export function ClassCard({
                 variant="destructive"
                 className="absolute end-4 top-4"
                 onClick={onDelete}
-                aria-label={t("delete-class")}
+                aria-label={t("delete-class-named", {
+                    name: studentClass.name,
+                })}
                 title={t("delete-class")}
             >
                 <Trash2 />
