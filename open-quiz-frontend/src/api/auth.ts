@@ -2,15 +2,12 @@ import {
     clearSessionTokens,
     refreshProofHeaders,
     request,
+    requestParsed,
     restoreAccessToken,
     setSessionTokens,
 } from "./client"
+import { LoginResponseSchema, TokenResponseSchema, UserSchema } from "./schemas"
 import type { TwoFactorChallenge, User } from "./types"
-
-type TokenResponse = {
-    access_token: string
-    refresh_proof: string
-}
 
 /** A browser that passed two-factor login today signs in without a code. */
 export type LoginResult =
@@ -21,9 +18,8 @@ export async function login(
     password: string,
     audience: "professor" | "admin"
 ): Promise<LoginResult> {
-    const result = await request<
-        TwoFactorChallenge | (TokenResponse & { status: "authenticated" })
-    >(
+    const result = await requestParsed(
+        LoginResponseSchema,
         "/api/auth/login",
         {
             method: "POST",
@@ -49,7 +45,8 @@ export async function verifyTwoFactor(
     challengeToken: string,
     code: string
 ): Promise<User> {
-    const result = await request<TokenResponse>(
+    const result = await requestParsed(
+        TokenResponseSchema,
         "/api/auth/2fa/verify",
         {
             method: "POST",
@@ -103,5 +100,5 @@ export async function logout({
 }
 
 function currentUser(): Promise<User> {
-    return request<User>("/api/users/me")
+    return requestParsed(UserSchema, "/api/users/me")
 }

@@ -20,7 +20,7 @@ from fastapi import (
     Response,
     status,
 )
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,7 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
+from app.pagination import Paging
 from app.participants import (
     enforce_public_rate_limit,
     generate_join_code,
@@ -74,8 +75,8 @@ from app.services.session_lifecycle import (
     finish_session,
 )
 from app.session_responses import (
+    makeup_responses,
     makeup_session_response,
-    makeup_session_responses,
     quiz_responses,
     student_state_response,
 )
@@ -125,11 +126,27 @@ def owned_makeup_session(
     return makeup
 
 
+# Kept on purpose: the interface follows make-up sessions on their WebSocket
+# feed (live.py), and this read-only list stays as a polling fallback for API
+# clients and the backend tests.
 @router.get("/makeup/sessions", response_model=list[MakeupSessionResponse])
 def list_makeup_sessions(
-    professor: ProfessorUser, session: DbSession
+    professor: ProfessorUser, session: DbSession, paging: Paging
 ) -> list[MakeupSessionResponse]:
-    return makeup_session_responses(professor, session)
+    """Every make-up of the teacher, finished ones included, newest first."""
+    owned = MakeupSession.owner_id == professor.id
+    paging.set_total(
+        session.scalar(select(func.count()).select_from(MakeupSession).where(owned))
+        or 0
+    )
+    makeups = session.scalars(
+        select(MakeupSession)
+        .where(owned)
+        .order_by(MakeupSession.created_at.desc(), MakeupSession.id.desc())
+        .offset(paging.offset)
+        .limit(paging.page_size)
+    )
+    return makeup_responses(list(makeups), session)
 
 
 def class_finished_quiz_ids(
@@ -323,6 +340,12 @@ def apply_makeup_action(
 @router.post(
     "/makeup/sessions/{session_id}/{action}",
     response_model=MakeupSessionResponse,
+    # Cancelling deletes the make-up session: there is nothing left to return.
+    responses={
+        status.HTTP_204_NO_CONTENT: {
+            "description": "Make-up session cancelled (action `cancel`)"
+        }
+    },
 )
 def control_makeup_session(
     session_id: int,

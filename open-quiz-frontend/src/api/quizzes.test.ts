@@ -6,6 +6,7 @@ const client = vi.hoisted(() => ({
     request: vi.fn(),
     requestBlob: vi.fn(),
     requestPage: vi.fn(),
+    requestParsed: vi.fn(),
 }))
 vi.mock("./client", () => client)
 
@@ -16,6 +17,7 @@ function lastUrl(mock: ReturnType<typeof vi.fn>): string {
 describe("quiz API", () => {
     beforeEach(() => {
         client.request.mockResolvedValue({})
+        client.requestParsed.mockResolvedValue({})
         client.requestBlob.mockResolvedValue(new Blob())
         client.requestPage.mockImplementation((url: string) =>
             Promise.resolve({
@@ -82,12 +84,14 @@ describe("quiz API", () => {
             vi.clearAllMocks()
             await call(1, 2, 3, "text", 5)
             const urls = [
-                client.request,
-                client.requestBlob,
-                client.requestPage,
+                ...[client.request, client.requestBlob, client.requestPage]
+                    .flatMap((mock) => mock.mock.calls)
+                    .map((args) => String(args[0])),
+                // A validated request takes its schema first.
+                ...client.requestParsed.mock.calls.map((args) =>
+                    String(args[1])
+                ),
             ]
-                .flatMap((mock) => mock.mock.calls)
-                .map((args) => String(args[0]))
             expect(urls, name).toEqual([
                 expect.stringMatching(/^\/api\/quizzes/),
             ])

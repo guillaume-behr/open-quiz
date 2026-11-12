@@ -378,7 +378,7 @@ export function QuestionsManager({
                 ) : (
                     <ol
                         ref={listRef}
-                        className="max-h-[32rem] space-y-3 overflow-y-auto pr-1"
+                        className="max-h-[32rem] space-y-3 overflow-y-auto pe-1"
                     >
                         {visibleQuestions.map((question, index) => (
                             <QuestionCard

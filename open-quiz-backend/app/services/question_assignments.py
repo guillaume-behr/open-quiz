@@ -9,7 +9,7 @@ functions resolve that ordering and the participant's position in it.
 
 from collections import defaultdict
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.enums import SessionStatus
@@ -160,23 +160,6 @@ def last_answered_question_id(
         return None
     question_ids = session_question_ids(quiz_session, session, participant)
     return question_ids[-1] if question_ids else None
-
-
-def session_question_count(quiz_session: QuizSession, session: Session) -> int:
-    common_count = session.scalar(
-        select(func.count(QuizSessionQuestion.question_id)).where(
-            QuizSessionQuestion.session_id == quiz_session.id
-        )
-    )
-    if common_count:
-        return common_count
-    personalized_count = session.scalar(
-        select(func.count(QuizSessionStudentQuestion.question_id))
-        .where(QuizSessionStudentQuestion.session_id == quiz_session.id)
-        .group_by(QuizSessionStudentQuestion.student_identifier)
-        .limit(1)
-    )
-    return personalized_count or 0
 
 
 def accessible_question_positions(

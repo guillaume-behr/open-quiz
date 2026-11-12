@@ -10,6 +10,7 @@ import {
     submitStudentQuiz,
     submitStudentQuizAnswer,
 } from "@/api/quizzes"
+import { StudentQuizSessionSchema } from "@/api/schemas"
 import type { StudentQuizSession } from "@/api/types"
 import { JoinQuizForm } from "@/components/forms/join-quiz-form"
 import { NavbarAction } from "@/components/navigation/navbar-action"
@@ -193,9 +194,10 @@ export function StudentQuiz({
         if (!liveJoinCode || !participantToken || isSessionOver) return
         const connection = `${liveJoinCode}:${participantToken}`
 
-        return connectLiveUpdates<StudentQuizSession>({
+        return connectLiveUpdates({
             path: `/api/quizzes/live/student/sessions/${encodeURIComponent(liveJoinCode)}`,
             getToken: () => Promise.resolve(participantToken),
+            schema: StudentQuizSessionSchema,
             onData: (updated) => {
                 liveRevisionRef.current += 1
                 setError(null)

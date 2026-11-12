@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { restoreSession } from "@/api/auth"
+import { login, restoreSession, verifyTwoFactor } from "@/api/auth"
 import {
     ApiError,
+    UNEXPECTED_RESPONSE_CODE,
     apiWebSocketUrl,
     clearSessionTokens,
     getLiveAccessToken,
@@ -15,6 +16,7 @@ import {
     setSessionTokens,
 } from "@/api/client"
 import { importQuestionBatch } from "@/api/question-banks"
+import { apiErrorMessage } from "@/lib/errors"
 
 const teacher = {
     id: 7,
@@ -92,6 +94,93 @@ describe("staff session restore", () => {
 
         expect(expired).toHaveBeenCalledTimes(1)
         unsubscribe()
+    })
+})
+
+describe("response validation", () => {
+    function expectUnexpectedResponse(error: unknown) {
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error).toMatchObject({
+            code: UNEXPECTED_RESPONSE_CODE,
+            status: 200,
+        })
+        expect(apiErrorMessage(error, (key) => key, "fallback")).toBe(
+            "error-unexpected-response"
+        )
+    }
+
+    it("refuses a current user of the wrong shape", async () => {
+        setSessionTokens(jwtExpiringIn(600), "proof")
+        stubFetch(() => Response.json({ ...teacher, is_admin: "no" }))
+
+        expectUnexpectedResponse(
+            await restoreSession().catch((error: unknown) => error)
+        )
+    })
+
+    it("refuses a renewal without tokens and keeps the old session", async () => {
+        setSessionTokens(jwtExpiringIn(30), "proof")
+        stubFetch(() => Response.json({ access_token: "token-only" }))
+
+        expectUnexpectedResponse(
+            await restoreSession().catch((error: unknown) => error)
+        )
+        expect(refreshProofHeaders()).toEqual({ "X-Refresh-Proof": "proof" })
+    })
+
+    it("refuses a login answer it cannot tell apart", async () => {
+        stubFetch(() => Response.json({ status: "authenticated" }))
+
+        expectUnexpectedResponse(
+            await login("grace", "secret", "professor").catch(
+                (error: unknown) => error
+            )
+        )
+    })
+
+    it("refuses a body that is not JSON", async () => {
+        stubFetch(() => new Response("<html>", { status: 200 }))
+
+        expectUnexpectedResponse(
+            await verifyTwoFactor("challenge", "123456").catch(
+                (error: unknown) => error
+            )
+        )
+    })
+
+    it("signs in from a challenge-free login", async () => {
+        const calls = stubFetch((path) =>
+            path === "/api/auth/login"
+                ? Response.json({
+                      status: "authenticated",
+                      access_token: jwtExpiringIn(900),
+                      refresh_proof: "proof",
+                      token_type: "bearer",
+                  })
+                : Response.json(teacher)
+        )
+
+        await expect(login("grace", "secret", "professor")).resolves.toEqual({
+            status: "authenticated",
+            user: teacher,
+        })
+        expect(calls).toEqual(["/api/auth/login", "/api/users/me"])
+    })
+
+    it("returns a two-factor challenge with the backend defaults", async () => {
+        stubFetch(() =>
+            Response.json({
+                status: "verification_required",
+                challenge_token: "challenge",
+            })
+        )
+
+        await expect(login("grace", "secret", "admin")).resolves.toEqual({
+            status: "verification_required",
+            challenge_token: "challenge",
+            secret: null,
+            provisioning_uri: null,
+        })
     })
 })
 

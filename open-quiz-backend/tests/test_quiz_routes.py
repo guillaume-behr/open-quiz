@@ -32,13 +32,13 @@ from app.models import (
 )
 from app.participants import generate_join_code
 from app.services.grading import (
-    participant_maximum_scores,
     question_maximum_scores,
     selected_choice_score,
 )
 from app.services.results import (
     safe_spreadsheet_cell,
 )
+from app.session_responses import session_responses
 
 from support import (
     app_for,
@@ -843,7 +843,10 @@ def test_teacher_lists_use_constant_query_counts(tmp_path: Path) -> None:
         assert quiz_query_count <= 5
 
 
-def test_participant_maximum_scores_uses_constant_query_count(tmp_path: Path) -> None:
+SNAPSHOT_QUERIES = 7
+
+
+def test_session_snapshot_uses_a_constant_query_count(tmp_path: Path) -> None:
     with make_client(settings_for(tmp_path / "score-performance.db")) as client:
         with client.app.state.session_factory() as session:
             professor = User(
@@ -943,12 +946,17 @@ def test_participant_maximum_scores_uses_constant_query_count(tmp_path: Path) ->
 
             event.listen(engine, "before_cursor_execute", record_statement)
             try:
-                scores = participant_maximum_scores(quiz_session, participants, session)
+                (snapshot,) = session_responses([(quiz_session, quiz)], session)
             finally:
                 event.remove(engine, "before_cursor_execute", record_statement)
 
-        assert scores == {participant.id: 2.5 for participant in participants}
-        assert len(statements) == 3
+        assert {
+            participant.id: participant.maximum_score
+            for participant in snapshot.participants
+        } == {participant.id: 2.5 for participant in participants}
+        # Answers, participants, both assignment tables, question maximums,
+        # students and classes: none of them per participant.
+        assert len(statements) == SNAPSHOT_QUERIES
 
 
 def test_quiz_can_assign_the_same_draw_to_every_student(tmp_path: Path) -> None:
@@ -1429,3 +1437,46 @@ def test_results_filter_by_class_id_and_start_date(environment) -> None:
     assert result_ids(started_from=started.isoformat()) == [launched["id"]]
     assert result_ids(started_before=started.isoformat()) == [other["id"]]
     assert result_ids(started_from=(started + timedelta(seconds=1)).isoformat()) == []
+
+
+def selects_during(client, request) -> int:
+    """SELECT statements a request issues."""
+    engine = client.app.state.session_factory.kw["bind"]
+    statements: list[str] = []
+
+    def record_statement(_c, _cursor, statement, _p, _context, _many) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record_statement)
+    try:
+        response = request()
+    finally:
+        event.remove(engine, "before_cursor_execute", record_statement)
+    assert response.status_code == 200
+    return len(statements)
+
+
+def test_active_sessions_snapshot_does_not_grow_with_the_sessions(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "active-snapshot.db")) as client:
+        environment = exam_environment(client)
+        headers = environment["teacher_headers"]
+
+        def snapshot():
+            return client.get("/api/quizzes/sessions/active", headers=headers)
+
+        launch_and_join(client, environment)
+        one_session = selects_during(client, snapshot)
+        for _ in range(2):
+            assert (
+                client.post(
+                    f"/api/quizzes/{environment['quiz']['id']}/launch",
+                    headers=headers,
+                    json={"class_id": environment["student_class"]["id"]},
+                ).status_code
+                == 201
+            )
+        assert len(snapshot().json()) == 3
+        assert selects_during(client, snapshot) == one_session

@@ -39,3 +39,13 @@ export function scoreTone(score: number, maxScore: number): ScoreTone {
     if (maxScore > 0 && score >= maxScore) return "success"
     return score > 0 ? "warning" : "destructive"
 }
+
+/** Translation key that says whether an answer earned all, some or none of its points. */
+export function answerOutcomeKey(
+    score: number,
+    maxScore: number
+): "training-correct" | "answer-partially-correct" | "training-incorrect" {
+    if (score >= maxScore) return "training-correct"
+    if (score > 0) return "answer-partially-correct"
+    return "training-incorrect"
+}

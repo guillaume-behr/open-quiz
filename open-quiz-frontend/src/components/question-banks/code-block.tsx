@@ -13,6 +13,7 @@ import {
     type UIEvent,
     useDeferredValue,
     useEffect,
+    useId,
     useRef,
     useState,
 } from "react"
@@ -187,6 +188,7 @@ export function CodeBlock({
     const highlightedCodeRef = useRef<HTMLPreElement>(null)
     const currentCodeRef = useRef(code)
     const mountedRef = useRef(true)
+    const editorHintId = useId()
 
     useEffect(() => {
         currentCodeRef.current = code
@@ -289,7 +291,13 @@ export function CodeBlock({
                         autoCorrect="off"
                         autoCapitalize="off"
                         aria-label={t("source-code")}
+                        aria-describedby={editorHintId}
                     />
+                )}
+                {editable && (
+                    <span id={editorHintId} className="sr-only">
+                        {t("code-editor-keyboard-hint")}
+                    </span>
                 )}
             </div>
             {result !== null && (

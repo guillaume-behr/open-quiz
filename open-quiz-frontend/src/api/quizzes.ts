@@ -1,6 +1,7 @@
 import { PAGE_SIZE } from "@/lib/utils"
 
-import { request, requestBlob, requestPage } from "./client"
+import { request, requestBlob, requestPage, requestParsed } from "./client"
+import { StudentQuizJoinSchema, StudentQuizSessionSchema } from "./schemas"
 import type {
     MakeupJoin,
     MakeupSession,
@@ -11,6 +12,7 @@ import type {
     QuizAnswerReview,
     Quiz,
     QuizSession,
+    ReportedViolationType,
     StudentQuizAnswer,
     StudentQuizJoin,
     StudentQuizSession,
@@ -60,7 +62,8 @@ export function startTrainingQuiz(
     questionBankId: number,
     studentToken: string
 ): Promise<StudentQuizJoin> {
-    return request<StudentQuizJoin>(
+    return requestParsed(
+        StudentQuizJoinSchema,
         `/api/quizzes/training/${questionBankId}/start`,
         {
             method: "POST",
@@ -176,7 +179,8 @@ export function selectMakeupQuiz(
     quizId: number,
     studentToken: string
 ): Promise<StudentQuizJoin> {
-    return request<StudentQuizJoin>(
+    return requestParsed(
+        StudentQuizJoinSchema,
         `/api/quizzes/makeup/${encodeURIComponent(joinCode)}/select`,
         {
             method: "POST",
@@ -301,7 +305,8 @@ export function joinQuiz(
     joinCode: string,
     studentToken: string
 ): Promise<StudentQuizJoin> {
-    return request<StudentQuizJoin>(
+    return requestParsed(
+        StudentQuizJoinSchema,
         "/api/quizzes/join",
         {
             method: "POST",
@@ -316,7 +321,8 @@ export function getStudentQuizSession(
     joinCode: string,
     participantToken: string
 ): Promise<StudentQuizSession> {
-    return request<StudentQuizSession>(
+    return requestParsed(
+        StudentQuizSessionSchema,
         `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}`,
         { headers: { "X-Quiz-Token": participantToken } },
         false
@@ -342,7 +348,8 @@ export function submitStudentQuizAnswer(
     participantToken: string,
     answer: StudentQuizAnswer
 ): Promise<StudentQuizSession> {
-    return request<StudentQuizSession>(
+    return requestParsed(
+        StudentQuizSessionSchema,
         `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/answer`,
         {
             method: "POST",
@@ -357,7 +364,8 @@ export function reviewStudentAnswers(
     joinCode: string,
     participantToken: string
 ): Promise<StudentQuizSession> {
-    return request<StudentQuizSession>(
+    return requestParsed(
+        StudentQuizSessionSchema,
         `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/review`,
         {
             method: "POST",
@@ -371,7 +379,8 @@ export function submitStudentQuiz(
     joinCode: string,
     participantToken: string
 ): Promise<StudentQuizSession> {
-    return request<StudentQuizSession>(
+    return requestParsed(
+        StudentQuizSessionSchema,
         `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/submit`,
         {
             method: "POST",
@@ -386,7 +395,8 @@ export function navigateStudentQuiz(
     participantToken: string,
     questionNumber: number
 ): Promise<StudentQuizSession> {
-    return request<StudentQuizSession>(
+    return requestParsed(
+        StudentQuizSessionSchema,
         `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/navigate`,
         {
             method: "POST",
@@ -400,13 +410,7 @@ export function navigateStudentQuiz(
 export function reportStudentQuizViolation(
     joinCode: string,
     participantToken: string,
-    eventType:
-        | "fullscreen_exit"
-        | "pointer_exit"
-        | "window_blur"
-        | "page_hidden"
-        | "context_menu"
-        | "print_attempt"
+    eventType: ReportedViolationType
 ): Promise<void> {
     return request<void>(
         `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/violation`,

@@ -8,15 +8,18 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text, update
+from sqlalchemy import event, select, text, update
 
+from app.enums import SessionStatus
 from app.models import (
     MakeupSession,
     Quiz,
     QuizAnswer,
     QuizParticipant,
     QuizSession,
+    User,
 )
+from app.session_responses import active_makeup_session_responses
 
 from support import (
     choice_answer,
@@ -1081,3 +1084,63 @@ def test_listing_shows_the_teachers_makeups(environment) -> None:
     )
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()] == [makeup["id"]]
+
+
+def makeup_selects(client, headers) -> tuple[int, list[dict[str, Any]]]:
+    """SELECT statements of the teacher's make-up list, and the list."""
+    engine = client.app.state.session_factory.kw["bind"]
+    statements: list[str] = []
+
+    def record_statement(_c, _cursor, statement, _p, _context, _many) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record_statement)
+    try:
+        listed = client.get("/api/quizzes/makeup/sessions", headers=headers)
+    finally:
+        event.remove(engine, "before_cursor_execute", record_statement)
+    assert listed.status_code == 200
+    return len(statements), listed.json()
+
+
+def test_makeup_list_does_not_grow_with_the_makeups(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    create_makeup(client, environment)
+    one_makeup, _ = makeup_selects(client, headers)
+    for _ in range(2):
+        create_makeup(client, environment)
+    three_makeups, listed = makeup_selects(client, headers)
+    assert len(listed) == 3
+    assert three_makeups == one_makeup
+
+
+def test_the_live_feed_lists_open_makeups_and_the_list_pages_all(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    finished = create_makeup(client, environment)
+    still_open = create_makeup(client, environment)
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(MakeupSession)
+            .where(MakeupSession.id == finished["id"])
+            .values(status=SessionStatus.FINISHED)
+        )
+        session.commit()
+        owner = session.get(User, session.get(MakeupSession, finished["id"]).owner_id)
+        assert [
+            item.id for item in active_makeup_session_responses(owner, session)
+        ] == [still_open["id"]]
+
+    first_page = client.get(
+        "/api/quizzes/makeup/sessions", headers=headers, params={"page_size": 1}
+    )
+    assert first_page.headers["X-Total-Count"] == "2"
+    assert [item["id"] for item in first_page.json()] == [still_open["id"]]
+    second_page = client.get(
+        "/api/quizzes/makeup/sessions",
+        headers=headers,
+        params={"page_size": 1, "page": 2},
+    )
+    assert [item["id"] for item in second_page.json()] == [finished["id"]]
