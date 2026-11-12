@@ -7,10 +7,11 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
+from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import CheckConstraint, create_engine, text
+from sqlalchemy import CheckConstraint, create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
@@ -23,6 +24,8 @@ from app.models import (
     Quiz,
     QuizParticipant,
     QuizSession,
+    QuizSessionStudentQuestion,
+    RefreshSession,
     User,
 )
 
@@ -40,7 +43,7 @@ def assert_schema_matches_models(database_url: str) -> None:
     try:
         with engine.connect() as connection:
             context = MigrationContext.configure(
-                connection, opts={"compare_type": True}
+                connection, opts={"compare_type": True, "compare_server_default": True}
             )
             head = ScriptDirectory.from_config(migration_config()).get_current_head()
             assert context.get_current_revision() == head
@@ -251,5 +254,125 @@ def test_vocabulary_constraints_match_the_models_and_refuse_unknown_values(
             )
             with pytest.raises(IntegrityError, match="ck_quizzes_mode"):
                 session.flush()
+    finally:
+        engine.dispose()
+
+
+def test_every_foreign_key_leads_an_index(tmp_path: Path) -> None:
+    """Filtering on a foreign key, or deleting its parent, never scans a table.
+
+    A column that is only the second one of a composite primary key is not
+    indexed by it: it needs an index of its own.
+    """
+    settings = settings_for(tmp_path / "foreign-key-indexes")
+    with make_client(settings):
+        pass
+
+    engine = create_engine(postgres_url(settings.database_url))
+    try:
+        inspector = inspect(engine)
+        unindexed = []
+        for table in inspector.get_table_names():
+            leading = {
+                (inspector.get_pk_constraint(table)["constrained_columns"] or [None])[0]
+            }
+            leading |= {
+                index["column_names"][0] for index in inspector.get_indexes(table)
+            }
+            leading |= {
+                constraint["column_names"][0]
+                for constraint in inspector.get_unique_constraints(table)
+            }
+            unindexed += [
+                f"{table}.{foreign_key['constrained_columns'][0]}"
+                for foreign_key in inspector.get_foreign_keys(table)
+                if foreign_key["constrained_columns"][0] not in leading
+            ]
+        assert unindexed == []
+    finally:
+        engine.dispose()
+
+
+def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
+    tmp_path: Path,
+) -> None:
+    """Student question rows lose a reference to a deleted student.
+
+    Before 0008, quiz_session_student_questions.student_id had no foreign key:
+    deleting a student left it pointing nowhere. The upgrade clears those, then
+    the new key keeps them consistent. Unix timestamps fit past 2038.
+    """
+    database_url = database_url_for(tmp_path / "upgrade-0008")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0007")
+        with DbSession(engine) as session:
+            teacher = User(username="teacher", display_name="T", password_hash="x")
+            session.add(teacher)
+            session.flush()
+            quiz = Quiz(owner_id=teacher.id, title="Quiz", question_count=1)
+            bank = QuestionBank(owner_id=teacher.id, grade_level="5e", chapter="C")
+            session.add_all([quiz, bank])
+            session.flush()
+            question, other_question = (
+                Question(
+                    question_bank_id=bank.id,
+                    prompt=prompt,
+                    difficulty="easy",
+                    answer_mode="single",
+                    correction_mode="automatic",
+                )
+                for prompt in ("Q1", "Q2")
+            )
+            quiz_session = QuizSession(
+                quiz_id=quiz.id, class_name="C", join_code="ORPHAN", status="finished"
+            )
+            session.add_all([question, other_question, quiz_session])
+            session.flush()
+            session.add(
+                QuizSessionStudentQuestion(
+                    session_id=quiz_session.id,
+                    student_id=424242,
+                    student_identifier="gone.student",
+                    question_id=question.id,
+                    position=0,
+                )
+            )
+            session.commit()
+            session_id, other_question_id = quiz_session.id, other_question.id
+            teacher_id = teacher.id
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with DbSession(engine) as session:
+            assert session.scalars(
+                text("SELECT student_id FROM quiz_session_student_questions")
+            ).all() == [None]
+            # Rows without a student account are unique by identifier too.
+            session.add(
+                QuizSessionStudentQuestion(
+                    session_id=session_id,
+                    student_identifier="gone.student",
+                    question_id=other_question_id,
+                    position=0,
+                )
+            )
+            with pytest.raises(
+                IntegrityError, match="uq_quiz_session_student_question"
+            ):
+                session.flush()
+            session.rollback()
+            session.add(
+                RefreshSession(
+                    token_hash="0" * 64, user_id=teacher_id, expires_at=2**33
+                )
+            )
+            session.commit()
     finally:
         engine.dispose()

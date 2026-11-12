@@ -136,6 +136,13 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Migration 0008 indexes running sessions, session creation dates and the
+  foreign keys composite primary keys left unindexed; stores Unix timestamps
+  in 64 bits, so sign-in and rate limiting keep working after 2038; makes
+  `quiz_session_student_questions.student_id` a foreign key (rows pointing at
+  a deleted student are cleared) with positions unique per student
+  identifier; and drops the server defaults only databases adopted from
+  0.4.0 had. Migrations and the drift test now compare server defaults.
 - A cancelled `restore.sh` no longer rewrites `open-quiz-backend/.env` or
   creates `.env.database` on a deployment from before the API's own role.
 - After an update, a page opened from a bookmark or a link (such as
