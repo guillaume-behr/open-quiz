@@ -5,7 +5,7 @@ from time import time
 from sqlalchemy import update
 
 from app.config import get_settings, secure_private_file, write_private_file
-from app.database import build_session_factory
+from app.database import database_sessions
 from app.models import RefreshSession
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -44,8 +44,10 @@ def rotate() -> None:
     ENV_FILE.write_text("\n".join(output) + "\n", encoding="utf-8")
     secure_private_file(ENV_FILE)
     settings = get_settings()
-    session_factory = build_session_factory(settings.database_url)
-    with session_factory() as session:
+    with (
+        database_sessions(settings.database_url) as session_factory,
+        session_factory() as session,
+    ):
         session.execute(
             update(RefreshSession)
             .where(RefreshSession.revoked_at.is_(None))

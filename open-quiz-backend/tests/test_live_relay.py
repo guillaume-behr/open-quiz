@@ -1,6 +1,5 @@
 """Live updates reach the sockets of every worker, not only the publisher's."""
 
-import time
 from pathlib import Path
 
 import psycopg
@@ -18,20 +17,12 @@ from support import (
     launch_and_join,
     make_client,
     settings_for,
+    wait_until,
 )
 
 
 def conninfo_for(database: Path) -> str:
     return database_url_for(database).replace("postgresql+psycopg://", "postgresql://")
-
-
-def wait_until(condition, timeout: float = 5.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if condition():
-            return True
-        time.sleep(0.02)
-    return False
 
 
 def test_a_relay_delivers_other_processes_notifications(tmp_path: Path) -> None:
@@ -48,8 +39,11 @@ def test_a_relay_delivers_other_processes_notifications(tmp_path: Path) -> None:
         first.send("quiz-session:7")
         assert wait_until(lambda: second_received == ["quiz-session:7"])
         # Its own notification is not delivered twice: the hub already did.
-        time.sleep(0.2)
-        assert first_received == []
+        # Notifications arrive in commit order, so had it been delivered it
+        # would come before this one from the other process.
+        second.send("quiz-session:8")
+        assert wait_until(lambda: first_received != [])
+        assert first_received == ["quiz-session:8"]
     finally:
         for relay in (first, second):
             relay.stop()
