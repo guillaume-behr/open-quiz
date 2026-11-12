@@ -534,7 +534,6 @@ def seeded_exam_session(
         prompt="2 + 2 ?",
         difficulty="easy",
         answer_mode="single",
-        correction_mode="automatic",
     )
     session.add(question)
     session.flush()

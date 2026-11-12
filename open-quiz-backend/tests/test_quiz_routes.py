@@ -26,6 +26,7 @@ from app.models import (
     QuizSession,
     QuizSessionStudentQuestion,
     Student,
+    StudentAccount,
     StudentClass,
     TrainingQuizProfile,
     User,
@@ -309,14 +310,14 @@ def test_starting_requires_a_present_participant_and_survives_races(
             lambda connection: connection.execute(
                 update(QuizSession)
                 .where(QuizSession.id == launched["id"])
-                .values(status="cancelled")
+                .values(status="finished")
             ),
         ),
     ) as fired:
         raced = client.post(f"{session_url}/start", headers=headers)
     assert fired
     assert raced.status_code == 200
-    assert raced.json()["status"] == "cancelled"
+    assert raced.json()["status"] == "finished"
 
 
 def test_results_and_answer_reviews_validate_their_targets(environment) -> None:
@@ -467,22 +468,6 @@ def test_written_answers_cannot_exceed_their_points(environment) -> None:
     assert too_high.json()["detail"]["code"] == "GRADE_ABOVE_MAXIMUM"
 
 
-def test_cancelled_sessions_without_answers_are_cleaned_up(environment) -> None:
-    client = environment["client"]
-    headers = environment["teacher_headers"]
-    launched, _ = launch_and_join(client, environment)
-    with client.app.state.session_factory() as session:
-        session.execute(
-            update(QuizSession)
-            .where(QuizSession.id == launched["id"])
-            .values(status="cancelled")
-        )
-        session.commit()
-    assert client.get("/api/quizzes/sessions/active", headers=headers).json() == []
-    with client.app.state.session_factory() as session:
-        assert session.get(QuizSession, launched["id"]) is None
-
-
 def test_training_configuration_validates_its_input(environment) -> None:
     client = environment["client"]
     headers = environment["teacher_headers"]
@@ -554,9 +539,6 @@ def test_training_profile_creation_tolerates_a_concurrent_creator(
                 easy_question_count=0,
                 medium_question_count=0,
                 hard_question_count=0,
-                easy_points=0,
-                medium_points=0,
-                hard_points=0,
             )
             .returning(Quiz.id)
         ).scalar_one()
@@ -894,7 +876,6 @@ def test_participant_maximum_scores_uses_constant_query_count(tmp_path: Path) ->
                 prompt="Question",
                 difficulty="easy",
                 answer_mode="single",
-                correction_mode="automatic",
             )
             session.add(question)
             session.flush()
@@ -917,10 +898,19 @@ def test_participant_maximum_scores_uses_constant_query_count(tmp_path: Path) ->
             session.flush()
             participants = []
             for index in range(12):
-                student = Student(
-                    class_id=student_class.id,
+                account = StudentAccount(
+                    owner_id=student_class.owner_id,
                     identifier=f"student.{index}",
                     display_name=f"Student {index}",
+                    password_hash="x",
+                )
+                session.add(account)
+                session.flush()
+                student = Student(
+                    class_id=student_class.id,
+                    account_id=account.id,
+                    identifier=account.identifier,
+                    display_name=account.display_name,
                 )
                 session.add(student)
                 session.flush()

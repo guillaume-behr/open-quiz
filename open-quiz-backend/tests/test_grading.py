@@ -271,7 +271,6 @@ def add_question(
         prompt="Prompt",
         difficulty="easy",
         answer_mode=answer_mode,
-        correction_mode="automatic",
     )
     session.add(question)
     session.flush()

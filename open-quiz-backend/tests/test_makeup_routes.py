@@ -188,22 +188,6 @@ def test_cancelling_a_makeup_removes_it_unless_answers_exist(environment) -> Non
         assert session.get(QuizSession, child.id) is None
 
 
-def test_listing_removes_legacy_cancelled_makeups(environment) -> None:
-    client = environment["client"]
-    headers = environment["teacher_headers"]
-    makeup = create_makeup(client, environment)
-    with client.app.state.session_factory() as session:
-        session.execute(
-            update(MakeupSession)
-            .where(MakeupSession.id == makeup["id"])
-            .values(status="cancelled")
-        )
-        session.commit()
-    assert client.get("/api/quizzes/makeup/sessions", headers=headers).json() == []
-    with client.app.state.session_factory() as session:
-        assert session.get(MakeupSession, makeup["id"]) is None
-
-
 def test_makeup_start_leaves_already_running_children_alone(environment) -> None:
     client = environment["client"]
     headers = environment["teacher_headers"]
@@ -1087,3 +1071,13 @@ def test_a_paused_makeup_can_be_finished_directly(environment) -> None:
         )
         assert answer is not None
         assert (answer.score, answer.is_graded) == (2.0, True)
+
+
+def test_listing_shows_the_teachers_makeups(environment) -> None:
+    client = environment["client"]
+    makeup = create_makeup(client, environment)
+    listed = client.get(
+        "/api/quizzes/makeup/sessions", headers=environment["teacher_headers"]
+    )
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [makeup["id"]]

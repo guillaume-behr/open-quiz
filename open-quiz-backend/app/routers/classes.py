@@ -87,7 +87,6 @@ def class_response(
             select(Student)
             .where(
                 Student.class_id == student_class.id,
-                Student.account_id.is_not(None),
             )
             .order_by(Student.display_name, Student.identifier, Student.id)
         )
@@ -171,7 +170,6 @@ def class_students(class_ids: list[int], session: Session) -> dict[int, list[Stu
         select(Student)
         .where(
             Student.class_id.in_(class_ids),
-            Student.account_id.is_not(None),
         )
         .order_by(Student.display_name, Student.identifier, Student.id)
     ):

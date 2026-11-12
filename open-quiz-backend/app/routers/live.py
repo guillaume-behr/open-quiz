@@ -155,10 +155,7 @@ def live_teacher_session_snapshot(
             return None, False
         quiz_session, quiz = row
         state = session_response(quiz_session, quiz, session)
-    return state.model_dump(mode="json"), state.status in {
-        SessionStatus.FINISHED,
-        SessionStatus.CANCELLED,
-    }
+    return state.model_dump(mode="json"), state.status == SessionStatus.FINISHED
 
 
 def without_clock(value: object) -> object:
@@ -205,10 +202,7 @@ def live_student_session_snapshot(
         except HTTPException:
             return None
         state = student_state_response(quiz_session, quiz, participant, session)
-    return state.model_dump(mode="json"), state.status in {
-        SessionStatus.FINISHED,
-        SessionStatus.CANCELLED,
-    }
+    return state.model_dump(mode="json"), state.status == SessionStatus.FINISHED
 
 
 def live_makeup_sessions_snapshot(

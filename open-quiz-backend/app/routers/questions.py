@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
-from app.enums import CorrectionMode, QuizMode, SessionStatus
+from app.enums import QuizMode, SessionStatus
 from app.errors import ApiError, ErrorCode
 from app.images import (
     ALLOWED_IMAGE_TYPES,
@@ -346,7 +346,6 @@ def apply_question_fields(
     question.answer_mode_disclosed = question_payload.answer_mode_disclosed
     question.response_language = question_payload.response_language
     question.allow_code_execution = question_payload.allow_code_execution
-    question.correction_mode = CorrectionMode.AUTOMATIC
     if image_data and image_content_type:
         question.image_sha256 = store_image(session, image_data, image_content_type)
     elif question_payload.remove_image:

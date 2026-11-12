@@ -15,6 +15,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Upgrade actions
 
+- Migration 0011 deletes legacy data no release has written since 0.4:
+  cancelled sessions and make-up sessions (with their answers, if any),
+  student memberships without an account (their past participations keep
+  their results without the student), and stored paste or copy alerts,
+  which were already hidden. Back up before updating if you need them.
 - Grade level, class and question bank names are now unique per teacher
   ignoring case. Migration 0009 resolves existing names that differ only by
   case: grade levels merge into the oldest one (their classes and banks take
@@ -323,6 +328,15 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   the results, the student history and the CSV export: totals such as
   `0.6300000000000001` no longer appear. A mark given by hand is stored to two
   decimals too.
+
+### Removed
+
+- The `cancelled` session status, the masking of retired paste alerts,
+  the unused columns `quizzes.easy_points`, `medium_points` and
+  `hard_points`, `questions.correction_mode` and
+  `refresh_session_families.parent_session_id`, and the purge of expired
+  problem reports on each request (the hourly maintenance does it; reports
+  past retention are hidden meanwhile).
 
 ### Security
 

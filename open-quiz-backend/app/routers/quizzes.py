@@ -178,9 +178,6 @@ def create_quiz(
         easy_question_count=payload.easy_question_count,
         medium_question_count=payload.medium_question_count,
         hard_question_count=payload.hard_question_count,
-        easy_points=0,
-        medium_points=0,
-        hard_points=0,
     )
     session.add(quiz)
     session.flush()
@@ -243,7 +240,7 @@ def delete_quiz_session(
     session: DbSession,
 ) -> None:
     quiz_session, _ = owned_quiz_session(session_id, professor, session)
-    if quiz_session.status not in {SessionStatus.FINISHED, SessionStatus.CANCELLED}:
+    if quiz_session.status != SessionStatus.FINISHED:
         raise ApiError(
             status.HTTP_409_CONFLICT,
             ErrorCode.QUIZ_SESSION_NOT_DELETABLE,
@@ -363,17 +360,8 @@ def delete_quiz(
             ErrorCode.QUIZ_USED_BY_MAKEUP,
             "Impossible de supprimer ce quiz car un rattrapage l’utilise",
         )
-    # Its bank links and training profile cascade; cancelled sessions too, but
-    # their join codes are released by hand.
-    cancelled_session_ids = list(
-        session.scalars(
-            select(QuizSession.id).where(
-                QuizSession.quiz_id == quiz.id,
-                QuizSession.status == SessionStatus.CANCELLED,
-            )
-        )
-    )
-    delete_quiz_session_records(cancelled_session_ids, session)
+    # No session is left: active and finished ones were refused above. Bank
+    # links and the training profile cascade.
     session.execute(delete(Quiz).where(Quiz.id == quiz_id))
     session.commit()
     audit_event(
@@ -573,9 +561,6 @@ def update_quiz(
     quiz.easy_question_count = payload.easy_question_count
     quiz.medium_question_count = payload.medium_question_count
     quiz.hard_question_count = payload.hard_question_count
-    quiz.easy_points = 0
-    quiz.medium_points = 0
-    quiz.hard_points = 0
     session.execute(delete(QuizQuestionBank).where(QuizQuestionBank.quiz_id == quiz.id))
     session.add_all(
         QuizQuestionBank(quiz_id=quiz.id, question_bank_id=bank_id)
@@ -621,7 +606,6 @@ def launch_quiz(
         session.scalars(
             select(Student).where(
                 Student.class_id == student_class.id,
-                Student.account_id.is_not(None),
             )
         )
     )

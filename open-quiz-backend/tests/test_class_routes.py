@@ -187,17 +187,24 @@ def test_class_writes_lose_concurrent_races_gracefully(tmp_path: Path) -> None:
             headers=headers,
             json={"first_name": "Ada", "last_name": "Lovelace"},
         ).json()
+        other_account = client.post(
+            "/api/students",
+            headers=headers,
+            json={"first_name": "Grace", "last_name": "Hopper"},
+        ).json()
         with concurrent_writes(
             client,
             (
                 "INSERT INTO students",
                 lambda connection: connection.execute(
                     text(
-                        "INSERT INTO students (class_id, identifier, display_name, "
-                        "created_at) VALUES (:class_id, :identifier, 'Legacy', now())"
+                        "INSERT INTO students (class_id, account_id, identifier, "
+                        "display_name, created_at) VALUES (:class_id, :account_id, "
+                        ":identifier, 'Racer', now())"
                     ),
                     {
                         "class_id": student_class["id"],
+                        "account_id": other_account["id"],
                         "identifier": account["identifier"],
                     },
                 ),

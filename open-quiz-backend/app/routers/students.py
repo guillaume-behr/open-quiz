@@ -135,18 +135,11 @@ def list_student_accounts(
         owned_class(class_id, professor, session)
         filters.append(
             StudentAccount.id.in_(
-                select(Student.account_id).where(
-                    Student.class_id == class_id,
-                    Student.account_id.is_not(None),
-                )
+                select(Student.account_id).where(Student.class_id == class_id)
             )
         )
     elif unassigned:
-        filters.append(
-            StudentAccount.id.not_in(
-                select(Student.account_id).where(Student.account_id.is_not(None))
-            )
-        )
+        filters.append(StudentAccount.id.not_in(select(Student.account_id)))
     if is_active is not None:
         filters.append(StudentAccount.is_active.is_(is_active))
     total = (

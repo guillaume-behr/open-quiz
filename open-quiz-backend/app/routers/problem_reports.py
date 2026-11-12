@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Request, Response, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import ColumnElement, func, select
 
 from app.audit import audit_event
 from app.dependencies import AdminUser, DbSession
@@ -15,11 +15,16 @@ from app.schemas import ProblemReportCreate, ProblemReportResponse
 router = APIRouter(prefix="/api/problem-reports", tags=["problem reports"])
 
 
-def purge_expired_reports(request: Request, session: DbSession) -> None:
+def retained_report(request: Request) -> ColumnElement[bool]:
+    """Whether a report is within its retention.
+
+    The hourly maintenance deletes expired reports; until it runs, they are
+    already hidden.
+    """
     cutoff = datetime.now(UTC) - timedelta(
         days=request.app.state.settings.problem_report_retention_days
     )
-    session.execute(delete(ProblemReport).where(ProblemReport.created_at <= cutoff))
+    return ProblemReport.created_at > cutoff
 
 
 @router.post(
@@ -45,7 +50,6 @@ def create_problem_report(
             "Trop de signalements envoyés. Réessayez plus tard.",
             headers={"Retry-After": str(retry_after)},
         )
-    purge_expired_reports(request, session)
     report = ProblemReport(
         message=payload.message,
         page_path=payload.page_path,
@@ -64,13 +68,16 @@ def list_problem_reports(
     session: DbSession,
     paging: Paging,
 ) -> list[ProblemReport]:
-    purge_expired_reports(request, session)
-    session.commit()
-    total = session.scalar(select(func.count()).select_from(ProblemReport)) or 0
+    retained = retained_report(request)
+    total = (
+        session.scalar(select(func.count()).select_from(ProblemReport).where(retained))
+        or 0
+    )
     paging.set_total(total)
     return list(
         session.scalars(
             select(ProblemReport)
+            .where(retained)
             .order_by(ProblemReport.created_at.desc(), ProblemReport.id.desc())
             .offset(paging.offset)
             .limit(paging.page_size)

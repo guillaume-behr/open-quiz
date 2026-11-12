@@ -49,9 +49,6 @@ def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
         easy_question_count=0,
         medium_question_count=0,
         hard_question_count=0,
-        easy_points=0,
-        medium_points=0,
-        hard_points=0,
     )
     session.add(quiz)
     try:

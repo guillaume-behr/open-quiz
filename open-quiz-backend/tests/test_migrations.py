@@ -5,6 +5,7 @@ import sys
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
@@ -50,6 +51,20 @@ def assert_schema_matches_models(database_url: str) -> None:
             assert compare_metadata(context, Base.metadata) == []
     finally:
         engine.dispose()
+
+
+def accept_current_models(connection: Any) -> None:
+    """Let today's models write rows into a schema older than 0011.
+
+    The columns 0011 drops have no default: the models no longer set them.
+    """
+    connection.execute(
+        text(
+            "ALTER TABLE quizzes ALTER easy_points SET DEFAULT 0, "
+            "ALTER medium_points SET DEFAULT 0, ALTER hard_points SET DEFAULT 0; "
+            "ALTER TABLE questions ALTER correction_mode SET DEFAULT 'automatic'"
+        )
+    )
 
 
 def test_migrations_build_the_schema_the_models_describe(tmp_path: Path) -> None:
@@ -104,7 +119,6 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
                 prompt="Legacy question",
                 difficulty="easy",
                 answer_mode="single",
-                correction_mode="automatic",
             )
             session.add(question)
             session.flush()
@@ -137,6 +151,18 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
             )
             session.commit()
         with engine.begin() as connection:
+            # Columns 0.4.0 had and 0011 drops.
+            connection.exec_driver_sql(
+                "ALTER TABLE questions ADD correction_mode varchar(20) "
+                "NOT NULL DEFAULT 'automatic'"
+            )
+            for column in ("easy_points", "medium_points", "hard_points"):
+                connection.exec_driver_sql(
+                    f"ALTER TABLE quizzes ADD {column} float NOT NULL DEFAULT 0"
+                )
+            connection.exec_driver_sql(
+                "ALTER TABLE refresh_session_families ADD parent_session_id integer"
+            )
             connection.exec_driver_sql("ALTER TABLE quiz_answers DROP COLUMN feedback")
             connection.exec_driver_sql(
                 "ALTER TABLE quiz_participants DROP COLUMN submitted_at"
@@ -309,6 +335,7 @@ def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
         with engine.begin() as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "0007")
+            accept_current_models(connection)
         with DbSession(engine) as session:
             teacher = User(username="teacher", display_name="T", password_hash="x")
             session.add(teacher)
@@ -323,7 +350,6 @@ def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
                     prompt=prompt,
                     difficulty="easy",
                     answer_mode="single",
-                    correction_mode="automatic",
                 )
                 for prompt in ("Q1", "Q2")
             )
@@ -466,6 +492,7 @@ def test_upgrade_to_0010_lets_the_database_cascade_deletes(tmp_path: Path) -> No
         with engine.begin() as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "0009")
+            accept_current_models(connection)
         with DbSession(engine) as session:
             teacher = User(username="teacher", display_name="T", password_hash="x")
             session.add(teacher)
@@ -478,7 +505,6 @@ def test_upgrade_to_0010_lets_the_database_cascade_deletes(tmp_path: Path) -> No
                 prompt="Q",
                 difficulty="easy",
                 answer_mode="single",
-                correction_mode="automatic",
             )
             session.add(question)
             session.flush()
@@ -499,5 +525,124 @@ def test_upgrade_to_0010_lets_the_database_cascade_deletes(tmp_path: Path) -> No
                     ).scalar_one()
                     == 0
                 )
+    finally:
+        engine.dispose()
+
+
+def test_upgrade_to_0011_clears_legacy_rows_and_dead_columns(tmp_path: Path) -> None:
+    """Cancelled sessions, retired alerts and account-less pupils are cleared.
+
+    Nothing writes them any more: the application stops handling them, so the
+    upgrade removes what an older release left, then drops unused columns.
+    """
+    database_url = database_url_for(tmp_path / "upgrade-0011")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0010")
+
+        def insert(connection: Any, statement: str, **values: object) -> int:
+            return connection.execute(text(statement), values).scalar_one()
+
+        with engine.begin() as connection:
+            owner = insert(
+                connection,
+                "INSERT INTO users (username, display_name, password_hash, "
+                "access_token_generation, is_admin, is_active, created_at) "
+                "VALUES ('t', 'T', 'x', 0, false, true, now()) RETURNING id",
+            )
+            quiz = insert(
+                connection,
+                "INSERT INTO quizzes (owner_id, mode, title, source_language, "
+                "question_count, duration_seconds, allow_previous_questions, "
+                "allow_answer_review, allow_negative_points, same_questions_for_all, "
+                "easy_question_count, medium_question_count, hard_question_count, "
+                "easy_points, medium_points, hard_points, created_at) VALUES "
+                "(:owner, 'exam', 'Q', 'fr', 1, 600, true, true, false, false, "
+                "1, 0, 0, 0, 0, 0, now()) RETURNING id",
+                owner=owner,
+            )
+            class_id = insert(
+                connection,
+                "INSERT INTO student_classes (owner_id, name, grade_level, "
+                "created_at) VALUES (:owner, 'C', 'Tle', now()) RETURNING id",
+                owner=owner,
+            )
+            legacy_pupil = insert(
+                connection,
+                "INSERT INTO students (class_id, identifier, display_name, "
+                "created_at) VALUES (:class_id, 'legacy', 'Legacy', now()) "
+                "RETURNING id",
+                class_id=class_id,
+            )
+            makeup = insert(
+                connection,
+                "INSERT INTO makeup_sessions (owner_id, class_name, join_code, "
+                "status, created_at) VALUES (:owner, 'C', 'MAKEUP1', 'cancelled', "
+                "now()) RETURNING id",
+                owner=owner,
+            )
+            sessions = {}
+            for code, status_value, makeup_id in (
+                ("CANCEL1", "cancelled", None),
+                ("CHILD01", "waiting", makeup),
+                ("KEPT001", "finished", None),
+            ):
+                sessions[code] = insert(
+                    connection,
+                    "INSERT INTO quiz_sessions (quiz_id, class_name, join_code, "
+                    "status, created_at, paused_duration_seconds, "
+                    "makeup_session_id) VALUES (:quiz, 'C', :code, :status, now(), "
+                    "0, :makeup) RETURNING id",
+                    quiz=quiz,
+                    code=code,
+                    status=status_value,
+                    makeup=makeup_id,
+                )
+            for code in ("CANCEL1", "CHILD01", "KEPT001", "MAKEUP1"):
+                connection.execute(
+                    text("INSERT INTO quiz_join_codes (code) VALUES (:code)"),
+                    {"code": code},
+                )
+            connection.execute(
+                text(
+                    "INSERT INTO quiz_participants (session_id, student_id, "
+                    "student_identifier, violation_count, last_violation_type, "
+                    "last_violation_at, joined_at) VALUES (:session, :pupil, "
+                    "'legacy', 3, 'paste_attempt', now(), now())"
+                ),
+                {"session": sessions["KEPT001"], "pupil": legacy_pupil},
+            )
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT join_code FROM quiz_sessions")
+            ).scalars().all() == ["KEPT001"]
+            assert (
+                connection.execute(
+                    text("SELECT count(*) FROM makeup_sessions")
+                ).scalar_one()
+                == 0
+            )
+            assert connection.execute(
+                text("SELECT code FROM quiz_join_codes")
+            ).scalars().all() == ["KEPT001"]
+            assert (
+                connection.execute(text("SELECT count(*) FROM students")).scalar_one()
+                == 0
+            )
+            assert connection.execute(
+                text(
+                    "SELECT student_id, violation_count, last_violation_type, "
+                    "last_violation_at FROM quiz_participants"
+                )
+            ).all() == [(None, 0, None, None)]
     finally:
         engine.dispose()

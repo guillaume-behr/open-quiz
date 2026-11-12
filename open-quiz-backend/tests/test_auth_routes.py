@@ -318,12 +318,8 @@ def test_refresh_and_logout_edge_cases(tmp_path: Path) -> None:
         unknown = use_refresh_token(client, "unknown-token")
         assert client.post("/api/auth/refresh", headers=unknown).status_code == 401
 
-        legacy = seed_refresh_session(session_factory, admin_id, with_family=False)
-        refreshed = client.post(
-            "/api/auth/refresh", headers=use_refresh_token(client, legacy)
-        )
-        assert refreshed.status_code == 200
-
+        # A revoked session from before families can still come back until
+        # it expires: replaying it revokes nothing more.
         revoked = seed_refresh_session(
             session_factory, admin_id, with_family=False, revoked=True
         )

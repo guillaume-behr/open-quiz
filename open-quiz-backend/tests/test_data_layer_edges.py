@@ -40,7 +40,6 @@ def question_row(bank_id: int, prompt: str) -> dict[str, Any]:
         "prompt": prompt,
         "difficulty": "easy",
         "answer_mode": "single",
-        "correction_mode": "automatic",
     }
 
 

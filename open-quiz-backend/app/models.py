@@ -20,7 +20,6 @@ from sqlalchemy.sql import func, text
 from app.database import Base
 from app.enums import (
     AnswerMode,
-    CorrectionMode,
     Difficulty,
     QuizMode,
     SessionStatus,
@@ -123,9 +122,8 @@ class Student(Base):
     class_id: Mapped[int] = mapped_column(
         ForeignKey("student_classes.id", ondelete="CASCADE"), index=True
     )
-    account_id: Mapped[int | None] = mapped_column(
+    account_id: Mapped[int] = mapped_column(
         ForeignKey("student_accounts.id", ondelete="CASCADE"),
-        nullable=True,
         unique=True,
         index=True,
     )
@@ -201,10 +199,6 @@ class Question(Base):
         CheckConstraint(
             allowed_values("answer_mode", AnswerMode), name="ck_questions_answer_mode"
         ),
-        CheckConstraint(
-            allowed_values("correction_mode", CorrectionMode),
-            name="ck_questions_correction_mode",
-        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -219,7 +213,6 @@ class Question(Base):
     allow_code_execution: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0"
     )
-    correction_mode: Mapped[str] = mapped_column(String(20))
     image_sha256: Mapped[str | None] = mapped_column(
         ForeignKey("stored_images.sha256"), nullable=True, index=True
     )
@@ -292,9 +285,6 @@ class Quiz(Base):
     easy_question_count: Mapped[int] = mapped_column(Integer, default=0)
     medium_question_count: Mapped[int] = mapped_column(Integer, default=0)
     hard_question_count: Mapped[int] = mapped_column(Integer, default=0)
-    easy_points: Mapped[float] = mapped_column(Float, default=0.0)
-    medium_points: Mapped[float] = mapped_column(Float, default=0.0)
-    hard_points: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
@@ -570,7 +560,6 @@ class RefreshSessionFamily(Base):
         ForeignKey("refresh_sessions.id", ondelete="CASCADE"), primary_key=True
     )
     family_id: Mapped[str] = mapped_column(String(64), index=True)
-    parent_session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class TwoFactorCredential(Base):

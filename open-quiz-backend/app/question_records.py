@@ -9,7 +9,7 @@ from fastapi import (
 from sqlalchemy import select
 
 from app.dependencies import DbSession, ProfessorUser
-from app.enums import CorrectionMode, QuizMode
+from app.enums import QuizMode
 from app.errors import ApiError, ErrorCode
 from app.images import (
     MAX_IMAGE_BYTES,
@@ -156,7 +156,6 @@ def add_question(
         answer_mode_disclosed=payload.answer_mode_disclosed,
         response_language=payload.response_language,
         allow_code_execution=payload.allow_code_execution,
-        correction_mode=CorrectionMode.AUTOMATIC,
         image_sha256=store_image(session, image_data, image_content_type),
     )
     session.add(question)

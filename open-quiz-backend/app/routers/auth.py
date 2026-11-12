@@ -175,7 +175,6 @@ def issue_session(
     session: Session,
     *,
     family_id: str | None = None,
-    parent_session_id: int | None = None,
     expires_at: int | None = None,
 ) -> TokenResponse:
     settings = request.app.state.settings
@@ -223,7 +222,6 @@ def issue_session(
         RefreshSessionFamily(
             session_id=refresh_session.id,
             family_id=family_id or hash_refresh_token(create_refresh_token()),
-            parent_session_id=parent_session_id,
         )
     )
     session.commit()
@@ -715,14 +713,13 @@ def retire_refresh_session(
     stored_session: RefreshSession, session: Session, now: int
 ) -> RefreshSessionFamily:
     """Revoke the session being rotated, and return the family it belongs to."""
-    family = session.get(RefreshSessionFamily, stored_session.id)
-    if family is None:
-        family = RefreshSessionFamily(
-            session_id=stored_session.id,
-            family_id=hash_refresh_token(create_refresh_token()),
+    # Startup revokes every live session without a family
+    # (app/security_state.py), so the one being rotated has one.
+    family = session.execute(
+        select(RefreshSessionFamily).where(
+            RefreshSessionFamily.session_id == stored_session.id
         )
-        session.add(family)
-        session.flush()
+    ).scalar_one()
     result = session.execute(
         update(RefreshSession)
         .where(
@@ -798,7 +795,6 @@ def refresh(
         response,
         session,
         family_id=family.family_id,
-        parent_session_id=stored_session.id,
         expires_at=stored_session.expires_at,
     )
 
