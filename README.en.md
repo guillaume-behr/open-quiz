@@ -121,7 +121,9 @@ The script asks for the domain name, without `https://` or a trailing `/`. It
 generates the secrets and the administrator password, writes
 `open-quiz-backend/.env`, then builds and starts the containers. Pass
 `--domain quiz.example.com` for a non-interactive installation, and `--help`
-for the other options.
+for the other options. Docker Compose settings (API workers, memory, internal
+subnet) belong in the root `.env`, created from [`.env.example`](.env.example);
+never pass them on the command line, where the next update would not see them.
 
 > [!IMPORTANT]
 > The administrator password is shown only once. Save it before closing the

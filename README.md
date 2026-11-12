@@ -123,7 +123,10 @@ Le script demande le nom de domaine, sans `https://` ni `/` final. Il génère
 les secrets et le mot de passe administrateur, écrit
 `open-quiz-backend/.env`, puis construit et démarre les conteneurs. Passez
 `--domain quiz.example.com` pour une installation non interactive, et
-`--help` pour les autres options.
+`--help` pour les autres options. Les réglages de Docker Compose (nombre de
+workers, mémoire, sous-réseau) vont dans le fichier `.env` de la racine, créé
+depuis [`.env.example`](.env.example) : ne les passez pas dans la ligne de
+commande, que la mise à jour suivante ne verrait pas.
 
 > [!IMPORTANT]
 > Le mot de passe administrateur n’est affiché qu’une seule fois. Enregistrez-le

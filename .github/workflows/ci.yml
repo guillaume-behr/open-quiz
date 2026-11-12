@@ -133,6 +133,18 @@ jobs:
         run: |
           cp open-quiz-backend/.env.production.example open-quiz-backend/.env
           docker compose config --quiet
+          # The same with the root .env install.sh creates from its example:
+          # every Compose setting listed there, at its default.
+          cp .env.example .env
+          docker compose config --quiet
+          for variable in $(sed -n 's/^\([A-Z_]*\)=.*/\1/p' .env.example); do
+            grep -q "\${$variable" docker-compose.yml \
+              || { echo "::error::.env.example lists $variable, unused by docker-compose.yml"; exit 1; }
+          done
+          for variable in $(grep -o '\${[A-Z_]*' docker-compose.yml | sort -u | cut -c3-); do
+            grep -q "^$variable=" .env.example \
+              || { echo "::error::docker-compose.yml reads $variable, missing from .env.example"; exit 1; }
+          done
       - name: Build backend with provenance and SBOM
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.0.0
         with:

@@ -13,15 +13,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-ARG VITE_API_URL=""
-ENV VITE_API_URL=${VITE_API_URL}
 RUN pnpm build
 
 
 FROM caddy:2.11.8@sha256:4fcafa98afd1c2e642e353e3c5cf9ddbe892fcee14bc990e7ba2c5b78e51f9cf
-
-ARG VITE_API_URL=""
-ENV API_ORIGIN=${VITE_API_URL}
 
 RUN setcap -r /usr/bin/caddy \
     && addgroup -S openquiz \

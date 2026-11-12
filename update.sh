@@ -250,6 +250,19 @@ fi
 step 'Validating the Compose configuration'
 compose config --quiet
 
+# A Compose setting given only in the shell holds for this run, and is lost
+# on the next one started without it: it belongs in the root .env.
+for variable in OPEN_QUIZ_SUBNET_PREFIX OPEN_QUIZ_API_WORKERS \
+    OPEN_QUIZ_API_PIDS OPEN_QUIZ_API_MEMORY OPEN_QUIZ_PROXY_MEMORY; do
+    if eval "[ -n \"\${$variable+set}\" ]" \
+        && ! grep -q "^$variable=" "$SCRIPT_DIR/.env" 2>/dev/null; then
+        note "Warning: $variable is set in the shell but not in .env; the next update will not see it."
+    fi
+done
+if [ -n "${VITE_API_URL:-}" ]; then
+    note 'Warning: VITE_API_URL is ignored: the deployment serves the API under the interface origin.'
+fi
+
 backup_file=''
 if [ "$backup" = false ]; then
     step 'Skipping the database backup (--no-backup)'
