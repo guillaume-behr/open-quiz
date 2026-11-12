@@ -199,13 +199,13 @@ def expire_due_quiz_sessions(
         .where(QuizSession.status == SessionStatus.IN_PROGRESS, deadline <= now)
         .with_for_update(of=QuizSession, skip_locked=True)
     ).all():
-        if not quiz_session_is_due(quiz_session, quiz, now):
-            continue
         quiz_session_id = quiz_session.id
         try:
             with session.begin_nested():
-                if finish_session(quiz_session, quiz, session):
-                    finished.append(quiz_session)
+                # Due by the query, and its row locked since: nothing else
+                # can have finished it in between.
+                finish_session(quiz_session, quiz, session)
+            finished.append(quiz_session)
         except Exception:
             logger.exception("Finishing expired session %s failed", quiz_session_id)
     session.commit()
