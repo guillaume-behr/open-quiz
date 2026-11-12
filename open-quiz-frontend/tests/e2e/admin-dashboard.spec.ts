@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Request } from "@playwright/test"
+import { expect, test, type Page, type Request } from "./fixtures"
 
 const admin = {
     id: 1,
@@ -168,8 +168,10 @@ test("administrator manages teachers and problem reports", async ({ page }) => {
     })
 
     const teacherRow = page
-        .getByText("@grace", { exact: true })
-        .locator("../..")
+        .locator("div")
+        .filter({ has: page.getByText("@grace", { exact: true }) })
+        .filter({ has: page.getByRole("button", { name: "Delete" }) })
+        .last()
     await teacherRow.getByRole("button", { name: "Recover access" }).click()
     const recoveryDialog = page.getByRole("dialog", {
         name: "Recover access",
@@ -213,7 +215,7 @@ test("administrator manages teachers and problem reports", async ({ page }) => {
     await expect(deleteDialog).toContainText("Permanently delete this report?")
     const closingContent = await deleteDialog
         .getByRole("button", { name: "Cancel" })
-        .evaluate((button) => {
+        .evaluate((button: HTMLElement) => {
             button.click()
             return button.closest('[role="dialog"]')?.textContent
         })
@@ -266,11 +268,12 @@ test("a failed teacher deletion is explained inside its dialog", async ({
     )
     await page.goto("/admin/dashboard")
 
-    await page
-        .getByText("@grace", { exact: true })
-        .locator("../..")
-        .getByRole("button", { name: "Delete" })
-        .click()
+    const teacherRow = page
+        .locator("div")
+        .filter({ has: page.getByText("@grace", { exact: true }) })
+        .filter({ has: page.getByRole("button", { name: "Delete" }) })
+        .last()
+    await teacherRow.getByRole("button", { name: "Delete" }).click()
     const dialog = page.getByRole("dialog", { name: "Delete the teacher" })
     await dialog.getByRole("button", { name: "Delete" }).click()
 

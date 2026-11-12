@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 
 const student = {
     id: 7,
@@ -378,9 +378,13 @@ test("a student launches training and sees the correct answer", async ({
         name: "Student space",
     })
     const studentSignInButton = page.getByRole("button", { name: "Sign in" })
-    await expect(studentLoginHeading.locator("..").locator("svg")).toHaveCount(
-        0
-    )
+    await expect(
+        page
+            .locator("div")
+            .filter({ has: studentLoginHeading })
+            .last()
+            .locator("svg")
+    ).toHaveCount(0)
     await expect(studentSignInButton.locator("svg")).toHaveCount(0)
     await page.getByLabel("Student ID").fill("alex-8b")
     await page.getByLabel("Password", { exact: true }).fill("student-password")
@@ -521,7 +525,13 @@ test("training history ignores a response from a previously closed dialog", asyn
     )
     releaseFirstHistory?.()
     await staleResponse
-    await page.waitForTimeout(100)
+    // Let React commit whatever the stale response would have rendered.
+    await page.evaluate(
+        () =>
+            new Promise((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(resolve))
+            )
+    )
     await expect(page.getByText("20 / 20 (100%)")).toBeVisible()
     await expect(page.getByText("5 / 20 (25%)")).toHaveCount(0)
 })
@@ -698,7 +708,10 @@ test("a student reviews the correction history", async ({ page }) => {
     // A wrong answer sits at the destructive end of the same gradient, which
     // the surrounding block carries as an inline style rather than a class.
     await expect(
-        page.getByText("Venus", { exact: true }).locator("..")
+        page
+            .locator("[style]")
+            .filter({ has: page.getByText("Venus", { exact: true }) })
+            .last()
     ).toHaveAttribute("style", /var\(--destructive\) 100%, var\(--success\) 0%/)
     await expect(page.getByText("Review this answer")).toBeAttached()
     await expect(page.getByText("Mars", { exact: true })).toBeVisible()

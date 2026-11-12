@@ -1,4 +1,4 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test"
+import { expect, test, type Page, type WebSocketRoute } from "./fixtures"
 
 const baseSession = {
     quiz_title: "Science review",
@@ -597,6 +597,7 @@ test("hidden choice mode uses a generic multi-select control", async ({
 test("student translates a quiz and monitoring reports leaving the viewport", async ({
     page,
 }) => {
+    await page.clock.install()
     await page.addInitScript(() => {
         Object.defineProperty(document, "fullscreenElement", {
             configurable: true,
@@ -690,7 +691,8 @@ test("student translates a quiz and monitoring reports leaving the viewport", as
     await page.getByRole("button", { name: "Show original text" }).click()
     await expect(page.getByText("Quelle planète est rouge ?")).toBeVisible()
 
-    await page.waitForTimeout(1600)
+    // Monitoring ignores the first 1.5 s after the paper opens.
+    await page.clock.runFor(1_600)
     await page.locator("html").dispatchEvent("mouseleave")
     await expect
         .poll(() => violations)
