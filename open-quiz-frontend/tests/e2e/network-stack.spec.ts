@@ -1,8 +1,10 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 
 test("Vite proxies HTTP and WebSocket traffic to the API upstream", async ({
     page,
 }) => {
+    // This test is about the real upstream: let its calls through.
+    await page.unrouteAll()
     await page.goto("/")
 
     const health = await page.evaluate(async () => {

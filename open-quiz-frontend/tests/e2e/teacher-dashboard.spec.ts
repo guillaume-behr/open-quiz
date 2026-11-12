@@ -4,7 +4,7 @@ import {
     type Page,
     type Request,
     type WebSocketRoute,
-} from "@playwright/test"
+} from "./fixtures"
 
 const teacher = {
     id: 7,
@@ -2066,7 +2066,12 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
     // of 5 sits 70% of the way from destructive to success. A solid red here
     // would mean partial credit reads as an outright failure again.
     await expect(
-        answersDialog.getByText("Energy moves between systems.").locator("..")
+        answersDialog
+            .locator("[style]")
+            .filter({
+                has: page.getByText("Energy moves between systems."),
+            })
+            .last()
     ).toHaveAttribute("style", /var\(--destructive\) 30%, var\(--success\) 70%/)
     expect(
         requests

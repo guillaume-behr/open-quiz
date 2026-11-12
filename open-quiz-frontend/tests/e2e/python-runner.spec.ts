@@ -1,11 +1,16 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
+
+type PythonRunner = typeof import("@/components/question-banks/python-runner")
+
+// The dev server serves source modules by path, so the browser imports the
+// runner directly; the type above keeps the call checked.
+const RUNNER_PATH = "/src/components/question-banks/python-runner.ts"
 
 test("Python execution cannot forge worker responses", async ({ page }) => {
     await page.goto("/student/login")
 
-    const output = await page.evaluate(async () => {
-        const { runPython } =
-            await import("/src/components/question-banks/python-runner.ts")
+    const output = await page.evaluate(async (runnerPath) => {
+        const { runPython } = (await import(runnerPath)) as PythonRunner
         return runPython(
             [
                 "from js import Object, postMessage",
@@ -16,7 +21,7 @@ test("Python execution cannot forge worker responses", async ({ page }) => {
                 "print('genuine')",
             ].join("\n")
         )
-    })
+    }, RUNNER_PATH)
 
     expect(output).toBe("genuine")
 })
@@ -26,15 +31,14 @@ test("Python execution still blocks browser data and network capabilities", asyn
 }) => {
     await page.goto("/student/login")
 
-    const error = await page.evaluate(async () => {
-        const { runPython } =
-            await import("/src/components/question-banks/python-runner.ts")
+    const error = await page.evaluate(async (runnerPath) => {
+        const { runPython } = (await import(runnerPath)) as PythonRunner
         return runPython("from js import indexedDB\nindexedDB()").then(
             () => "",
             (failure: unknown) =>
                 failure instanceof Error ? failure.message : String(failure)
         )
-    })
+    }, RUNNER_PATH)
 
     expect(error).toContain(
         "This browser capability is disabled for Python execution"
@@ -46,9 +50,8 @@ test("Python execution cannot reach a capability through its prototype", async (
 }) => {
     await page.goto("/student/login")
 
-    const errors = await page.evaluate(async () => {
-        const { runPython } =
-            await import("/src/components/question-banks/python-runner.ts")
+    const errors = await page.evaluate(async (runnerPath) => {
+        const { runPython } = (await import(runnerPath)) as PythonRunner
         const failure = (source: string) =>
             runPython(source).then(
                 () => "",
@@ -68,7 +71,7 @@ test("Python execution cannot reach a capability through its prototype", async (
             ),
             failure("from js import navigator\nnavigator.storage()"),
         ])
-    })
+    }, RUNNER_PATH)
 
     for (const error of errors) {
         expect(error).toContain(
@@ -77,20 +80,20 @@ test("Python execution cannot reach a capability through its prototype", async (
     }
 })
 
-test("concurrent Python requests keep their output isolated", async ({ page }) => {
+test("concurrent Python requests keep their output isolated", async ({
+    page,
+}) => {
     await page.goto("/student/login")
 
-    const output = await page.evaluate(async () => {
-        const { runPython } = await import(
-            "/src/components/question-banks/python-runner.ts"
-        )
+    const output = await page.evaluate(async (runnerPath) => {
+        const { runPython } = (await import(runnerPath)) as PythonRunner
         return Promise.all([
             runPython(
                 "import asyncio\nprint('first-start')\nawait asyncio.sleep(0.05)\nprint('first-end')"
             ),
             runPython("print('second-only')"),
         ])
-    })
+    }, RUNNER_PATH)
 
     expect(output).toEqual(["first-start\nfirst-end", "second-only"])
 })

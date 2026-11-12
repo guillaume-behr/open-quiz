@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "./fixtures"
 
 // Right-to-left regression guard. Cards pin their edit/delete buttons to the
 // inline-end corner and reserve space for them with padding on the same side.
@@ -87,7 +87,9 @@ async function overlappingHeadings(page: Page) {
         for (const card of document.querySelectorAll("li, div")) {
             const buttons = [
                 ...card.querySelectorAll(":scope > button"),
-            ].filter((button) => getComputedStyle(button).position === "absolute")
+            ].filter(
+                (button) => getComputedStyle(button).position === "absolute"
+            )
             if (buttons.length === 0) continue
             for (const heading of card.querySelectorAll("h3, h4")) {
                 const range = document.createRange()
@@ -116,7 +118,9 @@ async function overlappingHeadings(page: Page) {
     })
 }
 
-test("long card titles clear the action buttons in Arabic", async ({ page }) => {
+test("long card titles clear the action buttons in Arabic", async ({
+    page,
+}) => {
     await mockArabicTeacher(page)
     await page.goto("/teacher/dashboard")
     await expect(page.locator("html")).toHaveAttribute("dir", "rtl")

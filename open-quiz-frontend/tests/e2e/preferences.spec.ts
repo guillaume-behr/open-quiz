@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 
 test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -31,4 +31,14 @@ test("language selection updates the interface and document direction", async ({
     await expect
         .poll(() => page.evaluate(() => localStorage.getItem("i18nextLng")))
         .toBe("ar")
+})
+
+test("a locale that fails to load falls back to French", async ({ page }) => {
+    test.setTimeout(30_000)
+    await page.route("**/locales/en/translation.json", (route) => route.abort())
+    await page.goto("/no-such-page")
+    await expect(
+        page.getByRole("heading", { name: "Page introuvable" })
+        // i18next retries the failed file a few times before falling back.
+    ).toBeVisible({ timeout: 20_000 })
 })

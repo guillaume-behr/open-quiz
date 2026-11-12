@@ -2,6 +2,8 @@ import { defineConfig, devices } from "@playwright/test"
 
 export default defineConfig({
     testDir: "./tests/e2e",
+    // Run by playwright.production.config.ts against the built image.
+    testIgnore: "production/**",
     fullyParallel: true,
     forbidOnly: Boolean(process.env.CI),
     // Retries keep a trace of a failure, but a test that only passes on a

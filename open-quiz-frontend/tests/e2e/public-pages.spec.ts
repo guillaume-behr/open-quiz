@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
@@ -273,9 +273,10 @@ test("cookie settings clear local quiz and preference data", async ({
     // No Open Quiz key survives, whether or not the page lists it.
     expect(
         await page.evaluate(() =>
-            [...Object.keys(localStorage), ...Object.keys(sessionStorage)].filter(
-                (key) => key.startsWith("open-quiz-")
-            )
+            [
+                ...Object.keys(localStorage),
+                ...Object.keys(sessionStorage),
+            ].filter((key) => key.startsWith("open-quiz-"))
         )
     ).toEqual([])
 })
