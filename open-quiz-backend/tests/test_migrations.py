@@ -376,3 +376,82 @@ def test_upgrade_to_0008_clears_dangling_students_and_widens_timestamps(
             session.commit()
     finally:
         engine.dispose()
+
+
+def test_upgrade_to_0009_merges_levels_and_renames_names_differing_by_case(
+    tmp_path: Path,
+) -> None:
+    """Names unique only with their case keep their rows under new names.
+
+    Levels differing by case merge into the oldest one; a class or a bank
+    whose name clashes ignoring case gets a numbered suffix.
+    """
+    database_url = database_url_for(tmp_path / "upgrade-0009")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0008")
+        with engine.begin() as connection:
+            owner = connection.execute(
+                text(
+                    "INSERT INTO users (username, display_name, password_hash, "
+                    "is_admin, is_active, access_token_generation, created_at) "
+                    "VALUES ('t', 'T', 'x', false, true, 0, now()) RETURNING id"
+                )
+            ).scalar_one()
+            for name in ("Tle", "tle", "1ere"):
+                connection.execute(
+                    text(
+                        "INSERT INTO grade_levels (owner_id, name, created_at) "
+                        "VALUES (:owner, :name, now())"
+                    ),
+                    {"owner": owner, "name": name},
+                )
+            for name, level in (
+                ("TG1", "tle"),
+                ("tg1", "Tle"),
+                ("tg1 (2)", "1ere"),
+                ("x" * 120, "Tle"),
+                ("X" * 120, "Tle"),
+            ):
+                connection.execute(
+                    text(
+                        "INSERT INTO student_classes (owner_id, name, grade_level, "
+                        "created_at) VALUES (:owner, :name, :level, now())"
+                    ),
+                    {"owner": owner, "name": name, "level": level},
+                )
+            for level, chapter in (("Tle", "Suites"), ("tle", "suites")):
+                connection.execute(
+                    text(
+                        "INSERT INTO question_banks (owner_id, grade_level, chapter, "
+                        "created_at) VALUES (:owner, :level, :chapter, now())"
+                    ),
+                    {"owner": owner, "level": level, "chapter": chapter},
+                )
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT name FROM grade_levels ORDER BY id")
+            ).scalars().all() == ["Tle", "1ere"]
+            assert connection.execute(
+                text("SELECT name, grade_level FROM student_classes ORDER BY id")
+            ).all() == [
+                ("TG1", "Tle"),
+                ("tg1 (3)", "Tle"),
+                ("tg1 (2)", "1ere"),
+                ("x" * 120, "Tle"),
+                ("X" * 116 + " (2)", "Tle"),
+            ]
+            assert connection.execute(
+                text("SELECT grade_level, chapter FROM question_banks ORDER BY id")
+            ).all() == [("Tle", "Suites"), ("Tle", "suites (2)")]
+    finally:
+        engine.dispose()
