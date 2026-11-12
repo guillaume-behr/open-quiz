@@ -10,6 +10,7 @@ import {
     type KeyboardEvent,
     type UIEvent,
     useEffect,
+    useId,
     useRef,
     useState,
 } from "react"
@@ -120,6 +121,7 @@ export function CodeBlock({
     const highlightedCodeRef = useRef<HTMLPreElement>(null)
     const currentCodeRef = useRef(code)
     const mountedRef = useRef(true)
+    const editorHintId = useId()
 
     useEffect(() => {
         currentCodeRef.current = code
@@ -207,7 +209,8 @@ export function CodeBlock({
                                     : "overflow-x-auto"
                             } ${canRun ? "pr-28" : ""}`}
                             style={style}
-                            tabIndex={0}
+                            // The editable textarea above is the tab stop.
+                            tabIndex={editable ? undefined : 0}
                             role="region"
                             aria-label={t("code-block-region")}
                         >
@@ -264,7 +267,13 @@ export function CodeBlock({
                                 autoCorrect="off"
                                 autoCapitalize="off"
                                 aria-label={t("source-code")}
+                                aria-describedby={editorHintId}
                             />
+                        )}
+                        {editable && (
+                            <span id={editorHintId} className="sr-only">
+                                {t("code-editor-keyboard-hint")}
+                            </span>
                         )}
                     </div>
                 )}

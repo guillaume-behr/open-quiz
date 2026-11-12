@@ -25,7 +25,7 @@ export function PasswordInput({
                 variant="ghost"
                 size="icon-sm"
                 className="absolute end-1 top-1/2 size-8 -translate-y-1/2 active:not-aria-[haspopup]:-translate-y-1/2"
-                aria-label={t(visible ? "hide-password" : "show-password")}
+                aria-label={t("show-password")}
                 aria-pressed={visible}
                 onClick={() => setVisible((current) => !current)}
             >

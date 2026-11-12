@@ -723,7 +723,6 @@
     "allow-code-execution": "Permitir execução de código",
     "allow-code-execution-help": "The student can run their Python answer in the browser.",
     "show-password": "Mostrar palavra-passe",
-    "hide-password": "Ocultar palavra-passe",
     "saving": "A guardar",
     "training-history": "Ver histórico",
     "training-history-title": "Histórico — {{bank}}",
@@ -847,5 +846,17 @@
     "error-username-taken": "Este nome de utilizador já é usado por outra conta.",
     "error-service-unavailable": "O serviço está temporariamente indisponível. Tente novamente dentro de instantes.",
     "error-request-invalid": "O pedido enviado é inválido. Recarregue a página e tente novamente.",
-    "error-request-too-large": "Os dados enviados são demasiado grandes. Reduza o tamanho das imagens ou do ficheiro."
+    "error-request-too-large": "Os dados enviados são demasiado grandes. Reduza o tamanho das imagens ou do ficheiro.",
+    "code-editor-keyboard-hint": "Tab adiciona recuo e Shift+Tab remove-o. Pressione Escape e depois Tab para sair do editor.",
+    "answer-partially-correct": "Resposta parcialmente correta",
+    "training-potential-score-about": "Sobre esta nota",
+    "edit-quiz-named": "Editar o questionário “{{title}}”",
+    "delete-quiz-named": "Excluir o questionário “{{title}}”",
+    "edit-question-bank-named": "Editar o banco de questões “{{name}}”",
+    "delete-question-bank-named": "Excluir o banco de questões “{{name}}”",
+    "edit-class-named": "Alterar a turma “{{name}}”",
+    "delete-class-named": "Excluir a turma “{{name}}”",
+    "edit-student-named": "Editar o aluno “{{name}}”",
+    "delete-student-named": "Excluir o aluno “{{name}}”",
+    "delete-result-named": "Excluir o resultado de “{{title}}”"
 }

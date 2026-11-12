@@ -152,7 +152,9 @@ export function ResultCard({
                 </Button>
                 <Button
                     variant="outline"
-                    aria-label={t("delete-result")}
+                    aria-label={t("delete-result-named", {
+                        title: result.quiz_title,
+                    })}
                     onClick={onDelete}
                 >
                     <Trash2 />

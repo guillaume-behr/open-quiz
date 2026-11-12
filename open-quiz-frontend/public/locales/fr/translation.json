@@ -723,7 +723,6 @@
     "allow-code-execution": "Autoriser l’exécution de code",
     "allow-code-execution-help": "L’élève pourra exécuter sa réponse Python dans l’environnement sécurisé du navigateur.",
     "show-password": "Afficher le mot de passe",
-    "hide-password": "Masquer le mot de passe",
     "saving": "Enregistrement en cours",
     "training-history": "Voir l’historique",
     "training-history-title": "Historique — {{bank}}",
@@ -847,5 +846,17 @@
     "error-username-taken": "Cet identifiant est déjà utilisé par un autre compte.",
     "error-service-unavailable": "Le service est momentanément indisponible. Réessayez dans un instant.",
     "error-request-invalid": "La requête envoyée est invalide. Rechargez la page, puis réessayez.",
-    "error-request-too-large": "Les données envoyées sont trop volumineuses. Réduisez la taille des images ou du fichier."
+    "error-request-too-large": "Les données envoyées sont trop volumineuses. Réduisez la taille des images ou du fichier.",
+    "code-editor-keyboard-hint": "Tab indente et Maj+Tab désindente. Appuyez sur Échap puis Tab pour quitter l’éditeur.",
+    "answer-partially-correct": "Réponse partiellement correcte",
+    "training-potential-score-about": "À propos de cette note",
+    "edit-quiz-named": "Modifier le quiz « {{title}} »",
+    "delete-quiz-named": "Supprimer le quiz « {{title}} »",
+    "edit-question-bank-named": "Modifier la banque « {{name}} »",
+    "delete-question-bank-named": "Supprimer la banque « {{name}} »",
+    "edit-class-named": "Modifier la classe « {{name}} »",
+    "delete-class-named": "Supprimer la classe « {{name}} »",
+    "edit-student-named": "Modifier l’élève « {{name}} »",
+    "delete-student-named": "Supprimer l’élève « {{name}} »",
+    "delete-result-named": "Supprimer le résultat de « {{title}} »"
 }
