@@ -65,6 +65,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- Training never draws written questions, which need a teacher's review it
+  never gets. The training question count of a class is checked against a
+  bank's other questions, which question-bank summaries report as
+  `trainable_question_count`; a bank with none cannot be chosen for training.
 - The results list filters a class by its id (`class_id`) instead of a
   search on its name (`class_search`, removed), and accepts a start range
   (`started_from`, `started_before`).
