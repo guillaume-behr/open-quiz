@@ -22,7 +22,7 @@ import {
     QuestionsManager,
     type QuestionsView,
 } from "@/components/question-banks/questions-manager"
-import { type FormEvent, useCallback, useState } from "react"
+import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
 import { useAsyncAction } from "@/hooks/use-async-action"
@@ -77,11 +77,7 @@ export function QuestionBanksPanel({
         gradeLevel: "",
     })
     const questionBanks = bankList.items
-    const [gradeLevel, setGradeLevel] = useState("")
-    const [title, setTitle] = useState("")
     const [editingBank, setEditingBank] = useState<QuestionBank | null>(null)
-    const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
-    const [newGradeLevel, setNewGradeLevel] = useState("")
     const [selectedBankId, setSelectedBankId] = useState<number | null>(null)
     const questionList = useResource(
         useCallback(
@@ -167,9 +163,10 @@ export function QuestionBanksPanel({
         )
     }
 
-    async function saveBank(event: FormEvent<HTMLFormElement>): Promise<void> {
-        event.preventDefault()
-        const values = { grade_level: gradeLevel.trim(), chapter: title.trim() }
+    async function saveBank(values: {
+        grade_level: string
+        chapter: string
+    }): Promise<void> {
         const saved = editingBank
             ? await updateQuestionBank(editingBank.id, values)
             : await createQuestionBank(values)
@@ -179,8 +176,6 @@ export function QuestionBanksPanel({
                 : [...banks, saved]
             ).sort(compareQuestionBanks)
         )
-        setGradeLevel("")
-        setTitle("")
         setEditingBank(null)
         setBankView(null)
         setSelectedBankId(null)
@@ -189,19 +184,15 @@ export function QuestionBanksPanel({
         onCreateDialogOpenChange(false)
     }
 
-    async function addGradeLevel(): Promise<void> {
-        const normalizedLevel = newGradeLevel.trim()
-        if (!normalizedLevel) return
+    async function addGradeLevel(name: string): Promise<GradeLevel | null> {
         saving.setError(null)
         try {
-            const created = await onCreateGradeLevel(normalizedLevel)
-            setGradeLevel(created.name)
-            setNewGradeLevel("")
-            setIsAddingGradeLevel(false)
+            return await onCreateGradeLevel(name)
         } catch (caughtError) {
             saving.setError(
                 apiErrorMessage(caughtError, t, t("grade-level-create-error"))
             )
+            return null
         }
     }
 
@@ -213,8 +204,6 @@ export function QuestionBanksPanel({
         if (bank.id === selectedBankId) questionList.reload()
         setSelectedBankId(bank.id)
         setEditingBank(bank)
-        setGradeLevel(bank.grade_level)
-        setTitle(bank.chapter)
         saving.setError(null)
         setPublishedSessionsKept(0)
         setQuestionsView(null)
@@ -280,97 +269,93 @@ export function QuestionBanksPanel({
                 onEdit={openBankEditor}
             />
 
-            <QuestionBankFormDialog
-                open={
-                    isCreateDialogOpen ||
-                    (editingBank !== null && bankView === "questions")
-                }
-                editingBank={editingBank}
-                gradeLevels={gradeLevels}
-                gradeLevel={gradeLevel}
-                title={title}
-                newGradeLevel={newGradeLevel}
-                isAddingGradeLevel={isAddingGradeLevel}
-                isBusy={saving.isPending}
-                error={saving.error}
-                onGradeLevelChange={setGradeLevel}
-                onTitleChange={setTitle}
-                onNewGradeLevelChange={setNewGradeLevel}
-                onAddingGradeLevelChange={setIsAddingGradeLevel}
-                onDeleteGradeLevel={async (level) => {
-                    saving.setError(null)
-                    try {
-                        await onDeleteGradeLevel(level)
-                    } catch (error) {
-                        saving.setError(
-                            apiErrorMessage(
-                                error,
-                                t,
-                                error instanceof ApiError &&
-                                    error.status === 409
-                                    ? t("grade-level-in-use-error")
-                                    : t("grade-level-delete-error")
-                            )
-                        )
-                        throw error
+            {(isCreateDialogOpen || editingBank !== null) && (
+                <QuestionBankFormDialog
+                    key={editingBank?.id ?? "new"}
+                    open={
+                        isCreateDialogOpen ||
+                        (editingBank !== null && bankView === "questions")
                     }
-                }}
-                onAddGradeLevel={() => void addGradeLevel()}
-                onClose={() => {
-                    onCreateDialogOpenChange(false)
-                    setEditingBank(null)
-                    setBankView(null)
-                    setQuestionsView(null)
-                    setSelectedBankId(null)
-                    setGradeLevel("")
-                    setTitle("")
-                    saving.setError(null)
-                }}
-                onSubmit={(event) => void saving.run(event)}
-                questionManagement={
-                    editingBank && selectedBank ? (
-                        <QuestionsManager
-                            questions={
-                                questionList.isLoading
-                                    ? []
-                                    : (questionList.data ?? [])
-                            }
-                            isLoading={questionList.isLoading}
-                            error={
-                                questionList.error
-                                    ? t("questions-load-error")
-                                    : null
-                            }
-                            notice={
-                                publishedSessionsKept > 0
-                                    ? t("question-published-sessions-kept", {
-                                          count: publishedSessionsKept,
-                                      })
-                                    : null
-                            }
-                            initialView={questionsView}
-                            onAdd={(view) => {
-                                setQuestionsView(view)
-                                setPublishedSessionsKept(0)
-                                setEditingQuestion(null)
-                                setBankView("question-form")
-                            }}
-                            onEdit={(question, view) => {
-                                setQuestionsView(view)
-                                setPublishedSessionsKept(0)
-                                setEditingQuestion(question)
-                                setBankView("question-form")
-                            }}
-                            onDelete={(question, view) => {
-                                setQuestionsView(view)
-                                deletingQuestion.setError(null)
-                                setQuestionToDelete(question)
-                                setBankView("delete-question")
-                            }}
-                        />
-                    ) : undefined
-                }
-            />
+                    editingBank={editingBank}
+                    gradeLevels={gradeLevels}
+                    isBusy={saving.isPending}
+                    error={saving.error}
+                    onDeleteGradeLevel={async (level) => {
+                        saving.setError(null)
+                        try {
+                            await onDeleteGradeLevel(level)
+                        } catch (error) {
+                            saving.setError(
+                                apiErrorMessage(
+                                    error,
+                                    t,
+                                    error instanceof ApiError &&
+                                        error.status === 409
+                                        ? t("grade-level-in-use-error")
+                                        : t("grade-level-delete-error")
+                                )
+                            )
+                            throw error
+                        }
+                    }}
+                    onAddGradeLevel={addGradeLevel}
+                    onClose={() => {
+                        onCreateDialogOpenChange(false)
+                        setEditingBank(null)
+                        setBankView(null)
+                        setQuestionsView(null)
+                        setSelectedBankId(null)
+                        saving.setError(null)
+                    }}
+                    onSubmit={(values) => void saving.run(values)}
+                    questionManagement={
+                        editingBank && selectedBank ? (
+                            <QuestionsManager
+                                questions={
+                                    questionList.isLoading
+                                        ? []
+                                        : (questionList.data ?? [])
+                                }
+                                isLoading={questionList.isLoading}
+                                error={
+                                    questionList.error
+                                        ? t("questions-load-error")
+                                        : null
+                                }
+                                notice={
+                                    publishedSessionsKept > 0
+                                        ? t(
+                                              "question-published-sessions-kept",
+                                              {
+                                                  count: publishedSessionsKept,
+                                              }
+                                          )
+                                        : null
+                                }
+                                initialView={questionsView}
+                                onAdd={(view) => {
+                                    setQuestionsView(view)
+                                    setPublishedSessionsKept(0)
+                                    setEditingQuestion(null)
+                                    setBankView("question-form")
+                                }}
+                                onEdit={(question, view) => {
+                                    setQuestionsView(view)
+                                    setPublishedSessionsKept(0)
+                                    setEditingQuestion(question)
+                                    setBankView("question-form")
+                                }}
+                                onDelete={(question, view) => {
+                                    setQuestionsView(view)
+                                    deletingQuestion.setError(null)
+                                    setQuestionToDelete(question)
+                                    setBankView("delete-question")
+                                }}
+                            />
+                        ) : undefined
+                    }
+                />
+            )}
 
             <ImportQuestionBankDialog
                 open={transfer.isImportDialogOpen}

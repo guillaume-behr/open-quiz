@@ -9,44 +9,34 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import type { FormEvent, ReactNode } from "react"
+import { type FormEvent, type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 type QuestionBankFormDialogProps = {
     open: boolean
     editingBank: QuestionBank | null
     gradeLevels: GradeLevel[]
-    gradeLevel: string
-    title: string
-    newGradeLevel: string
-    isAddingGradeLevel: boolean
     isBusy: boolean
     error: string | null
-    onGradeLevelChange: (value: string) => void
-    onTitleChange: (value: string) => void
-    onNewGradeLevelChange: (value: string) => void
-    onAddingGradeLevelChange: (value: boolean) => void
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
-    onAddGradeLevel: () => void
+    /** Creates a grade level; null when it failed (the error is shown). */
+    onAddGradeLevel: (name: string) => Promise<GradeLevel | null>
     onClose: () => void
-    onSubmit: (event: FormEvent<HTMLFormElement>) => void
+    onSubmit: (values: { grade_level: string; chapter: string }) => void
     questionManagement?: ReactNode
 }
 
+/**
+ * Creates a question bank, or edits one with its questions. Mount it while
+ * the bank is being created or edited, keyed by the bank, so each opening
+ * starts from that bank; `open` only hides it while a question is edited.
+ */
 export function QuestionBankFormDialog({
     open,
     editingBank,
     gradeLevels,
-    gradeLevel,
-    title,
-    newGradeLevel,
-    isAddingGradeLevel,
     isBusy,
     error,
-    onGradeLevelChange,
-    onTitleChange,
-    onNewGradeLevelChange,
-    onAddingGradeLevelChange,
     onDeleteGradeLevel,
     onAddGradeLevel,
     onClose,
@@ -54,6 +44,26 @@ export function QuestionBankFormDialog({
     questionManagement,
 }: QuestionBankFormDialogProps) {
     const { t } = useTranslation()
+    const [gradeLevel, setGradeLevel] = useState(editingBank?.grade_level ?? "")
+    const [title, setTitle] = useState(editingBank?.chapter ?? "")
+    const [newGradeLevel, setNewGradeLevel] = useState("")
+    const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
+
+    async function addGradeLevel() {
+        const normalizedLevel = newGradeLevel.trim()
+        if (!normalizedLevel) return
+        const created = await onAddGradeLevel(normalizedLevel)
+        if (!created) return
+        setGradeLevel(created.name)
+        setNewGradeLevel("")
+        setIsAddingGradeLevel(false)
+    }
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault()
+        onSubmit({ grade_level: gradeLevel.trim(), chapter: title.trim() })
+    }
+
     return (
         <Dialog
             open={open}
@@ -67,7 +77,7 @@ export function QuestionBankFormDialog({
             size={editingBank ? "xl" : "md"}
         >
             <FieldGroup className="gap-4">
-                <form id="question-bank-form" onSubmit={onSubmit}>
+                <form id="question-bank-form" onSubmit={submit}>
                     <div className="grid items-start gap-4 md:grid-cols-2">
                         <Field>
                             <FieldLabel htmlFor="question-bank-title">
@@ -77,7 +87,7 @@ export function QuestionBankFormDialog({
                                 id="question-bank-title"
                                 value={title}
                                 onChange={(event) =>
-                                    onTitleChange(event.target.value)
+                                    setTitle(event.target.value)
                                 }
                                 maxLength={160}
                                 placeholder={t(
@@ -93,11 +103,11 @@ export function QuestionBankFormDialog({
                             newValue={newGradeLevel}
                             isAdding={isAddingGradeLevel}
                             disabled={isBusy}
-                            onChange={onGradeLevelChange}
-                            onNewValueChange={onNewGradeLevelChange}
-                            onAddingChange={onAddingGradeLevelChange}
+                            onChange={setGradeLevel}
+                            onNewValueChange={setNewGradeLevel}
+                            onAddingChange={setIsAddingGradeLevel}
                             onDelete={onDeleteGradeLevel}
-                            onAdd={onAddGradeLevel}
+                            onAdd={() => void addGradeLevel()}
                         />
                     </div>
                 </form>

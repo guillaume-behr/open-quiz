@@ -27,7 +27,7 @@ import { FieldError } from "@/components/ui/field"
 import { saveBlob } from "@/lib/utils"
 import { Pagination } from "@/components/ui/pagination"
 import { FileJson, UsersRound, Upload } from "lucide-react"
-import { type FormEvent, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
 import { withPrintWindow } from "@/lib/print-window"
@@ -75,10 +75,6 @@ export function ClassesPanel({
     const [deleting, setDeleting] = useState<StudentClass | null>(null)
     const [assigning, setAssigning] = useState(false)
     const [accounts, setAccounts] = useState<StudentAccount[]>([])
-    const [className, setClassName] = useState("")
-    const [gradeLevel, setGradeLevel] = useState("")
-    const [newGradeLevel, setNewGradeLevel] = useState("")
-    const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
     const [isFormBusy, setIsFormBusy] = useState(false)
     const [printingClassId, setPrintingClassId] = useState<number | null>(null)
     const [importOpen, setImportOpen] = useState(false)
@@ -111,14 +107,9 @@ export function ClassesPanel({
 
     /** Saves the class form; its error is also the form's other errors. */
     const classForm = useAsyncAction(
-        async () => {
-            if (editing)
-                await updateStudentClass(
-                    editing.id,
-                    className.trim(),
-                    gradeLevel
-                )
-            else await createStudentClass(className.trim(), gradeLevel)
+        async ({ name, gradeLevel }: { name: string; gradeLevel: string }) => {
+            if (editing) await updateStudentClass(editing.id, name, gradeLevel)
+            else await createStudentClass(name, gradeLevel)
             closeClassForm()
             classList.reload()
         },
@@ -128,31 +119,19 @@ export function ClassesPanel({
 
     function closeClassForm() {
         setEditing(null)
-        setClassName("")
-        setGradeLevel("")
-        setNewGradeLevel("")
-        setIsAddingGradeLevel(false)
         setManaged(null)
         setFormError(null)
         onCreateDialogOpenChange(false)
     }
 
-    function saveClass(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault()
-        void classForm.run()
-    }
-
-    async function addGradeLevel() {
-        if (!newGradeLevel.trim()) return
+    async function addGradeLevel(name: string) {
         try {
-            const created = await onCreateGradeLevel(newGradeLevel.trim())
-            setGradeLevel(created.name)
-            setNewGradeLevel("")
-            setIsAddingGradeLevel(false)
+            return await onCreateGradeLevel(name)
         } catch (caught) {
             setFormError(
                 apiErrorMessage(caught, t, t("grade-level-create-error"))
             )
+            return null
         }
     }
 
@@ -358,8 +337,6 @@ export function ClassesPanel({
                                         setFormError(null)
                                         setEditing(studentClass)
                                         setManaged(studentClass)
-                                        setClassName(studentClass.name)
-                                        setGradeLevel(studentClass.grade_level)
                                     }}
                                     onDelete={() => openDeletion(studentClass)}
                                     onPrint={() =>
@@ -390,37 +367,33 @@ export function ClassesPanel({
                     download.setError(null)
                 }}
             />
-            <ClassFormDialog
-                open={isCreateDialogOpen || editing !== null}
-                editingClass={editing}
-                classes={classes}
-                gradeLevels={gradeLevels}
-                className={className}
-                gradeLevel={gradeLevel}
-                newGradeLevel={newGradeLevel}
-                isAddingGradeLevel={isAddingGradeLevel}
-                isBusy={classForm.isPending || isFormBusy}
-                error={classForm.error}
-                onClassNameChange={setClassName}
-                onGradeLevelChange={setGradeLevel}
-                onNewGradeLevelChange={setNewGradeLevel}
-                onAddingGradeLevelChange={setIsAddingGradeLevel}
-                onDeleteGradeLevel={onDeleteGradeLevel}
-                onAddGradeLevel={() => void addGradeLevel()}
-                onClose={closeClassForm}
-                onSubmit={saveClass}
-                studentManagement={
-                    managed ? (
-                        <ClassStudentsSection
-                            studentClass={managed}
-                            isBusy={classForm.isPending || isFormBusy}
-                            onOpenAssignment={() => void openAssignment()}
-                            onCreateStudent={createAndAssignStudent}
-                            onUnassign={(accountId) => void unassign(accountId)}
-                        />
-                    ) : undefined
-                }
-            />
+            {(isCreateDialogOpen || editing !== null) && (
+                <ClassFormDialog
+                    key={editing?.id ?? "new"}
+                    editingClass={editing}
+                    classes={classes}
+                    gradeLevels={gradeLevels}
+                    isBusy={classForm.isPending || isFormBusy}
+                    error={classForm.error}
+                    onDeleteGradeLevel={onDeleteGradeLevel}
+                    onAddGradeLevel={addGradeLevel}
+                    onClose={closeClassForm}
+                    onSubmit={(values) => void classForm.run(values)}
+                    studentManagement={
+                        managed ? (
+                            <ClassStudentsSection
+                                studentClass={managed}
+                                isBusy={classForm.isPending || isFormBusy}
+                                onOpenAssignment={() => void openAssignment()}
+                                onCreateStudent={createAndAssignStudent}
+                                onUnassign={(accountId) =>
+                                    void unassign(accountId)
+                                }
+                            />
+                        ) : undefined
+                    }
+                />
+            )}
 
             <StudentAssignmentDialog
                 open={assigning}
