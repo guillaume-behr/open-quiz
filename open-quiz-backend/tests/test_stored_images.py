@@ -6,7 +6,6 @@ from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
 from threading import Thread
-from time import sleep
 
 from sqlalchemy import event, func, select, update
 
@@ -14,7 +13,15 @@ from app import maintenance
 from app.models import Question, StoredImage
 from app.stored_images import delete_unreferenced_images, store_image
 
-from support import VALID_PNG, exam_environment, make_client, settings_for
+from support import (
+    VALID_PNG,
+    backend_pid,
+    exam_environment,
+    make_client,
+    settings_for,
+    wait_until,
+    waits_for_a_lock,
+)
 
 
 def question_payload(prompt: str) -> str:
@@ -136,11 +143,12 @@ def test_purging_skips_an_image_a_concurrent_save_reuses(tmp_path: Path) -> None
                 .values(image_sha256=digest)
             )
             purged: list[int] = []
+            purging_pid = backend_pid(purging)
             purge = Thread(
                 target=lambda: purged.append(delete_unreferenced_images(purging))
             )
             purge.start()
-            sleep(0.3)
+            assert wait_until(lambda: waits_for_a_lock(client, purging_pid))
             saving.commit()
             purge.join(timeout=10)
             assert purged == [0]
@@ -181,9 +189,10 @@ def test_reusing_an_image_keeps_it_from_a_concurrent_purge(tmp_path: Path) -> No
                 purged.append(delete_unreferenced_images(purging))
                 purging.commit()
 
+            purging_pid = backend_pid(purging)
             purger = Thread(target=purge)
             purger.start()
-            sleep(0.3)
+            assert wait_until(lambda: waits_for_a_lock(client, purging_pid))
             saving.execute(
                 update(Question)
                 .where(Question.id == created["id"])

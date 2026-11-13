@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.database import build_session_factory
 from app.models import Question, QuestionBank, QuestionChoice, User
 from app.security import hash_password
 from app.services import grading
@@ -17,7 +16,7 @@ from app.services.grading import (
     selected_choice_score,
 )
 
-from support import settings_for
+from support import session_factory_for, settings_for
 
 
 def test_selecting_wrong_choices_cancels_non_negative_partial_credit() -> None:
@@ -260,7 +259,7 @@ def test_a_corrupted_selection_scores_zero_instead_of_crashing() -> None:
 
 @pytest.fixture
 def session_factory(tmp_path: Path) -> sessionmaker[Session]:
-    return build_session_factory(settings_for(tmp_path / "edges").database_url)
+    return session_factory_for(settings_for(tmp_path / "edges").database_url)
 
 
 def add_question(

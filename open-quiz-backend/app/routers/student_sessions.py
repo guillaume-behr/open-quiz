@@ -330,7 +330,7 @@ def join_quiz(
     payload: QuizJoin,
     request: Request,
     session: DbSession,
-    account: StudentAccount = Depends(current_student),
+    account: Annotated[StudentAccount, Depends(current_student)],
 ) -> StudentQuizJoinResponse:
     quiz_session, quiz, student, join_subject = joinable_session(
         payload, account, request, session
@@ -684,6 +684,7 @@ def submit_student_answer(
         # Rebuilding a whole makeup session for every answer is wasteful, but
         # its supervision view must see a participant reaching the end.
         makeup_sessions_changed=participant.current_position is None,
+        participant=participant,
     )
     state = student_state_response(quiz_session, quiz, participant, session)
     if feedback is not None:
@@ -768,6 +769,7 @@ def review_student_answers(
             session,
             active_sessions_changed=False,
             makeup_sessions_changed=False,
+            participant=participant,
         )
     return student_state_response(quiz_session, quiz, participant, session)
 
@@ -804,7 +806,7 @@ def submit_student_quiz(
     session.flush()
     finish_when_nobody_can_answer(quiz_session, quiz, session)
     session.commit()
-    publish_quiz_update(request, quiz_session, session)
+    publish_quiz_update(request, quiz_session, session, participant=participant)
     return student_state_response(quiz_session, quiz, participant, session)
 
 
@@ -873,6 +875,7 @@ def navigate_student_quiz(
         session,
         active_sessions_changed=False,
         makeup_sessions_changed=False,
+        participant=participant,
     )
     return student_state_response(quiz_session, quiz, participant, session)
 
@@ -920,6 +923,7 @@ def report_student_violation(
         session,
         active_sessions_changed=False,
         makeup_sessions_changed=False,
+        participant=participant,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

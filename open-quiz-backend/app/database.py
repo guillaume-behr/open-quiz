@@ -1,4 +1,6 @@
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
@@ -94,6 +96,16 @@ def build_session_factory(
     )
     migrate_database(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+@contextmanager
+def database_sessions(database_url: str) -> Iterator[sessionmaker[Session]]:
+    """A session factory for a command-line script, its pool closed on exit."""
+    session_factory = build_session_factory(database_url)
+    try:
+        yield session_factory
+    finally:
+        session_factory.kw["bind"].dispose()
 
 
 # Rate limiters count attempts in short transactions of their own while a

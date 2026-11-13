@@ -434,7 +434,7 @@ def test_answering_requires_a_current_question_and_a_student(environment) -> Non
 
 def test_an_orphaned_participant_cannot_answer(environment, monkeypatch) -> None:
     client = environment["client"]
-    launched, headers, url = started(client, environment)
+    _launched, headers, url = started(client, environment)
     from app.routers import student_sessions
 
     original = student_sessions.authenticated_participant
@@ -459,7 +459,7 @@ def test_an_orphaned_participant_cannot_answer(environment, monkeypatch) -> None
 
 def test_inactive_student_accounts_lose_their_participation(environment) -> None:
     client = environment["client"]
-    launched, headers, url = started(client, environment)
+    _launched, headers, url = started(client, environment)
     with client.app.state.session_factory() as session:
         session.execute(
             update(StudentAccount)

@@ -8,12 +8,14 @@ from app.live_quiz import (
     LiveQuizHub,
     active_quiz_sessions_topic,
     makeup_sessions_topic,
+    participant_topic,
     quiz_session_topic,
     student_session_topic,
 )
 from app.models import (
     MakeupSession,
     Quiz,
+    QuizParticipant,
     QuizSession,
 )
 
@@ -25,6 +27,7 @@ def publish_quiz_update(
     *,
     active_sessions_changed: bool = True,
     makeup_sessions_changed: bool = True,
+    participant: QuizParticipant | None = None,
 ) -> None:
     publish_session_change(
         request.app.state.live_quiz_hub,
@@ -32,6 +35,7 @@ def publish_quiz_update(
         session,
         active_sessions_changed=active_sessions_changed,
         makeup_sessions_changed=makeup_sessions_changed,
+        participant=participant,
     )
 
 
@@ -42,10 +46,18 @@ def publish_session_change(
     *,
     active_sessions_changed: bool = True,
     makeup_sessions_changed: bool = True,
+    participant: QuizParticipant | None = None,
 ) -> None:
-    """Notify every live view a change of this session concerns."""
+    """Notify every live view a change of this session concerns.
+
+    A change to one ``participant`` only (an answer, navigation, a violation,
+    the hand-in) wakes that student's socket, not the whole class's.
+    """
     hub.publish(quiz_session_topic(quiz_session.id))
-    hub.publish(student_session_topic(quiz_session.join_code))
+    if participant is not None:
+        hub.publish(participant_topic(participant.id))
+    else:
+        hub.publish(student_session_topic(quiz_session.join_code))
     if active_sessions_changed:
         owner_id = session.scalar(
             select(Quiz.owner_id).where(Quiz.id == quiz_session.quiz_id)

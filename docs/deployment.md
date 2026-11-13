@@ -175,6 +175,9 @@ PostgreSQL. Mesuré sur 4 cœurs avec PostgreSQL local, ce relais réveille les
 (2,6 ms au 95ᵉ centile), et 250 WebSockets en 8 ms. Le script
 `python -m scripts.live_relay_benchmark` refait cette mesure sur une instance.
 
+La limite de 4 WebSockets par compte et par flux en direct est tenue par chaque
+worker : avec N workers, un même compte peut en ouvrir jusqu’à 4 × N.
+
 Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes
 (`DATABASE_POOL_SIZE` + `DATABASE_MAX_OVERFLOW`, dans
 `open-quiz-backend/.env`), 5 pour les limites de débit et 2 pour le relais,

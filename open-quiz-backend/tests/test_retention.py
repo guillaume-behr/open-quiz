@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
 from app import maintenance
-from app.application import create_app
 from app.models import (
     AuthenticationChallenge,
     ProblemReport,
@@ -26,6 +25,7 @@ from app.session_retention import close_abandoned_sessions
 from support import (
     FRONTEND_ORIGIN,
     TEST_CLIENT_BACKEND_OPTIONS,
+    app_for,
     concurrent_writes,
     create_professor,
     exam_environment,
@@ -43,7 +43,7 @@ def test_startup_enforces_security_data_retention(tmp_path: Path) -> None:
         quiz_result_retention_days=1,
         problem_report_retention_days=1,
     )
-    app = create_app(settings)
+    app = app_for(settings)
     with TestClient(
         app,
         headers={"Origin": FRONTEND_ORIGIN},
@@ -133,7 +133,7 @@ def test_retention_settles_sessions_their_teacher_never_closed(
         tmp_path / "abandoned-sessions",
         abandoned_session_retention_days=7,
     )
-    app = create_app(settings)
+    app = app_for(settings)
     with make_client(settings):
         pass
 
@@ -255,7 +255,7 @@ def test_retention_purges_finished_training_attempts(tmp_path: Path) -> None:
         tmp_path / "training-retention",
         training_result_retention_days=30,
     )
-    app = create_app(settings)
+    app = app_for(settings)
     with make_client(settings):
         pass
 
