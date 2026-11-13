@@ -8,7 +8,7 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from sqlalchemy import event, select, update
 
-from app import security
+from app import auth_guards, security
 from app.models import StudentAccount, User
 from app.routers import auth, student_auth
 from app.routers.auth import REFRESH_COOKIE
@@ -124,13 +124,14 @@ def test_no_connection_is_held_while_waiting_for_the_password_hash(
         environment = exam_environment(client)
         engine = client.app.state.session_factory.kw["bind"]
         held: list[int] = []
-        verify = module.verify_password_and_update
+        # Teachers and students share the password check of auth_guards.
+        verify = auth_guards.verify_password_and_update
 
         def watched(password: str, encoded: str):
             held.append(engine.pool.checkedout())
             return verify(password, encoded)
 
-        monkeypatch.setattr(module, "verify_password_and_update", watched)
+        monkeypatch.setattr(auth_guards, "verify_password_and_update", watched)
         if module is auth:
             client.post(
                 "/api/auth/login",

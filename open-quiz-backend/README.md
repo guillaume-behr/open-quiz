@@ -398,6 +398,9 @@ docker compose exec open-quiz-backend \
     /app/.venv/bin/python -m scripts.reset_two_factor identifiant
 ```
 
+Le script ne migre pas la base : lancez-le une fois le backend démarré, qui
+l’a mise à jour.
+
 Privilégiez toutefois l’action **Récupérer l’accès** dans l’espace
 administrateur : elle remplace également le mot de passe du compte ciblé.
 

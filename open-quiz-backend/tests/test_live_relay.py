@@ -124,16 +124,24 @@ def test_the_listener_reconnects_after_losing_its_connection(
     try:
         assert listener.listening.wait(5)
         with psycopg.connect(conninfo, autocommit=True) as admin:
+            # Only this listener's connection: tests running in parallel
+            # hold listeners of their own.
             admin.execute(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                "WHERE query LIKE 'LISTEN %%' AND pid <> pg_backend_pid()"
+                "WHERE query = %s AND pid <> pg_backend_pid()",
+                (f'LISTEN "{relay_channel(conninfo)}"',),
             )
         assert wait_until(
             lambda: "Live relay lost its connection; reconnecting" in logged
         )
-        assert wait_until(listener.listening.is_set)
-        sender.send("quiz-session:3")
-        assert wait_until(lambda: received == ["quiz-session:3"])
+
+        # A notification sent while the listener reconnects is lost, by
+        # design: send until one arrives over the new connection.
+        def delivered() -> bool:
+            sender.send("quiz-session:3")
+            return "quiz-session:3" in received
+
+        assert wait_until(delivered)
     finally:
         listener.stop()
         sender.stop()
