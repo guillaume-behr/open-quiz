@@ -523,7 +523,7 @@ class QuestionChoiceResponse(BaseModel):
     points: float
     position: int
     has_image: bool
-    code_language: str | None
+    code_language: CodeLanguage | None
     code_content: str | None
 
 
@@ -533,10 +533,10 @@ class QuestionContentResponse(BaseModel):
     difficulty: Difficulty
     answer_mode: AnswerMode
     answer_mode_disclosed: bool
-    response_language: str | None
+    response_language: CodeLanguage | None
     allow_code_execution: bool
     has_image: bool
-    code_language: str | None
+    code_language: CodeLanguage | None
     code_content: str | None
 
 
@@ -675,6 +675,20 @@ class MakeupQuizSelection(BaseModel):
     quiz_id: int = Field(gt=0)
 
 
+# A browser event a student's quiz reports (StudentQuizViolation).
+ReportedViolation = Literal[
+    "fullscreen_exit",
+    "pointer_exit",
+    "window_blur",
+    "page_hidden",
+    "context_menu",
+    "print_attempt",
+]
+# A participant's last alert: a reported event, or the resumption the server
+# records itself (participants.SESSION_RESUMED_VIOLATION).
+RecordedViolation = Literal[ReportedViolation, "session_resumed"]
+
+
 class QuizParticipantResponse(BaseModel):
     id: int
     student_identifier: str
@@ -685,7 +699,7 @@ class QuizParticipantResponse(BaseModel):
     maximum_score: float = 0
     pending_manual_grading_count: int = 0
     violation_count: int = 0
-    last_violation_type: str | None = None
+    last_violation_type: RecordedViolation | None = None
     last_violation_at: datetime | None = None
     joined_at: datetime
 
@@ -751,7 +765,7 @@ class StudentQuizChoiceResponse(BaseModel):
     label: str
     position: int
     has_image: bool
-    code_language: str | None
+    code_language: CodeLanguage | None
     code_content: str | None
 
 
@@ -826,8 +840,8 @@ class QuizAnswerReview(BaseModel):
     difficulty: Difficulty
     answer_mode: AnswerMode
     code_content: str | None = None
-    code_language: str | None = None
-    response_language: str | None = None
+    code_language: CodeLanguage | None = None
+    response_language: CodeLanguage | None = None
     submitted_answers: list[str]
     expected_answers: list[str]
     score: float
@@ -844,8 +858,8 @@ class StudentQuizHistoryAnswer(BaseModel):
     difficulty: Difficulty
     answer_mode: AnswerMode
     code_content: str | None = None
-    code_language: str | None = None
-    response_language: str | None = None
+    code_language: CodeLanguage | None = None
+    response_language: CodeLanguage | None = None
     submitted_answers: list[str]
     # Until the grades are published, nothing that reveals the key: no
     # expected answers, score, correctness or feedback.
@@ -888,14 +902,7 @@ class StudentQuizNavigation(BaseModel):
 class StudentQuizViolation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    event_type: Literal[
-        "fullscreen_exit",
-        "pointer_exit",
-        "window_blur",
-        "page_hidden",
-        "context_menu",
-        "print_attempt",
-    ]
+    event_type: ReportedViolation
 
 
 class QuizJoin(BaseModel):

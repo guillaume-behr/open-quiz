@@ -1,3 +1,7 @@
+import * as v from "valibot"
+
+import { TokenResponseSchema } from "./schemas"
+
 const API_URL = import.meta.env.VITE_API_URL ?? ""
 const REFRESH_PROOF_STORAGE_KEY = "open-quiz-refresh-proof"
 const REQUEST_TIMEOUT_MS = 30_000
@@ -35,10 +39,12 @@ export function onSessionExpired(listener: () => void): () => void {
     }
 }
 
-type TokenResponse = {
-    access_token: string
-    refresh_proof: string
-}
+/**
+ * The code of an ApiError for a response that does not have the shape the
+ * interface expects: the server is not the version this interface was built
+ * for, or something between them altered the response.
+ */
+export const UNEXPECTED_RESPONSE_CODE = "UNEXPECTED_RESPONSE"
 
 export class ApiError extends Error {
     readonly status: number
@@ -58,6 +64,23 @@ export class ApiError extends Error {
                 ? detail.code
                 : null
     }
+}
+
+/**
+ * The response body as `schema` describes it, or an ApiError with
+ * UNEXPECTED_RESPONSE_CODE: a malformed body never reaches the screens.
+ */
+export function parseResponse<S extends v.GenericSchema>(
+    schema: S,
+    body: unknown,
+    status = 200
+): v.InferOutput<S> {
+    const result = v.safeParse(schema, body)
+    if (result.success) return result.output
+    throw new ApiError("Unexpected response from the server", status, {
+        code: UNEXPECTED_RESPONSE_CODE,
+        issues: v.flatten(result.issues),
+    })
 }
 
 function readRefreshProof(): string | null {
@@ -118,7 +141,11 @@ async function refreshAccessToken(): Promise<boolean> {
                     return false
                 }
                 if (!response.ok) throw await errorFrom(response)
-                const result = (await response.json()) as TokenResponse
+                const result = parseResponse(
+                    TokenResponseSchema,
+                    await response.json(),
+                    response.status
+                )
                 setSessionTokens(result.access_token, result.refresh_proof)
                 return true
             })
@@ -245,6 +272,19 @@ export async function request<T>(
         return undefined as T
     }
     return response.json() as Promise<T>
+}
+
+/** A request whose response is checked against `schema` before it is used. */
+export async function requestParsed<S extends v.GenericSchema>(
+    schema: S,
+    path: string,
+    options: RequestOptions = {},
+    allowRefresh = true
+): Promise<v.InferOutput<S>> {
+    const response = await authenticatedFetch(path, options, allowRefresh)
+    // An unreadable body is as unexpected as a body of the wrong shape.
+    const body: unknown = await response.json().catch(() => undefined)
+    return parseResponse(schema, body, response.status)
 }
 
 export async function requestPage<T>(

@@ -1,4 +1,4 @@
-import { ApiError } from "@/api/client"
+import { ApiError, UNEXPECTED_RESPONSE_CODE } from "@/api/client"
 
 // Every ErrorCode member of open-quiz-backend/app/errors.py needs a key here:
 // scripts/check-error-codes.mjs fails `pnpm test` when one is missing.
@@ -120,6 +120,13 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     REQUEST_BODY_TOO_LARGE: "error-request-too-large",
 }
 
+// Codes the interface gives an ApiError itself, never sent by the backend:
+// kept out of the table above, which scripts/check-error-codes.mjs matches
+// against open-quiz-backend/app/errors.py.
+const CLIENT_ERROR_TRANSLATION_KEYS: Record<string, string> = {
+    [UNEXPECTED_RESPONSE_CODE]: "error-unexpected-response",
+}
+
 // The message to show for a failed request: the translation of its API code
 // when the table knows it, otherwise the screen's translated fallback. A
 // network failure or a timeout falls back too: its own message is neither
@@ -131,7 +138,8 @@ export function apiErrorMessage(
 ): string {
     const translationKey =
         error instanceof ApiError && error.code
-            ? API_ERROR_TRANSLATION_KEYS[error.code]
+            ? (API_ERROR_TRANSLATION_KEYS[error.code] ??
+              CLIENT_ERROR_TRANSLATION_KEYS[error.code])
             : undefined
     return translationKey ? translate(translationKey) : fallback
 }

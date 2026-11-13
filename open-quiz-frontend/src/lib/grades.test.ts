@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { formatScore, GRADE_SCALE, gradeOnScale, scoreTone } from "@/lib/grades"
+import {
+    answerOutcomeKey,
+    formatScore,
+    GRADE_SCALE,
+    gradeOnScale,
+    scoreTone,
+} from "@/lib/grades"
 
 describe("gradeOnScale", () => {
     it("rebases a score on the grade scale", () => {
@@ -35,5 +41,13 @@ describe("scoreTone", () => {
         expect(scoreTone(0.5, 2)).toBe("warning")
         expect(scoreTone(0, 2)).toBe("destructive")
         expect(scoreTone(0, 0)).toBe("destructive")
+    })
+})
+
+describe("answerOutcomeKey", () => {
+    it("tells full, partial and no credit apart", () => {
+        expect(answerOutcomeKey(2, 2)).toBe("training-correct")
+        expect(answerOutcomeKey(0.5, 2)).toBe("answer-partially-correct")
+        expect(answerOutcomeKey(0, 2)).toBe("training-incorrect")
     })
 })

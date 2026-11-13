@@ -209,6 +209,9 @@ def owned_class_session(
     return quiz_session, quiz
 
 
+# This route and the next are kept on purpose: the interface follows sessions
+# on their WebSocket feeds (live.py), and these read-only views stay as a
+# polling fallback for API clients and the backend tests.
 @router.get("/sessions/active", response_model=list[QuizSessionResponse])
 def list_active_sessions(
     professor: ProfessorUser,

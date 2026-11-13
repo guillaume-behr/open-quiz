@@ -723,7 +723,6 @@
     "allow-code-execution": "Permitir la ejecución de código",
     "allow-code-execution-help": "The student can run their Python answer in the browser.",
     "show-password": "Mostrar contraseña",
-    "hide-password": "Ocultar contraseña",
     "saving": "Guardando",
     "training-history": "Ver historial",
     "training-history-title": "Historial — {{bank}}",
@@ -847,5 +846,18 @@
     "error-username-taken": "Este nombre de usuario ya lo usa otra cuenta.",
     "error-service-unavailable": "El servicio no está disponible temporalmente. Inténtalo de nuevo en un momento.",
     "error-request-invalid": "La solicitud enviada no es válida. Recarga la página e inténtalo de nuevo.",
-    "error-request-too-large": "Los datos enviados son demasiado grandes. Reduce el tamaño de las imágenes o del archivo."
+    "error-request-too-large": "Los datos enviados son demasiado grandes. Reduce el tamaño de las imágenes o del archivo.",
+    "error-unexpected-response": "El servidor envió una respuesta inesperada. Recarga la página e inténtalo de nuevo.",
+    "code-editor-keyboard-hint": "Tab aplica sangría y Mayús+Tab la quita. Pulsa Escape y luego Tab para salir del editor.",
+    "answer-partially-correct": "Respuesta parcialmente correcta",
+    "training-potential-score-about": "Acerca de esta nota",
+    "edit-quiz-named": "Editar el cuestionario “{{title}}”",
+    "delete-quiz-named": "Eliminar el cuestionario “{{title}}”",
+    "edit-question-bank-named": "Editar el banco de preguntas “{{name}}”",
+    "delete-question-bank-named": "Eliminar el banco de preguntas “{{name}}”",
+    "edit-class-named": "Cambiar la clase “{{name}}”",
+    "delete-class-named": "Eliminar la clase “{{name}}”",
+    "edit-student-named": "Editar al estudiante “{{name}}”",
+    "delete-student-named": "Eliminar al estudiante “{{name}}”",
+    "delete-result-named": "Eliminar el resultado de “{{title}}”"
 }

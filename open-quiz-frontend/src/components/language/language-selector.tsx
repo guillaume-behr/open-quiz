@@ -2,11 +2,12 @@ import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-import { Check, Languages } from "lucide-react"
+import { Languages } from "lucide-react"
 
 import { useTranslation } from "react-i18next"
 import { availableLanguages } from "@/lib/i18n"
@@ -25,26 +26,18 @@ export function LanguageSelector({ className }: React.ComponentProps<"div">) {
                     <span className="sr-only">{t("language")}</span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top">
-                    {availableLanguages.map(({ code, label }) => {
-                        return (
-                            <DropdownMenuItem
-                                key={code}
-                                aria-current={
-                                    currentLanguage === code
-                                        ? "true"
-                                        : undefined
-                                }
-                                onClick={() => {
-                                    void i18n.changeLanguage(code)
-                                }}
-                            >
-                                {label}
-                                {currentLanguage === code && (
-                                    <Check className="ms-auto" />
-                                )}
-                            </DropdownMenuItem>
-                        )
-                    })}
+                    <DropdownMenuRadioGroup
+                        value={currentLanguage}
+                        onValueChange={(code: string) => {
+                            void i18n.changeLanguage(code)
+                        }}
+                    >
+                        {availableLanguages.map(({ code, label }) => (
+                            <DropdownMenuRadioItem key={code} value={code}>
+                                <span lang={code}>{label}</span>
+                            </DropdownMenuRadioItem>
+                        ))}
+                    </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
             </DropdownMenu>
         </div>
