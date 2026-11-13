@@ -18,6 +18,7 @@ from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
     Quiz,
+    QuizAnswer,
     QuizParticipant,
     QuizSession,
     StudentClass,
@@ -102,6 +103,26 @@ def listed_participants(
     return listed
 
 
+def unanswered_skip_counts(
+    participants: Sequence[QuizParticipant], session: Session
+) -> dict[int, int]:
+    """For each participant, the questions skipped and not answered since."""
+    skipping = {
+        participant.id: set(participant.skipped_question_ids)
+        for participant in participants
+        if participant.skipped_question_ids
+    }
+    if not skipping:
+        return {}
+    for participant_id, question_id in session.execute(
+        select(QuizAnswer.participant_id, QuizAnswer.question_id).where(
+            QuizAnswer.participant_id.in_(skipping)
+        )
+    ):
+        skipping[participant_id].discard(question_id)
+    return {participant_id: len(left) for participant_id, left in skipping.items()}
+
+
 def session_responses(
     rows: Sequence[tuple[QuizSession, Quiz]],
     session: Session,
@@ -161,6 +182,9 @@ def session_responses(
         )
         review_enabled = answer_review_enabled(quiz_session, quiz)
         finished_session = quiz_session.status == SessionStatus.FINISHED
+        skip_counts = (
+            {} if finished_session else unanswered_skip_counts(participants, session)
+        )
         participant_responses = []
         for participant in participants:
             counts = statistics.get((quiz_session.id, participant.id), (0, 0, 0))
@@ -174,6 +198,7 @@ def session_responses(
                         participant, counts[0], review_enabled, total_questions
                     ),
                     show_grades=finished_session,
+                    skipped_count=skip_counts.get(participant.id, 0),
                 )
             )
         student_class = (

@@ -140,6 +140,7 @@ def participant_response(
     *,
     has_finished: bool = False,
     show_grades: bool = True,
+    skipped_count: int = 0,
 ) -> QuizParticipantResponse:
     """One participant's line in a teacher's view of a session.
 
@@ -156,6 +157,7 @@ def participant_response(
             else participant.student_display_name
         ),
         answered_count=answered_count,
+        skipped_count=skipped_count,
         has_finished=has_finished,
         score=score if show_grades else 0,
         maximum_score=maximum_score,

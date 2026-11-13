@@ -12,7 +12,7 @@ from collections.abc import Collection, Iterable
 from datetime import UTC, datetime, timedelta
 from math import ceil
 
-from sqlalchemy import Select, delete, func, or_, select, update
+from sqlalchemy import Select, and_, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
@@ -104,6 +104,24 @@ def handed_in_question_ids(
     """The questions a participant is done with: answered, or skipped."""
     return answered_question_ids(quiz_session, participant, session) | set(
         participant.skipped_question_ids
+    )
+
+
+def final_review_offered(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    participant: QuizParticipant,
+    session: Session,
+) -> bool:
+    """Whether this participant confirms their paper before handing it in.
+
+    The quiz may ask for it. Otherwise, questions they skipped and left
+    unanswered call for it too: without it, the last answer would hand the
+    paper in before they could come back to them.
+    """
+    return answer_review_enabled(quiz_session, quiz) or bool(
+        set(participant.skipped_question_ids)
+        - answered_question_ids(quiz_session, participant, session)
     )
 
 
@@ -312,6 +330,16 @@ def finish_when_nobody_can_answer(
         # The last answer no longer ends the session on its own: a participant
         # reviewing their answers still has to confirm them.
         still_working = or_(still_working, QuizParticipant.submitted_at.is_(None))
+    else:
+        # Without the review step, the last answer hands the paper in unless
+        # skipped questions are left: that participant reviews them first.
+        still_working = or_(
+            still_working,
+            and_(
+                QuizParticipant.submitted_at.is_(None),
+                func.cardinality(QuizParticipant.skipped_question_ids) > 0,
+            ),
+        )
     unfinished_count = session.scalar(
         select(func.count(QuizParticipant.id)).where(
             QuizParticipant.session_id == quiz_session.id,

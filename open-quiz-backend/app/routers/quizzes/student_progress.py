@@ -37,9 +37,9 @@ from app.services.question_assignments import (
     session_question_ids,
 )
 from app.services.session_lifecycle import (
-    answer_review_enabled,
     answered_question_ids,
     expire_quiz_session,
+    final_review_offered,
     finish_when_nobody_can_answer,
     handed_in_question_ids,
     lock_for_participant_write,
@@ -190,7 +190,7 @@ def review_student_answers(
     )
     expire_quiz_session(quiz_session, quiz, session)
     lock_for_participant_write(quiz_session, participant, session)
-    require_answer_review_offered(quiz_session, quiz)
+    require_answer_review_offered(quiz_session, quiz, participant, session)
     if participant.submitted_at is not None:
         return student_state_response(quiz_session, quiz, participant, session)
     require_reviewable_participant(quiz_session, participant, session)
@@ -225,7 +225,7 @@ def submit_student_quiz(
     )
     expire_quiz_session(quiz_session, quiz, session)
     lock_for_participant_write(quiz_session, participant, session)
-    require_answer_review_offered(quiz_session, quiz)
+    require_answer_review_offered(quiz_session, quiz, participant, session)
     if participant.submitted_at is not None:
         # A duplicate confirmation must not fail the student whose paper is
         # already handed in.
@@ -268,7 +268,7 @@ def navigate_student_quiz(
     reviewing = (
         participant.current_position is None
         and participant.submitted_at is None
-        and answer_review_enabled(quiz_session, quiz)
+        and final_review_offered(quiz_session, quiz, participant, session)
         and bool(question_ids)
         and set(question_ids).issubset(handed_in)
     )

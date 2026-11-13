@@ -297,10 +297,26 @@ function QuestionNavigation({
                                 type="button"
                                 variant={isCurrent ? "default" : "outline"}
                                 aria-current={isCurrent ? "step" : undefined}
-                                aria-label={t("student-question-progress", {
-                                    current: number,
-                                    total,
-                                })}
+                                // The state is said, not only coloured.
+                                aria-label={[
+                                    t("student-question-progress", {
+                                        current: number,
+                                        total,
+                                    }),
+                                    isCurrent
+                                        ? null
+                                        : t(
+                                              !isSeen
+                                                  ? "student-question-state-unseen"
+                                                  : isSkipped
+                                                    ? "student-question-state-skipped"
+                                                    : answered.has(number)
+                                                      ? "student-question-state-answered"
+                                                      : "student-question-state-unanswered"
+                                          ),
+                                ]
+                                    .filter(Boolean)
+                                    .join(", ")}
                                 disabled={isBusy || isCurrent || !isSeen}
                                 onClick={() => onNavigate(number)}
                             >

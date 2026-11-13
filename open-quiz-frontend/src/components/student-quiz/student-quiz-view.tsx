@@ -68,7 +68,11 @@ export function StudentQuizView({
         session.status === "in_progress" &&
         !session.awaiting_final_submission &&
         session.total_questions > 0 &&
-        session.answered_count >= session.total_questions
+        // Every question is answered or skipped.
+        new Set([
+            ...session.answered_question_numbers,
+            ...session.skipped_question_numbers,
+        ]).size >= session.total_questions
     const showsQuestionNavigation =
         !isReviewing &&
         session.status === "in_progress" &&
@@ -138,7 +142,13 @@ export function StudentQuizView({
                                 onWrittenAnswerChange={onWrittenAnswerChange}
                                 onNavigate={onNavigate}
                                 onSubmit={onSubmitAnswer}
-                                onSkip={onSkipQuestion}
+                                // Without going back, a skipped question would
+                                // be lost for good: no skip is offered.
+                                onSkip={
+                                    session.allow_previous_questions
+                                        ? onSkipQuestion
+                                        : undefined
+                                }
                             />
                         </>
                     )}

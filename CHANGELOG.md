@@ -20,12 +20,18 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Added
 
-- A student can skip a question during a quiz (“Skip the question”). A skip
-  is no answer: it is not counted as one, and the question stays within
-  reach. When the session ends, each skipped question still unanswered gets
-  an empty answer that scores zero; a blank written answer needs no marking.
-  The student state gains `answered_question_numbers` and
-  `skipped_question_numbers`, and
+- A student can skip a question during a quiz (“Skip the question”), when
+  the quiz lets them go back to earlier questions. A skip is no answer: it is
+  not counted as one, and the question stays within reach. When the session
+  ends, each skipped question still unanswered gets an empty answer that
+  scores zero; a blank written answer needs no marking.
+- Skipped questions left unanswered open the review step even on a quiz
+  without it: the last answer no longer hands the paper in before the
+  student could come back to them, or hand it in with them blank.
+- The teacher's live view shows how many questions each student skipped and
+  has not answered yet.
+- The student state gains `answered_question_numbers` and
+  `skipped_question_numbers`, the teacher's participant `skipped_count`, and
   `POST /api/quizzes/student/sessions/{join_code}/skip` takes the
   `question_id` shown, like an answer.
 
@@ -36,6 +42,7 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   time with arrows beyond that, and turns the page by itself with a slide:
   skipped questions are light orange (even once answered), reached but
   unanswered ones grey, and those not seen yet dark grey and out of reach.
+  Each number's state is also part of its accessible name.
 - The exam screen no longer shows the class name, and the time left sits in
   the top corner of the question card.
 

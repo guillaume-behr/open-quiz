@@ -194,7 +194,8 @@ describe("StudentQuestionForm", () => {
         })
         expect(screen.getByText("Too late")).toBeInTheDocument()
         const previous = screen.getByRole("button", {
-            name: 'student-question-progress {"current":1,"total":4}',
+            // session has no answered_question_numbers: reached, unanswered.
+            name: 'student-question-progress {"current":1,"total":4}, student-question-state-unanswered',
         })
         await userEvent.click(previous)
         expect(handlers.onNavigate).toHaveBeenCalledWith(1)
@@ -217,8 +218,24 @@ describe("StudentQuestionForm", () => {
         })
         const number = (current: number) =>
             screen.getByRole("button", {
-                name: `student-question-progress {"current":${current},"total":6}`,
+                name: new RegExp(
+                    `^student-question-progress \\{"current":${current},"total":6\\}`
+                ),
             })
+        // Each state is said, not only coloured.
+        expect(number(1)).toHaveAccessibleName(
+            'student-question-progress {"current":1,"total":6}, student-question-state-answered'
+        )
+        expect(number(2)).toHaveAccessibleName(
+            /student-question-state-skipped$/
+        )
+        expect(number(3)).toHaveAccessibleName(
+            'student-question-progress {"current":3,"total":6}'
+        )
+        expect(number(4)).toHaveAccessibleName(
+            /student-question-state-unanswered$/
+        )
+        expect(number(6)).toHaveAccessibleName(/student-question-state-unseen$/)
         // Answered: plain and reachable.
         expect(number(1)).toBeEnabled()
         expect(number(1)).not.toHaveClass("bg-muted")

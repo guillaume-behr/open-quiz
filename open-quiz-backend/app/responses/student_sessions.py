@@ -43,8 +43,8 @@ from app.services.question_assignments import (
     session_question_ids,
 )
 from app.services.session_lifecycle import (
-    answer_review_enabled,
     answered_question_ids,
+    final_review_offered,
     previous_questions_allowed,
     quiz_ends_at,
 )
@@ -246,7 +246,8 @@ def student_state_response(
     saved_choice_ids = saved_answer.get("selected_choice_ids")
     tokens = ChoiceTokens(session, quiz_session, participant)
     answered_count = len(answered_ids)
-    review_enabled = answer_review_enabled(quiz_session, quiz)
+    # Skipped questions left unanswered offer the review step as well.
+    review_enabled = final_review_offered(quiz_session, quiz, participant, session)
     # A participant done with every question (answered or skipped) but who
     # has not confirmed yet keeps
     # the session open for themselves: they may re-read, and correct when the
