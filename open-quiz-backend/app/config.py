@@ -154,6 +154,12 @@ class Settings:
     problem_report_window_seconds: int = bounded(900, 60, 86400)
     problem_report_retention_days: int = bounded(90, 1, 365)
     max_request_body_bytes: int = bounded(65536, 1024, 1048576)
+    # Connections each worker's requests may hold at once: the pool keeps
+    # DATABASE_POOL_SIZE open and opens up to DATABASE_MAX_OVERFLOW more under
+    # load. A request that waits longer than the timeout for one answers 503.
+    database_pool_size: int = bounded(5, 1, 100)
+    database_max_overflow: int = bounded(10, 0, 100)
+    database_pool_timeout_seconds: int = bounded(10, 1, 60)
     # Extra Host names the API answers to in production, separated by commas,
     # for an API published under another name than FRONTEND_ORIGIN.
     trusted_hosts: str = ""
