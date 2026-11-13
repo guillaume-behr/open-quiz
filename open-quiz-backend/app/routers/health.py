@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.config import app_settings
 from app.errors import ApiError, ErrorCode
 
 router = APIRouter(prefix="/api", tags=["system"])
@@ -25,7 +26,7 @@ def health(request: Request) -> dict[str, str]:
 @router.get("/public-information")
 def public_information(request: Request) -> dict[str, object]:
     """Expose only the instance information required on public legal pages."""
-    settings = request.app.state.settings
+    settings = app_settings(request)
     return {
         "host": {
             "name": settings.legal_host_name,

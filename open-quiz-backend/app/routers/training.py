@@ -139,7 +139,7 @@ def update_class_training_question_banks(
         for item in configured_items
     ):
         raise ApiError(
-            422,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.TRAINING_QUESTION_COUNT_EXCEEDED,
             "Le nombre demandé dépasse les questions disponibles",
         )
@@ -209,7 +209,7 @@ def list_student_training_history(
     membership = session.scalar(select(Student).where(Student.account_id == student.id))
     if membership is None:
         raise ApiError(
-            409,
+            status.HTTP_409_CONFLICT,
             ErrorCode.TRAINING_CLASS_REQUIRED,
             "L’élève doit être affecté à une classe",
         )
@@ -263,13 +263,17 @@ def start_training_quiz(
     ).first()
     if membership is None:
         raise ApiError(
-            409,
+            status.HTTP_409_CONFLICT,
             ErrorCode.TRAINING_CLASS_REQUIRED,
             "L’élève doit être affecté à une classe",
         )
     class_student, student_class = membership
     if question_bank_id in active_exam_bank_ids_for_class(student_class.id, session):
-        raise ApiError(404, ErrorCode.TRAINING_NOT_FOUND, "Entraînement introuvable")
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.TRAINING_NOT_FOUND,
+            "Entraînement introuvable",
+        )
     assigned = session.execute(
         select(QuestionBank, ClassTrainingQuestionBank.question_count)
         .join(
@@ -284,12 +288,16 @@ def start_training_quiz(
         )
     ).first()
     if assigned is None:
-        raise ApiError(404, ErrorCode.TRAINING_NOT_FOUND, "Entraînement introuvable")
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.TRAINING_NOT_FOUND,
+            "Entraînement introuvable",
+        )
     bank, configured_count = assigned
     question_ids = draw_training_question_ids(bank.id, session)[:configured_count]
     if not question_ids:
         raise ApiError(
-            409,
+            status.HTTP_409_CONFLICT,
             ErrorCode.TRAINING_BANK_EMPTY,
             "Cette banque ne contient encore aucune question",
         )

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
 from app.auth_guards import student_password_rate_subject
+from app.config import app_settings
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import QuizMode
 from app.errors import ApiError, ErrorCode
@@ -91,7 +92,7 @@ def credential_response(
         try:
             password = decrypt_student_password(
                 account.encrypted_password,
-                request.app.state.settings.student_credential_encryption_key,
+                app_settings(request).student_credential_encryption_key,
             )
         except InvalidToken:
             # A rotated STUDENT_CREDENTIAL_ENCRYPTION_KEY (or a restored
@@ -235,7 +236,11 @@ def export_student_credentials(
     )
 
 
-@router.post("", response_model=StudentAccountCreatedResponse, status_code=201)
+@router.post(
+    "",
+    response_model=StudentAccountCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_student_account(
     payload: StudentAccountCreate,
     professor: ProfessorUser,
@@ -253,7 +258,7 @@ def create_student_account(
         password_hash=hash_password(password),
         encrypted_password=encrypt_student_password(
             password,
-            request.app.state.settings.student_credential_encryption_key,
+            app_settings(request).student_credential_encryption_key,
         ),
     )
     session.add(account)
@@ -301,7 +306,7 @@ def update_student_account(
         account.password_hash = hash_password(payload.password)
         account.encrypted_password = encrypt_student_password(
             payload.password,
-            request.app.state.settings.student_credential_encryption_key,
+            app_settings(request).student_credential_encryption_key,
         )
     # Flushing the new identifier here would raise a duplicate outside the
     # IntegrityError handler below and turn a conflict into a server error.
@@ -319,7 +324,7 @@ def update_student_account(
     except IntegrityError:
         session.rollback()
         raise ApiError(
-            409,
+            status.HTTP_409_CONFLICT,
             ErrorCode.STUDENT_IDENTIFIER_TAKEN,
             "Cet identifiant élève est déjà utilisé",
         ) from None
@@ -338,7 +343,7 @@ def update_student_account(
     return student_account_response(account, session)
 
 
-@router.delete("/{account_id}", status_code=204)
+@router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_student_account(
     account_id: int,
     professor: ProfessorUser,
@@ -358,7 +363,7 @@ def delete_student_account(
         )
         if active is not None:
             raise ApiError(
-                409,
+                status.HTTP_409_CONFLICT,
                 ErrorCode.STUDENT_ACCOUNT_IN_ACTIVE_SESSION,
                 "Ce compte participe à une session active",
             )

@@ -374,6 +374,22 @@ def delete_quiz(
     )
 
 
+def not_running_error() -> ApiError:
+    return ApiError(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.QUIZ_SESSION_NOT_RUNNING,
+        "Seul un quiz en cours peut être mis en pause",
+    )
+
+
+def not_paused_error() -> ApiError:
+    return ApiError(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.QUIZ_SESSION_NOT_PAUSED,
+        "Seul un quiz en pause peut être repris",
+    )
+
+
 @router.post(
     "/sessions/{session_id}/pause",
     response_model=QuizSessionResponse,
@@ -387,11 +403,7 @@ def pause_quiz_session(
     quiz_session, quiz = owned_class_session(session_id, professor, session)
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status != SessionStatus.IN_PROGRESS:
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUIZ_SESSION_NOT_RUNNING,
-            "Seul un quiz en cours peut être mis en pause",
-        )
+        raise not_running_error()
     transition = session.execute(
         update(QuizSession)
         .where(
@@ -404,11 +416,7 @@ def pause_quiz_session(
     if affected_rows(transition) != 1:
         # A concurrent request finished or paused it since it was read.
         session.rollback()
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUIZ_SESSION_NOT_RUNNING,
-            "Seul un quiz en cours peut être mis en pause",
-        )
+        raise not_running_error()
     session.commit()
     session.refresh(quiz_session)
     publish_quiz_update(request, quiz_session, session)
@@ -427,11 +435,7 @@ def resume_quiz_session(
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_class_session(session_id, professor, session)
     if quiz_session.status != SessionStatus.PAUSED or quiz_session.paused_at is None:
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUIZ_SESSION_NOT_PAUSED,
-            "Seul un quiz en pause peut être repris",
-        )
+        raise not_paused_error()
     transition = session.execute(
         update(QuizSession)
         .where(
@@ -452,11 +456,7 @@ def resume_quiz_session(
     if affected_rows(transition) != 1:
         # A concurrent request resumed or finished it since it was read.
         session.rollback()
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUIZ_SESSION_NOT_PAUSED,
-            "Seul un quiz en pause peut être repris",
-        )
+        raise not_paused_error()
     session.commit()
     session.refresh(quiz_session)
     publish_quiz_update(request, quiz_session, session)
@@ -475,6 +475,10 @@ def cancel_quiz_session(
 ) -> None:
     quiz_session, quiz = owned_class_session(session_id, professor, session)
     expire_quiz_session(quiz_session, quiz, session)
+    # Answers lock this row (lock_for_participant_write), so holding its
+    # lock until the delete commits means no answer can land between the
+    # check below and the delete, which would discard it with the session.
+    session.refresh(quiz_session, with_for_update=True)
     if quiz_session.status not in ACTIVE_SESSION_STATUSES:
         raise ApiError(
             status.HTTP_409_CONFLICT,

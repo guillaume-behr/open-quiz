@@ -6,11 +6,12 @@ student accounts and their memberships in one transaction, or nothing.
 
 import json
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import String, func, literal, select
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.exc import IntegrityError
 
+from app.config import app_settings
 from app.dependencies import DbSession, ProfessorUser
 from app.errors import ApiError, ErrorCode
 from app.grade_levels import (
@@ -73,7 +74,11 @@ def lowered_names(names: list[str], session: DbSession) -> dict[str, str]:
     return dict(rows.all())
 
 
-@router.post("/import", response_model=ClassBatchImportResponse, status_code=201)
+@router.post(
+    "/import",
+    response_model=ClassBatchImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def import_classes(
     payload: ClassBatchImport,
     request: Request,
@@ -85,7 +90,7 @@ def import_classes(
     )
     if retry_after:
         raise ApiError(
-            429,
+            status.HTTP_429_TOO_MANY_REQUESTS,
             ErrorCode.CLASS_IMPORT_RATE_LIMITED,
             "Trop d’imports de classes. Réessayez plus tard.",
             headers={"Retry-After": str(retry_after)},
@@ -105,7 +110,9 @@ def import_classes(
         set(identifiers)
     ):
         raise ApiError(
-            422, ErrorCode.CLASS_IMPORT_DUPLICATES, "Le fichier contient des doublons"
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.CLASS_IMPORT_DUPLICATES,
+            "Le fichier contient des doublons",
         )
     existing_levels: dict[str, str] = dict(
         session.execute(
@@ -123,7 +130,7 @@ def import_classes(
     )
     if invalid_levels:
         raise ApiError(
-            422,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.CLASS_IMPORT_GRADE_LEVEL_INVALID,
             f"Niveau invalide : {', '.join(invalid_levels)}",
         )
@@ -138,7 +145,11 @@ def import_classes(
         )
         is not None
     ):
-        raise ApiError(409, ErrorCode.CLASS_NAME_TAKEN, "Une classe existe déjà")
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.CLASS_NAME_TAKEN,
+            "Une classe existe déjà",
+        )
     if (
         identifiers
         and session.scalar(
@@ -149,7 +160,7 @@ def import_classes(
         is not None
     ):
         raise ApiError(
-            409,
+            status.HTTP_409_CONFLICT,
             ErrorCode.STUDENT_IDENTIFIER_TAKEN,
             "Un identifiant élève est déjà utilisé",
         )
@@ -176,7 +187,7 @@ def import_classes(
                     password_hash=password_hash,
                     encrypted_password=encrypt_student_password(
                         password,
-                        request.app.state.settings.student_credential_encryption_key,
+                        app_settings(request).student_credential_encryption_key,
                     ),
                     is_active=True,
                 )
@@ -194,7 +205,9 @@ def import_classes(
     except IntegrityError:
         session.rollback()
         raise ApiError(
-            409, ErrorCode.CLASS_IMPORT_CONFLICT, "Conflit avec les données existantes"
+            status.HTTP_409_CONFLICT,
+            ErrorCode.CLASS_IMPORT_CONFLICT,
+            "Conflit avec les données existantes",
         ) from None
     return ClassBatchImportResponse(
         class_count=len(payload.classes), student_count=len(identifiers)

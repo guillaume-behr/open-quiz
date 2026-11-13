@@ -19,6 +19,7 @@ from app.models import (
     QuizSession,
     User,
 )
+from app.routers import makeup as makeup_routes
 from app.teacher_session_responses import active_makeup_session_responses
 
 from support import (
@@ -30,6 +31,7 @@ from support import (
     hand_in_quiz,
     launch_and_join,
     make_client,
+    row_is_locked,
     settings_for,
 )
 
@@ -189,6 +191,33 @@ def test_cancelling_a_makeup_removes_it_unless_answers_exist(environment) -> Non
     with client.app.state.session_factory() as session:
         assert session.get(MakeupSession, makeup["id"]) is None
         assert session.get(QuizSession, child.id) is None
+
+
+def test_cancelling_a_makeup_holds_its_lock_until_the_delete(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent start, and then an answer, cannot slip in between the
+    checks and the delete."""
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    makeup = create_makeup(client, environment)
+    locked_at_delete: list[bool] = []
+    delete_records = makeup_routes.delete_makeup_session_records
+
+    def probe_then_delete(makeup_id: int, session: Any) -> None:
+        locked_at_delete.append(row_is_locked(client, MakeupSession, makeup["id"]))
+        delete_records(makeup_id, session)
+
+    monkeypatch.setattr(
+        makeup_routes, "delete_makeup_session_records", probe_then_delete
+    )
+
+    cancelled = client.post(
+        f"/api/quizzes/makeup/sessions/{makeup['id']}/cancel", headers=headers
+    )
+
+    assert cancelled.status_code == 204
+    assert locked_at_delete == [True]
 
 
 def test_makeup_start_leaves_already_running_children_alone(environment) -> None:
