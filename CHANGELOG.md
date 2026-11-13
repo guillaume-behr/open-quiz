@@ -99,6 +99,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- Deleting a question bank that quizzes draw from now says so in its
+  confirmation: those quizzes stop drawing from it, and one that drew only
+  from it needs another bank before its next launch. Question banks report
+  `quiz_count` for this.
 - `scripts/reset_two_factor.py` now resets an account exactly like
   **Recover access** with a 2FA reset: it also empties the account's password
   attempt buckets, and revokes its sessions instead of deleting them. It no
@@ -185,6 +189,19 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- The last answer or hand-in that ends an exam now tells every student at
+  once; those who had already handed in waited up to 25 seconds to see it.
+- Turning a choice question that students already answered into a written
+  one now sends their answers to manual grading, instead of keeping the
+  automatic mark of a choice answer as if a teacher had given it.
+- Editing a question with a new image no longer keeps the question and its
+  sessions locked while the image is decoded.
+- A sign-in session deleted by a sign-in on another device while it was
+  being renewed is now refused with a 401, not a 500.
+- `update.sh`: retrying an update that failed before replacing the running
+  deployment (a build error, say) now makes `--rollback` restore the retry's
+  backup, which holds what was written in between, and no longer prunes the
+  backup a pending rollback needs.
 - Saving a question that reuses an image no longer fails with a 500 when the
   unused-image purge runs at the same moment; two questions created at once
   can no longer push a bank past 500 questions; a class import refuses a

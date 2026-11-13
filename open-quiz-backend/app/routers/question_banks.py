@@ -91,6 +91,7 @@ def list_question_banks(
             medium_count,
             hard_count,
             trainable_count,
+            quiz_count,
         )
         for (
             question_bank,
@@ -99,6 +100,7 @@ def list_question_banks(
             medium_count,
             hard_count,
             trainable_count,
+            quiz_count,
         ) in rows
     ]
 

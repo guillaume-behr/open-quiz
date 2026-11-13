@@ -372,6 +372,7 @@ export function QuestionBanksPanel({
                 open={bankToDelete !== null}
                 kind="bank"
                 title={bankToDelete?.chapter ?? ""}
+                quizCount={bankToDelete?.quiz_count ?? 0}
                 isBusy={deletingBank.isPending}
                 error={deletingBank.error}
                 onClose={() => {

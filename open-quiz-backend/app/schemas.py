@@ -354,6 +354,8 @@ class QuestionBankResponse(BaseModel):
     hard_question_count: int = 0
     # Questions training can draw: every question but the written ones.
     trainable_question_count: int = 0
+    # Quizzes that draw from the bank: deleting it takes it out of them.
+    quiz_count: int = 0
     training_question_count: int | None = None
 
 

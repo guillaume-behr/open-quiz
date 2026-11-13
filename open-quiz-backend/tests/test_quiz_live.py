@@ -21,9 +21,13 @@ from app.routers import live as live_router
 
 from support import (
     FRONTEND_ORIGIN,
+    add_class_student,
     assert_student_exam_payload_hides_answers,
+    choice_answer,
+    correct_choice_id,
     exam_environment,
     expire_due_sessions,
+    hand_in_quiz,
     launch_and_join,
     make_client,
     settings_for,
@@ -665,4 +669,54 @@ def test_a_students_own_change_wakes_only_their_socket(
         ).status_code
         == 200
     )
+    assert class_topic in published
+
+
+def test_the_hand_in_that_ends_the_exam_wakes_the_whole_class(
+    environment, monkeypatch
+) -> None:
+    """Classmates who already handed in learn at once that the exam is over."""
+    client = environment["client"]
+    second_student = add_class_student(client, environment)
+    launched = client.post(
+        f"/api/quizzes/{environment['quiz']['id']}/launch",
+        headers=environment["teacher_headers"],
+        json={"class_id": environment["student_class"]["id"]},
+    ).json()
+    join_code = launched["join_code"]
+    participants = []
+    for student_headers in (environment["student_headers"], second_student):
+        joined = client.post(
+            "/api/quizzes/join", headers=student_headers, json={"join_code": join_code}
+        )
+        assert joined.status_code == 201
+        participants.append({"X-Quiz-Token": joined.json()["participant_token"]})
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{launched['id']}/start",
+            headers=environment["teacher_headers"],
+        ).status_code
+        == 200
+    )
+    for headers in participants:
+        assert (
+            client.post(
+                f"/api/quizzes/student/sessions/{join_code}/answer",
+                headers=headers,
+                json=choice_answer(
+                    client, headers, correct_choice_id(environment["question"])
+                ),
+            ).status_code
+            == 200
+        )
+    published: list[str] = []
+    monkeypatch.setattr(client.app.state.live_quiz_hub, "publish", published.append)
+    class_topic = f"student-session:{join_code}"
+
+    # The first hand-in leaves a classmate working: only that student's view.
+    hand_in_quiz(client, join_code, participants[0])
+    assert class_topic not in published
+
+    published.clear()
+    assert hand_in_quiz(client, join_code, participants[1])["status"] == "finished"
     assert class_topic in published

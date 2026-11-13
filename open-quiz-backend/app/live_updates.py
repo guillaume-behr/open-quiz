@@ -4,6 +4,7 @@ from sqlalchemy import select
 from starlette.requests import HTTPConnection
 
 from app.dependencies import DbSession
+from app.enums import SessionStatus
 from app.live_quiz import (
     LiveQuizHub,
     active_quiz_sessions_topic,
@@ -51,12 +52,14 @@ def publish_session_change(
     """Notify every live view a change of this session concerns.
 
     A change to one ``participant`` only (an answer, navigation, a violation,
-    the hand-in) wakes that student's socket, not the whole class's.
+    the hand-in) wakes that student's socket, not the whole class's, unless
+    it finished the session: the last answer or hand-in ends the exam for
+    every classmate still waiting on it.
     """
     hub.publish(quiz_session_topic(quiz_session.id))
     if participant is not None:
         hub.publish(participant_topic(participant.id))
-    else:
+    if participant is None or quiz_session.status == SessionStatus.FINISHED:
         hub.publish(student_session_topic(quiz_session.join_code))
     if active_sessions_changed:
         owner_id = session.scalar(

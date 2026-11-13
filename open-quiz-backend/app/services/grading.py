@@ -152,6 +152,8 @@ def regrade_question(
     question: Question,
     choices: list[QuestionChoice],
     session: Session,
+    *,
+    became_written: bool = False,
 ) -> None:
     """Rescore the answers to one edited question, in one read and one write.
 
@@ -160,6 +162,9 @@ def regrade_question(
     scored with the same rule compute_final_scores applies, but only this
     question's answers are touched, so the cost follows the number of answers
     rather than one round of queries per session.
+
+    ``became_written``: the edit turned a choice question into a written one.
+    Its answers then only hold automatic marks, which all wait for a teacher.
     """
     rows = session.execute(
         select(
@@ -181,7 +186,7 @@ def regrade_question(
         changes = [
             {"id": answer_id, "score": 0.0, "is_graded": False}
             for answer_id, _, is_graded, _ in rows
-            if not is_graded
+            if became_written or not is_graded
         ]
     else:
         changes = [

@@ -103,6 +103,7 @@ export function DeleteEntityDialog({
     open,
     kind,
     title,
+    quizCount = 0,
     isBusy,
     error,
     onClose,
@@ -111,6 +112,8 @@ export function DeleteEntityDialog({
     open: boolean
     kind: "bank" | "question"
     title: string
+    /** Quizzes drawing from the bank, which deleting it takes away. */
+    quizCount?: number
     isBusy: boolean
     error: string | null
     onClose: () => void
@@ -125,7 +128,11 @@ export function DeleteEntityDialog({
         <ConfirmDeleteDialog
             open={open}
             title={t(titleKey)}
-            description={t(helpKey, { title })}
+            description={
+                kind === "bank" && quizCount > 0
+                    ? `${t(helpKey, { title })} ${t("delete-question-bank-in-quizzes")}`
+                    : t(helpKey, { title })
+            }
             confirmLabel={t(titleKey)}
             isBusy={isBusy}
             error={error}

@@ -266,6 +266,14 @@ if [ -n "${VITE_API_URL:-}" ]; then
     note 'Warning: VITE_API_URL is ignored: the deployment serves the API under the interface origin.'
 fi
 
+# An unfinished update's rollback record names the backup a rollback
+# restores: the pruning below must keep it.
+pending_backup=''
+pending_record=$(latest_rollback_state)
+if [ -n "$pending_record" ] && ! grep -qx 'completed=yes' "$pending_record"; then
+    pending_backup=$(state_value "$pending_record" backup)
+fi
+
 backup_file=''
 if [ "$backup" = false ]; then
     step 'Skipping the database backup (--no-backup)'
@@ -273,7 +281,8 @@ elif database_is_running; then
     step 'Backing up the database'
     backup_file=$(create_backup "$BACKUP_DIRECTORY")
     note "Saved to $backup_file; restore it with: sh ./restore.sh $backup_file"
-    prune_backups "$BACKUP_DIRECTORY" "$(backup_retention)" "$backup_file"
+    prune_backups "$BACKUP_DIRECTORY" "$(backup_retention)" "$backup_file" \
+        ${pending_backup:+"$pending_backup"}
 else
     step 'Skipping the database backup: the database is not running yet'
 fi
@@ -289,6 +298,21 @@ if [ -n "$state_file" ] && ! grep -qx 'completed=yes' "$state_file"; then
     # failed attempt: a retry keeps the record of the deployment before it.
     step 'Keeping the rollback record of the unfinished update'
     note "$state_file"
+    # If that attempt failed before replacing the API (a build error, say),
+    # the deployment the record returns to is what still runs, and it kept
+    # taking writes since the record's backup: the backup just made has the
+    # same schema and that newer data, so a rollback restores it instead.
+    recorded_image=$(state_value "$state_file" backend_rollback_image)
+    recorded_id=''
+    [ -z "$recorded_image" ] \
+        || recorded_id=$(docker_cli image inspect --format '{{.Id}}' "$recorded_image" 2>/dev/null || true)
+    if [ -n "$backup_file" ] && [ -n "$recorded_id" ] \
+        && [ "$recorded_id" = "${backend_image#* }" ]; then
+        updated_state=$(umask 077 && mktemp "$state_file.tmp.XXXXXX")
+        sed "s|^backup=.*\$|backup=$backup_file|" "$state_file" >"$updated_state"
+        mv "$updated_state" "$state_file"
+        note "The previous deployment still runs: a rollback restores $backup_file."
+    fi
 elif [ -n "$backend_image" ] && [ -n "$frontend_image" ]; then
     step 'Recording what a rollback needs'
     (umask 077 && mkdir -p "$BACKUP_DIRECTORY")
