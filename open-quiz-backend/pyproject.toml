@@ -11,13 +11,14 @@ authors = [
 ]
 dependencies = [
     "alembic>=1.20.1",
-    "argon2-cffi>=25.1.0",
+    # Not imported: a floor, for security fixes, under the certifi that httpx
+    # (FastAPI's standard extra) brings.
     "certifi>=2026.10.19",
     "cryptography>=50.0.0",
     "fastapi[standard]>=0.139.2",
     "pillow>=13.0.0",
     "psycopg[binary]>=3.2.10",
-    "pwdlib>=0.3.0",
+    "pwdlib[argon2]>=0.3.0",
     "pydantic-settings>=2.14.2",
     "pyjwt>=2.15.1",
     "pyotp>=2.10.0",
@@ -27,30 +28,42 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    # 2.12.0 clears PYSEC-2026-3846, 3848 and 3849.
+    # Never imported here: starlette.testclient loads it instead of httpx,
+    # which it deprecates. 2.12.0 clears PYSEC-2026-3846, 3848 and 3849.
     "httpx2>=2.12.0",
     "mypy>=2.4.1",
     "pip-audit>=2.10.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.0.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.16.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+addopts = "--strict-markers --strict-config"
+# Every warning fails the test that raised it, a connection or file left
+# open included.
+filterwarnings = ["error"]
 
 [tool.ruff]
 target-version = "py314"
 
 [tool.ruff.lint]
 select = [
-    "ARG", "B", "C4", "E4", "E7", "E9", "F", "I", "N", "PERF", "PIE", "PT",
-    "RET", "S", "SIM", "UP",
+    "ARG", "ASYNC", "B", "C4", "C90", "DTZ", "E4", "E7", "E9", "F", "FAST", "I",
+    "N", "PERF", "PIE", "PT", "RET", "RUF", "S", "SIM", "UP",
 ]
 ignore = [
     # FastAPI dependency declarations intentionally call parameter helpers.
     "B008",
+    # French text uses typographic apostrophes, non-breaking spaces and
+    # guillemets on purpose.
+    "RUF001", "RUF002", "RUF003",
 ]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
@@ -68,8 +81,7 @@ known-local-folder = ["support"]
 python_version = "3.14"
 files = ["app", "main.py", "scripts", "migrations"]
 plugins = ["pydantic.mypy"]
-warn_unused_ignores = true
-warn_redundant_casts = true
+strict = true
 
 [tool.coverage.run]
 branch = true

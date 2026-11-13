@@ -8,7 +8,7 @@ trained on.
 
 from datetime import UTC, datetime
 from secrets import token_urlsafe
-from typing import cast
+from typing import Annotated, cast
 
 from fastapi import (
     APIRouter,
@@ -168,7 +168,7 @@ def update_class_training_question_banks(
 @router.get("/training", response_model=list[QuestionBankResponse])
 def list_student_training_question_banks(
     session: DbSession,
-    student: StudentAccount = Depends(current_student),
+    student: Annotated[StudentAccount, Depends(current_student)],
 ) -> list[QuestionBankResponse]:
     memberships = list(
         session.scalars(select(Student).where(Student.account_id == student.id))
@@ -204,7 +204,7 @@ def list_student_training_question_banks(
 def list_student_training_history(
     question_bank_id: int,
     session: DbSession,
-    student: StudentAccount = Depends(current_student),
+    student: Annotated[StudentAccount, Depends(current_student)],
 ) -> list[TrainingHistoryItem]:
     membership = session.scalar(select(Student).where(Student.account_id == student.id))
     if membership is None:
@@ -254,7 +254,7 @@ def list_student_training_history(
 def start_training_quiz(
     question_bank_id: int,
     session: DbSession,
-    student: StudentAccount = Depends(current_student),
+    student: Annotated[StudentAccount, Depends(current_student)],
 ) -> StudentQuizJoinResponse:
     membership = session.execute(
         select(Student, StudentClass)

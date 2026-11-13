@@ -56,6 +56,7 @@ async def measure(subscribers: int, sessions: int, rounds: int) -> list[float]:
     receiving_hub = LiveQuizHub()
     publisher = PostgresLiveRelay(conninfo, lambda _: None)
     receiver = PostgresLiveRelay(conninfo, receiving_hub.publish_local)
+    publisher.start()
     receiver.start()
     await asyncio.to_thread(receiver.listening.wait, 5)
     try:

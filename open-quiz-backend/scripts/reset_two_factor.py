@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.audit import audit_event
 from app.config import Settings, get_settings
-from app.database import build_session_factory
+from app.database import database_sessions
 from app.models import User
 from app.rate_limit import build_credential_rate_limiters
 from app.services.credentials import reset_two_factor
@@ -14,8 +14,10 @@ def reset(username: str, settings: Settings | None = None) -> bool:
     settings = settings or get_settings()
     # The application migrates the database when it starts; this script
     # only works on a schema it has already brought up to date.
-    session_factory = build_session_factory(settings.database_url, migrate=False)
-    with session_factory() as session:
+    with (
+        database_sessions(settings.database_url, migrate=False) as session_factory,
+        session_factory() as session,
+    ):
         user = session.scalar(select(User).where(User.username == username))
         if user is None:
             return False

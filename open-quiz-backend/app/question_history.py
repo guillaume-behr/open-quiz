@@ -58,7 +58,7 @@ SESSION_QUESTION_REFERENCES = (
 )
 
 
-def sessions_using_questions(question_ids: Collection[int]) -> CompoundSelect:
+def sessions_using_questions(question_ids: Collection[int]) -> CompoundSelect[int]:
     """Every session that drew one of the questions or holds an answer to it."""
     return union(
         *(
@@ -68,7 +68,7 @@ def sessions_using_questions(question_ids: Collection[int]) -> CompoundSelect:
     )
 
 
-def questions_sessions_use(question_ids: Collection[int]) -> CompoundSelect:
+def questions_sessions_use(question_ids: Collection[int]) -> CompoundSelect[int]:
     """Those of the questions that a session drew or holds an answer to."""
     return union(
         *(
@@ -263,7 +263,7 @@ def freeze_for_published_sessions(question: Question, session: Session) -> list[
     return session_ids
 
 
-def unused_detached_questions() -> Select:
+def unused_detached_questions() -> Select[int]:
     return select(Question.id).where(
         Question.question_bank_id.is_(None),
         *(

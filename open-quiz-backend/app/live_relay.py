@@ -23,6 +23,8 @@ logger = logging.getLogger("open_quiz")
 
 LISTEN_POLL_SECONDS = 0.5
 RECONNECT_SECONDS = 1.0
+# A database that does not answer must not hold the sender for long.
+CONNECT_TIMEOUT_SECONDS = 5
 
 
 def relay_channel(conninfo: str) -> str:
@@ -40,17 +42,40 @@ class PostgresLiveRelay:
         self._origin = uuid4().hex
         self._send_lock = Lock()
         self._send_connection: psycopg.Connection | None = None
+        # Topics waiting for the sender thread; a set, so that a burst of
+        # changes to one session is sent once.
+        self._pending: set[str] = set()
+        self._pending_lock = Lock()
+        self._has_pending = Event()
         self._stopping = Event()
         self.listening = Event()
         self._thread: Thread | None = None
+        self._sender: Thread | None = None
 
     def send(self, topic: str) -> None:
+        """Queue a topic for the other workers; never waits for the database."""
+        with self._pending_lock:
+            self._pending.add(topic)
+        self._has_pending.set()
+
+    def _send_pending(self) -> None:
+        while not self._stopping.is_set():
+            self._has_pending.wait()
+            self._has_pending.clear()
+            with self._pending_lock:
+                topics, self._pending = self._pending, set()
+            for topic in sorted(topics):
+                self._notify(topic)
+
+    def _notify(self, topic: str) -> None:
         payload = f"{self._origin} {topic}"
         with self._send_lock:
             try:
                 if self._send_connection is None or self._send_connection.closed:
                     self._send_connection = psycopg.connect(
-                        self._conninfo, autocommit=True
+                        self._conninfo,
+                        autocommit=True,
+                        connect_timeout=CONNECT_TIMEOUT_SECONDS,
                     )
                 self._send_connection.execute(
                     "SELECT pg_notify(%s, %s)", (self._channel, payload)
@@ -64,11 +89,17 @@ class PostgresLiveRelay:
     def start(self) -> None:
         self._thread = Thread(target=self._listen, name="live-relay", daemon=True)
         self._thread.start()
+        self._sender = Thread(
+            target=self._send_pending, name="live-relay-sender", daemon=True
+        )
+        self._sender.start()
 
     def stop(self) -> None:
         self._stopping.set()
-        if self._thread is not None:
-            self._thread.join(timeout=5)
+        self._has_pending.set()
+        for thread in (self._thread, self._sender):
+            if thread is not None:
+                thread.join(timeout=5)
         with self._send_lock:
             self._close_send_connection()
 
@@ -80,7 +111,11 @@ class PostgresLiveRelay:
     def _listen(self) -> None:
         while not self._stopping.is_set():
             try:
-                with psycopg.connect(self._conninfo, autocommit=True) as connection:
+                with psycopg.connect(
+                    self._conninfo,
+                    autocommit=True,
+                    connect_timeout=CONNECT_TIMEOUT_SECONDS,
+                ) as connection:
                     connection.execute(
                         sql.SQL("LISTEN {}").format(sql.Identifier(self._channel))
                     )

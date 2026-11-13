@@ -212,10 +212,12 @@ def test_student_feed_follows_its_participation(
         assert socket.receive_json()["type"] == "session"
         assert socket.receive_json() == {"type": "ping"}
 
-    checks = [True, False]
+    # The participant the socket opened with, then none: the token stopped
+    # working between two heartbeats.
+    checks: list[int | None] = [1, None]
     monkeypatch.setattr(
         live,
-        "live_participant_is_authenticated",
+        "live_participant_id",
         lambda *_: checks.pop(0) if len(checks) > 1 else checks[0],
     )
     with connect(client, path) as socket:
@@ -223,7 +225,7 @@ def test_student_feed_follows_its_participation(
         socket.receive_json()
         assert_closed(socket)
 
-    monkeypatch.setattr(live, "live_participant_is_authenticated", lambda *_: True)
+    monkeypatch.setattr(live, "live_participant_id", lambda *_: 1)
     monkeypatch.setattr(live, "live_student_session_snapshot", lambda *_: None)
     with connect(client, path) as socket:
         socket.send_json(token)
@@ -258,7 +260,7 @@ def test_live_snapshots_handle_missing_records(environment) -> None:
     assert live.live_teacher_active_sessions_snapshot(websocket, 999999) is None
     assert live.live_makeup_sessions_snapshot(websocket, 999999) is None
     assert live.live_student_session_snapshot(websocket, "ABCDEF", "bad") is None
-    assert not live.live_participant_is_authenticated(websocket, "ABCDEF", "bad")
+    assert live.live_participant_id(websocket, "ABCDEF", "bad") is None
 
 
 class _ScalarSession:
@@ -631,3 +633,36 @@ def test_idle_live_socket_still_receives_a_keepalive(
             assert socket.receive_json() == {"type": "active_sessions", "data": []}
             # Nothing changes from here on, so only a keepalive can arrive.
             assert socket.receive_json() == {"type": "ping"}
+
+
+def test_a_students_own_change_wakes_only_their_socket(
+    environment, monkeypatch
+) -> None:
+    client = environment["client"]
+    launched, participant_headers = launch_and_join(client, environment)
+    client.post(
+        f"/api/quizzes/sessions/{launched['id']}/start",
+        headers=environment["teacher_headers"],
+    )
+    published: list[str] = []
+    monkeypatch.setattr(client.app.state.live_quiz_hub, "publish", published.append)
+    class_topic = f"student-session:{launched['join_code']}"
+
+    reported = client.post(
+        f"/api/quizzes/student/sessions/{launched['join_code']}/violation",
+        headers=participant_headers,
+        json={"event_type": "fullscreen_exit"},
+    )
+    assert reported.status_code == 204
+    assert class_topic not in published
+    assert any(topic.startswith("quiz-participant:") for topic in published)
+
+    published.clear()
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{launched['id']}/pause",
+            headers=environment["teacher_headers"],
+        ).status_code
+        == 200
+    )
+    assert class_topic in published

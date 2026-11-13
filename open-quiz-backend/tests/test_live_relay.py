@@ -1,7 +1,7 @@
 """Live updates reach the sockets of every worker, not only the publisher's."""
 
-import time
 from pathlib import Path
+from threading import Event, Thread
 
 import psycopg
 import pytest
@@ -18,20 +18,12 @@ from support import (
     launch_and_join,
     make_client,
     settings_for,
+    wait_until,
 )
 
 
 def conninfo_for(database: Path) -> str:
     return database_url_for(database).replace("postgresql+psycopg://", "postgresql://")
-
-
-def wait_until(condition, timeout: float = 5.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if condition():
-            return True
-        time.sleep(0.02)
-    return False
 
 
 def test_a_relay_delivers_other_processes_notifications(tmp_path: Path) -> None:
@@ -48,8 +40,11 @@ def test_a_relay_delivers_other_processes_notifications(tmp_path: Path) -> None:
         first.send("quiz-session:7")
         assert wait_until(lambda: second_received == ["quiz-session:7"])
         # Its own notification is not delivered twice: the hub already did.
-        time.sleep(0.2)
-        assert first_received == []
+        # Notifications arrive in commit order, so had it been delivered it
+        # would come before this one from the other process.
+        second.send("quiz-session:8")
+        assert wait_until(lambda: first_received != [])
+        assert first_received == ["quiz-session:8"]
     finally:
         for relay in (first, second):
             relay.stop()
@@ -77,11 +72,41 @@ def test_a_failed_notification_is_logged_and_retried(
         return real_connect(*arguments, **options)
 
     monkeypatch.setattr(live_relay.psycopg, "connect", flaky_connect)
-    relay.send("quiz-session:1")
+    # What the sender thread runs for each queued topic.
+    relay._notify("quiz-session:1")
     assert logged == ["Live relay could not notify the other workers"]
-    relay.send("quiz-session:1")
+    relay._notify("quiz-session:1")
     assert logged == ["Live relay could not notify the other workers"]
     relay.stop()
+
+
+def test_publishing_never_waits_for_an_unresponsive_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    relay = PostgresLiveRelay(conninfo_for(tmp_path / "relay-hang"), lambda _: None)
+    release = Event()
+    connecting: list[dict[str, object]] = []
+
+    def hanging_connect(*_arguments, **options):
+        connecting.append(options)
+        release.wait(10)
+        raise psycopg.OperationalError("timed out")
+
+    monkeypatch.setattr(live_relay.psycopg, "connect", hanging_connect)
+    monkeypatch.setattr(live_relay.logger, "exception", lambda *_: None)
+    relay._sender = Thread(target=relay._send_pending, daemon=True)
+    relay._sender.start()
+    try:
+        for _ in range(3):
+            relay.send("quiz-session:9")
+        # The request thread got here while the sender is stuck connecting.
+        assert wait_until(lambda: len(connecting) == 1)
+        assert connecting[0]["connect_timeout"] == live_relay.CONNECT_TIMEOUT_SECONDS
+    finally:
+        release.set()
+        relay.stop()
+    # Three sends of one topic while the first was in flight: sent once more.
+    assert len(connecting) <= 2
 
 
 def test_the_listener_reconnects_after_losing_its_connection(
@@ -95,6 +120,7 @@ def test_the_listener_reconnects_after_losing_its_connection(
     listener = PostgresLiveRelay(conninfo, received.append)
     sender = PostgresLiveRelay(conninfo, lambda _: None)
     listener.start()
+    sender.start()
     try:
         assert listener.listening.wait(5)
         with psycopg.connect(conninfo, autocommit=True) as admin:

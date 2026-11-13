@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect
 
 import main
-from app.application import create_app
 from app.config import (
     secure_private_file,
     warn_missing_public_information,
@@ -28,6 +27,7 @@ from support import (
     FRONTEND_ORIGIN,
     JWT_SECRET,
     TEST_CLIENT_BACKEND_OPTIONS,
+    app_for,
     create_professor,
     exam_environment,
     login_admin,
@@ -254,7 +254,7 @@ def test_production_redirects_to_https_before_body_authentication(
         frontend_origin="https://quiz.example.test",
     )
     with TestClient(
-        create_app(app_settings),
+        app_for(app_settings),
         base_url="http://quiz.example.test",
         follow_redirects=False,
         backend_options=TEST_CLIENT_BACKEND_OPTIONS,
@@ -286,7 +286,7 @@ def test_production_only_answers_to_its_own_host_names(tmp_path: Path) -> None:
         "*.intranet.test",
     ]
     with TestClient(
-        create_app(app_settings),
+        app_for(app_settings),
         follow_redirects=False,
         backend_options=TEST_CLIENT_BACKEND_OPTIONS,
     ) as client:
