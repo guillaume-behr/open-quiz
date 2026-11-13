@@ -3,13 +3,13 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import ColumnElement, func, select
 
-from app.audit import audit_event
-from app.dependencies import AdminUser, DbSession
-from app.errors import ApiError, ErrorCode
-from app.models import ProblemReport
-from app.pagination import (
+from app.core.audit import audit_event
+from app.core.dependencies import AdminUser, DbSession
+from app.core.errors import ApiError, ErrorCode
+from app.core.pagination import (
     Paging,
 )
+from app.models import ProblemReport
 from app.schemas import ProblemReportCreate, ProblemReportResponse
 
 router = APIRouter(prefix="/api/problem-reports", tags=["problem reports"])

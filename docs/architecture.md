@@ -22,7 +22,7 @@ que le frontend au reverse proxy HTTPS de la machine.
   limites de débit, partagés ainsi entre tous les workers.
 - **Événements en direct** : chaque worker garde les WebSocket de ses propres
   clients ; une modification faite par un worker est relayée aux autres par
-  `NOTIFY`/`LISTEN` PostgreSQL (`app/live_relay.py`). Aucun état n’est partagé
+  `NOTIFY`/`LISTEN` PostgreSQL (`app/live/relay.py`). Aucun état n’est partagé
   en mémoire entre workers, et aucun service supplémentaire (Redis…) n’est
   nécessaire.
 - **Fichiers `.env`** : `open-quiz-backend/.env` (secrets de l’API, dont les
@@ -34,3 +34,22 @@ que le frontend au reverse proxy HTTPS de la machine.
 
 L’API se connecte avec le rôle `open_quiz_app`, sans privilège de
 superutilisateur ; `scripts/database-roles.sql` le crée.
+
+## Organisation du code de l’API
+
+Le paquet `open-quiz-backend/app` est découpé en couches. Chacune n’importe
+que les couches situées au-dessous d’elle ; `tests/test_layers.py` le vérifie.
+
+| Couche (de bas en haut)                      | Contenu                                                                                                    |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `core/`, `models.py`, `enums.py`, `schemas/` | configuration, base de données, sécurité, middleware, limites de débit ; tables ; corps des requêtes       |
+| `domain/`, `live/`                           | règles pures sans accès à la base (images, libellés, jetons de choix) ; diffusion temps réel entre workers |
+| `records/`                                   | lecture et écriture des lignes : recherches, contrôles de propriété, créations                             |
+| `services/`                                  | opérations métier : réponses, notation, tirages, cycle de vie des sessions, maintenance                    |
+| `responses/`                                 | corps des réponses envoyées aux enseignants et aux élèves                                                  |
+| `routers/`                                   | routes HTTP et WebSocket, regroupées par ressource (`quizzes/`, `question_banks/`, `classes/`)             |
+| `application.py`                             | assemblage de l’application : routes, middleware et tâches de fond                                         |
+
+`app/data/` contient les fichiers fournis avec l’API, comme l’exemple de
+banque de questions téléchargeable. Les tests de `tests/` sont rangés par
+domaine ; leurs aides communes se trouvent dans `tests/support.py`.

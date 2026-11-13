@@ -28,8 +28,9 @@ from pwdlib import PasswordHash  # noqa: E402
 from pwdlib.hashers.argon2 import Argon2Hasher  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 
-from app import maintenance, security  # noqa: E402
-from app.database import postgres_url  # noqa: E402
+from app.core import security  # noqa: E402
+from app.core.database import postgres_url  # noqa: E402
+from app.services import maintenance  # noqa: E402
 
 from support import PREPARED_TEST_SCHEMAS, TEST_DATABASE_URL, TEST_ENGINES  # noqa: E402
 

@@ -2,12 +2,18 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import pytest
+from fastapi import HTTPException
 from sqlalchemy import func, insert, select, text
 from sqlalchemy.exc import OperationalError
 
+from app.core.pagination import contains_pattern
 from app.models import Question
+from app.records.questions import load_question_records
+from app.records.student_accounts import owned_student_account
 from app.schemas import MAX_QUESTIONS_PER_BANK
 
 from support import (
@@ -138,3 +144,26 @@ def test_class_imports_are_rate_limited_per_teacher(tmp_path: Path) -> None:
         assert limited.json()["detail"]["code"] == "CLASS_IMPORT_RATE_LIMITED"
         assert int(limited.headers["retry-after"]) > 0
         assert import_class(second, "A").status_code == 201
+
+
+def test_loading_no_question_records_skips_the_database() -> None:
+    assert load_question_records([], session=None) == ({}, {})
+
+
+def test_missing_student_account_is_not_found() -> None:
+    session = SimpleNamespace(scalar=lambda _statement: None)
+    with pytest.raises(HTTPException) as error:
+        owned_student_account(1, 2, session)
+    assert error.value.status_code == 404
+
+
+def test_search_patterns_match_their_text_literally() -> None:
+    assert contains_pattern("5e A") == "%5e A%"
+    assert contains_pattern("50%_off") == r"%50\%\_off%"
+    assert contains_pattern("a\\b") == r"%a\\b%"
+
+
+def test_search_patterns_for_empty_or_wildcard_only_input() -> None:
+    assert contains_pattern("") == "%%"
+    assert contains_pattern("%%") == r"%\%\%%"
+    assert contains_pattern("\\%") == r"%\\\%%"

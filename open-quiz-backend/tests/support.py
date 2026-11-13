@@ -19,11 +19,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Connection, create_engine, event, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import maintenance
 from app.application import create_app
-from app.choice_tokens import CHOICE_HMAC_ENTRY
-from app.config import Settings
-from app.database import build_session_factory, postgres_url
+from app.core.config import Settings
+from app.core.database import build_session_factory, postgres_url
+from app.core.security import refresh_request_proof, student_choice_token
+from app.domain.choice_tokens import CHOICE_HMAC_ENTRY
 from app.models import (
     Question,
     QuestionBank,
@@ -33,13 +33,13 @@ from app.models import (
     QuizParticipant,
     QuizSession,
 )
-from app.participants import participant_token_hash
 from app.routers.auth import (
     REFRESH_COOKIE,
     REFRESH_PROOF_HEADER,
     TWO_FACTOR_TRUST_COOKIE,
 )
-from app.security import refresh_request_proof, student_choice_token
+from app.services import maintenance
+from app.services.participants import participant_token_hash
 from app.services.question_assignments import (
     current_question_id,
     last_answered_question_id,
@@ -410,7 +410,7 @@ def hand_in_quiz(
 def choice_tokens(
     client: TestClient, participant_headers: dict[str, str], *choice_ids: int
 ) -> list[str]:
-    """The tokens a participant sends for these choices (app/choice_tokens.py)."""
+    """The tokens a participant sends for these choices (app/domain/choice_tokens.py)."""
     with client.app.state.session_factory() as session:
         participant = session.scalars(
             select(QuizParticipant).where(

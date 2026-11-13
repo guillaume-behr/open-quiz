@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.errors import ApiError, ErrorCode
+from app.core.errors import ApiError, ErrorCode
 
 router = APIRouter(prefix="/api", tags=["system"])
 

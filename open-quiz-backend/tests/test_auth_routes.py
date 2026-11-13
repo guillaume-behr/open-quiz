@@ -19,30 +19,13 @@ from sqlalchemy import select, text, update
 from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import maintenance, rate_limit, security, security_state
-from app.config import PUBLIC_INFORMATION_VARIABLES, warn_missing_public_information
-from app.models import (
-    AuthenticationChallenge,
-    GradeLevel,
-    LoginRateLimit,
-    ProblemReport,
-    RefreshSession,
-    RefreshSessionFamily,
-    SecurityState,
-    TwoFactorCredential,
-    User,
+from app.core import rate_limit, security
+from app.core.config import (
+    PUBLIC_INFORMATION_VARIABLES,
+    warn_missing_public_information,
 )
-from app.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
-from app.routers.auth import (
-    REFRESH_COOKIE,
-    REFRESH_PROOF_HEADER,
-    TWO_FACTOR_TRUST_COOKIE,
-)
-from app.schemas import (
-    LoginRequest,
-    StudentLoginRequest,
-)
-from app.security import (
+from app.core.rate_limit import FixedWindowRateLimiter, LoginRateLimiter
+from app.core.security import (
     DUMMY_PASSWORD_HASH,
     access_token_version,
     create_access_token,
@@ -60,6 +43,27 @@ from app.security import (
     refresh_request_proof,
     verify_totp_code,
 )
+from app.models import (
+    AuthenticationChallenge,
+    GradeLevel,
+    LoginRateLimit,
+    ProblemReport,
+    RefreshSession,
+    RefreshSessionFamily,
+    SecurityState,
+    TwoFactorCredential,
+    User,
+)
+from app.routers.auth import (
+    REFRESH_COOKIE,
+    REFRESH_PROOF_HEADER,
+    TWO_FACTOR_TRUST_COOKIE,
+)
+from app.schemas import (
+    LoginRequest,
+    StudentLoginRequest,
+)
+from app.services import maintenance, security_state
 from scripts.reset_two_factor import reset
 
 from support import (
@@ -484,7 +488,7 @@ def test_student_login_is_rate_limited_per_identifier(
 ) -> None:
     events: list[str] = []
     monkeypatch.setattr(
-        "app.auth_guards.audit_event", lambda name, **_: events.append(name)
+        "app.core.auth_guards.audit_event", lambda name, **_: events.append(name)
     )
     with make_client(settings_for(tmp_path / "student-limit", login_attempts=3)) as (
         client
@@ -1012,7 +1016,7 @@ def test_login_rate_limit_reserves_concurrent_attempts_atomically(
         return False, None
 
     monkeypatch.setattr(
-        "app.auth_guards.verify_password_and_update",
+        "app.core.auth_guards.verify_password_and_update",
         held_invalid_password,
     )
 
@@ -1047,7 +1051,7 @@ def test_global_auth_rate_limit_is_shared_across_login_flows(
     )
     # Teachers and students share one password check.
     monkeypatch.setattr(
-        "app.auth_guards.verify_password_and_update", lambda *_: (False, None)
+        "app.core.auth_guards.verify_password_and_update", lambda *_: (False, None)
     )
 
     with make_client(app_settings) as client:
@@ -1087,7 +1091,7 @@ def test_an_exhausted_global_budget_still_admits_a_known_teacher(
     )
     with make_client(app_settings) as client:
         monkeypatch.setattr(
-            "app.auth_guards.verify_password_and_update",
+            "app.core.auth_guards.verify_password_and_update",
             lambda password, _: (password == ADMIN_PASSWORD, None),
         )
         for attempt in range(50):
@@ -1160,7 +1164,7 @@ def test_an_exhausted_global_budget_admits_only_active_students(
         # Teachers and students share one password check; the teacher
         # attempts below all send another password.
         monkeypatch.setattr(
-            "app.auth_guards.verify_password_and_update",
+            "app.core.auth_guards.verify_password_and_update",
             lambda password, _: (password == student_password, None),
         )
         for attempt in range(50):
@@ -1293,7 +1297,7 @@ def test_student_login_verifies_password_for_unknown_accounts(
         verifications.append((password, encoded))
         return False, None
 
-    monkeypatch.setattr("app.auth_guards.verify_password_and_update", spy)
+    monkeypatch.setattr("app.core.auth_guards.verify_password_and_update", spy)
     with make_client(settings_for(tmp_path / "student-timing.db")) as client:
         response = client.post(
             "/api/student-auth/login",

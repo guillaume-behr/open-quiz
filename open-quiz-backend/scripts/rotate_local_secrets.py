@@ -2,8 +2,8 @@ from pathlib import Path
 from secrets import token_urlsafe
 from time import time
 
-from app.config import get_settings, secure_private_file, write_private_file
-from app.database import database_sessions
+from app.core.config import get_settings, secure_private_file, write_private_file
+from app.core.database import database_sessions
 from app.services.credentials import revoke_refresh_sessions
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"

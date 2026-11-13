@@ -12,10 +12,18 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from app.auth_guards import (
+from app.core.auth_guards import (
     password_rate_subject,
     trusted_password_rate_subject,
     two_factor_rate_subject,
+)
+from app.core.security import (
+    TWO_FACTOR_TRUST_MAXIMUM,
+    create_access_token,
+    create_two_factor_trust_token,
+    decode_two_factor_trust_token,
+    end_of_trusted_day,
+    resolve_timezone,
 )
 from app.models import (
     AuthenticationChallenge,
@@ -25,14 +33,6 @@ from app.models import (
 )
 from app.routers.auth import TWO_FACTOR_TRUST_COOKIE, TWO_FACTOR_TRUST_COOKIE_PATH
 from app.schemas import TwoFactorVerifyRequest
-from app.security import (
-    TWO_FACTOR_TRUST_MAXIMUM,
-    create_access_token,
-    create_two_factor_trust_token,
-    decode_two_factor_trust_token,
-    end_of_trusted_day,
-    resolve_timezone,
-)
 from scripts.reset_two_factor import reset
 
 from support import (

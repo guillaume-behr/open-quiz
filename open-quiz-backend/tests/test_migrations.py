@@ -16,7 +16,7 @@ from sqlalchemy import CheckConstraint, create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
-from app.database import Base, migration_config, postgres_url
+from app.core.database import Base, migration_config, postgres_url
 from app.enums import SessionStatus
 from app.models import (
     Question,
@@ -222,7 +222,7 @@ def test_concurrent_startups_migrate_the_database_once(tmp_path: Path) -> None:
     script = (
         "import sys\n"
         "from sqlalchemy import create_engine\n"
-        "from app.database import migrate_database, postgres_url\n"
+        "from app.core.database import migrate_database, postgres_url\n"
         "migrate_database(create_engine(postgres_url(sys.argv[1])))\n"
     )
     workers = [

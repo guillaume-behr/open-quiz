@@ -11,7 +11,6 @@ import pytest
 from fastapi import HTTPException, status
 from sqlalchemy import event, select, update
 
-from app import maintenance
 from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
@@ -30,15 +29,14 @@ from app.models import (
     TrainingQuizProfile,
     User,
 )
-from app.participants import generate_join_code
+from app.responses.teacher_sessions import session_responses
+from app.services import maintenance
 from app.services.grading import (
     question_maximum_scores,
     selected_choice_score,
 )
-from app.services.results import (
-    safe_spreadsheet_cell,
-)
-from app.teacher_session_responses import session_responses
+from app.services.participants import generate_join_code
+from app.services.results import safe_spreadsheet_cell
 
 from support import (
     app_for,
@@ -1174,7 +1172,7 @@ def test_join_code_reservations_prevent_reuse(
 ) -> None:
     app_settings = settings_for(tmp_path / "join-code-reservations.db")
     app = app_for(app_settings)
-    monkeypatch.setattr("app.participants.randomizer.choice", lambda _: "A")
+    monkeypatch.setattr("app.services.participants.randomizer.choice", lambda _: "A")
 
     with app.state.session_factory() as session:
         assert generate_join_code(session) == "AAAAAA"

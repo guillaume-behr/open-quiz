@@ -14,7 +14,7 @@ COMPOSE_DEV="$SCRIPT_DIR/docker-compose.dev.yml"
 
 # The backend test suite connects to its own role and database, isolating it
 # from the development data. These two values must stay equal to the default
-# TEST_DATABASE_URL of open-quiz-backend/tests/test_api.py, which the suite
+# TEST_DATABASE_URL of open-quiz-backend/tests/conftest.py, which the suite
 # uses when the variable is unset. The database is reachable on the loopback
 # interface only and holds no real data.
 TEST_DATABASE_ROLE=open_quiz_test

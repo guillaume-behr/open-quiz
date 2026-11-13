@@ -7,17 +7,13 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select, text, update
 
-from app.class_names import format_class_name
+from app.core.security import encrypt_student_password
+from app.domain.class_names import format_class_name
 from app.models import (
     MakeupSession,
     StudentAccount,
 )
-from app.schemas import (
-    StudentAccountUpdate,
-)
-from app.security import (
-    encrypt_student_password,
-)
+from app.schemas import StudentAccountUpdate
 
 from support import (
     complete_first_login,

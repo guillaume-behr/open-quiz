@@ -23,7 +23,7 @@ from app.models import (
     QuizParticipant,
     QuizSession,
 )
-from app.question_responses import load_question_records
+from app.records.questions import load_question_records
 from app.services.question_assignments import session_question_ids
 
 

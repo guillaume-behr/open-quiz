@@ -1,32 +1,47 @@
 """Configuration and HTTP safeguards: settings, secrets, request limits and headers."""
 
 import asyncio
+import importlib
 import json
+import logging
 import os
 import stat
 import tomllib
+from dataclasses import Field, fields
 from pathlib import Path
 from typing import Any
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import create_engine, inspect
 
+import app.core.audit
+import app.core.config
 import main
-from app.config import (
+from app.core.config import (
+    BOUNDS,
+    Settings,
+    environment_variable,
+    get_settings,
+    reject_predictable_secret,
     secure_private_file,
+    validate_optional_public_url,
     warn_missing_public_information,
     write_private_file,
 )
-from app.database import postgres_url
-from app.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
-from app.pagination import MAX_PAGE, MAX_PAGE_SIZE
+from app.core.database import postgres_url
+from app.core.middleware import LARGE_QUESTION_BODY_BYTES, RequestBodyLimitMiddleware
+from app.core.pagination import MAX_PAGE, MAX_PAGE_SIZE
 
 from support import (
+    ADMIN_PASSWORD,
     FRONTEND_ORIGIN,
     JWT_SECRET,
+    STUDENT_CREDENTIAL_ENCRYPTION_KEY,
     TEST_CLIENT_BACKEND_OPTIONS,
+    TOTP_ENCRYPTION_KEY,
     app_for,
     create_professor,
     exam_environment,
@@ -420,7 +435,9 @@ def test_the_version_has_one_source_per_package() -> None:
     frontend = json.loads((frontend_root / "package.json").read_text())["version"]
     assert backend == frontend, f"pyproject {backend}, package.json {frontend}"
     assert main.app.version == backend
-    layout = (frontend_root / "src" / "layouts" / "main-layout.tsx").read_text()
+    layout = (
+        frontend_root / "src" / "components" / "navigation" / "main-layout.tsx"
+    ).read_text()
     assert '"app-version", { version: __APP_VERSION__ }' in layout
     vite_config = (frontend_root / "vite.config.ts").read_text()
     assert "__APP_VERSION__: JSON.stringify(version)" in vite_config
@@ -612,3 +629,272 @@ def test_the_last_allowed_page_is_served_empty(tmp_path: Path) -> None:
             )
             assert response.status_code == 200, path
             assert response.json() == [], path
+
+
+SETTINGS_VALUES: dict[str, Any] = {
+    "database_url": "postgresql+psycopg://user:a-long-enough-password@localhost/db",
+    "jwt_secret": JWT_SECRET,
+    "totp_encryption_key": TOTP_ENCRYPTION_KEY,
+    "student_credential_encryption_key": STUDENT_CREDENTIAL_ENCRYPTION_KEY,
+    "admin_username": "root-admin",
+    "admin_password": ADMIN_PASSWORD,
+    "frontend_origin": "http://localhost:5173",
+    "environment": "test",
+}
+
+
+def make_settings(**overrides: Any) -> Settings:
+    return Settings(**{**SETTINGS_VALUES, **overrides})
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        (
+            {"totp_encryption_key": "short"},
+            "TOTP_ENCRYPTION_KEY must contain at least 32",
+        ),
+        (
+            {"totp_encryption_key": "replace-with-a-long-random-totp-key"},
+            "TOTP_ENCRYPTION_KEY is still set",
+        ),
+        (
+            {"student_credential_encryption_key": "short"},
+            "STUDENT_CREDENTIAL_ENCRYPTION_KEY must contain at least 32",
+        ),
+        (
+            {
+                "student_credential_encryption_key": "replace-with-a-long-student-credential-key"
+            },
+            "STUDENT_CREDENTIAL_ENCRYPTION_KEY is still set",
+        ),
+        (
+            {"student_credential_encryption_key": JWT_SECRET},
+            "must be distinct from other secrets",
+        ),
+        ({"admin_password": "short"}, "at least 16 characters"),
+        ({"admin_password": "x" * 257}, "at most 256 characters"),
+        ({"access_token_minutes": 0}, "ACCESS_TOKEN_MINUTES"),
+        ({"refresh_token_days": 31}, "REFRESH_TOKEN_DAYS"),
+        ({"login_attempts": 2}, "LOGIN_ATTEMPTS"),
+        ({"login_window_seconds": 59}, "LOGIN_WINDOW_SECONDS"),
+        ({"global_login_attempts": 49}, "GLOBAL_LOGIN_ATTEMPTS"),
+        ({"global_login_window_seconds": 9}, "GLOBAL_LOGIN_WINDOW_SECONDS"),
+        ({"quiz_result_retention_days": 0}, "QUIZ_RESULT_RETENTION_DAYS"),
+        ({"training_result_retention_days": 0}, "TRAINING_RESULT_RETENTION_DAYS"),
+        ({"abandoned_session_retention_days": 91}, "ABANDONED_SESSION_RETENTION"),
+        ({"problem_report_attempts": 0}, "PROBLEM_REPORT_ATTEMPTS"),
+        ({"problem_report_window_seconds": 59}, "PROBLEM_REPORT_WINDOW_SECONDS"),
+        ({"problem_report_retention_days": 366}, "PROBLEM_REPORT_RETENTION_DAYS"),
+        ({"max_request_body_bytes": 1023}, "MAX_REQUEST_BODY_BYTES"),
+        ({"frontend_origin": "ftp://example.org"}, "must be an HTTP(S) origin"),
+        (
+            {"frontend_origin": "https://user:secret@example.org"},
+            "must not contain credentials",
+        ),
+        ({"frontend_origin": "https://example.org:99999"}, "invalid port"),
+        ({"frontend_origin": "https://example.org/"}, "trailing slash"),
+        ({"environment": "staging"}, "APP_ENV"),
+        ({"database_url": "sqlite:///quiz.db"}, "DATABASE_URL must use PostgreSQL"),
+    ],
+)
+def test_settings_reject_invalid_values(overrides: dict[str, Any], message) -> None:
+    with pytest.raises(
+        ValueError, match=message.replace("(", r"\(").replace(")", r"\)")
+    ):
+        make_settings(**overrides)
+
+
+BOUNDED_SETTINGS = [
+    setting for setting in fields(Settings) if BOUNDS in setting.metadata
+]
+
+
+@pytest.mark.parametrize(
+    "setting", BOUNDED_SETTINGS, ids=[setting.name for setting in BOUNDED_SETTINGS]
+)
+def test_bounded_settings_accept_their_edges_only(setting: Field[Any]) -> None:
+    minimum, maximum = setting.metadata[BOUNDS]
+    assert minimum <= setting.default
+    assert maximum is None or setting.default <= maximum
+    variable = environment_variable(setting)
+    make_settings(**{setting.name: minimum})
+    with pytest.raises(ValueError, match=f"{variable} must be"):
+        make_settings(**{setting.name: minimum - 1})
+    if maximum is not None:
+        make_settings(**{setting.name: maximum})
+        with pytest.raises(ValueError, match=f"{variable} must be between"):
+            make_settings(**{setting.name: maximum + 1})
+
+
+@pytest.mark.parametrize(
+    ("value", "environment", "message"),
+    [
+        ("https://example.org/\x07", "test", "control characters"),
+        ("javascript:alert(1)", "test", "absolute HTTP"),
+        ("https://user:secret@example.org", "test", "credentials"),
+        ("https://example.org:70000", "test", "invalid port"),
+        ("http://example.org", "production", "must use HTTPS"),
+    ],
+)
+def test_optional_public_urls_are_validated(
+    value: str, environment: str, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        validate_optional_public_url("ACCESSIBILITY_SCHEME_URL", value, environment)
+
+
+def test_optional_public_urls_accept_https_in_production() -> None:
+    validate_optional_public_url("NAME", "https://example.org/plan", "production")
+    settings = make_settings(
+        accessibility_scheme_url="https://example.org/scheme",
+        accessibility_action_plan_url="http://example.org/plan",
+    )
+    assert settings.accessibility_action_plan_url == "http://example.org/plan"
+
+
+def test_repeated_secrets_are_rejected() -> None:
+    with pytest.raises(ValueError, match="repeated pattern"):
+        reject_predictable_secret(
+            "SECRET", "abcdefghijkl" * 4, minimum_unique_characters=10
+        )
+
+
+def test_securing_a_private_file_reports_permission_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = tmp_path / "secret"
+    private.write_text("value", encoding="utf-8")
+
+    def refuse(self: Path, mode: int) -> None:
+        raise PermissionError("read-only filesystem")
+
+    monkeypatch.setattr(Path, "chmod", refuse)
+    with pytest.raises(RuntimeError, match="Unable to secure private file"):
+        secure_private_file(private)
+
+
+def test_settings_are_read_from_the_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app.core.config, "ENV_FILE", tmp_path / ".env")
+    environment = {
+        "DATABASE_URL": SETTINGS_VALUES["database_url"],
+        "APP_ENV": "test",
+        "FRONTEND_ORIGIN": "https://quiz.example.org",
+        "ACCESS_TOKEN_MINUTES": "7",
+        "ACCESSIBILITY_CONTACT": "access@example.org",
+    }
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+
+    settings = get_settings()
+
+    assert settings.frontend_origin == "https://quiz.example.org"
+    assert settings.access_token_minutes == 7
+    assert settings.accessibility_contact == "access@example.org"
+    assert settings.cookie_secure is False
+
+    monkeypatch.delenv("DATABASE_URL")
+    with pytest.raises(RuntimeError, match="DATABASE_URL must be set"):
+        get_settings()
+
+
+def test_a_malformed_environment_value_names_its_variable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app.core.config, "ENV_FILE", tmp_path / ".env")
+    monkeypatch.setenv("DATABASE_URL", SETTINGS_VALUES["database_url"])
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("LOGIN_ATTEMPTS", "dix")
+
+    with pytest.raises(ValidationError, match=r"LOGIN_ATTEMPTS\n.*valid integer"):
+        get_settings()
+
+
+@pytest.mark.parametrize(
+    ("url", "password", "message"),
+    [
+        ("mysql://user:a-long-enough-password@localhost/db", None, "PostgreSQL"),
+        (
+            "postgresql+asyncpg://user:a-long-enough-password@localhost/db",
+            None,
+            "Psycopg driver",
+        ),
+        ("postgresql://user@localhost/db", None, "DATABASE_PASSWORD must be set"),
+        ("postgresql://user:short@localhost/db", None, "at least 16 characters"),
+        (
+            "postgresql://user:replace-with-a-database-password@localhost/db",
+            None,
+            "non-example value",
+        ),
+    ],
+)
+def test_database_urls_must_use_a_strong_postgres_password(
+    url: str,
+    password: str | None,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DATABASE_PASSWORD", raising=False)
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    with pytest.raises(ValueError, match=message):
+        postgres_url(url)
+
+
+def test_database_url_reads_a_missing_password_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DATABASE_PASSWORD", raising=False)
+    monkeypatch.setenv("POSTGRES_PASSWORD", "a-long-enough-password")
+    url = postgres_url("postgresql://user@localhost/db")
+    assert url.drivername == "postgresql+psycopg"
+    assert url.password == "a-long-enough-password"
+
+
+def test_the_application_role_password_takes_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_PASSWORD", "the-application-role-password")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "the-superuser-password-unused")
+    url = postgres_url("postgresql://open_quiz_app@localhost/db")
+    assert url.password == "the-application-role-password"
+
+
+def test_audit_logger_keeps_an_existing_handler() -> None:
+    logger = logging.getLogger("open_quiz.audit")
+    handlers = list(logger.handlers)
+    importlib.reload(app.core.audit)
+    assert logger.handlers == handlers
+
+
+def test_body_limit_ignores_non_body_messages() -> None:
+    incoming = iter(
+        [
+            {"type": "http.disconnect"},
+            {"type": "http.request", "body": b"{}", "more_body": False},
+        ]
+    )
+    received: list[str] = []
+
+    async def receive() -> dict[str, Any]:
+        return next(incoming)
+
+    async def send(message: dict[str, Any]) -> None:
+        received.append(message["type"])
+
+    async def downstream(scope, receive, send) -> None:
+        received.append((await receive())["type"])
+        received.append((await receive())["type"])
+
+    middleware = RequestBodyLimitMiddleware(
+        downstream, default_limit=1024, session_factory=None
+    )
+    asyncio.run(
+        middleware(
+            {"type": "http", "method": "POST", "path": "/api/x", "headers": []},
+            receive,
+            send,
+        )
+    )
+    assert received == ["http.disconnect", "http.request"]

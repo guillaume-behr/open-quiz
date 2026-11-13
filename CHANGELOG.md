@@ -99,6 +99,13 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- The API code is organized in layers (`core`, `domain`, `live`, `records`,
+  `services`, `responses`, `routers`), and a test keeps each layer importing
+  only from those below it; `docs/architecture.md` describes them. Schemas
+  are split by resource, and routes are grouped under `routers/quizzes`,
+  `routers/question_banks` and `routers/classes`. The frontend pages use
+  kebab-case file names, and the legal pages are split one per file. No
+  behaviour or API change.
 - Deleting a question bank that quizzes draw from now says so in its
   confirmation: those quizzes stop drawing from it, and one that drew only
   from it needs another bank before its next launch. Question banks report

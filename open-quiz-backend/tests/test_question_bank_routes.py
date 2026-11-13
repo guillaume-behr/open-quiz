@@ -15,8 +15,7 @@ from pydantic import ValidationError
 from sqlalchemy import delete, event, select, text
 from sqlalchemy.exc import OperationalError
 
-from app import maintenance, question_history, question_records
-from app.images import (
+from app.domain.images import (
     MAX_IMAGE_BYTES,
     MAX_IMAGE_DIMENSION,
     InvalidImageError,
@@ -33,12 +32,16 @@ from app.models import (
     QuizSessionQuestion,
     QuizSessionStudentQuestion,
 )
-from app.routers import question_bank_transfer, questions
+from app.records import question_history
+from app.records import questions as question_records
+from app.routers.question_banks import questions
+from app.routers.question_banks import transfer as question_bank_transfer
 from app.schemas import (
     QuestionBatchImport,
     QuestionChoiceCreate,
     QuestionCreate,
 )
+from app.services import maintenance
 
 from support import (
     VALID_PNG,

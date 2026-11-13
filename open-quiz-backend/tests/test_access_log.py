@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from app import access_log
-from app.access_log import route_template
+from app.core import access_log
+from app.core.access_log import route_template
 
 from support import make_client, settings_for
 

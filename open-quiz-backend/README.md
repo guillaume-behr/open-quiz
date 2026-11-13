@@ -216,7 +216,7 @@ les sessions à chaque passage.
 
 Chaque processus diffuse les changements à ses propres WebSockets, et les
 relaie aux autres workers Uvicorn par `LISTEN/NOTIFY` de PostgreSQL
-(`app/live_relay.py`) : plusieurs workers peuvent donc servir la même instance.
+(`app/live/relay.py`) : plusieurs workers peuvent donc servir la même instance.
 Une notification émise pendant qu’un worker se reconnecte à la base est perdue
 pour lui ; la réconciliation périodique des flux le remet à jour. Le nombre de
 workers se règle avec `WEB_CONCURRENCY`, alimentée sous Docker Compose par
@@ -247,7 +247,7 @@ workers se règle avec `WEB_CONCURRENCY`, alimentée sous Docker Compose par
 - une banque reste entièrement modifiable après un examen : une question
   supprimée que des examens ont posée quitte sa banque mais reste lue par ces
   examens, et une question modifiée laisse aux sessions publiées une copie de
-  sa version d’origine (`app/question_history.py`). Seul un examen encore
+  sa version d’origine (`app/records/question_history.py`). Seul un examen encore
   ouvert bloque la modification ou la suppression des questions qu’il a
   tirées.
 

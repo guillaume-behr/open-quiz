@@ -19,7 +19,7 @@ from app.models import (
     QuizSession,
     User,
 )
-from app.teacher_session_responses import active_makeup_session_responses
+from app.responses.teacher_sessions import active_makeup_session_responses
 
 from support import (
     choice_answer,
@@ -901,7 +901,7 @@ def test_training_gives_no_feedback_while_an_exam_uses_its_bank(
     # A training started concurrently with the exam escapes the discard; the
     # answer endpoint must still refuse to reveal the correction.
     monkeypatch.setattr(
-        "app.routers.makeup.discard_active_training_sessions",
+        "app.routers.quizzes.makeup.discard_active_training_sessions",
         lambda *arguments: None,
     )
     with make_client(settings_for(tmp_path / "training-guard.db")) as client:

@@ -2,11 +2,11 @@ from argparse import ArgumentParser
 
 from sqlalchemy import select
 
-from app.audit import audit_event
-from app.config import Settings, get_settings
-from app.database import database_sessions
+from app.core.audit import audit_event
+from app.core.config import Settings, get_settings
+from app.core.database import database_sessions
+from app.core.rate_limit import build_credential_rate_limiters
 from app.models import User
-from app.rate_limit import build_credential_rate_limiters
 from app.services.credentials import reset_two_factor
 
 

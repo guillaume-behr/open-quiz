@@ -7,16 +7,21 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.security import hash_password
 from app.models import Question, QuestionBank, QuestionChoice, User
-from app.security import hash_password
 from app.services import grading
 from app.services.grading import (
+    compute_final_scores,
+    decoded_answer_data,
     question_maximum_scores,
     selected_choice_ids,
     selected_choice_score,
 )
 
-from support import session_factory_for, settings_for
+from support import (
+    session_factory_for,
+    settings_for,
+)
 
 
 def test_selecting_wrong_choices_cancels_non_negative_partial_credit() -> None:
@@ -328,3 +333,40 @@ def test_question_maximums_follow_the_scoring_rule(
     assert maximums[only_distractors] == 0
     assert maximums[unknown] == 0
     assert list(maximums) == [single, multiple, written, only_distractors, unknown]
+
+
+@pytest.mark.parametrize("stored", [None, "not json", "[1, 2]"])
+def test_unreadable_answer_payloads_are_treated_as_empty(stored) -> None:
+    assert decoded_answer_data(SimpleNamespace(answer_data=stored)) == {}
+
+
+class _ScriptedSession:
+    def __init__(self, *results: list[Any]) -> None:
+        self._results = list(results)
+
+    def scalars(self, _statement: object) -> list[Any]:
+        return self._results.pop(0)
+
+
+def test_final_scores_handle_deleted_and_ungraded_written_questions() -> None:
+    deleted = SimpleNamespace(
+        question_id=1, answer_data="{}", score=3.0, is_graded=False
+    )
+    ungraded = SimpleNamespace(
+        question_id=2, answer_data="{}", score=4.0, is_graded=False
+    )
+    graded = SimpleNamespace(question_id=2, answer_data="{}", score=4.0, is_graded=True)
+    written = SimpleNamespace(id=2, answer_mode="written")
+    session = _ScriptedSession([deleted, ungraded, graded], [], [written])
+
+    compute_final_scores(SimpleNamespace(id=1, allow_negative_points=False), session)
+
+    assert (deleted.score, deleted.is_graded) == (0, True)
+    assert (ungraded.score, ungraded.is_graded) == (0, False)
+    assert (graded.score, graded.is_graded) == (4.0, True)
+
+
+def test_final_scores_without_answers_do_not_load_choices() -> None:
+    session = _ScriptedSession([], [])
+    compute_final_scores(SimpleNamespace(id=1, allow_negative_points=False), session)
+    assert session._results == []

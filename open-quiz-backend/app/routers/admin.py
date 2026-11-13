@@ -4,30 +4,30 @@ from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.audit import audit_event
-from app.dependencies import AdminUser, DbSession
+from app.core.audit import audit_event
+from app.core.dependencies import AdminUser, DbSession
+from app.core.errors import ApiError, ErrorCode
+from app.core.pagination import (
+    Paging,
+)
+from app.core.rate_limit import CredentialRateLimiters
+from app.core.security import hash_password
+from app.domain.session_status import ACTIVE_SESSION_STATUSES
 from app.enums import QuizMode
-from app.errors import ApiError, ErrorCode
-from app.grade_levels import ensure_default_grade_levels
 from app.models import (
     Quiz,
     QuizSession,
     User,
 )
-from app.pagination import (
-    Paging,
-)
-from app.rate_limit import CredentialRateLimiters
+from app.records.grade_levels import ensure_default_grade_levels
+from app.records.users import delete_user_records
 from app.schemas import (
     UserCreate,
     UserCredentialReset,
     UserResponse,
     UserStatusUpdate,
 )
-from app.security import hash_password
 from app.services.credentials import reset_credentials, revoke_user_sessions
-from app.session_status import ACTIVE_SESSION_STATUSES
-from app.user_records import delete_user_records
 
 router = APIRouter(prefix="/api/admin", tags=["administration"])
 

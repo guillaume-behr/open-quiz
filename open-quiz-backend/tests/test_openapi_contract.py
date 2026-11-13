@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app import schemas
-from app.routers import makeup
+from app.routers.quizzes import makeup
 
 CODE_LANGUAGES = [
     "javascript",

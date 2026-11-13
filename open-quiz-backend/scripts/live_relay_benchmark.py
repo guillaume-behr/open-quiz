@@ -15,9 +15,9 @@ import os
 import statistics
 from time import perf_counter
 
-from app.database import postgres_url
-from app.live_quiz import LiveQuizHub, quiz_session_topic
-from app.live_relay import PostgresLiveRelay
+from app.core.database import postgres_url
+from app.live.hub import LiveQuizHub, quiz_session_topic
+from app.live.relay import PostgresLiveRelay
 
 
 async def one_round(

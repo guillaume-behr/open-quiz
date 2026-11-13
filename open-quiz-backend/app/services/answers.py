@@ -13,9 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.choice_tokens import ChoiceTokens
+from app.core.errors import ApiError, ErrorCode
+from app.domain.choice_tokens import ChoiceTokens
 from app.enums import AnswerMode, QuizMode, SessionStatus
-from app.errors import ApiError, ErrorCode
 from app.models import (
     Question,
     QuestionChoice,
@@ -24,7 +24,7 @@ from app.models import (
     QuizParticipant,
     QuizSession,
 )
-from app.question_responses import load_question_records
+from app.records.questions import load_question_records
 from app.schemas import StudentQuizAnswer, TrainingFeedback
 from app.services.grading import decoded_answer_data
 from app.services.question_assignments import (

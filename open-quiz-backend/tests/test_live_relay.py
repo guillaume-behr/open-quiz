@@ -1,14 +1,17 @@
 """Live updates reach the sockets of every worker, not only the publisher's."""
 
+import asyncio
 from pathlib import Path
 from threading import Event, Thread
+from types import SimpleNamespace
 
 import psycopg
 import pytest
 
-from app import live_relay
-from app.live_relay import PostgresLiveRelay, relay_channel
-from app.routers import live
+from app.live import relay as live_relay
+from app.live.hub import LiveQuizHub, websocket_origin_allowed
+from app.live.relay import PostgresLiveRelay, relay_channel
+from app.routers.quizzes import live
 from scripts import live_relay_benchmark
 
 from support import (
@@ -180,3 +183,71 @@ def test_the_relay_benchmark_reports_latencies(
         ["--subscribers", "4", "--sessions", "2", "--rounds", "3"]
     )
     assert "3 publications to 2 sockets each: median" in capsys.readouterr().out
+
+
+def test_live_hub_tolerates_closed_loops_and_pending_updates() -> None:
+    hub = LiveQuizHub()
+
+    async def scenario() -> None:
+        async with hub.subscribe("topic") as first, hub.subscribe("topic"):
+            hub.publish("topic")
+            hub.publish("topic")
+            await asyncio.sleep(0)
+            assert first.qsize() == 1
+        assert "topic" not in hub._subscribers
+
+    asyncio.run(scenario())
+
+    async def closed_loop_subscription() -> None:
+        async with hub.subscribe("closed"):
+            loop = asyncio.get_running_loop()
+            subscriber = next(iter(hub._subscribers["closed"]))
+            object.__setattr__(subscriber, "loop", _ClosedLoop())
+            hub.publish("closed")
+            object.__setattr__(subscriber, "loop", loop)
+
+    asyncio.run(closed_loop_subscription())
+
+    async def topic_removed_during_subscription() -> None:
+        async with hub.subscribe("removed"):
+            hub._subscribers.pop("removed")
+
+    asyncio.run(topic_removed_during_subscription())
+    hub.end_authentication()
+    assert hub._pending_authentications == 0
+
+
+class _ClosedLoop:
+    def call_soon_threadsafe(self, *_: object) -> None:
+        raise RuntimeError("Event loop is closed")
+
+
+@pytest.mark.parametrize(
+    ("origin", "environment", "allowed"),
+    [
+        ("http://localhost:5173/", "test", True),
+        (None, "development", False),
+        ("http://localhost:4173", "development", True),
+        ("http://127.0.0.1:4173", "development", True),
+        ("http://evil.example:4173", "development", False),
+        ("http://localhost:4173/path", "development", False),
+        ("http://user@localhost:4173", "development", False),
+        ("http://localhost:4173", "test", False),
+    ],
+)
+def test_websocket_origins_follow_the_environment(
+    origin: str | None, environment: str, allowed: bool
+) -> None:
+    headers = {} if origin is None else {"origin": origin}
+    websocket = SimpleNamespace(
+        headers=headers,
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                settings=SimpleNamespace(
+                    frontend_origin="http://localhost:5173",
+                    environment=environment,
+                )
+            )
+        ),
+    )
+    assert websocket_origin_allowed(websocket) is allowed
