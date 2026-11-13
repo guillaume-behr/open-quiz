@@ -51,8 +51,8 @@ from app.services.session_lifecycle import (
     active_exam_bank_ids_for_class,
     discard_previous_training_sessions,
 )
-from app.session_responses import student_state_response
 from app.student_accounts import owned_class
+from app.student_state import student_state_response
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 

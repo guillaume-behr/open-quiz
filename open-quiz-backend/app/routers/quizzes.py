@@ -48,6 +48,7 @@ from app.quiz_lookup import (
     owned_quiz,
     owned_quiz_session,
 )
+from app.quiz_responses import quiz_responses
 from app.quiz_session_records import (
     delete_quiz_session_records,
 )
@@ -69,12 +70,11 @@ from app.services.session_lifecycle import (
     discard_active_training_sessions,
     expire_quiz_session,
 )
-from app.session_responses import (
+from app.session_status import ACTIVE_SESSION_STATUSES
+from app.teacher_session_responses import (
     active_session_responses,
-    quiz_responses,
     session_response,
 )
-from app.session_status import ACTIVE_SESSION_STATUSES
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 

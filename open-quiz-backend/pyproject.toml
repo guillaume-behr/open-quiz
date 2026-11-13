@@ -73,6 +73,10 @@ max-complexity = 12
     # in subprocesses.
     "S101", "S105", "S106", "S107", "S603",
 ]
+# The participant routes read {join_code} through the CurrentParticipant and
+# ReportingParticipant dependencies (app/participants.py), which ruff does not
+# follow across modules.
+"app/routers/student_{join,progress,sessions}.py" = ["FAST003"]
 
 [tool.ruff.lint.isort]
 known-local-folder = ["support"]

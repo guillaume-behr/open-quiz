@@ -54,6 +54,7 @@ from app.participants import (
     generate_join_code,
     participant_token_hash,
 )
+from app.quiz_responses import quiz_responses
 from app.schemas import (
     MakeupQuizOption,
     MakeupQuizSelection,
@@ -74,13 +75,12 @@ from app.services.session_lifecycle import (
     discard_active_training_sessions,
     finish_session,
 )
-from app.session_responses import (
+from app.student_accounts import owned_class
+from app.student_state import student_state_response
+from app.teacher_session_responses import (
     makeup_responses,
     makeup_session_response,
-    quiz_responses,
-    student_state_response,
 )
-from app.student_accounts import owned_class
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 

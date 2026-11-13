@@ -39,6 +39,8 @@ from app.routers import (
     quizzes,
     results,
     student_auth,
+    student_join,
+    student_progress,
     student_sessions,
     students,
     training,
@@ -63,6 +65,8 @@ def include_routers(app: FastAPI) -> None:
     # Before quizzes: /sessions/{session_id} would capture /sessions/results.
     app.include_router(results.router)
     app.include_router(quizzes.router)
+    app.include_router(student_join.router)
+    app.include_router(student_progress.router)
     app.include_router(student_sessions.router)
     app.include_router(makeup.router)
     app.include_router(training.router)
