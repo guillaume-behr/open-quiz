@@ -160,7 +160,6 @@ const QuizHeader = memo(function QuizHeader({
             <h1 className="text-3xl font-extrabold" dir={contentDirection}>
                 {title}
             </h1>
-            <p className="text-muted-foreground">{session.class_name}</p>
             {session.status === "in_progress" && (
                 <div className="mt-3">
                     <QuizTimer
