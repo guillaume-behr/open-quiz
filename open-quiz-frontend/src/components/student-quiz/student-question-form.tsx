@@ -178,7 +178,7 @@ export function StudentQuestionForm({
 }
 
 /** How many question numbers the navigation bar shows at once. */
-export const QUESTION_NAVIGATION_PAGE_SIZE = 10
+const QUESTION_NAVIGATION_PAGE_SIZE = 10
 
 /**
  * The numbered back-navigation, outside the question card: a bar fixed at

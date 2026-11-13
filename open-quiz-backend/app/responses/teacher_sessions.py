@@ -107,11 +107,7 @@ def listed_participants(
 def unanswered_skip_counts(
     participants: Sequence[QuizParticipant], session: Session
 ) -> dict[int, int]:
-    """For each participant, the questions skipped and not answered since.
-
-    Once a session is over an empty answer stands for each of them, so its
-    participants count none here: answer_statistics counts those blanks.
-    """
+    """For each participant, the questions skipped and not answered since."""
     skipping = {
         participant.id: set(participant.skipped_question_ids)
         for participant in participants
@@ -163,12 +159,14 @@ def session_responses(
     )
 
     responses = []
-    # One read for every session: the questions skipped and not answered yet.
+    # One read for every running session: the questions skipped and not
+    # answered yet. A finished session's blanks are in answer_statistics.
     skip_counts = unanswered_skip_counts(
         [
             participant
-            for participants in participants_by_session.values()
-            for participant in participants
+            for quiz_session, _ in rows
+            if quiz_session.status != SessionStatus.FINISHED
+            for participant in participants_by_session[quiz_session.id]
         ],
         session,
     )
