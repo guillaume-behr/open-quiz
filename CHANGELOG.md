@@ -27,7 +27,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   scores zero; a blank written answer needs no marking.
 - A student who skipped a question confirms their paper on the review step
   even on a quiz without it: the last answer no longer hands the paper in
-  before they could come back to what they skipped.
+  before they could come back to what they skipped. A quiz that does not
+  allow going back never gains the review this way.
 - The teacher's live view and the results show how many questions each
   student skipped and left unanswered; they are not counted as answered.
 - The student state gains `answered_question_numbers` and

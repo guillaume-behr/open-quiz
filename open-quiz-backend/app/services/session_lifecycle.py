@@ -117,9 +117,13 @@ def final_review_offered(
     it too: without it, the last answer would hand the paper in before they
     could come back to what they skipped. It stays offered once they did,
     so answering a skipped question never takes the review away from them.
+
+    A quiz that does not allow going back never gains the review this way:
+    there would be nothing to come back to.
     """
-    return answer_review_enabled(quiz_session, quiz) or bool(
-        participant.skipped_question_ids
+    return answer_review_enabled(quiz_session, quiz) or (
+        bool(participant.skipped_question_ids)
+        and previous_questions_allowed(quiz_session, quiz)
     )
 
 
@@ -328,7 +332,7 @@ def finish_when_nobody_can_answer(
         # The last answer no longer ends the session on its own: a participant
         # reviewing their answers still has to confirm them.
         still_working = or_(still_working, QuizParticipant.submitted_at.is_(None))
-    else:
+    elif previous_questions_allowed(quiz_session, quiz):
         # Without the review step, the last answer hands the paper in, except
         # for a participant who skipped a question (final_review_offered).
         still_working = or_(

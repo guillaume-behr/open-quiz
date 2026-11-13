@@ -642,13 +642,34 @@ def test_without_review_skipped_questions_are_reviewed_before_handing_in(
 
 def test_skipping_needs_an_exam_that_allows_going_back(environment) -> None:
     client = environment["client"]
-    environment = two_question_quiz(client, environment, allow_previous_questions=False)
-    _launched, headers, url = started(client, environment)
+    environment = two_question_quiz(
+        client,
+        environment,
+        allow_previous_questions=False,
+        allow_answer_review=False,
+    )
+    launched, headers, url = started(client, environment)
 
     refused = skip_current(client, url, headers)
     assert refused.status_code == 409
     assert refused.json()["detail"]["code"] == "QUIZ_SKIP_UNAVAILABLE"
     assert client.get(url, headers=headers).json()["skipped_question_numbers"] == []
+
+    # Even with a skip on record, a quiz without going back and without the
+    # review step never gains a review screen: the last answer hands in.
+    state = client.get(url, headers=headers).json()
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(QuizParticipant)
+            .where(QuizParticipant.session_id == launched["id"])
+            .values(skipped_question_ids=[state["question"]["id"]])
+        )
+        session.commit()
+    assert answer_current(client, url, headers).json()["question_number"] == 2
+    done = answer_current(client, url, headers)
+    assert done.json()["allow_answer_review"] is False
+    assert done.json()["awaiting_final_submission"] is False
+    assert done.json()["status"] == "finished"
 
 
 def test_without_review_a_paper_with_skips_can_be_handed_in_blank(
