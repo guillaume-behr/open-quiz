@@ -563,6 +563,7 @@
     "student-question-points_one": "{{count}} point",
     "student-question-points_other": "{{count}} points",
     "student-submit-answer": "Submit my answer",
+    "student-skip-question": "Skip the question",
     "teacher-student-progress_one": "Progress: {{count}} of {{total}} question",
     "teacher-student-progress_other": "Progress: {{count}} of {{total}} questions",
     "finish-quiz": "Finish quiz",

@@ -1,7 +1,8 @@
 """Student progress through a running quiz: answering, reviewing, navigating.
 
-The participant answers the current question, goes back to an earlier one
-when the quiz allows it, reviews the given answers and hands in the paper.
+The participant answers the current question or skips it, goes back to an
+earlier one when the quiz allows it, reviews the given answers and hands in
+the paper.
 """
 
 from datetime import UTC, datetime
@@ -17,6 +18,7 @@ from app.responses.student_sessions import student_state_response
 from app.schemas.student_quizzes import (
     StudentQuizAnswer,
     StudentQuizNavigation,
+    StudentQuizSkip,
     StudentQuizStateResponse,
 )
 from app.services.answers import (
@@ -110,6 +112,57 @@ def submit_student_answer(
     if feedback is not None:
         state.training_feedback = feedback
     return state
+
+
+@router.post(
+    "/student/sessions/{join_code}/skip",
+    response_model=StudentQuizStateResponse,
+)
+def skip_student_question(
+    payload: StudentQuizSkip,
+    context: CurrentParticipant,
+    request: Request,
+    session: DbSession,
+) -> StudentQuizStateResponse:
+    """Leave the current question blank and move on, as an empty answer.
+
+    The question then counts as handed in: it scores zero unless the student
+    comes back to answer it, and the quiz ends or offers its review as after
+    any other answer.
+    """
+    quiz_session, quiz, participant = (
+        context.session,
+        context.quiz,
+        context.participant,
+    )
+    expire_quiz_session(quiz_session, quiz, session)
+    lock_for_participant_write(quiz_session, participant, session)
+    require_answer_accepted(quiz_session, participant, session)
+    question, _, retargeting = answered_question(quiz_session, participant, session)
+    if payload.question_id != question.id:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.ANSWER_QUESTION_MISMATCH,
+            "La réponse concerne une autre question que la question en cours",
+        )
+    if retargeting:
+        # The paper is already handed in: a late skip changes nothing.
+        return student_state_response(quiz_session, quiz, participant, session)
+    # Skipping a question answered earlier keeps that answer: it only moves on.
+    if question.id not in answered_question_ids(quiz_session, participant, session):
+        store_answer(quiz_session, participant, question.id, {}, session, skipped=True)
+    advance_participant(quiz_session, quiz, participant, session)
+    session.flush()
+    finish_when_nobody_can_answer(quiz_session, quiz, session)
+    session.commit()
+    publish_quiz_update(
+        request,
+        quiz_session,
+        session,
+        makeup_sessions_changed=participant.current_position is None,
+        participant=participant,
+    )
+    return student_state_response(quiz_session, quiz, participant, session)
 
 
 @router.post(

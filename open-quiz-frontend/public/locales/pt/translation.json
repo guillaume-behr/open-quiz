@@ -564,6 +564,7 @@
     "student-question-points_one": "{{count}} ponto",
     "student-question-points_other": "{{count}} pontos",
     "student-submit-answer": "Validar minha resposta",
+    "student-skip-question": "Pular a pergunta",
     "teacher-student-progress_one": "Progresso: {{count}} pergunta sobre {{total}}",
     "teacher-student-progress_other": "Progresso: {{count}} perguntas sobre {{total}}",
     "finish-quiz": "Complete o teste",

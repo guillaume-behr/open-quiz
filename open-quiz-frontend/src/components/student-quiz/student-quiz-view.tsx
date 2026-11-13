@@ -31,6 +31,7 @@ type StudentQuizViewProps = {
     onWrittenAnswerChange: (answer: string) => void
     onNavigate: (questionNumber: number) => void
     onSubmitAnswer: (event: FormEvent<HTMLFormElement>) => void
+    onSkipQuestion: () => void
     onBackToReview: () => void
     onSubmitQuiz: () => void
     onReturnHome: () => void
@@ -53,6 +54,7 @@ export function StudentQuizView({
     onWrittenAnswerChange,
     onNavigate,
     onSubmitAnswer,
+    onSkipQuestion,
     onBackToReview,
     onSubmitQuiz,
     onReturnHome,
@@ -76,7 +78,7 @@ export function StudentQuizView({
     return (
         <div
             className={cn(
-                "flex w-full max-w-7xl flex-col gap-6 rounded-2xl border bg-secondary px-5 py-6 shadow-lg sm:px-8 sm:py-8 lg:px-12",
+                "relative flex w-full max-w-7xl flex-col gap-6 rounded-2xl border bg-secondary px-5 py-6 shadow-lg sm:px-8 sm:py-8 lg:px-12",
                 // Room for the question navigation fixed below the card.
                 showsQuestionNavigation && "mb-20"
             )}
@@ -136,6 +138,7 @@ export function StudentQuizView({
                                 onWrittenAnswerChange={onWrittenAnswerChange}
                                 onNavigate={onNavigate}
                                 onSubmit={onSubmitAnswer}
+                                onSkip={onSkipQuestion}
                             />
                         </>
                     )}
@@ -155,20 +158,31 @@ const QuizHeader = memo(function QuizHeader({
     title: string
     contentDirection: "ltr" | "rtl"
 }) {
+    const running = session.status === "in_progress"
     return (
-        <div className="text-center">
-            <h1 className="text-3xl font-extrabold" dir={contentDirection}>
-                {title}
-            </h1>
-            {session.status === "in_progress" && (
-                <div className="mt-3">
+        <>
+            {running && (
+                // The time left sits in the card's top corner: on a phone it
+                // keeps its own line above the title instead.
+                <div className="-mb-3 flex justify-end sm:absolute sm:end-6 sm:top-6 sm:mb-0 lg:end-8 lg:top-8">
                     <QuizTimer
                         endsAt={session.ends_at}
                         serverNow={session.server_now}
                     />
                 </div>
             )}
-        </div>
+            <div
+                className={cn(
+                    "-mb-2 text-center",
+                    // Clear of the time left in the corner.
+                    running && "sm:px-32"
+                )}
+            >
+                <h1 className="text-3xl font-extrabold" dir={contentDirection}>
+                    {title}
+                </h1>
+            </div>
+        </>
     )
 })
 

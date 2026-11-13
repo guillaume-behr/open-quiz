@@ -563,6 +563,7 @@
     "student-question-points_one": "{{count}} Punkt",
     "student-question-points_other": "{{count}} Punkte",
     "student-submit-answer": "Bestätige meine Antwort",
+    "student-skip-question": "Frage überspringen",
     "teacher-student-progress_one": "Fortschritt: {{count}} Frage zu {{total}}",
     "teacher-student-progress_other": "Fortschritt: {{count}} Fragen zu {{total}}",
     "finish-quiz": "Schließe das Quiz ab",

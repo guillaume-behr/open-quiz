@@ -356,6 +356,24 @@ export function submitStudentQuizAnswer(
     )
 }
 
+/** Leaves the current question blank and moves on: an empty answer. */
+export function skipStudentQuestion(
+    joinCode: string,
+    participantToken: string,
+    questionId: number
+): Promise<StudentQuizSession> {
+    return requestParsed(
+        StudentQuizSessionSchema,
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/skip`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+            body: JSON.stringify({ question_id: questionId }),
+        },
+        false
+    )
+}
+
 export function reviewStudentAnswers(
     joinCode: string,
     participantToken: string

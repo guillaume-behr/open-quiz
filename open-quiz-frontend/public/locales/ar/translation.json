@@ -611,6 +611,7 @@
     "student-question-points_many": "{{count}} نقطة",
     "student-question-points_other": "{{count}} نقطة",
     "student-submit-answer": "التحقق من صحة إجابتي",
+    "student-skip-question": "تخطي السؤال",
     "teacher-student-progress_one": "التقدم: {{count}} سؤال حول {{total}}",
     "teacher-student-progress_other": "التقدم: {{count}} الأسئلة في {{total}}",
     "teacher-student-progress_zero": "التقدم: {{count}} الأسئلة في {{total}}",

@@ -563,6 +563,7 @@
     "student-question-points_one": "{{count}} 分",
     "student-question-points_other": "{{count}} 分",
     "student-submit-answer": "验证我的答案",
+    "student-skip-question": "跳过此题",
     "teacher-student-progress_one": "进展：关于 {{total}} 的 {{count}} 问题",
     "teacher-student-progress_other": "进度：有关 {{total}} 的 {{count}} 个问题",
     "finish-quiz": "完成测验",

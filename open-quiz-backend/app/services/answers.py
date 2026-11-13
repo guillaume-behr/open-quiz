@@ -213,6 +213,8 @@ def store_answer(
     question_id: int,
     answer_data: dict[str, object],
     session: Session,
+    *,
+    skipped: bool = False,
 ) -> None:
     # Atomic upsert: concurrent submissions for the same question can never
     # create duplicate answers nor crash on the uniqueness constraint.
@@ -223,7 +225,10 @@ def store_answer(
         answer_data=json.dumps(answer_data, ensure_ascii=False),
         score=0,
         is_graded=False,
+        was_skipped=skipped,
     )
+    # An update leaves was_skipped alone: answering a skipped question later
+    # keeps the skip on record.
     session.execute(
         answer_statement.on_conflict_do_update(
             index_elements=[

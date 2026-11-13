@@ -523,6 +523,95 @@ def test_review_and_navigation_rules(environment) -> None:
     assert client.post(f"{url}/review", headers=headers).status_code == 200
 
 
+def skip_current(client, url: str, headers: dict[str, str]):
+    question = client.get(url, headers=headers).json()["question"]
+    return client.post(
+        f"{url}/skip", headers=headers, json={"question_id": question["id"]}
+    )
+
+
+def test_skipping_leaves_a_question_blank_and_moves_on(environment) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment)
+    launched, headers, url = started(client, environment)
+
+    stale = client.post(f"{url}/skip", headers=headers, json={"question_id": -1})
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "ANSWER_QUESTION_MISMATCH"
+
+    skipped = skip_current(client, url, headers)
+    assert skipped.status_code == 200
+    assert skipped.json()["question_number"] == 2
+    # Handed in blank: reachable again, but not counted as filled in.
+    assert skipped.json()["accessible_question_numbers"] == [1, 2]
+    assert skipped.json()["answered_question_numbers"] == []
+    assert skipped.json()["skipped_question_numbers"] == [1]
+    back = client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
+    assert back.json()["has_answered"] is False
+    assert back.json()["selected_choice_ids"] is None
+
+    # Answering it later fills it in; skipping it again keeps that answer.
+    assert answer_current(client, url, headers).status_code == 200
+    client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
+    kept = skip_current(client, url, headers)
+    assert kept.json()["question_number"] == 2
+    assert kept.json()["answered_question_numbers"] == [1]
+    # Answered since, it stays marked as skipped once.
+    assert kept.json()["skipped_question_numbers"] == [1]
+
+    # Skipping the last question opens the review, with that answer empty.
+    last = skip_current(client, url, headers)
+    assert last.json()["awaiting_final_submission"] is True
+    assert [
+        summary["submitted_answers"] for summary in last.json()["answer_summaries"]
+    ] == [["Two"], []]
+    assert hand_in_quiz(client, launched["join_code"], headers)["status"] == "finished"
+    # A repeat of the skip once the paper is in changes nothing.
+    question_id = last.json()["answer_summaries"][-1]["question_id"]
+    repeat = client.post(
+        f"{url}/skip", headers=headers, json={"question_id": question_id}
+    )
+    assert repeat.status_code == 200
+    assert repeat.json()["status"] == "finished"
+
+
+def test_a_skipped_written_question_needs_no_marking(environment) -> None:
+    client = environment["client"]
+    add_question(
+        client,
+        environment,
+        prompt="Explain why",
+        difficulty="hard",
+        answer_mode="written",
+        choices=[{"label": "Because", "is_correct": True, "points": 2}],
+    )
+    quiz = client.post(
+        "/api/quizzes",
+        headers=environment["teacher_headers"],
+        json={
+            "title": "Written",
+            "question_bank_ids": [environment["question"]["question_bank_id"]],
+            "easy_question_count": 0,
+            "medium_question_count": 0,
+            "hard_question_count": 1,
+        },
+    )
+    assert quiz.status_code == 201
+    environment = {**environment, "quiz": quiz.json()}
+    launched, headers, url = started(client, environment)
+
+    assert skip_current(client, url, headers).status_code == 200
+    hand_in_quiz(client, launched["join_code"], headers)
+    with client.app.state.session_factory() as session:
+        answer = session.scalars(
+            select(QuizAnswer).where(QuizAnswer.session_id == launched["id"])
+        ).one()
+        assert json.loads(answer.answer_data) == {}
+        # Nothing to mark: the blank answer is graded zero at once.
+        assert answer.is_graded is True
+        assert answer.score == 0
+
+
 def test_student_images_require_a_running_session_and_an_image(environment) -> None:
     client = environment["client"]
     launched, headers, url = started(client, environment)

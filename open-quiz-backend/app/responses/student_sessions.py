@@ -34,6 +34,7 @@ from app.schemas.student_quizzes import (
 )
 from app.services.grading import (
     decoded_answer_data,
+    is_blank_answer_payload,
     question_maximum_scores,
     training_result,
 )
@@ -204,6 +205,27 @@ def student_question_response(
     )
 
 
+def skipped_and_blank_question_ids(
+    quiz_session: QuizSession, participant: QuizParticipant, session: DbSession
+) -> tuple[set[int], set[int]]:
+    """The questions a participant ever skipped, and those still left blank."""
+    skipped: set[int] = set()
+    blank: set[int] = set()
+    for question_id, answer_data, was_skipped in session.execute(
+        select(
+            QuizAnswer.question_id, QuizAnswer.answer_data, QuizAnswer.was_skipped
+        ).where(
+            QuizAnswer.session_id == quiz_session.id,
+            QuizAnswer.participant_id == participant.id,
+        )
+    ):
+        if was_skipped:
+            skipped.add(question_id)
+        if is_blank_answer_payload(answer_data):
+            blank.add(question_id)
+    return skipped, blank
+
+
 def student_state_response(
     quiz_session: QuizSession,
     quiz: Quiz,
@@ -213,12 +235,17 @@ def student_state_response(
     question_ids = session_question_ids(quiz_session, session, participant)
     question_id = current_question_id(quiz_session, participant, session)
     answered_ids = answered_question_ids(quiz_session, participant, session)
+    # A skipped question holds an empty answer: handed in, but not filled in.
+    skipped_ids, blank_ids = skipped_and_blank_question_ids(
+        quiz_session, participant, session
+    )
+    filled_ids = answered_ids - blank_ids
     # A participant who has submitted every assigned answer has no current
     # question while classmates may still be working. Keep that completed
     # state explicit so the frontend can render its waiting message instead of
     # an otherwise empty in-progress page.
     has_answered = (
-        question_id in answered_ids
+        question_id in filled_ids
         if question_id is not None
         else bool(question_ids) and set(question_ids).issubset(answered_ids)
     )
@@ -283,7 +310,12 @@ def student_state_response(
         answered_question_numbers=[
             position + 1
             for position, answered_id in enumerate(question_ids)
-            if answered_id in answered_ids
+            if answered_id in filled_ids
+        ],
+        skipped_question_numbers=[
+            position + 1
+            for position, skipped_id in enumerate(question_ids)
+            if skipped_id in skipped_ids
         ],
         selected_choice_ids=(
             [

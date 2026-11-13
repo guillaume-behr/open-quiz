@@ -131,6 +131,7 @@ export const StudentQuizSessionSchema = v.object({
     answer_summaries: v.optional(v.array(StudentAnswerSummarySchema), []),
     accessible_question_numbers: v.optional(v.array(v.number()), []),
     answered_question_numbers: v.optional(v.array(v.number()), []),
+    skipped_question_numbers: v.optional(v.array(v.number()), []),
     selected_choice_ids: v.optional(v.nullable(v.array(v.string())), null),
     written_answer: v.optional(v.nullable(v.string()), null),
     question: v.nullable(StudentQuizQuestionSchema),

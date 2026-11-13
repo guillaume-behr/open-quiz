@@ -53,6 +53,7 @@ describe("student quiz state schema", () => {
             answer_summaries: [],
             accessible_question_numbers: [],
             answered_question_numbers: [],
+            skipped_question_numbers: [],
             selected_choice_ids: null,
             written_answer: null,
             training_feedback: null,

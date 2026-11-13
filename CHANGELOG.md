@@ -13,6 +13,30 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ## [Unreleased]
 
+### Upgrade actions
+
+- Migration 0013 adds `quiz_answers.was_skipped`, false for every existing
+  answer. It changes no data.
+
+### Added
+
+- A student can skip a question during a quiz (“Skip the question”). The
+  question is handed in blank and scores zero unless the student comes back
+  to answer it; a blank written answer needs no marking. The student state
+  gains `answered_question_numbers` and `skipped_question_numbers`, and
+  `POST /api/quizzes/student/sessions/{join_code}/skip` takes the
+  `question_id` shown, like an answer.
+
+### Changed
+
+- The numbered question navigation sits in a bar centred at the bottom of
+  the screen, outside the question card. It numbers every question, ten at a
+  time with arrows beyond that, and turns the page by itself with a slide:
+  skipped questions are light orange (even once answered), reached but unanswered
+  ones grey, and those not seen yet dark grey and out of reach.
+- The exam screen no longer shows the class name, and the time left sits in
+  the top corner of the question card.
+
 ## [1.1.0] — 2026-11-13
 
 ### Upgrade actions

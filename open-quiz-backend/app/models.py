@@ -534,6 +534,11 @@ class QuizAnswer(Base):
     answer_data: Mapped[str] = mapped_column(Text)
     score: Mapped[float] = mapped_column(Float, default=0.0)
     is_graded: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The student skipped this question at some point. It stays set when they
+    # come back to answer it, so the navigation keeps the question marked.
+    was_skipped: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now

@@ -58,6 +58,7 @@ function page(writtenAnswer: string) {
             onWrittenAnswerChange={() => undefined}
             onNavigate={() => undefined}
             onSubmitAnswer={() => undefined}
+            onSkipQuestion={() => undefined}
             onBackToReview={() => undefined}
             onSubmitQuiz={() => undefined}
             onReturnHome={() => undefined}

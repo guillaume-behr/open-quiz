@@ -587,6 +587,7 @@
     "student-question-points_many": "{{count}} балів",
     "student-question-points_other": "{{count}} бала",
     "student-submit-answer": "Підтвердьте мою відповідь",
+    "student-skip-question": "Пропустити питання",
     "teacher-student-progress_one": "Перебіг: {{count}} запитання на {{total}}",
     "teacher-student-progress_other": "Перебіг: {{count}} запитань на {{total}}",
     "teacher-student-progress_few": "Перебіг: {{count}} запитань на {{total}}",
