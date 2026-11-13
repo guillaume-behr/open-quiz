@@ -178,9 +178,11 @@ PostgreSQL. Mesuré sur 4 cœurs avec PostgreSQL local, ce relais réveille les
 La limite de 4 WebSockets par compte et par flux en direct est tenue par chaque
 worker : avec N workers, un même compte peut en ouvrir jusqu’à 4 × N.
 
-Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes, 5 pour
-les limites de débit et 2 pour le relais. Restez sous `max_connections` (100
-par défaut) : au-delà de 4 workers, augmentez-le ou réduisez leur nombre.
+Chaque worker ouvre jusqu’à 15 connexions PostgreSQL pour les requêtes
+(`DATABASE_POOL_SIZE` + `DATABASE_MAX_OVERFLOW`, dans
+`open-quiz-backend/.env`), 5 pour les limites de débit et 2 pour le relais,
+soit 22 en tout. Restez sous `max_connections` (100 par défaut) : au-delà de
+4 workers, augmentez-le ou réduisez leur nombre.
 
 Le conteneur du backend est aussi limité en nombre de processus, threads
 compris : 256 par défaut. Chaque worker peut utiliser une centaine de threads
@@ -199,7 +201,9 @@ Le backend est limité à 2 Go de mémoire et le frontend à 512 Mo, sans swap :
 une rafale d’imports d’images ou de tentatives de connexion ne peut ainsi pas
 priver PostgreSQL et l’hôte de mémoire. Le backend ne décode par ailleurs que
 deux images et ne calcule que quatre condensats de mots de passe à la fois ;
-les demandes suivantes attendent leur tour.
+les demandes suivantes attendent leur tour. Une image qui attend plus de
+30 secondes répond 503 (`SERVER_BUSY`), et les imports de classes laissent
+toujours un condensat libre pour les connexions.
 
 Avec plusieurs workers, ou si des imports volumineux échouent faute de
 mémoire, ajustez ces limites dans le même fichier `.env` racine :
@@ -689,6 +693,9 @@ Les valeurs ci-dessous sont fournies dans les fichiers `.env` d’exemple.
 | `PROBLEM_REPORT_WINDOW_SECONDS`    | fenêtre du quota de signalements                        | `900`                                           |
 | `PROBLEM_REPORT_RETENTION_DAYS`    | conservation des signalements                           | `90`                                            |
 | `MAX_REQUEST_BODY_BYTES`           | taille des requêtes applicatives ordinaires             | `65536`                                         |
+| `DATABASE_POOL_SIZE`               | connexions PostgreSQL gardées ouvertes par worker       | `5`                                             |
+| `DATABASE_MAX_OVERFLOW`            | connexions supplémentaires par worker sous charge       | `10`                                            |
+| `DATABASE_POOL_TIMEOUT_SECONDS`    | attente d’une connexion libre avant de répondre 503     | `10`                                            |
 
 Les codes de double authentification sont limités deux fois : par
 `LOGIN_ATTEMPTS` sur `LOGIN_WINDOW_SECONDS`, et par
@@ -873,10 +880,12 @@ Les contrôles de santé de `docker compose ps` vérifient :
 
 Pannes fréquentes :
 
-- **Erreurs 500 ou 503 sous forte charge** : chaque worker de l’API dispose
+- **Erreurs 503 sous forte charge** : chaque worker de l’API dispose
   d’un nombre limité de connexions à la base ; une requête qui en attend une
-  plus de 30 secondes échoue (`QueuePool limit … reached` dans les journaux),
-  et `/api/health` répond 503 tant que la base est injoignable. Vérifiez les
+  plus de `DATABASE_POOL_TIMEOUT_SECONDS` (10 secondes par défaut) répond 503
+  avec le code `SERVER_BUSY` (`Database pool exhausted` dans les journaux),
+  comme une image qui attend plus de 30 secondes son tour d’être décodée.
+  `/api/health` répond 503 tant que la base est injoignable. Vérifiez les
   requêtes lentes côté PostgreSQL et la mémoire allouée avant d’augmenter
   `OPEN_QUIZ_API_WORKERS` (voir [Plusieurs workers](#plusieurs-workers)).
 - **`can't start new thread` ou `fork: Resource temporarily unavailable`** :

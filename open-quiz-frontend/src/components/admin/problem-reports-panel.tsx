@@ -9,6 +9,7 @@ import { apiErrorMessage } from "@/lib/errors"
 import { Inbox, LoaderCircle, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { AnimatedGrid } from "@/components/ui/animated-grid"
 
 export function ProblemReportsPanel({
     isLoading,
@@ -75,9 +76,9 @@ export function ProblemReportsPanel({
                         {t("problem-report-count", { count: total })}
                     </p>
                 </div>
-                <div
-                    key={reports.map((report) => report.id).join(",")}
-                    className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+                <AnimatedGrid
+                    ids={reports.map((report) => report.id)}
+                    className="gap-4"
                 >
                     {reports.map((report) => (
                         <article
@@ -131,7 +132,7 @@ export function ProblemReportsPanel({
                             </p>
                         </article>
                     ))}
-                </div>
+                </AnimatedGrid>
                 <Pagination
                     currentPage={page}
                     totalPages={totalPages}

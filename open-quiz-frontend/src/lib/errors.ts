@@ -2,7 +2,7 @@ import { ApiError, UNEXPECTED_RESPONSE_CODE } from "@/api/client"
 
 // Every ErrorCode member of open-quiz-backend/app/errors.py needs a key here:
 // scripts/check-error-codes.mjs fails `pnpm test` when one is missing.
-export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
+const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     AUTH_ORIGIN_REJECTED: "auth-origin-rejected",
     AUTH_INVALID_CREDENTIALS: "student-login-error",
     AUTH_RATE_LIMITED: "auth-rate-limited",
@@ -115,6 +115,7 @@ export const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     TEACHER_IN_ACTIVE_EXAM: "error-teacher-in-active-exam",
     USERNAME_TAKEN: "error-username-taken",
     DATABASE_UNAVAILABLE: "error-service-unavailable",
+    SERVER_BUSY: "error-service-unavailable",
     REQUEST_CONTENT_LENGTH_INVALID: "error-request-invalid",
     REQUEST_BODY_TOO_LARGE: "error-request-too-large",
 }

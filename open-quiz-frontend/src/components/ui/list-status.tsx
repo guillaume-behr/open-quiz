@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button"
-import { LoaderCircle, RotateCcw } from "lucide-react"
+import { RotateCcw } from "lucide-react"
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+import { LoadingState } from "@/components/ui/loading-state"
 
 /**
  * Shows a list's loading state, or its load error with a way to retry,
@@ -20,20 +21,8 @@ export function ListStatus({
     onRetry: () => void
     children: ReactNode
 }) {
-    const { t } = useTranslation()
     if (isLoading) {
-        return (
-            <div
-                className="flex min-h-40 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle
-                    className="size-7 animate-spin text-primary motion-reduce:animate-none"
-                    aria-hidden="true"
-                />
-            </div>
-        )
+        return <LoadingState />
     }
     if (error) return <LoadErrorNotice message={error} onRetry={onRetry} />
     return children

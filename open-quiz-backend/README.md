@@ -121,6 +121,9 @@ est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` 
 | `PROBLEM_REPORT_WINDOW_SECONDS`    | `900`   | 60 à 86 400       |
 | `PROBLEM_REPORT_RETENTION_DAYS`    | `90`    | 1 à 365 jours     |
 | `MAX_REQUEST_BODY_BYTES`           | `65536` | 1 024 à 1 048 576 |
+| `DATABASE_POOL_SIZE`               | `5`     | 1 à 100           |
+| `DATABASE_MAX_OVERFLOW`            | `10`    | 0 à 100           |
+| `DATABASE_POOL_TIMEOUT_SECONDS`    | `10`    | 1 à 60 secondes   |
 
 En production, l’API ne répond qu’aux requêtes dont l’en-tête `Host` porte le
 nom de `FRONTEND_ORIGIN` ou un nom interne du déploiement Compose. Si elle est
@@ -394,6 +397,9 @@ Dans Docker :
 docker compose exec open-quiz-backend \
     /app/.venv/bin/python -m scripts.reset_two_factor identifiant
 ```
+
+Le script ne migre pas la base : lancez-le une fois le backend démarré, qui
+l’a mise à jour.
 
 Privilégiez toutefois l’action **Récupérer l’accès** dans l’espace
 administrateur : elle remplace également le mot de passe du compte ciblé.

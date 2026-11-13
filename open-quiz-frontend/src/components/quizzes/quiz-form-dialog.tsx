@@ -1,7 +1,6 @@
-import type { GradeLevel, QuestionBank, Quiz } from "@/api/types"
+import type { GradeLevel, QuestionBank } from "@/api/types"
 import { GradeLevelSelect } from "@/components/grade-level-select"
 import { DialogFormActions } from "@/components/forms/dialog-form-actions"
-import { CollapsibleFilters } from "@/components/ui/collapsible-filters"
 import { Dialog } from "@/components/ui/dialog"
 import {
     Field,
@@ -10,85 +9,91 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Pagination } from "@/components/ui/pagination"
 import { Switch } from "@/components/ui/switch"
-import { type FormEvent, useState } from "react"
+import { type Dispatch, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
-
-const difficultyKeys = ["easy", "medium", "hard"] as const
-type Difficulty = (typeof difficultyKeys)[number]
-type DifficultyValues = Record<Difficulty, number>
-const BANK_PAGE_SIZE = 6
+import { DifficultyQuestionCounts } from "./difficulty-question-counts"
+import { DurationInput } from "./duration-input"
+import { QuestionBankPicker } from "./quiz-bank-picker"
+import {
+    availableQuestionCounts,
+    type QuizFormAction,
+    type QuizFormState,
+} from "./quiz-form-state"
 
 type QuizFormDialogProps = {
     open: boolean
-    editingQuiz: Quiz | null
+    /** The quiz being created or edited, and how to change it. */
+    form: QuizFormState
+    dispatch: Dispatch<QuizFormAction>
     banks: QuestionBank[]
     gradeLevels: GradeLevel[]
-    quizGradeLevel: string
-    title: string
-    durationMinutes: number
-    selectedBankIds: number[]
-    allowPreviousQuestions: boolean
-    allowAnswerReview: boolean
-    showProvisionalGrades: boolean
-    allowNegativePoints: boolean
-    sameQuestionsForAll: boolean
-    difficultyCounts: DifficultyValues
-    availableByDifficulty: DifficultyValues
     isBusy: boolean
     error: string | null
-    onTitleChange: (value: string) => void
-    onDurationChange: (value: number) => void
-    onQuizGradeLevelChange: (value: string) => void
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
-    onSelectedBankIdsChange: (ids: number[]) => void
-    onAllowPreviousQuestionsChange: (value: boolean) => void
-    onAllowAnswerReviewChange: (value: boolean) => void
-    onShowProvisionalGradesChange: (value: boolean) => void
-    onAllowNegativePointsChange: (value: boolean) => void
-    onSameQuestionsForAllChange: (value: boolean) => void
-    onDifficultyCountsChange: (values: DifficultyValues) => void
     onClose: () => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
 
+/** The yes/no options of a quiz, in the order the form shows them. */
+const QUIZ_OPTIONS = [
+    {
+        field: "allowPreviousQuestions",
+        label: "allow-previous-questions",
+        help: "allow-previous-questions-help",
+    },
+    {
+        field: "allowAnswerReview",
+        label: "allow-answer-review",
+        help: "allow-answer-review-help",
+    },
+    {
+        field: "showProvisionalGrades",
+        label: "show-provisional-grades",
+        help: "show-provisional-grades-help",
+    },
+    {
+        field: "sameQuestionsForAll",
+        label: "same-questions-for-all",
+        help: "same-questions-for-all-help",
+    },
+    {
+        field: "allowNegativePoints",
+        label: "allow-negative-points",
+        help: null,
+    },
+] as const satisfies readonly {
+    field: keyof QuizFormState
+    label: string
+    help: string | null
+}[]
+
 export function QuizFormDialog({
     open,
-    editingQuiz,
+    form,
+    dispatch,
     banks,
     gradeLevels,
-    quizGradeLevel,
-    title,
-    durationMinutes,
-    selectedBankIds,
-    allowPreviousQuestions,
-    allowAnswerReview,
-    showProvisionalGrades,
-    allowNegativePoints,
-    sameQuestionsForAll,
-    difficultyCounts,
-    availableByDifficulty,
     isBusy,
     error,
-    onTitleChange,
-    onDurationChange,
-    onQuizGradeLevelChange,
     onDeleteGradeLevel,
-    onSelectedBankIdsChange,
-    onAllowPreviousQuestionsChange,
-    onAllowAnswerReviewChange,
-    onShowProvisionalGradesChange,
-    onAllowNegativePointsChange,
-    onSameQuestionsForAllChange,
-    onDifficultyCountsChange,
     onClose,
     onSubmit,
 }: QuizFormDialogProps) {
+    const {
+        editingQuiz,
+        gradeLevel: quizGradeLevel,
+        selectedBankIds,
+        difficultyCounts,
+    } = form
     const { t } = useTranslation()
     const questionCount = Object.values(difficultyCounts).reduce(
         (total, count) => total + count,
         0
+    )
+    const availableByDifficulty = availableQuestionCounts(
+        banks,
+        selectedBankIds
     )
 
     return (
@@ -110,9 +115,13 @@ export function QuizFormDialog({
                             </FieldLabel>
                             <Input
                                 id="quiz-title"
-                                value={title}
+                                value={form.title}
                                 onChange={(event) =>
-                                    onTitleChange(event.target.value)
+                                    dispatch({
+                                        type: "set",
+                                        field: "title",
+                                        value: event.target.value,
+                                    })
                                 }
                                 maxLength={160}
                                 required
@@ -126,7 +135,12 @@ export function QuizFormDialog({
                                 id="quiz-grade-level"
                                 value={quizGradeLevel}
                                 levels={gradeLevels}
-                                onChange={onQuizGradeLevelChange}
+                                onChange={(gradeLevel) =>
+                                    dispatch({
+                                        type: "grade-level",
+                                        gradeLevel,
+                                    })
+                                }
                                 onDelete={onDeleteGradeLevel}
                                 disabled={isBusy}
                             />
@@ -136,8 +150,14 @@ export function QuizFormDialog({
                                 {t("quiz-duration")}
                             </FieldLabel>
                             <DurationInput
-                                value={durationMinutes}
-                                onChange={onDurationChange}
+                                value={form.durationMinutes}
+                                onChange={(value) =>
+                                    dispatch({
+                                        type: "set",
+                                        field: "durationMinutes",
+                                        value,
+                                    })
+                                }
                             />
                             <p className="text-xs text-muted-foreground">
                                 {t("quiz-duration-help")}
@@ -149,7 +169,9 @@ export function QuizFormDialog({
                             banks={banks}
                             gradeLevel={quizGradeLevel}
                             selectedIds={selectedBankIds}
-                            onSelectedIdsChange={onSelectedBankIdsChange}
+                            onSelectedIdsChange={(ids) =>
+                                dispatch({ type: "banks", ids, banks })
+                            }
                         />
                     )}
                     <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
@@ -162,91 +184,51 @@ export function QuizFormDialog({
                             </p>
                         </div>
                         <div className="grid gap-3 md:grid-cols-2">
-                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
-                                <span>
-                                    <span className="block font-medium">
-                                        {t("allow-previous-questions")}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t("allow-previous-questions-help")}
-                                    </span>
-                                </span>
-                                <Switch
-                                    checked={allowPreviousQuestions}
-                                    onCheckedChange={
-                                        onAllowPreviousQuestionsChange
-                                    }
-                                    aria-label={t("allow-previous-questions")}
-                                />
-                            </label>
-                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
-                                <span>
-                                    <span className="block font-medium">
-                                        {t("allow-answer-review")}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t("allow-answer-review-help")}
-                                    </span>
-                                </span>
-                                <Switch
-                                    checked={allowAnswerReview}
-                                    onCheckedChange={onAllowAnswerReviewChange}
-                                    aria-label={t("allow-answer-review")}
-                                />
-                            </label>
-                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
-                                <span>
-                                    <span className="block font-medium">
-                                        {t("show-provisional-grades")}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t("show-provisional-grades-help")}
-                                    </span>
-                                </span>
-                                <Switch
-                                    checked={showProvisionalGrades}
-                                    onCheckedChange={
-                                        onShowProvisionalGradesChange
-                                    }
-                                    aria-label={t("show-provisional-grades")}
-                                />
-                            </label>
-                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
-                                <span>
-                                    <span className="block font-medium">
-                                        {t("same-questions-for-all")}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {t("same-questions-for-all-help")}
-                                    </span>
-                                </span>
-                                <Switch
-                                    checked={sameQuestionsForAll}
-                                    onCheckedChange={
-                                        onSameQuestionsForAllChange
-                                    }
-                                    aria-label={t("same-questions-for-all")}
-                                />
-                            </label>
-                            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4">
-                                <span className="font-medium">
-                                    {t("allow-negative-points")}
-                                </span>
-                                <Switch
-                                    checked={allowNegativePoints}
-                                    onCheckedChange={
-                                        onAllowNegativePointsChange
-                                    }
-                                    aria-label={t("allow-negative-points")}
-                                />
-                            </label>
+                            {QUIZ_OPTIONS.map(({ field, label, help }) => (
+                                <label
+                                    key={field}
+                                    className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background p-4"
+                                >
+                                    {help ? (
+                                        <span>
+                                            <span className="block font-medium">
+                                                {t(label)}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {t(help)}
+                                            </span>
+                                        </span>
+                                    ) : (
+                                        <span className="font-medium">
+                                            {t(label)}
+                                        </span>
+                                    )}
+                                    <Switch
+                                        checked={form[field]}
+                                        onCheckedChange={(value) =>
+                                            dispatch({
+                                                type: "set",
+                                                field,
+                                                value,
+                                            })
+                                        }
+                                        aria-label={t(label)}
+                                    />
+                                </label>
+                            ))}
                         </div>
                     </section>
                     <DifficultyQuestionCounts
                         counts={difficultyCounts}
                         available={availableByDifficulty}
                         hasSelectedBanks={selectedBankIds.length > 0}
-                        onChange={onDifficultyCountsChange}
+                        onChange={(value) =>
+                            dispatch({
+                                type: "set",
+                                field: "difficultyCounts",
+                                value,
+                            })
+                        }
                     />
                     {error && <FieldError>{error}</FieldError>}
                     <DialogFormActions
@@ -265,242 +247,5 @@ export function QuizFormDialog({
                 </FieldGroup>
             </form>
         </Dialog>
-    )
-}
-
-function QuestionBankPicker({
-    banks,
-    gradeLevel,
-    selectedIds,
-    onSelectedIdsChange,
-}: {
-    banks: QuestionBank[]
-    gradeLevel: string
-    selectedIds: number[]
-    onSelectedIdsChange: (ids: number[]) => void
-}) {
-    const { t } = useTranslation()
-    const [search, setSearch] = useState("")
-    const [page, setPage] = useState(1)
-
-    const trimmedSearch = search.trim().toLowerCase()
-    const filtered = banks.filter(
-        (bank) =>
-            bank.grade_level === gradeLevel &&
-            (trimmedSearch === "" ||
-                bank.chapter.toLowerCase().includes(trimmedSearch))
-    )
-    const totalPages = Math.max(1, Math.ceil(filtered.length / BANK_PAGE_SIZE))
-    const safePage = Math.min(page, totalPages)
-    const visible = filtered.slice(
-        (safePage - 1) * BANK_PAGE_SIZE,
-        safePage * BANK_PAGE_SIZE
-    )
-
-    function toggle(bankId: number) {
-        onSelectedIdsChange(
-            selectedIds.includes(bankId)
-                ? selectedIds.filter((id) => id !== bankId)
-                : [...selectedIds, bankId]
-        )
-    }
-
-    return (
-        <Field>
-            <FieldLabel htmlFor="quiz-bank-search">
-                {t("quiz-question-banks")}
-            </FieldLabel>
-            <CollapsibleFilters activeCount={Number(Boolean(trimmedSearch))}>
-                <Input
-                    id="quiz-bank-search"
-                    className="max-w-md"
-                    value={search}
-                    placeholder={t("search-question-bank")}
-                    aria-label={t("search-question-bank")}
-                    onChange={(event) => {
-                        setSearch(event.target.value)
-                        setPage(1)
-                    }}
-                />
-            </CollapsibleFilters>
-            {filtered.length === 0 ? (
-                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    {t("quiz-needs-question-bank")}
-                </p>
-            ) : (
-                <>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                        {visible.map((bank) => {
-                            const selected = selectedIds.includes(bank.id)
-                            return (
-                                <label
-                                    key={bank.id}
-                                    className={`flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 ${
-                                        selected
-                                            ? "border-primary bg-primary/5"
-                                            : ""
-                                    }`}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        className="mt-1 accent-primary"
-                                        checked={selected}
-                                        onChange={() => toggle(bank.id)}
-                                    />
-                                    <span className="min-w-0">
-                                        <span className="block font-medium">
-                                            {bank.chapter}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                            {t("question-count", {
-                                                count: bank.question_count,
-                                            })}
-                                        </span>
-                                    </span>
-                                </label>
-                            )
-                        })}
-                    </div>
-                    <Pagination
-                        currentPage={safePage}
-                        totalPages={totalPages}
-                        onPageChange={setPage}
-                    />
-                </>
-            )}
-        </Field>
-    )
-}
-
-function DifficultyQuestionCounts({
-    counts,
-    available,
-    hasSelectedBanks,
-    onChange,
-}: {
-    counts: DifficultyValues
-    available: DifficultyValues
-    hasSelectedBanks: boolean
-    onChange: (values: DifficultyValues) => void
-}) {
-    const { t } = useTranslation()
-    const total = counts.easy + counts.medium + counts.hard
-    const maximumFor = (difficulty: Difficulty) =>
-        Math.min(available[difficulty], 200 - total + counts[difficulty])
-
-    return (
-        <Field>
-            <FieldLabel>{t("quiz-difficulty-counts")}</FieldLabel>
-            <p className="text-xs text-muted-foreground">
-                {t("quiz-difficulty-count-help")}
-            </p>
-            <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                {difficultyKeys.map((difficulty) => (
-                    <div key={difficulty}>
-                        <FieldLabel htmlFor={`quiz-${difficulty}`}>
-                            {t(`difficulty-${difficulty}`)}
-                        </FieldLabel>
-                        <Input
-                            id={`quiz-${difficulty}`}
-                            type="number"
-                            min={0}
-                            max={maximumFor(difficulty)}
-                            value={counts[difficulty]}
-                            disabled={!hasSelectedBanks}
-                            onChange={(event) =>
-                                onChange({
-                                    ...counts,
-                                    [difficulty]: Math.min(
-                                        maximumFor(difficulty),
-                                        Math.max(0, Number(event.target.value))
-                                    ),
-                                })
-                            }
-                            required
-                        />
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            {t("difficulty-available", {
-                                count: available[difficulty],
-                            })}
-                        </p>
-                    </div>
-                ))}
-            </div>
-            <p className="mt-3 text-sm font-semibold text-primary">
-                {t("quiz-total-questions", { count: total })}
-            </p>
-            {hasSelectedBanks && total === 0 && (
-                <FieldError>{t("quiz-needs-question")}</FieldError>
-            )}
-        </Field>
-    )
-}
-
-const MIN_DURATION_MINUTES = 1
-const MAX_DURATION_MINUTES = 480
-
-/**
- * The quiz duration in minutes. What the teacher types stays as typed, so
- * the field can be emptied and typed again; the form only receives whole
- * numbers within bounds, and leaving the field brings it back within them.
- * An empty or out-of-range field also blocks submission (required, min, max).
- */
-function DurationInput({
-    value,
-    onChange,
-}: {
-    value: number
-    onChange: (minutes: number) => void
-}) {
-    const [draft, setDraft] = useState(String(value))
-    const [shownValue, setShownValue] = useState(value)
-    // A new value from the form (a reset, a quiz opened for editing).
-    if (value !== shownValue) {
-        setShownValue(value)
-        setDraft(String(value))
-    }
-
-    function commit(minutes: number) {
-        setShownValue(minutes)
-        onChange(minutes)
-    }
-
-    return (
-        <Input
-            id="quiz-duration"
-            type="number"
-            min={MIN_DURATION_MINUTES}
-            max={MAX_DURATION_MINUTES}
-            step={1}
-            value={draft}
-            onChange={(event) => {
-                const typed = event.target.value
-                setDraft(typed)
-                const minutes = Number(typed)
-                if (
-                    typed.trim() !== "" &&
-                    Number.isInteger(minutes) &&
-                    minutes >= MIN_DURATION_MINUTES &&
-                    minutes <= MAX_DURATION_MINUTES
-                )
-                    commit(minutes)
-            }}
-            onBlur={() => {
-                const minutes = Number(draft)
-                const bounded =
-                    draft.trim() === "" || !Number.isFinite(minutes)
-                        ? value
-                        : Math.min(
-                              MAX_DURATION_MINUTES,
-                              Math.max(
-                                  MIN_DURATION_MINUTES,
-                                  Math.round(minutes)
-                              )
-                          )
-                setDraft(String(bounded))
-                commit(bounded)
-            }}
-            required
-        />
     )
 }

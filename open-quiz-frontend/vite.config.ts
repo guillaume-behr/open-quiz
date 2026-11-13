@@ -107,6 +107,7 @@ export default defineConfig({
                         "src/hooks/use-resource.ts",
                         "src/components/student-quiz/use-quiz-monitoring.ts",
                         "src/components/student-quiz/use-quiz-translation.ts",
+                        "src/components/student-quiz/use-student-quiz-session.ts",
                         "src/components/quizzes/print-quiz.ts",
                         "src/components/classes/print-credentials.ts",
                         "src/components/quizzes/use-live-quiz-sessions.ts",

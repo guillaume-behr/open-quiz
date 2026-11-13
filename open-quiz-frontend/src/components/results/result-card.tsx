@@ -1,6 +1,6 @@
 import type { QuizSession, StudentClass } from "@/api/types"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { cn, formatClassName } from "@/lib/utils"
@@ -13,6 +13,7 @@ import {
     TriangleAlert,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { FilterSidebar } from "@/components/ui/filter-sidebar"
 
 export type ResultFilterValues = { quiz: string; class: string }
 
@@ -31,62 +32,51 @@ export function ResultFilters({
 }) {
     const { t } = useTranslation()
     return (
-        <aside className="h-fit rounded-xl border bg-background p-4">
-            <h3 className="font-semibold">{t("filters")}</h3>
-            <FieldGroup className="mt-4 gap-4">
-                <Field>
-                    <FieldLabel htmlFor="result-quiz-filter">
-                        {t("quiz-title")}
-                    </FieldLabel>
-                    <Input
-                        id="result-quiz-filter"
-                        value={filters.quiz}
-                        placeholder={t("search-quiz")}
-                        onChange={(event) => {
-                            onFilterChange("quiz", event.target.value)
-                        }}
-                    />
-                </Field>
-                <Field>
-                    <FieldLabel htmlFor="result-class-filter">
-                        {t("class-name")}
-                    </FieldLabel>
-                    <select
-                        id="result-class-filter"
-                        className={NATIVE_SELECT_CLASS_NAME}
-                        value={filters.class}
-                        disabled={areClassesLoading}
-                        onChange={(event) => {
-                            onFilterChange("class", event.target.value)
-                        }}
-                    >
-                        <option value="">{t("all-classes")}</option>
-                        {classes.map((studentClass) => (
-                            <option
-                                key={studentClass.id}
-                                value={String(studentClass.id)}
-                            >
-                                {formatClassName(
-                                    studentClass.grade_level,
-                                    studentClass.name
-                                )}
-                            </option>
-                        ))}
-                    </select>
-                </Field>
-                {(filters.quiz || filters.class) && (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                            onReset()
-                        }}
-                    >
-                        {t("clear-filters")}
-                    </Button>
-                )}
-            </FieldGroup>
-        </aside>
+        <FilterSidebar
+            hasFilters={Boolean(filters.quiz || filters.class)}
+            onClear={onReset}
+        >
+            <Field>
+                <FieldLabel htmlFor="result-quiz-filter">
+                    {t("quiz-title")}
+                </FieldLabel>
+                <Input
+                    id="result-quiz-filter"
+                    value={filters.quiz}
+                    placeholder={t("search-quiz")}
+                    onChange={(event) => {
+                        onFilterChange("quiz", event.target.value)
+                    }}
+                />
+            </Field>
+            <Field>
+                <FieldLabel htmlFor="result-class-filter">
+                    {t("class-name")}
+                </FieldLabel>
+                <select
+                    id="result-class-filter"
+                    className={NATIVE_SELECT_CLASS_NAME}
+                    value={filters.class}
+                    disabled={areClassesLoading}
+                    onChange={(event) => {
+                        onFilterChange("class", event.target.value)
+                    }}
+                >
+                    <option value="">{t("all-classes")}</option>
+                    {classes.map((studentClass) => (
+                        <option
+                            key={studentClass.id}
+                            value={String(studentClass.id)}
+                        >
+                            {formatClassName(
+                                studentClass.grade_level,
+                                studentClass.name
+                            )}
+                        </option>
+                    ))}
+                </select>
+            </Field>
+        </FilterSidebar>
     )
 }
 

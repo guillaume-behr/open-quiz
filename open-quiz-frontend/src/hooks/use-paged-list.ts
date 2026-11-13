@@ -3,9 +3,7 @@ import { useCallback, useState } from "react"
 import type { Page } from "@/api/types"
 import { useResource, type Resource } from "@/hooks/use-resource"
 
-export type PagedList<T, F extends Record<string, string>> = Resource<
-    Page<T>
-> & {
+type PagedList<T, F extends Record<string, string>> = Resource<Page<T>> & {
     /** Items of the page on screen, empty until the first load settles. */
     items: T[]
     /** The page on screen: the one the API chose while an item is focused. */

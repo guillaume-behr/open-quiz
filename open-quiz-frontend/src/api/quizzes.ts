@@ -1,6 +1,7 @@
 import { PAGE_SIZE } from "@/lib/utils"
 
 import { request, requestBlob, requestPage, requestParsed } from "./client"
+import { ALL_PAGES_SIZE, fetchAllPages } from "./pagination"
 import { StudentQuizJoinSchema, StudentQuizSessionSchema } from "./schemas"
 import type {
     MakeupJoin,
@@ -39,13 +40,8 @@ export function getQuizzes(
     return requestPage<Quiz>(`/api/quizzes?${params}`, { signal })
 }
 
-export async function getAllQuizzes(): Promise<Quiz[]> {
-    const firstPage = await getQuizzes(1, "", "", 100)
-    const quizzes = [...firstPage.items]
-    for (let page = 2; page <= firstPage.totalPages; page += 1) {
-        quizzes.push(...(await getQuizzes(page, "", "", 100)).items)
-    }
-    return quizzes
+export function getAllQuizzes(): Promise<Quiz[]> {
+    return fetchAllPages((page) => getQuizzes(page, "", "", ALL_PAGES_SIZE))
 }
 
 export function getTrainingQuestionBanks(
@@ -202,7 +198,7 @@ export type QuizResultQuery = {
 export function getQuizResults(
     page = 1,
     query: QuizResultQuery = {},
-    pageSize = 8,
+    pageSize = PAGE_SIZE,
     signal?: AbortSignal
 ): Promise<Page<QuizSession>> {
     const params = new URLSearchParams({

@@ -9,6 +9,7 @@ open-quiz-frontend/src/lib/errors.ts: `pnpm test` fails otherwise.
 from enum import StrEnum
 
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 
 
 class ErrorCode(StrEnum):
@@ -123,6 +124,7 @@ class ErrorCode(StrEnum):
     TEACHER_IN_ACTIVE_EXAM = "TEACHER_IN_ACTIVE_EXAM"
     USERNAME_TAKEN = "USERNAME_TAKEN"
     DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE"
+    SERVER_BUSY = "SERVER_BUSY"
     REQUEST_CONTENT_LENGTH_INVALID = "REQUEST_CONTENT_LENGTH_INVALID"
     REQUEST_BODY_TOO_LARGE = "REQUEST_BODY_TOO_LARGE"
 
@@ -152,3 +154,32 @@ class ApiError(HTTPException):
             headers=headers,
         )
         self.code = code
+
+
+class ServerBusyError(ApiError):
+    """Too much work in progress to take this request now.
+
+    The database pool or a bounded resource such as image decoding stayed
+    busy for longer than the request may wait; a retry shortly after may
+    succeed.
+    """
+
+    RETRY_AFTER_SECONDS = 5
+
+    def __init__(self) -> None:
+        super().__init__(
+            503,
+            ErrorCode.SERVER_BUSY,
+            "Le serveur est occupé. Réessayez dans un instant.",
+            headers={"Retry-After": str(self.RETRY_AFTER_SECONDS)},
+        )
+
+
+def server_busy_response() -> JSONResponse:
+    """ServerBusyError as a response, for code outside FastAPI's error handling."""
+    busy = ServerBusyError()
+    return JSONResponse(
+        status_code=busy.status_code,
+        content={"detail": busy.detail},
+        headers=busy.headers,
+    )

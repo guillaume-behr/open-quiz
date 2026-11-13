@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit_event
 from app.auth_guards import (
+    check_password,
     enforce_global_auth_limit,
     password_rate_subject,
     trusted_password_rate_subject,
@@ -36,7 +37,6 @@ from app.schemas import (
     TwoFactorVerifyRequest,
 )
 from app.security import (
-    DUMMY_PASSWORD_HASH,
     access_token_version,
     create_access_token,
     create_refresh_token,
@@ -52,9 +52,9 @@ from app.security import (
     provisioning_uri,
     refresh_request_proof,
     two_factor_trust_version,
-    verify_password_and_update,
     verify_totp_code,
 )
+from app.services.credentials import revoke_refresh_sessions, revoke_user_sessions
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 REFRESH_COOKIE = "open_quiz_refresh"
@@ -287,14 +287,7 @@ def revoke_refresh_family(
     family_session_ids = select(RefreshSessionFamily.session_id).where(
         RefreshSessionFamily.family_id == family.family_id
     )
-    session.execute(
-        update(RefreshSession)
-        .where(
-            RefreshSession.id.in_(family_session_ids),
-            RefreshSession.revoked_at.is_(None),
-        )
-        .values(revoked_at=now)
-    )
+    revoke_refresh_sessions(session, now, RefreshSession.id.in_(family_session_ids))
     session.commit()
     return True
 
@@ -316,41 +309,17 @@ def password_attempt_subject(
 
 def password_user(payload: LoginRequest, request: Request, session: Session) -> User:
     """The active account whose password this is, within the attempt limits."""
-    user = session.scalar(select(User).where(User.username == payload.username))
-    # Resolving the account before the budget check is what lets a real
-    # teacher still sign in while an anonymous flood holds the budget open.
-    enforce_global_auth_limit(
+    account = session.scalar(select(User).where(User.username == payload.username))
+    active_user = account if account is not None and account.is_active else None
+    user, upgraded_hash = check_password(
+        payload.password,
+        password_attempt_subject(payload.username, account, request, session),
+        active_user,
+        active_user.password_hash if active_user else None,
         request,
-        known_identity=user is not None and user.is_active,
+        session,
+        audit_prefix="auth",
     )
-    limiter = request.app.state.login_rate_limiter
-    rate_subject = password_attempt_subject(payload.username, user, request, session)
-    retry_after = limiter.reserve(rate_subject)
-    if retry_after:
-        audit_event("auth.login_rate_limited")
-        raise ApiError(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            ErrorCode.AUTH_RATE_LIMITED,
-            "Trop de tentatives de connexion",
-            headers={"Retry-After": str(retry_after)},
-        )
-    encoded_password = user.password_hash if user else DUMMY_PASSWORD_HASH
-    # Hashing can wait for a free slot: end the transaction first, so the
-    # request does not hold a pooled connection meanwhile.
-    session.commit()
-    password_valid, upgraded_hash = verify_password_and_update(
-        payload.password, encoded_password
-    )
-    if user is None or not user.is_active or not password_valid:
-        audit_event("auth.login_failed")
-        raise ApiError(
-            status.HTTP_401_UNAUTHORIZED,
-            ErrorCode.AUTH_INVALID_CREDENTIALS,
-            "Identifiants invalides",
-        )
-    # Give back only this attempt: clearing the whole bucket would hand
-    # whoever is guessing this password a fresh allowance at every sign-in.
-    limiter.release(rate_subject)
     if upgraded_hash is not None:
         # Tokens are bound to the hash, so they are issued from the new one.
         user.password_hash = upgraded_hash
@@ -720,15 +689,10 @@ def retire_refresh_session(
             RefreshSessionFamily.session_id == stored_session.id
         )
     ).scalar_one()
-    result = session.execute(
-        update(RefreshSession)
-        .where(
-            RefreshSession.id == stored_session.id,
-            RefreshSession.revoked_at.is_(None),
-        )
-        .values(revoked_at=now)
-    )
-    if affected_rows(result) != 1:
+    if (
+        revoke_refresh_sessions(session, now, RefreshSession.id == stored_session.id)
+        != 1
+    ):
         session.rollback()
         family_revoked = revoke_refresh_family(session, stored_session.id, now)
         audit_event(
@@ -756,14 +720,9 @@ def refreshable_user(
         or two_factor is None
         or not two_factor.confirmed
     ):
-        session.execute(
-            update(RefreshSession)
-            .where(
-                RefreshSession.user_id == stored_session.user_id,
-                RefreshSession.revoked_at.is_(None),
-            )
-            .values(revoked_at=now)
-        )
+        # Pending challenges stay: one may be the setup a 2FA reset started,
+        # which an old tab refreshing its session must not cancel.
+        revoke_user_sessions(session, stored_session.user_id, now, challenges=False)
         session.commit()
         raise ApiError(
             status.HTTP_401_UNAUTHORIZED,
@@ -822,13 +781,10 @@ def logout(
     if raw_token and not validate_refresh_proof(request, raw_token):
         audit_event("auth.logout_proof_rejected")
     elif raw_token:
-        session.execute(
-            update(RefreshSession)
-            .where(
-                RefreshSession.token_hash == hash_refresh_token(raw_token),
-                RefreshSession.revoked_at.is_(None),
-            )
-            .values(revoked_at=int(time()))
+        revoke_refresh_sessions(
+            session,
+            int(time()),
+            RefreshSession.token_hash == hash_refresh_token(raw_token),
         )
         session.commit()
     clear_refresh_cookie(response, request)

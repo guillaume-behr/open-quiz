@@ -16,6 +16,8 @@ import { LibraryBig, LoaderCircle, School } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+import { LoadingState } from "@/components/ui/loading-state"
+import { AnimatedGrid } from "@/components/ui/animated-grid"
 
 /** The training question count of each assigned bank. */
 function questionCounts(banks: QuestionBank[]): Map<number, number> {
@@ -191,18 +193,7 @@ export function ClassTrainingBanksPanel() {
     }
 
     if (isLoading) {
-        return (
-            <div
-                className="flex min-h-48 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle
-                    className="size-8 animate-spin text-primary motion-reduce:animate-none"
-                    aria-hidden="true"
-                />
-            </div>
-        )
+        return <LoadingState className="min-h-48" size={8} />
     }
 
     return (
@@ -285,16 +276,7 @@ export function ClassTrainingBanksPanel() {
                         help={t("training-needs-class")}
                     />
                 ) : isClassLoading ? (
-                    <div
-                        className="flex min-h-40 items-center justify-center"
-                        role="status"
-                        aria-label={t("page-loading")}
-                    >
-                        <LoaderCircle
-                            className="size-7 animate-spin text-primary motion-reduce:animate-none"
-                            aria-hidden="true"
-                        />
-                    </div>
+                    <LoadingState />
                 ) : eligibleBanks.length === 0 ? (
                     <EmptyState
                         title={t("no-question-bank")}
@@ -303,9 +285,9 @@ export function ClassTrainingBanksPanel() {
                         })}
                     />
                 ) : (
-                    <div
-                        key={eligibleBanks.map((bank) => bank.id).join(",")}
-                        className="mt-4 grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                    <AnimatedGrid
+                        ids={eligibleBanks.map((bank) => bank.id)}
+                        className="mt-4 gap-3 lg:grid-cols-2"
                     >
                         {eligibleBanks.map((bank) => {
                             const selected = selectedBankIds.includes(bank.id)
@@ -345,7 +327,7 @@ export function ClassTrainingBanksPanel() {
                                 </label>
                             )
                         })}
-                    </div>
+                    </AnimatedGrid>
                 )}
             </section>
             <Dialog

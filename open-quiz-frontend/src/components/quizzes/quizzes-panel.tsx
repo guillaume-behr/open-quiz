@@ -12,7 +12,6 @@ import type { GradeLevel, Quiz } from "@/api/types"
 import { printExamSubjects } from "@/components/quizzes/print-quiz"
 import { QuizFormDialog } from "@/components/quizzes/quiz-form-dialog"
 import {
-    availableQuestionCounts,
     emptyQuizForm,
     quizFormReducer,
 } from "@/components/quizzes/quiz-form-state"
@@ -32,6 +31,7 @@ import { type FormEvent, useCallback, useReducer, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PAGE_SIZE } from "@/lib/utils"
 import { apiErrorMessage } from "@/lib/errors"
+import { withPrintWindow } from "@/lib/print-window"
 
 type QuizzesPanelProps = {
     isCreateDialogOpen: boolean
@@ -90,10 +90,6 @@ export function QuizzesPanel({
     const [printClassId, setPrintClassId] = useState("")
     const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null)
 
-    const availableByDifficulty = availableQuestionCounts(
-        banks,
-        form.selectedBankIds
-    )
     const questionCount = Object.values(form.difficultyCounts).reduce(
         (total, count) => total + count,
         0
@@ -139,23 +135,18 @@ export function QuizzesPanel({
             (item) => String(item.id) === printClassId
         )
         if (!studentClass || studentClass.students.length === 0) return
-        const printWindow = window.open("", "_blank")
-        if (!printWindow) {
-            printing.setError(t("quiz-print-popup-error"))
-            return
-        }
-        printWindow.opener = null
-        try {
-            await printExamSubjects(
+        const opened = await withPrintWindow((printWindow) =>
+            printExamSubjects(
                 quizToPrint,
                 studentClass,
                 printWindow,
                 t,
                 i18n.resolvedLanguage ?? "fr"
             )
-        } catch (caught) {
-            printWindow.close()
-            throw caught
+        )
+        if (!opened) {
+            printing.setError(t("quiz-print-popup-error"))
+            return
         }
         setQuizToPrint(null)
         setPrintClassId("")
@@ -271,81 +262,13 @@ export function QuizzesPanel({
 
             <QuizFormDialog
                 open={isCreateDialogOpen || form.editingQuiz !== null}
-                editingQuiz={form.editingQuiz}
+                form={form}
+                dispatch={dispatchForm}
                 banks={banks}
                 gradeLevels={gradeLevels}
-                quizGradeLevel={form.gradeLevel}
-                title={form.title}
-                durationMinutes={form.durationMinutes}
-                selectedBankIds={form.selectedBankIds}
-                allowPreviousQuestions={form.allowPreviousQuestions}
-                allowAnswerReview={form.allowAnswerReview}
-                showProvisionalGrades={form.showProvisionalGrades}
-                allowNegativePoints={form.allowNegativePoints}
-                sameQuestionsForAll={form.sameQuestionsForAll}
-                difficultyCounts={form.difficultyCounts}
-                availableByDifficulty={availableByDifficulty}
                 isBusy={saving.isPending}
                 error={saving.error}
-                onTitleChange={(value) =>
-                    dispatchForm({ type: "set", field: "title", value })
-                }
-                onDurationChange={(value) =>
-                    dispatchForm({
-                        type: "set",
-                        field: "durationMinutes",
-                        value,
-                    })
-                }
-                onQuizGradeLevelChange={(gradeLevel) =>
-                    dispatchForm({ type: "grade-level", gradeLevel })
-                }
                 onDeleteGradeLevel={onDeleteGradeLevel}
-                onSelectedBankIdsChange={(ids) =>
-                    dispatchForm({ type: "banks", ids, banks })
-                }
-                onAllowPreviousQuestionsChange={(value) =>
-                    dispatchForm({
-                        type: "set",
-                        field: "allowPreviousQuestions",
-                        value,
-                    })
-                }
-                onAllowAnswerReviewChange={(value) =>
-                    dispatchForm({
-                        type: "set",
-                        field: "allowAnswerReview",
-                        value,
-                    })
-                }
-                onShowProvisionalGradesChange={(value) =>
-                    dispatchForm({
-                        type: "set",
-                        field: "showProvisionalGrades",
-                        value,
-                    })
-                }
-                onAllowNegativePointsChange={(value) =>
-                    dispatchForm({
-                        type: "set",
-                        field: "allowNegativePoints",
-                        value,
-                    })
-                }
-                onSameQuestionsForAllChange={(value) =>
-                    dispatchForm({
-                        type: "set",
-                        field: "sameQuestionsForAll",
-                        value,
-                    })
-                }
-                onDifficultyCountsChange={(value) =>
-                    dispatchForm({
-                        type: "set",
-                        field: "difficultyCounts",
-                        value,
-                    })
-                }
                 onClose={() => {
                     onCreateDialogOpenChange(false)
                     resetCreationForm()

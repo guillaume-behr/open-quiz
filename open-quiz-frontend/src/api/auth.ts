@@ -10,8 +10,7 @@ import { LoginResponseSchema, TokenResponseSchema, UserSchema } from "./schemas"
 import type { TwoFactorChallenge, User } from "./types"
 
 /** A browser that passed two-factor login today signs in without a code. */
-export type LoginResult =
-    TwoFactorChallenge | { status: "authenticated"; user: User }
+type LoginResult = TwoFactorChallenge | { status: "authenticated"; user: User }
 
 export async function login(
     username: string,

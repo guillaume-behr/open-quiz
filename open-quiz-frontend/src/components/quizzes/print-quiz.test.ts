@@ -102,14 +102,15 @@ describe("printExamSubjects", () => {
             "fr"
         )
         const doc = printWindow.document
-        // The print dialog waits for every image to load or fail.
+        // The copies are ready to print once every image loaded or failed.
+        let isReady = false
+        void printing.then(() => (isReady = true))
         await vi.waitFor(() => expect(doc.images.length).toBeGreaterThan(0))
-        expect(printWindow.print).not.toHaveBeenCalled()
+        expect(isReady).toBe(false)
         Array.from(doc.images).forEach((image, index) =>
             image.dispatchEvent(new Event(index === 0 ? "error" : "load"))
         )
         await printing
-        expect(printWindow.opener).toBeNull()
         expect(doc.title).toBe("Exam & co")
         expect(doc.documentElement.lang).toBe("fr")
         expect(doc.querySelectorAll("section.subject")).toHaveLength(2)
@@ -131,7 +132,6 @@ describe("printExamSubjects", () => {
         expect(api.getQuestionImage).toHaveBeenCalledTimes(1)
 
         for (const timer of timers) timer()
-        expect(printWindow.print).toHaveBeenCalled()
         expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2)
         for (const listener of listeners) listener()
         expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2)

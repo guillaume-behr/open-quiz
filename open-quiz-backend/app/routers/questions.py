@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
 from app.errors import ApiError, ErrorCode
+from app.image_responses import image_response
 from app.images import (
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
@@ -155,6 +156,24 @@ def list_questions(
     return load_question_responses(question_ids, session)
 
 
+def lock_bank_with_room(
+    question_bank_id: int, professor: ProfessorUser, session: Session
+) -> None:
+    """Lock the professor's bank until commit, if it can take one more question."""
+    owned_question_bank(question_bank_id, professor, session, for_update=True)
+    question_count = session.scalar(
+        select(func.count())
+        .select_from(Question)
+        .where(Question.question_bank_id == question_bank_id)
+    )
+    if (question_count or 0) >= MAX_QUESTIONS_PER_BANK:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_BANK_FULL,
+            "Cette banque a atteint le nombre maximal de questions",
+        )
+
+
 @router.post(
     "/{question_bank_id}/questions",
     response_model=QuestionResponse,
@@ -168,18 +187,7 @@ def create_question(
     image: Annotated[UploadFile | None, File()] = None,
 ) -> QuestionResponse:
     """Create a choice or written question, optionally with a private image."""
-    owned_question_bank(question_bank_id, professor, session, for_update=True)
-    question_count = session.scalar(
-        select(func.count())
-        .select_from(Question)
-        .where(Question.question_bank_id == question_bank_id)
-    )
-    if (question_count or 0) >= MAX_QUESTIONS_PER_BANK:
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUESTION_BANK_FULL,
-            "Cette banque a atteint le nombre maximal de questions",
-        )
+    lock_bank_with_room(question_bank_id, professor, session)
     try:
         question_payload = QuestionCreate.model_validate(json.loads(payload))
     except json.JSONDecodeError, ValidationError:
@@ -189,6 +197,10 @@ def create_question(
             "Question invalide",
         ) from None
 
+    # Decoding images can take a while: end the transaction first, so that
+    # neither the bank's lock nor a pooled connection waits on it, and check
+    # the bank again afterwards.
+    session.commit()
     image_data, image_content_type = normalized_uploaded_image(image)
 
     choice_images = [
@@ -204,6 +216,7 @@ def create_question(
             ErrorCode.QUESTION_IMAGES_TOO_LARGE,
             "Le volume total des images de la question est trop important",
         )
+    lock_bank_with_room(question_bank_id, professor, session)
     question, choices, code = add_question(
         question_bank_id,
         question_payload,
@@ -534,33 +547,25 @@ def delete_question(
 @router.get("/questions/{question_id}/image")
 def get_question_image(
     question_id: int,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> Response:
     """Return a private image attached to one of the professor's questions."""
-    question = session.scalar(
-        select(Question)
-        .join(QuestionBank, QuestionBank.id == Question.question_bank_id)
-        .where(
-            Question.id == question_id,
-            QuestionBank.owner_id == professor.id,
-        )
-    )
-    if question is None or question.image is None:
+    question = owned_question(question_id, professor, session)
+    if question.image_sha256 is None:
         raise ApiError(
             status.HTTP_404_NOT_FOUND,
             ErrorCode.IMAGE_NOT_FOUND,
             "Image de la question introuvable",
         )
-    return Response(
-        content=question.image.data,
-        media_type=question.image.content_type,
-    )
+    return image_response(question.image_sha256, request, session)
 
 
 @router.get("/choices/{choice_id}/image")
 def get_choice_image(
     choice_id: int,
+    request: Request,
     professor: ProfessorUser,
     session: DbSession,
 ) -> Response:
@@ -574,13 +579,10 @@ def get_choice_image(
             QuestionBank.owner_id == professor.id,
         )
     )
-    if choice is None or choice.image is None:
+    if choice is None or choice.image_sha256 is None:
         raise ApiError(
             status.HTTP_404_NOT_FOUND,
             ErrorCode.IMAGE_NOT_FOUND,
             "Image de la réponse introuvable",
         )
-    return Response(
-        content=choice.image.data,
-        media_type=choice.image.content_type,
-    )
+    return image_response(choice.image_sha256, request, session)

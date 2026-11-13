@@ -18,6 +18,8 @@ import { BarChart3, Dumbbell, LoaderCircle, Play } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
+import { LoadingState } from "@/components/ui/loading-state"
+import { AnimatedGrid } from "@/components/ui/animated-grid"
 
 export function TrainingQuizzesPanel({ token }: { token: string }) {
     const { t } = useTranslation()
@@ -95,18 +97,7 @@ export function TrainingQuizzesPanel({ token }: { token: string }) {
     }
 
     if (isLoading) {
-        return (
-            <div
-                className="flex min-h-48 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle
-                    className="size-8 animate-spin text-primary motion-reduce:animate-none"
-                    aria-hidden="true"
-                />
-            </div>
-        )
+        return <LoadingState className="min-h-48" size={8} />
     }
 
     return (
@@ -123,9 +114,9 @@ export function TrainingQuizzesPanel({ token }: { token: string }) {
                     <p className="mt-1 text-sm">{t("no-training-quiz-help")}</p>
                 </div>
             ) : (
-                <div
-                    key={sortedBanks.map((bank) => bank.id).join(",")}
-                    className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:grid-cols-2"
+                <AnimatedGrid
+                    ids={sortedBanks.map((bank) => bank.id)}
+                    className="gap-4 sm:grid-cols-2"
                 >
                     {sortedBanks.map((bank) => (
                         <article
@@ -172,7 +163,7 @@ export function TrainingQuizzesPanel({ token }: { token: string }) {
                             </Button>
                         </article>
                     ))}
-                </div>
+                </AnimatedGrid>
             )}
             <Dialog
                 open={historyBank !== null}

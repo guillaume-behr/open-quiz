@@ -10,47 +10,33 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { formatClassName } from "@/lib/utils"
-import type { FormEvent } from "react"
-import type { ReactNode } from "react"
+import { type FormEvent, type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 type ClassFormDialogProps = {
-    open: boolean
     editingClass: StudentClass | null
     classes: StudentClass[]
     gradeLevels: GradeLevel[]
-    className: string
-    gradeLevel: string
-    newGradeLevel: string
-    isAddingGradeLevel: boolean
     isBusy: boolean
     error: string | null
-    onClassNameChange: (value: string) => void
-    onGradeLevelChange: (value: string) => void
-    onNewGradeLevelChange: (value: string) => void
-    onAddingGradeLevelChange: (value: boolean) => void
     onDeleteGradeLevel: (level: GradeLevel) => Promise<void>
-    onAddGradeLevel: () => void
+    /** Creates a grade level; null when it failed (the error is shown). */
+    onAddGradeLevel: (name: string) => Promise<GradeLevel | null>
     onClose: () => void
-    onSubmit: (event: FormEvent<HTMLFormElement>) => void
+    onSubmit: (values: { name: string; gradeLevel: string }) => void
     studentManagement?: ReactNode
 }
 
+/**
+ * Creates a class, or edits one with its students. Mount it while it is
+ * open, keyed by the class, so each opening starts from that class.
+ */
 export function ClassFormDialog({
-    open,
     editingClass,
     classes,
     gradeLevels,
-    className,
-    gradeLevel,
-    newGradeLevel,
-    isAddingGradeLevel,
     isBusy,
     error,
-    onClassNameChange,
-    onGradeLevelChange,
-    onNewGradeLevelChange,
-    onAddingGradeLevelChange,
     onDeleteGradeLevel,
     onAddGradeLevel,
     onClose,
@@ -58,10 +44,30 @@ export function ClassFormDialog({
     studentManagement,
 }: ClassFormDialogProps) {
     const { t } = useTranslation()
+    const [className, setClassName] = useState(editingClass?.name ?? "")
+    const [gradeLevel, setGradeLevel] = useState(
+        editingClass?.grade_level ?? ""
+    )
+    const [newGradeLevel, setNewGradeLevel] = useState("")
+    const [isAddingGradeLevel, setIsAddingGradeLevel] = useState(false)
+
+    async function addGradeLevel() {
+        if (!newGradeLevel.trim()) return
+        const created = await onAddGradeLevel(newGradeLevel.trim())
+        if (!created) return
+        setGradeLevel(created.name)
+        setNewGradeLevel("")
+        setIsAddingGradeLevel(false)
+    }
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault()
+        onSubmit({ name: className.trim(), gradeLevel })
+    }
 
     return (
         <Dialog
-            open={open}
+            open
             onOpenChange={(nextOpen) => {
                 if (!nextOpen && !isBusy) onClose()
             }}
@@ -70,7 +76,7 @@ export function ClassFormDialog({
             size={editingClass ? "xl" : "md"}
         >
             <FieldGroup>
-                <form id="class-form" onSubmit={onSubmit}>
+                <form id="class-form" onSubmit={submit}>
                     <div className="grid items-start gap-4 md:grid-cols-2">
                         <GradeLevelField
                             id="class-grade"
@@ -79,11 +85,11 @@ export function ClassFormDialog({
                             newValue={newGradeLevel}
                             isAdding={isAddingGradeLevel}
                             disabled={isBusy}
-                            onChange={onGradeLevelChange}
-                            onNewValueChange={onNewGradeLevelChange}
-                            onAddingChange={onAddingGradeLevelChange}
+                            onChange={setGradeLevel}
+                            onNewValueChange={setNewGradeLevel}
+                            onAddingChange={setIsAddingGradeLevel}
                             onDelete={onDeleteGradeLevel}
-                            onAdd={onAddGradeLevel}
+                            onAdd={() => void addGradeLevel()}
                         />
                         <Field>
                             <FieldLabel htmlFor="class-name">
@@ -94,7 +100,7 @@ export function ClassFormDialog({
                                 list="existing-class-names"
                                 value={className}
                                 onChange={(event) =>
-                                    onClassNameChange(event.target.value)
+                                    setClassName(event.target.value)
                                 }
                                 placeholder={t("class-name-placeholder")}
                                 maxLength={120}

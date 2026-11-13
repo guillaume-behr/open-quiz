@@ -38,7 +38,8 @@ function appendRichText(
 
 /**
  * Writes one paper copy of the exam per student of the class into
- * printWindow, then opens the print dialog. Each copy draws and orders its
+ * printWindow, and resolves once its images are loaded, ready to print. Each
+ * copy draws and orders its
  * questions and choices from a seed, so printing again gives the same copies.
  */
 export async function printExamSubjects(
@@ -48,7 +49,6 @@ export async function printExamSubjects(
     t: TFunction,
     language: string
 ): Promise<void> {
-    printWindow.opener = null
     const questionGroups = await Promise.all(
         quiz.question_banks.map((bank) => getQuestions(bank.id))
     )
@@ -281,6 +281,4 @@ export async function printExamSubjects(
         once: true,
     })
     printWindow.setTimeout(releaseObjectUrls, 120_000)
-    printWindow.focus()
-    printWindow.setTimeout(() => printWindow.print(), 100)
 }

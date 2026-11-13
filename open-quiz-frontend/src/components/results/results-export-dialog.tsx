@@ -11,6 +11,7 @@ import { formatClassName, saveBlob } from "@/lib/utils"
 import { Download, LoaderCircle } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { LoadingState } from "@/components/ui/loading-state"
 
 type ExportProps = {
     classes: StudentClass[]
@@ -96,16 +97,7 @@ function ResultsExportForm({
     return (
         <>
             {quizList.isLoading || areClassesLoading ? (
-                <div
-                    className="flex min-h-32 items-center justify-center"
-                    role="status"
-                    aria-label={t("page-loading")}
-                >
-                    <LoaderCircle
-                        className="size-7 animate-spin text-primary motion-reduce:animate-none"
-                        aria-hidden="true"
-                    />
-                </div>
+                <LoadingState className="min-h-32" />
             ) : (
                 <FieldGroup>
                     <div className="grid items-start gap-4 sm:grid-cols-2">

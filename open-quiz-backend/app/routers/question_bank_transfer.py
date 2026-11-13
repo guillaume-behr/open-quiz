@@ -19,6 +19,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.dependencies import DbSession, ProfessorUser
 from app.enums import Difficulty
@@ -29,6 +30,7 @@ from app.models import (
     QuestionBank,
     QuestionChoice,
     QuestionCode,
+    StoredImage,
 )
 from app.question_records import (
     MAX_IMPORT_IMAGE_BYTES,
@@ -92,6 +94,30 @@ def download_import_example(
     )
 
 
+def exported_images(
+    session: Session, hashes: list[str | None]
+) -> dict[str | None, dict[str, str]]:
+    """The images among ``hashes`` as exported, keyed by hash, in one query.
+
+    Rows rather than StoredImage instances, so the session keeps no image
+    once the question that needed it is written.
+    """
+    wanted = {image_hash for image_hash in hashes if image_hash is not None}
+    if not wanted:
+        return {}
+    return {
+        image_hash: {
+            "content_type": content_type,
+            "data_base64": b64encode(data).decode(),
+        }
+        for image_hash, content_type, data in session.execute(
+            select(
+                StoredImage.sha256, StoredImage.content_type, StoredImage.data
+            ).where(StoredImage.sha256.in_(wanted))
+        )
+    }
+
+
 @router.get("/{question_bank_id}/export")
 def export_questions(
     question_bank_id: int,
@@ -105,6 +131,10 @@ def export_questions(
     grade_level = question_bank.grade_level
     chapter = question_bank.chapter
     session_factory = request.app.state.session_factory
+    # The response streams after the route returns, while the request's
+    # session stays open until it is sent: release its connection now, since
+    # the export reads through a session of its own.
+    session.commit()
 
     def stream_export() -> Iterator[str]:
         yield '{\n  "version": 1,\n  "question_bank": '
@@ -116,27 +146,39 @@ def export_questions(
         yield ',\n  "questions": ['
         first = True
         with session_factory() as export_session:
-            # Load one question at a time and expunge it once written, so that
-            # memory holds a single question's images: a question kept from an
-            # earlier query would be detached and could not load its image.
-            question_ids = list(
+            # Questions, choices and code in one query each; images, the bulk
+            # of a bank, one question at a time so that memory holds a single
+            # question's images.
+            questions = list(
                 export_session.scalars(
-                    select(Question.id)
+                    select(Question)
                     .where(Question.question_bank_id == bank_id)
                     .order_by(Question.created_at, Question.id)
                 )
             )
-            for question_id in question_ids:
-                question = export_session.get_one(Question, question_id)
-                choices = list(
-                    export_session.scalars(
-                        select(QuestionChoice)
-                        .where(QuestionChoice.question_id == question.id)
-                        .order_by(QuestionChoice.position)
-                    )
+            choices_by_question: dict[int, list[QuestionChoice]] = {}
+            for choice in export_session.scalars(
+                select(QuestionChoice)
+                .join(Question, Question.id == QuestionChoice.question_id)
+                .where(Question.question_bank_id == bank_id)
+                .order_by(QuestionChoice.question_id, QuestionChoice.position)
+            ):
+                choices_by_question.setdefault(choice.question_id, []).append(choice)
+            codes = {
+                code.question_id: code
+                for code in export_session.scalars(
+                    select(QuestionCode)
+                    .join(Question, Question.id == QuestionCode.question_id)
+                    .where(Question.question_bank_id == bank_id)
                 )
-                code = export_session.scalar(
-                    select(QuestionCode).where(QuestionCode.question_id == question.id)
+            }
+            for question in questions:
+                choices = choices_by_question.get(question.id, [])
+                code = codes.get(question.id)
+                images = exported_images(
+                    export_session,
+                    [question.image_sha256]
+                    + [choice.image_sha256 for choice in choices],
                 )
                 exported_question = {
                     "prompt": question.prompt,
@@ -150,16 +192,7 @@ def export_questions(
                             "label": choice.label,
                             "is_correct": choice.is_correct,
                             "points": choice.points,
-                            "image": (
-                                {
-                                    "content_type": choice.image.content_type,
-                                    "data_base64": b64encode(
-                                        choice.image.data
-                                    ).decode(),
-                                }
-                                if choice.image is not None
-                                else None
-                            ),
+                            "image": images.get(choice.image_sha256),
                             "code_language": choice.code_language,
                             "code_content": choice.code_content,
                         }
@@ -167,14 +200,7 @@ def export_questions(
                     ],
                     "code_language": code.language if code else None,
                     "code_content": code.content if code else None,
-                    "image": (
-                        {
-                            "content_type": question.image.content_type,
-                            "data_base64": b64encode(question.image.data).decode(),
-                        }
-                        if question.image is not None
-                        else None
-                    ),
+                    "image": images.get(question.image_sha256),
                 }
                 yield (",\n" if not first else "\n") + json.dumps(
                     exported_question,
@@ -182,7 +208,6 @@ def export_questions(
                     indent=4,
                 )
                 first = False
-                export_session.expunge_all()
         yield "\n  ]\n}\n"
 
     return StreamingResponse(
@@ -212,6 +237,9 @@ def import_question_bank(
     session: DbSession,
 ) -> QuestionBatchImportResponse:
     """Create a bank from a JSON batch and atomically import its questions."""
+    # Decoding the images can take minutes: end the transaction the
+    # authentication opened, so that no pooled connection waits on it.
+    session.commit()
     decoded_images: list[tuple[bytes | None, str | None]] = []
     decoded_choice_images: list[list[tuple[bytes | None, str | None]]] = []
     total_image_bytes = 0

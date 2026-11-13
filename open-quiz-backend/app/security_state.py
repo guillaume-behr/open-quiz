@@ -9,7 +9,7 @@ from hashlib import sha256
 from hmac import new as hmac_new
 from time import time
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.audit import audit_event
@@ -17,6 +17,7 @@ from app.config import Settings
 from app.database import MAINTENANCE_LOCK_KEY
 from app.models import RefreshSession, RefreshSessionFamily, SecurityState, User
 from app.security import hash_password, verify_password
+from app.services.credentials import revoke_refresh_sessions, revoke_user_sessions
 
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
 MANAGED_ADMIN_KEY = "managed_admin_user_id"
@@ -58,22 +59,14 @@ def revoke_sessions_on_jwt_rotation(
             .limit(1)
         )
         if unmapped_session is not None:
-            session.execute(
-                update(RefreshSession)
-                .where(RefreshSession.revoked_at.is_(None))
-                .values(revoked_at=now)
-            )
+            revoke_refresh_sessions(session, now)
             audit_event("security.legacy_sessions_revoked")
         session.add(SecurityState(key=JWT_FINGERPRINT_KEY, value=fingerprint))
     elif fingerprint_state.value == former_jwt_secret_fingerprint(settings):
         # Stored by an earlier release for the same secrets: carry it over.
         fingerprint_state.value = fingerprint
     elif fingerprint_state.value != fingerprint:
-        session.execute(
-            update(RefreshSession)
-            .where(RefreshSession.revoked_at.is_(None))
-            .values(revoked_at=now)
-        )
+        revoke_refresh_sessions(session, now)
         fingerprint_state.value = fingerprint
         audit_event("security.jwt_secret_rotated_sessions_revoked")
 
@@ -123,14 +116,7 @@ def managed_administrator(session: Session, settings: Settings, now: int) -> Use
             if stale_admin.id != admin_user.id:
                 stale_admin.is_admin = False
                 stale_admin.is_active = False
-                session.execute(
-                    update(RefreshSession)
-                    .where(
-                        RefreshSession.user_id == stale_admin.id,
-                        RefreshSession.revoked_at.is_(None),
-                    )
-                    .values(revoked_at=now)
-                )
+                revoke_user_sessions(session, stale_admin.id, now)
                 audit_event(
                     "security.stale_administrator_disabled",
                     user_id=stale_admin.id,
@@ -174,14 +160,7 @@ def apply_administrator_settings(
     admin_user.is_active = True
     if not verify_password(settings.admin_password, admin_user.password_hash):
         admin_user.password_hash = hash_password(settings.admin_password)
-        session.execute(
-            update(RefreshSession)
-            .where(
-                RefreshSession.user_id == admin_user.id,
-                RefreshSession.revoked_at.is_(None),
-            )
-            .values(revoked_at=now)
-        )
+        revoke_user_sessions(session, admin_user.id, now)
         audit_event(
             "security.administrator_password_rotated_sessions_revoked",
             user_id=admin_user.id,
