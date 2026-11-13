@@ -4,13 +4,14 @@ import tomllib
 from dataclasses import Field, dataclass, fields
 from dataclasses import field as dataclass_field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import ParseResult, urlparse
 
 from dotenv import load_dotenv
 from pydantic import Field as PydanticField
 from pydantic import create_model
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from starlette.requests import HTTPConnection
 
 from app.core.audit import audit_event
 
@@ -333,6 +334,15 @@ def environment_model() -> type[BaseSettings]:
     return create_model(
         "EnvironmentSettings", __base__=EnvironmentSettings, **definitions
     )
+
+
+def app_settings(connection: HTTPConnection) -> Settings:
+    """The settings the running app was created with, typed.
+
+    ``app.state`` is untyped, so reading ``app.state.settings`` directly
+    hides every settings access from the type checker.
+    """
+    return cast(Settings, connection.app.state.settings)
 
 
 def get_settings() -> Settings:

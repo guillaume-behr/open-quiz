@@ -1,7 +1,7 @@
 import { test as base, expect } from "@playwright/test"
 
 export { expect }
-export type { Page, Request, Route, WebSocketRoute } from "@playwright/test"
+export type { Page, Request, WebSocketRoute } from "@playwright/test"
 
 /**
  * Fails the test on any Content Security Policy violation, whichever server

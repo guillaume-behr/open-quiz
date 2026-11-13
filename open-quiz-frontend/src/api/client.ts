@@ -56,14 +56,18 @@ export class ApiError extends Error {
         this.name = "ApiError"
         this.status = status
         this.detail = detail
-        this.code =
-            typeof detail === "object" &&
-            detail !== null &&
-            "code" in detail &&
-            typeof detail.code === "string"
-                ? detail.code
-                : null
+        this.code = errorCode(detail)
     }
+}
+
+/** The `code` of an error `detail`, when the server gave one. */
+function errorCode(detail: unknown): string | null {
+    return typeof detail === "object" &&
+        detail !== null &&
+        "code" in detail &&
+        typeof detail.code === "string"
+        ? detail.code
+        : null
 }
 
 /**
@@ -110,13 +114,7 @@ async function errorFrom(response: Response): Promise<Error> {
     }
     // FastAPI validation failures return `detail` as an array of issues.
     const detail = typeof body.detail === "string" ? body.detail : null
-    const code =
-        typeof body.detail === "object" &&
-        body.detail !== null &&
-        "code" in body.detail &&
-        typeof body.detail.code === "string"
-            ? body.detail.code
-            : null
+    const code = errorCode(body.detail)
     return new ApiError(
         // Never shown as is: screens show apiErrorMessage, a translated text.
         detail ?? code ?? `Request failed with status ${response.status}`,
@@ -287,6 +285,20 @@ export async function requestParsed<S extends v.GenericSchema>(
     return parseResponse(schema, body, response.status)
 }
 
+/**
+ * A whole-number paging header, or `fallback` when it is missing or not a
+ * number of at least `minimum`, so a bad header never yields NaN pages.
+ */
+function headerCount(
+    response: Response,
+    name: string,
+    fallback: number,
+    minimum: number
+): number {
+    const value = Number(response.headers.get(name) ?? Number.NaN)
+    return Number.isInteger(value) && value >= minimum ? value : fallback
+}
+
 export async function requestPage<T>(
     path: string,
     options: RequestOptions = {},
@@ -295,11 +307,14 @@ export async function requestPage<T>(
     const response = await authenticatedFetch(path, options, allowRefresh)
 
     const items = (await response.json()) as T[]
-    const page = Number(response.headers.get("X-Page") ?? 1)
-    const pageSize = Number(
-        response.headers.get("X-Page-Size") ?? Math.max(items.length, 1)
+    const page = headerCount(response, "X-Page", 1, 1)
+    const pageSize = headerCount(
+        response,
+        "X-Page-Size",
+        Math.max(items.length, 1),
+        1
     )
-    const total = Number(response.headers.get("X-Total-Count") ?? items.length)
+    const total = headerCount(response, "X-Total-Count", items.length, 0)
     return {
         items,
         page,

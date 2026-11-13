@@ -73,7 +73,9 @@ def owned_student_account(
     )
     if account is None:
         raise ApiError(
-            404, ErrorCode.STUDENT_ACCOUNT_NOT_FOUND, "Compte élève introuvable"
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.STUDENT_ACCOUNT_NOT_FOUND,
+            "Compte élève introuvable",
         )
     return account
 

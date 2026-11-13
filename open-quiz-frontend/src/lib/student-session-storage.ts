@@ -12,7 +12,7 @@ export const STUDENT_TOKEN_STORAGE_KEY = "open-quiz-student-access-token"
 export const QUIZ_SESSION_STORAGE_KEY = "open-quiz-student-session"
 export const TRAINING_SESSION_STORAGE_KEY = "open-quiz-training-session"
 
-export const STUDENT_STORAGE_KEYS = [
+const STUDENT_STORAGE_KEYS = [
     STUDENT_TOKEN_STORAGE_KEY,
     QUIZ_SESSION_STORAGE_KEY,
     TRAINING_SESSION_STORAGE_KEY,

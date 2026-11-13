@@ -407,7 +407,7 @@ def assign_student_account(
         )
         if active_class_id is not None:
             raise ApiError(
-                409,
+                status.HTTP_409_CONFLICT,
                 ErrorCode.STUDENT_TRANSFER_DURING_SESSION,
                 "Un élève ne peut pas être transféré pendant une session active",
             )
@@ -429,7 +429,7 @@ def assign_student_account(
     except IntegrityError:
         session.rollback()
         raise ApiError(
-            409,
+            status.HTTP_409_CONFLICT,
             ErrorCode.STUDENT_IDENTIFIER_TAKEN,
             "Cet identifiant existe déjà dans la classe",
         ) from None
@@ -458,11 +458,15 @@ def unassign_student_account(
     )
     if membership is None:
         raise ApiError(
-            404, ErrorCode.CLASS_ASSIGNMENT_NOT_FOUND, "Affectation introuvable"
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.CLASS_ASSIGNMENT_NOT_FOUND,
+            "Affectation introuvable",
         )
     if class_has_active_exam_session(class_id, session):
         raise ApiError(
-            409, ErrorCode.CLASS_HAS_ACTIVE_SESSION, "La classe a une session active"
+            status.HTTP_409_CONFLICT,
+            ErrorCode.CLASS_HAS_ACTIVE_SESSION,
+            "La classe a une session active",
         )
     delete_student_membership(membership.id, session)
     session.commit()

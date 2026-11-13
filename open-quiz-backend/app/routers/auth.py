@@ -18,6 +18,7 @@ from app.core.auth_guards import (
     two_factor_rate_subject,
     validate_origin,
 )
+from app.core.config import app_settings
 from app.core.database import affected_rows
 from app.core.dependencies import DbSession
 from app.core.errors import ApiError, ErrorCode
@@ -63,6 +64,9 @@ REFRESH_PROOF_HEADER = "X-Refresh-Proof"
 # two-factor login. Only the login endpoint ever needs to read it.
 TWO_FACTOR_TRUST_COOKIE = "open_quiz_two_factor_trust"
 TWO_FACTOR_TRUST_COOKIE_PATH = "/api/auth/login"
+# Signed-in devices kept per account; signing in on one more drops the oldest.
+MAX_REFRESH_SESSIONS_PER_USER = 10
+SECONDS_PER_DAY = 86400
 
 
 def set_refresh_cookie(
@@ -71,7 +75,7 @@ def set_refresh_cookie(
     request: Request,
     expires_at: int,
 ) -> None:
-    settings = request.app.state.settings
+    settings = app_settings(request)
     response.set_cookie(
         key=REFRESH_COOKIE,
         value=token,
@@ -84,7 +88,7 @@ def set_refresh_cookie(
 
 
 def clear_refresh_cookie(response: Response, request: Request) -> None:
-    settings = request.app.state.settings
+    settings = app_settings(request)
     response.delete_cookie(
         REFRESH_COOKIE,
         path="/api/auth",
@@ -101,7 +105,7 @@ def current_two_factor_trust_version(
     return two_factor_trust_version(
         user.password_hash,
         two_factor.encrypted_secret,
-        request.app.state.settings.jwt_secret,
+        app_settings(request).jwt_secret,
         user.access_token_generation,
     )
 
@@ -114,7 +118,7 @@ def set_two_factor_trust_cookie(
     timezone_name: str | None,
 ) -> None:
     """Let this browser skip the code for the rest of the user's day."""
-    settings = request.app.state.settings
+    settings = app_settings(request)
     if not settings.two_factor_browser_trust:
         return
     now = datetime.now(UTC)
@@ -144,7 +148,7 @@ def browser_is_trusted(
 
     The cookie alone opens nothing: the caller has just checked the password.
     """
-    settings = request.app.state.settings
+    settings = app_settings(request)
     token = request.cookies.get(TWO_FACTOR_TRUST_COOKIE)
     if not settings.two_factor_browser_trust or not token or not two_factor.confirmed:
         return False
@@ -163,7 +167,7 @@ def validate_refresh_proof(request: Request, raw_token: str | None) -> bool:
         return False
     expected_proof = refresh_request_proof(
         raw_token,
-        request.app.state.settings.jwt_secret,
+        app_settings(request).jwt_secret,
     )
     return compare_digest(supplied_proof, expected_proof)
 
@@ -177,12 +181,12 @@ def issue_session(
     family_id: str | None = None,
     expires_at: int | None = None,
 ) -> TokenResponse:
-    settings = request.app.state.settings
+    settings = app_settings(request)
     now = int(time())
     session_expires_at = (
         expires_at
         if expires_at is not None
-        else now + settings.refresh_token_days * 86400
+        else now + settings.refresh_token_days * SECONDS_PER_DAY
     )
     # Expired sessions are swept by the hourly maintenance, not on every
     # sign-in and refresh; an expired one is refused anyway.
@@ -194,7 +198,8 @@ def issue_session(
                 RefreshSession.revoked_at.is_(None),
             )
             .order_by(RefreshSession.id.desc())
-            .offset(9)
+            # The session issued below takes the last place.
+            .offset(MAX_REFRESH_SESSIONS_PER_USER - 1)
         )
     )
     if older_session_ids:
@@ -262,7 +267,7 @@ def issue_two_factor_challenge(
     )
     token, token_id_hash, expires_at = create_two_factor_token(
         user_id,
-        request.app.state.settings.jwt_secret,
+        app_settings(request).jwt_secret,
         purpose,
     )
     session.add(
@@ -361,7 +366,7 @@ def begin_two_factor_setup(
     session: Session,
 ) -> LoginResponse:
     """Store a fresh authenticator secret and challenge its enrollment."""
-    settings = request.app.state.settings
+    settings = app_settings(request)
     secret = generate_totp_secret()
     encrypted_secret = encrypt_totp_secret(
         secret,
@@ -444,7 +449,7 @@ def challenged_user(
     challenge_token: str, request: Request, session: Session, now: int
 ) -> tuple[User, TwoFactorCredential, str]:
     """The account a live two-factor challenge belongs to, and the challenge id."""
-    settings = request.app.state.settings
+    settings = app_settings(request)
     try:
         decoded = decode_two_factor_token(
             challenge_token,
@@ -536,7 +541,7 @@ def matched_totp_counter(
     two_factor: TwoFactorCredential, user: User, code: str, request: Request
 ) -> int:
     """The time step the submitted code matches, never one already used."""
-    settings = request.app.state.settings
+    settings = app_settings(request)
     try:
         secret = decrypt_totp_secret(
             two_factor.encrypted_secret,
@@ -799,7 +804,7 @@ def logout(
         session.commit()
     clear_refresh_cookie(response, request)
     if payload is not None and payload.forget_browser:
-        settings = request.app.state.settings
+        settings = app_settings(request)
         response.delete_cookie(
             TWO_FACTOR_TRUST_COOKIE,
             path=TWO_FACTOR_TRUST_COOKIE_PATH,

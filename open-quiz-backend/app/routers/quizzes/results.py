@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_event
+from app.core.config import app_settings
 from app.core.dependencies import DbSession, ProfessorUser, current_student
 from app.core.errors import ApiError, ErrorCode
 from app.core.pagination import (
@@ -75,7 +76,7 @@ router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
 def exam_result_cutoff(request: Request) -> datetime:
     """Start time before which a finished exam is past its result retention."""
-    retention_days = request.app.state.settings.quiz_result_retention_days
+    retention_days = app_settings(request).quiz_result_retention_days
     return datetime.now(UTC) - timedelta(days=retention_days)
 
 

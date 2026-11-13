@@ -20,7 +20,7 @@ export function serverClockAnchor(
 }
 
 /** The server's current time, or the client's when no anchor is known. */
-export function serverTimeNow(anchor: ServerClockAnchor | null): number {
+function serverTimeNow(anchor: ServerClockAnchor | null): number {
     if (!anchor) return Date.now()
     return anchor.serverTime + (performance.now() - anchor.monotonicTime)
 }
@@ -37,7 +37,7 @@ export function secondsLeft(
 }
 
 // Minutes left at which a screen reader hears how much time remains.
-export const TIMER_ANNOUNCEMENT_MINUTES = [10, 5, 1] as const
+const TIMER_ANNOUNCEMENT_MINUTES = [10, 5, 1] as const
 
 /**
  * The threshold the countdown just crossed, if any.
