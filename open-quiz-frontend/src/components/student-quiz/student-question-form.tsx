@@ -10,8 +10,8 @@ import { indentCode } from "@/components/question-banks/code-editor-utils"
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
-import { LoaderCircle } from "lucide-react"
-import type { FormEvent } from "react"
+import { ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react"
+import { type FormEvent, useState } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { ProtectedQuizImage } from "./protected-quiz-image"
@@ -158,10 +158,17 @@ export function StudentQuestionForm({
     )
 }
 
+/** How many question numbers the navigation bar shows at once. */
+export const QUESTION_NAVIGATION_PAGE_SIZE = 10
+
 /**
  * The numbered back-navigation, outside the question card: a bar fixed at
  * the bottom centre of the screen, so it stays in reach on a long question.
  * Portalled to the body so no ancestor's transform can unpin it.
+ *
+ * Every question is numbered, ten at a time with arrows beyond that: the
+ * current one in the primary colour, answered ones plain, the ones reached
+ * but unanswered in grey, and those not seen yet in dark grey, disabled.
  */
 function QuestionNavigation({
     session,
@@ -174,6 +181,34 @@ function QuestionNavigation({
 }) {
     const { t } = useTranslation()
     const questionNumber = session.question_number ?? 1
+    const total = session.total_questions
+    const pageCount = Math.max(
+        1,
+        Math.ceil(total / QUESTION_NAVIGATION_PAGE_SIZE)
+    )
+    const currentPage = Math.floor(
+        (questionNumber - 1) / QUESTION_NAVIGATION_PAGE_SIZE
+    )
+    // The page the student browsed to, until the question changes: moving
+    // to another question brings back the page that holds it.
+    const [browsed, setBrowsed] = useState({
+        questionNumber,
+        page: currentPage,
+    })
+    const page =
+        browsed.questionNumber === questionNumber
+            ? Math.min(browsed.page, pageCount - 1)
+            : currentPage
+    const showPage = (next: number) =>
+        setBrowsed({ questionNumber, page: next })
+
+    const first = page * QUESTION_NAVIGATION_PAGE_SIZE + 1
+    const numbers = Array.from(
+        { length: Math.min(QUESTION_NAVIGATION_PAGE_SIZE, total - first + 1) },
+        (_, index) => first + index
+    )
+    const accessible = new Set(session.accessible_question_numbers)
+    const answered = new Set(session.answered_question_numbers)
 
     return createPortal(
         <div
@@ -181,27 +216,48 @@ function QuestionNavigation({
             dir="ltr"
         >
             <nav
-                className="pointer-events-auto max-w-full overflow-x-auto rounded-2xl border bg-secondary px-3 py-2 shadow-lg"
+                className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border bg-secondary px-3 py-2 shadow-lg"
                 aria-label={t("student-question-progress", {
                     current: questionNumber,
-                    total: session.total_questions,
+                    total,
                 })}
             >
+                {pageCount > 1 && (
+                    <Button
+                        className="size-10 shrink-0"
+                        type="button"
+                        variant="ghost"
+                        aria-label={t("student-question-navigation-previous")}
+                        disabled={page === 0}
+                        onClick={() => showPage(page - 1)}
+                    >
+                        <ChevronLeft className="size-5" />
+                    </Button>
+                )}
                 <div className="flex w-max gap-2 py-1">
-                    {session.accessible_question_numbers.map((number) => {
+                    {numbers.map((number) => {
                         const isCurrent = number === questionNumber
+                        const isSeen = accessible.has(number)
                         return (
                             <Button
                                 key={number}
-                                className="size-10 shrink-0 p-0"
+                                className={cn(
+                                    "size-10 shrink-0 p-0",
+                                    !isCurrent &&
+                                        isSeen &&
+                                        !answered.has(number) &&
+                                        "border-transparent bg-muted text-muted-foreground",
+                                    !isSeen &&
+                                        "border-transparent bg-muted-foreground/70 text-background disabled:opacity-100"
+                                )}
                                 type="button"
                                 variant={isCurrent ? "default" : "outline"}
                                 aria-current={isCurrent ? "step" : undefined}
                                 aria-label={t("student-question-progress", {
                                     current: number,
-                                    total: session.total_questions,
+                                    total,
                                 })}
-                                disabled={isBusy || isCurrent}
+                                disabled={isBusy || isCurrent || !isSeen}
                                 onClick={() => onNavigate(number)}
                             >
                                 {number}
@@ -209,6 +265,18 @@ function QuestionNavigation({
                         )
                     })}
                 </div>
+                {pageCount > 1 && (
+                    <Button
+                        className="size-10 shrink-0"
+                        type="button"
+                        variant="ghost"
+                        aria-label={t("student-question-navigation-next")}
+                        disabled={page === pageCount - 1}
+                        onClick={() => showPage(page + 1)}
+                    >
+                        <ChevronRight className="size-5" />
+                    </Button>
+                )}
             </nav>
         </div>,
         document.body

@@ -280,6 +280,11 @@ def student_state_response(
         accessible_question_numbers=[
             position + 1 for position in sorted(accessible_positions)
         ],
+        answered_question_numbers=[
+            position + 1
+            for position, answered_id in enumerate(question_ids)
+            if answered_id in answered_ids
+        ],
         selected_choice_ids=(
             [
                 tokens.token(choice_id)

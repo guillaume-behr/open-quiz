@@ -558,6 +558,8 @@
     "student-answer-recorded": "响应已记录",
     "student-waiting-next": "等待老师进入下一个问题。",
     "student-question-progress": "关于 {{total}} 的问题 {{current}}",
+    "student-question-navigation-previous": "上一组问题",
+    "student-question-navigation-next": "下一组问题",
     "student-question-points_one": "{{count}} 分",
     "student-question-points_other": "{{count}} 分",
     "student-submit-answer": "验证我的答案",

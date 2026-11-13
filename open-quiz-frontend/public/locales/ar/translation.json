@@ -602,6 +602,8 @@
     "student-answer-recorded": "تم تسجيل الاستجابة",
     "student-waiting-next": "انتظر حتى ينتقل المعلم إلى السؤال التالي.",
     "student-question-progress": "سؤال {{current}} على {{total}}",
+    "student-question-navigation-previous": "الأسئلة السابقة",
+    "student-question-navigation-next": "الأسئلة التالية",
     "student-question-points_zero": "{{count}} نقطة",
     "student-question-points_one": "{{count}} نقطة",
     "student-question-points_two": "{{count}} نقطة",

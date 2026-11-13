@@ -580,6 +580,8 @@
     "student-answer-recorded": "Відповідь записано",
     "student-waiting-next": "Зачекайте, поки вчитель перейде до наступного запитання.",
     "student-question-progress": "Питання {{current}} на {{total}}",
+    "student-question-navigation-previous": "Попередні питання",
+    "student-question-navigation-next": "Наступні питання",
     "student-question-points_one": "{{count}} бал",
     "student-question-points_few": "{{count}} бали",
     "student-question-points_many": "{{count}} балів",

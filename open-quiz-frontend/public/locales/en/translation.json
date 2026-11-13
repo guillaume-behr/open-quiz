@@ -558,6 +558,8 @@
     "student-answer-recorded": "Response recorded",
     "student-waiting-next": "Wait for the teacher to move on to the next question.",
     "student-question-progress": "Question {{current}} on {{total}}",
+    "student-question-navigation-previous": "Previous questions",
+    "student-question-navigation-next": "Next questions",
     "student-question-points_one": "{{count}} point",
     "student-question-points_other": "{{count}} points",
     "student-submit-answer": "Submit my answer",

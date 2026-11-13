@@ -70,6 +70,8 @@ class StudentQuizStateResponse(StudentQuizSessionResponse):
     awaiting_final_submission: bool = False
     answer_summaries: list[StudentAnswerSummary] = Field(default_factory=list)
     accessible_question_numbers: list[int] = Field(default_factory=list)
+    # The questions this participant has answered, for the numbered navigation.
+    answered_question_numbers: list[int] = Field(default_factory=list)
     selected_choice_ids: list[str] | None = None
     written_answer: str | None = None
     question: StudentQuizQuestionResponse | None

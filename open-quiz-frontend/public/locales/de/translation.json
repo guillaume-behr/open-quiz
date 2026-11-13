@@ -558,6 +558,8 @@
     "student-answer-recorded": "Antwort aufgezeichnet",
     "student-waiting-next": "Warten Sie, bis der Lehrer mit der nächsten Frage fortfährt.",
     "student-question-progress": "Frage {{current}} zu {{total}}",
+    "student-question-navigation-previous": "Vorherige Fragen",
+    "student-question-navigation-next": "Nächste Fragen",
     "student-question-points_one": "{{count}} Punkt",
     "student-question-points_other": "{{count}} Punkte",
     "student-submit-answer": "Bestätige meine Antwort",

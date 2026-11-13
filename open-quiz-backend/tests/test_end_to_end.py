@@ -1091,6 +1091,7 @@ def test_admin_can_login_and_create_professor(tmp_path: Path) -> None:
                 assert previous.status_code == 200
                 assert previous.json()["question_number"] == 2
                 assert previous.json()["accessible_question_numbers"] == [1, 2, 3]
+                assert previous.json()["answered_question_numbers"] == [1, 2]
                 assert previous.json()["has_answered"] is True
                 assert (
                     previous.json()["selected_choice_ids"] is not None
