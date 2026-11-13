@@ -19,7 +19,7 @@ from app.models import (
     QuizSession,
     User,
 )
-from app.session_responses import active_makeup_session_responses
+from app.teacher_session_responses import active_makeup_session_responses
 
 from support import (
     choice_answer,

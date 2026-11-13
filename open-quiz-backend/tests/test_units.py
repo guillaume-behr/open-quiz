@@ -812,7 +812,7 @@ def test_search_patterns_for_empty_or_wildcard_only_input() -> None:
 def test_a_session_without_a_class_keeps_its_recorded_class_name() -> None:
     from types import SimpleNamespace
 
-    from app.session_responses import quiz_session_class_name
+    from app.student_state import quiz_session_class_name
 
     detached = SimpleNamespace(class_id=None, class_name="2nde B")
     assert quiz_session_class_name(detached, None) == "2nde B"

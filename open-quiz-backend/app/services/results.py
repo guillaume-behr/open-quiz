@@ -135,13 +135,21 @@ def students_and_classes(
     return students_by_id, classes_by_id
 
 
-def finished_participant_response(
+def participant_response(
     participant: QuizParticipant,
-    session_id: int,
-    statistics: AnswerStatistics,
+    counts: tuple[int, float, int],
     maximum_score: float,
     students_by_id: dict[int, Student],
+    *,
+    has_finished: bool = False,
+    show_grades: bool = True,
 ) -> QuizParticipantResponse:
+    """One participant's line in a teacher's view of a session.
+
+    ``counts`` holds the answers given, the score and the answers awaiting
+    grading. A running session hides the score and the grading backlog.
+    """
+    answered_count, score, pending = counts
     return QuizParticipantResponse(
         id=participant.id,
         student_identifier=participant.student_identifier,
@@ -150,12 +158,11 @@ def finished_participant_response(
             if participant.student_id in students_by_id
             else participant.student_display_name
         ),
-        answered_count=statistics.get((session_id, participant.id), (0, 0, 0))[0],
-        score=statistics.get((session_id, participant.id), (0, 0, 0))[1],
+        answered_count=answered_count,
+        has_finished=has_finished,
+        score=score if show_grades else 0,
         maximum_score=maximum_score,
-        pending_manual_grading_count=statistics.get(
-            (session_id, participant.id), (0, 0, 0)
-        )[2],
+        pending_manual_grading_count=pending if show_grades else 0,
         violation_count=participant.violation_count,
         last_violation_type=participant.last_violation_type,
         last_violation_at=participant.last_violation_at,
@@ -248,10 +255,9 @@ def finished_session_responses(
                     else 0
                 ),
                 participants=[
-                    finished_participant_response(
+                    participant_response(
                         participant,
-                        quiz_session.id,
-                        statistics,
+                        statistics.get((quiz_session.id, participant.id), (0, 0, 0)),
                         participant_maximums[participant.id],
                         students_by_id,
                     )

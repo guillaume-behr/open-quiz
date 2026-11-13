@@ -6,6 +6,8 @@ periodic reconciliation, and a heartbeat while idle.
 """
 
 from asyncio import Queue, to_thread, wait_for
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from time import monotonic
 
 from fastapi import (
@@ -34,11 +36,11 @@ from app.models import (
     User,
 )
 from app.participants import authenticated_participant, participant_token_hash
-from app.session_responses import (
+from app.student_state import student_state_response
+from app.teacher_session_responses import (
     active_makeup_session_responses,
     active_session_responses,
     session_response,
-    student_state_response,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
@@ -225,55 +227,59 @@ def live_makeup_sessions_snapshot(
     return [item.model_dump(mode="json") for item in sessions]
 
 
-@router.websocket("/live/teacher/sessions")
-async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
-    token = await accept_live_socket(websocket)
-    if token is None:
-        return
-    professor_id = await async_live_professor_id(websocket, token)
-    if professor_id is None:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
+@dataclass(frozen=True)
+class LiveSnapshot:
+    """The message a feed sends when it changed, and whether it is the last."""
 
-    topic = active_quiz_sessions_topic(professor_id)
+    message: dict[str, object]
+    terminal: bool = False
+
+
+async def run_live_feed(
+    websocket: WebSocket,
+    *,
+    topic: str,
+    principal: str,
+    authorize: Callable[[], Awaitable[bool]],
+    snapshot: Callable[[], Awaitable[LiveSnapshot | None]],
+    reconcile_after: float,
+    also: tuple[str, ...] = (),
+    authorize_on_reconcile: bool = True,
+) -> None:
+    """Follow a topic and send each changed snapshot until the socket ends.
+
+    ``authorize`` tells whether the socket's credentials still hold: it is
+    checked before every heartbeat and, with ``authorize_on_reconcile``, at
+    each reconciliation. A snapshot of None refuses the socket.
+    """
     hub = websocket.app.state.live_quiz_hub
     try:
-        async with hub.subscribe(topic, f"professor:{professor_id}") as updates:
+        async with hub.subscribe(topic, principal, also=also) as updates:
             heartbeat = LiveHeartbeat()
-            last_sessions: list[dict[str, object]] | None = None
+            last_message: dict[str, object] | None = None
             # Checked again at each reconciliation, not on every update: the
-            # update itself only triggers a snapshot of the professor's data.
+            # update itself only triggers a snapshot of the subscriber's data.
             updated = True
             while True:
-                if (
-                    not updated
-                    and await async_live_professor_id(websocket, token) != professor_id
-                ):
+                if authorize_on_reconcile and not updated and not await authorize():
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                sessions = await to_thread(
-                    live_teacher_active_sessions_snapshot,
-                    websocket,
-                    professor_id,
-                )
-                if sessions is None:
+                current = await snapshot()
+                if current is None:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-                if without_clock(sessions) != without_clock(last_sessions):
-                    await websocket.send_json(
-                        {
-                            "type": "active_sessions",
-                            "data": sessions,
-                        }
-                    )
+                if without_clock(current.message) != without_clock(last_message):
+                    await websocket.send_json(current.message)
                     heartbeat.record_send()
-                    last_sessions = sessions
+                    last_message = current.message
+                if current.terminal:
+                    await websocket.close()
+                    return
                 updated = await wait_for_live_update(
-                    updates,
-                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
+                    updates, reconcile_after=reconcile_after
                 )
                 if heartbeat.is_due():
-                    if await async_live_professor_id(websocket, token) != professor_id:
+                    if not await authorize():
                         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                         return
                     await websocket.send_json({"type": "ping"})
@@ -282,6 +288,49 @@ async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
         await close_over_limit(websocket)
     except WebSocketDisconnect, RuntimeError:
         return
+
+
+async def run_teacher_feed(
+    websocket: WebSocket,
+    topic: Callable[[int], str],
+    snapshot: Callable[[int], Awaitable[LiveSnapshot | None]],
+) -> None:
+    """A teacher feed: authenticate the professor, then follow their topic."""
+    token = await accept_live_socket(websocket)
+    if token is None:
+        return
+    professor_id = await async_live_professor_id(websocket, token)
+    if professor_id is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    async def authorize() -> bool:
+        return await async_live_professor_id(websocket, token) == professor_id
+
+    async def professor_snapshot() -> LiveSnapshot | None:
+        return await snapshot(professor_id)
+
+    await run_live_feed(
+        websocket,
+        topic=topic(professor_id),
+        principal=f"professor:{professor_id}",
+        authorize=authorize,
+        snapshot=professor_snapshot,
+        reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
+    )
+
+
+@router.websocket("/live/teacher/sessions")
+async def live_teacher_active_quiz_sessions(websocket: WebSocket) -> None:
+    async def snapshot(professor_id: int) -> LiveSnapshot | None:
+        sessions = await to_thread(
+            live_teacher_active_sessions_snapshot, websocket, professor_id
+        )
+        if sessions is None:
+            return None
+        return LiveSnapshot({"type": "active_sessions", "data": sessions})
+
+    await run_teacher_feed(websocket, active_quiz_sessions_topic, snapshot)
 
 
 @router.websocket("/live/teacher/sessions/{session_id}")
@@ -289,61 +338,17 @@ async def live_teacher_quiz_session(
     websocket: WebSocket,
     session_id: int,
 ) -> None:
-    token = await accept_live_socket(websocket)
-    if token is None:
-        return
-    professor_id = await async_live_professor_id(websocket, token)
-    if professor_id is None:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
+    async def snapshot(professor_id: int) -> LiveSnapshot:
+        state, terminal = await to_thread(
+            live_teacher_session_snapshot, websocket, professor_id, session_id
+        )
+        if state is None:
+            return LiveSnapshot({"type": "deleted"}, terminal=True)
+        return LiveSnapshot({"type": "session", "data": state}, terminal=terminal)
 
-    topic = quiz_session_topic(session_id)
-    hub = websocket.app.state.live_quiz_hub
-    try:
-        async with hub.subscribe(topic, f"professor:{professor_id}") as updates:
-            heartbeat = LiveHeartbeat()
-            last_state: dict[str, object] | None = None
-            # Checked again at each reconciliation, not on every update: the
-            # update itself only triggers a snapshot of the professor's data.
-            updated = True
-            while True:
-                if (
-                    not updated
-                    and await async_live_professor_id(websocket, token) != professor_id
-                ):
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
-                state, terminal = await to_thread(
-                    live_teacher_session_snapshot,
-                    websocket,
-                    professor_id,
-                    session_id,
-                )
-                if state is None:
-                    await websocket.send_json({"type": "deleted"})
-                    await websocket.close()
-                    return
-                if without_clock(state) != without_clock(last_state):
-                    await websocket.send_json({"type": "session", "data": state})
-                    heartbeat.record_send()
-                    last_state = state
-                if terminal:
-                    await websocket.close()
-                    return
-                updated = await wait_for_live_update(
-                    updates,
-                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
-                )
-                if heartbeat.is_due():
-                    if await async_live_professor_id(websocket, token) != professor_id:
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                        return
-                    await websocket.send_json({"type": "ping"})
-                    heartbeat.record_send()
-    except LiveSocketLimitError:
-        await close_over_limit(websocket)
-    except WebSocketDisconnect, RuntimeError:
-        return
+    await run_teacher_feed(
+        websocket, lambda _professor_id: quiz_session_topic(session_id), snapshot
+    )
 
 
 @router.websocket("/live/student/sessions/{join_code}")
@@ -365,112 +370,42 @@ async def live_student_quiz_session(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    topic = student_session_topic(normalized_code)
-    hub = websocket.app.state.live_quiz_hub
-    try:
-        async with hub.subscribe(
-            topic,
-            f"participant:{participant_token_hash(token)}",
-            also=(participant_topic(participant_id),),
-        ) as updates:
-            heartbeat = LiveHeartbeat()
-            last_state: dict[str, object] | None = None
-            while True:
-                snapshot = await to_thread(
-                    live_student_session_snapshot,
-                    websocket,
-                    normalized_code,
-                    token,
-                )
-                if snapshot is None:
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
-                state, terminal = snapshot
-                if without_clock(state) != without_clock(last_state):
-                    await websocket.send_json({"type": "session", "data": state})
-                    heartbeat.record_send()
-                    last_state = state
-                if terminal:
-                    await websocket.close()
-                    return
-                await wait_for_live_update(
-                    updates,
-                    reconcile_after=LIVE_HEARTBEAT_SECONDS,
-                )
-                if heartbeat.is_due():
-                    if (
-                        await to_thread(
-                            live_participant_id,
-                            websocket,
-                            normalized_code,
-                            token,
-                        )
-                        != participant_id
-                    ):
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                        return
-                    await websocket.send_json({"type": "ping"})
-                    heartbeat.record_send()
-    except LiveSocketLimitError:
-        await close_over_limit(websocket)
-    except WebSocketDisconnect, RuntimeError:
-        return
+    async def authorize() -> bool:
+        return (
+            await to_thread(live_participant_id, websocket, normalized_code, token)
+            == participant_id
+        )
+
+    async def snapshot() -> LiveSnapshot | None:
+        current = await to_thread(
+            live_student_session_snapshot, websocket, normalized_code, token
+        )
+        if current is None:
+            return None
+        state, terminal = current
+        return LiveSnapshot({"type": "session", "data": state}, terminal=terminal)
+
+    await run_live_feed(
+        websocket,
+        topic=student_session_topic(normalized_code),
+        principal=f"participant:{participant_token_hash(token)}",
+        also=(participant_topic(participant_id),),
+        authorize=authorize,
+        snapshot=snapshot,
+        reconcile_after=LIVE_HEARTBEAT_SECONDS,
+        # Every snapshot authenticates the participant again.
+        authorize_on_reconcile=False,
+    )
 
 
 @router.websocket("/live/teacher/makeup-sessions")
 async def live_teacher_makeup_sessions(websocket: WebSocket) -> None:
-    token = await accept_live_socket(websocket)
-    if token is None:
-        return
-    professor_id = await async_live_professor_id(websocket, token)
-    if professor_id is None:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
+    async def snapshot(professor_id: int) -> LiveSnapshot | None:
+        sessions = await to_thread(
+            live_makeup_sessions_snapshot, websocket, professor_id
+        )
+        if sessions is None:
+            return None
+        return LiveSnapshot({"type": "makeup_sessions", "data": sessions})
 
-    topic = makeup_sessions_topic(professor_id)
-    hub = websocket.app.state.live_quiz_hub
-    try:
-        async with hub.subscribe(topic, f"professor:{professor_id}") as updates:
-            heartbeat = LiveHeartbeat()
-            last_sessions: list[dict[str, object]] | None = None
-            # Checked again at each reconciliation, not on every update: the
-            # update itself only triggers a snapshot of the professor's data.
-            updated = True
-            while True:
-                if (
-                    not updated
-                    and await async_live_professor_id(websocket, token) != professor_id
-                ):
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
-                sessions = await to_thread(
-                    live_makeup_sessions_snapshot,
-                    websocket,
-                    professor_id,
-                )
-                if sessions is None:
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
-                if without_clock(sessions) != without_clock(last_sessions):
-                    await websocket.send_json(
-                        {
-                            "type": "makeup_sessions",
-                            "data": sessions,
-                        }
-                    )
-                    heartbeat.record_send()
-                    last_sessions = sessions
-                updated = await wait_for_live_update(
-                    updates,
-                    reconcile_after=LIVE_TEACHER_RECONCILIATION_SECONDS,
-                )
-                if heartbeat.is_due():
-                    if await async_live_professor_id(websocket, token) != professor_id:
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                        return
-                    await websocket.send_json({"type": "ping"})
-                    heartbeat.record_send()
-    except LiveSocketLimitError:
-        await close_over_limit(websocket)
-    except WebSocketDisconnect, RuntimeError:
-        return
+    await run_teacher_feed(websocket, makeup_sessions_topic, snapshot)

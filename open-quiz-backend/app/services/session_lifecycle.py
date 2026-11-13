@@ -76,6 +76,27 @@ def answer_review_enabled(quiz_session: QuizSession, quiz: Quiz) -> bool:
     return quiz.allow_answer_review
 
 
+def previous_questions_allowed(quiz_session: QuizSession, quiz: Quiz) -> bool:
+    """Whether participants may go back, as the session was launched with."""
+    if quiz_session.allow_previous_questions is not None:
+        return quiz_session.allow_previous_questions
+    return quiz.allow_previous_questions
+
+
+def answered_question_ids(
+    quiz_session: QuizSession, participant: QuizParticipant, session: Session
+) -> set[int]:
+    """The questions a participant already answered in a session."""
+    return set(
+        session.scalars(
+            select(QuizAnswer.question_id).where(
+                QuizAnswer.session_id == quiz_session.id,
+                QuizAnswer.participant_id == participant.id,
+            )
+        )
+    )
+
+
 def quiz_session_is_due(
     quiz_session: QuizSession, quiz: Quiz, now: datetime | None = None
 ) -> bool:

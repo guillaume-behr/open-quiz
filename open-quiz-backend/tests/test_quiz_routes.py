@@ -38,7 +38,7 @@ from app.services.grading import (
 from app.services.results import (
     safe_spreadsheet_cell,
 )
-from app.session_responses import session_responses
+from app.teacher_session_responses import session_responses
 
 from support import (
     app_for,

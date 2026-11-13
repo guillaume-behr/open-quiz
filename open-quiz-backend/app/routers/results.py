@@ -65,10 +65,10 @@ from app.services.question_assignments import (
     session_question_ids,
 )
 from app.services.results import finished_session_responses, stream_results_csv
-from app.session_responses import session_response
 from app.session_retention import retained_exam_result
 from app.session_status import took_part
 from app.student_accounts import owned_class
+from app.teacher_session_responses import session_response
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
