@@ -2,13 +2,12 @@ import type { GradeLevel, Quiz, QuizSession } from "@/api/types"
 import { GradeLevelSelect } from "@/components/grade-level-select"
 import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
 import {
     BookOpenText,
     Eye,
-    LoaderCircle,
     Pencil,
     Play,
     Printer,
@@ -16,8 +15,11 @@ import {
     UsersRound,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { difficultyKeys } from "./quiz-form-state"
+import { LoadingState } from "@/components/ui/loading-state"
+import { AnimatedGrid } from "@/components/ui/animated-grid"
+import { FilterSidebar } from "@/components/ui/filter-sidebar"
 
-const difficulties = ["easy", "medium", "hard"] as const
 type QuizzesListProps = {
     quizzes: Quiz[]
     sessions: QuizSession[]
@@ -91,16 +93,7 @@ export function QuizzesList({
                 </div>
             )}
             {isLoading ? (
-                <div
-                    className="flex min-h-40 items-center justify-center"
-                    role="status"
-                    aria-label={t("page-loading")}
-                >
-                    <LoaderCircle
-                        className="size-7 animate-spin text-primary motion-reduce:animate-none"
-                        aria-hidden="true"
-                    />
-                </div>
+                <LoadingState />
             ) : (
                 <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
                     <QuizFilters
@@ -137,11 +130,10 @@ export function QuizzesList({
                             </div>
                         ) : (
                             <>
-                                <ul
-                                    key={quizzes
-                                        .map((quiz) => quiz.id)
-                                        .join(",")}
-                                    className="grid animate-in gap-4 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                                <AnimatedGrid
+                                    as="ul"
+                                    ids={quizzes.map((quiz) => quiz.id)}
+                                    className="gap-4 lg:grid-cols-2"
                                 >
                                     {quizzes.map((quiz) => (
                                         <QuizCard
@@ -154,7 +146,7 @@ export function QuizzesList({
                                             onPrint={() => onPrint(quiz)}
                                         />
                                     ))}
-                                </ul>
+                                </AnimatedGrid>
                                 <Pagination
                                     currentPage={page}
                                     totalPages={totalPages}
@@ -186,48 +178,37 @@ function QuizFilters({
 }) {
     const { t } = useTranslation()
     return (
-        <aside className="h-fit rounded-xl border bg-background p-4">
-            <h3 className="font-semibold">{t("filters")}</h3>
-            <FieldGroup className="mt-4 gap-4">
-                <Field>
-                    <FieldLabel htmlFor="quiz-filter">{t("search")}</FieldLabel>
-                    <Input
-                        id="quiz-filter"
-                        value={quizFilter}
-                        onChange={(event) =>
-                            onQuizFilterChange(event.target.value)
-                        }
-                        placeholder={t("search-quiz")}
-                    />
-                </Field>
-                <Field>
-                    <FieldLabel htmlFor="quiz-grade-filter">
-                        {t("grade-level")}
-                    </FieldLabel>
-                    <GradeLevelSelect
-                        id="quiz-grade-filter"
-                        value={gradeLevelFilter}
-                        levels={gradeLevels}
-                        onChange={onGradeLevelFilterChange}
-                        onDelete={onDeleteGradeLevel}
-                        required={false}
-                        placeholder={t("all-grade-levels")}
-                    />
-                </Field>
-                {(quizFilter || gradeLevelFilter) && (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                            onQuizFilterChange("")
-                            onGradeLevelFilterChange("")
-                        }}
-                    >
-                        {t("clear-filters")}
-                    </Button>
-                )}
-            </FieldGroup>
-        </aside>
+        <FilterSidebar
+            hasFilters={Boolean(quizFilter || gradeLevelFilter)}
+            onClear={() => {
+                onQuizFilterChange("")
+                onGradeLevelFilterChange("")
+            }}
+        >
+            <Field>
+                <FieldLabel htmlFor="quiz-filter">{t("search")}</FieldLabel>
+                <Input
+                    id="quiz-filter"
+                    value={quizFilter}
+                    onChange={(event) => onQuizFilterChange(event.target.value)}
+                    placeholder={t("search-quiz")}
+                />
+            </Field>
+            <Field>
+                <FieldLabel htmlFor="quiz-grade-filter">
+                    {t("grade-level")}
+                </FieldLabel>
+                <GradeLevelSelect
+                    id="quiz-grade-filter"
+                    value={gradeLevelFilter}
+                    levels={gradeLevels}
+                    onChange={onGradeLevelFilterChange}
+                    onDelete={onDeleteGradeLevel}
+                    required={false}
+                    placeholder={t("all-grade-levels")}
+                />
+            </Field>
+        </FilterSidebar>
     )
 }
 
@@ -283,7 +264,7 @@ function QuizCard({
                 </div>
             </div>
             <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted">
-                {difficulties.map((difficulty) => (
+                {difficultyKeys.map((difficulty) => (
                     <span
                         key={difficulty}
                         className={
@@ -304,7 +285,7 @@ function QuizCard({
                 ))}
             </div>
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                {difficulties.map((difficulty) => (
+                {difficultyKeys.map((difficulty) => (
                     <span key={difficulty}>
                         {t(`difficulty-${difficulty}`)}{" "}
                         {quiz[`${difficulty}_question_count`]}

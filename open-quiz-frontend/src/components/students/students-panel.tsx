@@ -8,17 +8,20 @@ import type { StudentAccount, StudentClass } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { StudentFormDialog } from "@/components/students/student-form-dialog"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
 import { Pagination } from "@/components/ui/pagination"
 import { formatClassName, saveBlob } from "@/lib/utils"
-import { LoaderCircle, Download, Pencil, Trash2, UserRound } from "lucide-react"
+import { Download, Pencil, Trash2, UserRound } from "lucide-react"
 import { usePagedList } from "@/hooks/use-paged-list"
 import { useResource } from "@/hooks/use-resource"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+import { LoadingState } from "@/components/ui/loading-state"
+import { AnimatedGrid } from "@/components/ui/animated-grid"
+import { FilterSidebar } from "@/components/ui/filter-sidebar"
 
 const STUDENTS_PAGE_SIZE = 12
 
@@ -124,90 +127,79 @@ export function StudentsPanel({
                 </p>
             )}
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                <aside className="h-fit rounded-xl border bg-background p-4">
-                    <h3 className="font-semibold">{t("filters")}</h3>
-                    <FieldGroup className="mt-4 gap-4">
-                        <Field>
-                            <FieldLabel htmlFor="student-filter-search">
-                                {t("search")}
-                            </FieldLabel>
-                            <Input
-                                id="student-filter-search"
-                                value={search}
-                                onChange={(event) => {
-                                    studentList.setFilter(
-                                        "search",
-                                        event.target.value
-                                    )
-                                }}
-                                placeholder={t("search-student")}
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="student-filter-class">
-                                {t("student-class")}
-                            </FieldLabel>
-                            <select
-                                id="student-filter-class"
-                                className={NATIVE_SELECT_CLASS_NAME}
-                                value={classFilter}
-                                onChange={(event) => {
-                                    studentList.setFilter(
-                                        "classId",
-                                        event.target.value
-                                    )
-                                }}
-                            >
-                                <option value="">{t("all-classes")}</option>
-                                <option value="unassigned">
-                                    {t("student-unassigned")}
+                <FilterSidebar
+                    hasFilters={Boolean(search || classFilter || statusFilter)}
+                    onClear={studentList.resetFilters}
+                >
+                    <Field>
+                        <FieldLabel htmlFor="student-filter-search">
+                            {t("search")}
+                        </FieldLabel>
+                        <Input
+                            id="student-filter-search"
+                            value={search}
+                            onChange={(event) => {
+                                studentList.setFilter(
+                                    "search",
+                                    event.target.value
+                                )
+                            }}
+                            placeholder={t("search-student")}
+                        />
+                    </Field>
+                    <Field>
+                        <FieldLabel htmlFor="student-filter-class">
+                            {t("student-class")}
+                        </FieldLabel>
+                        <select
+                            id="student-filter-class"
+                            className={NATIVE_SELECT_CLASS_NAME}
+                            value={classFilter}
+                            onChange={(event) => {
+                                studentList.setFilter(
+                                    "classId",
+                                    event.target.value
+                                )
+                            }}
+                        >
+                            <option value="">{t("all-classes")}</option>
+                            <option value="unassigned">
+                                {t("student-unassigned")}
+                            </option>
+                            {classes.map((studentClass) => (
+                                <option
+                                    key={studentClass.id}
+                                    value={studentClass.id}
+                                >
+                                    {formatClassName(
+                                        studentClass.grade_level,
+                                        studentClass.name
+                                    )}
                                 </option>
-                                {classes.map((studentClass) => (
-                                    <option
-                                        key={studentClass.id}
-                                        value={studentClass.id}
-                                    >
-                                        {formatClassName(
-                                            studentClass.grade_level,
-                                            studentClass.name
-                                        )}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="student-filter-status">
-                                {t("account-status")}
-                            </FieldLabel>
-                            <select
-                                id="student-filter-status"
-                                className={NATIVE_SELECT_CLASS_NAME}
-                                value={statusFilter}
-                                onChange={(event) => {
-                                    studentList.setFilter(
-                                        "status",
-                                        event.target.value
-                                    )
-                                }}
-                            >
-                                <option value="">{t("all-statuses")}</option>
-                                <option value="true">{t("active")}</option>
-                                <option value="false">{t("inactive")}</option>
-                            </select>
-                        </Field>
-                        {(search || classFilter || statusFilter) && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                    studentList.resetFilters()
-                                }}
-                            >
-                                {t("clear-filters")}
-                            </Button>
-                        )}
-                    </FieldGroup>
-                </aside>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field>
+                        <FieldLabel htmlFor="student-filter-status">
+                            {t("account-status")}
+                        </FieldLabel>
+                        <select
+                            id="student-filter-status"
+                            className={NATIVE_SELECT_CLASS_NAME}
+                            value={statusFilter}
+                            onChange={(event) => {
+                                studentList.setFilter(
+                                    "status",
+                                    event.target.value
+                                )
+                            }}
+                        >
+                            <option value="">{t("all-statuses")}</option>
+                            <option value="true">{t("active")}</option>
+                            <option value="false">{t("inactive")}</option>
+                        </select>
+                    </Field>
+                </FilterSidebar>
                 <div className="min-w-0">
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                         <h3 className="font-semibold">{t("students")}</h3>
@@ -223,16 +215,7 @@ export function StudentsPanel({
                         </Button>
                     </div>
                     {isLoading ? (
-                        <div
-                            className="flex min-h-40 items-center justify-center"
-                            role="status"
-                            aria-label={t("page-loading")}
-                        >
-                            <LoaderCircle
-                                className="size-7 animate-spin text-primary motion-reduce:animate-none"
-                                aria-hidden="true"
-                            />
-                        </div>
+                        <LoadingState />
                     ) : loadError ? (
                         <p role="alert" className="text-sm text-destructive">
                             {loadError}
@@ -254,11 +237,9 @@ export function StudentsPanel({
                             )}
                         </div>
                     ) : (
-                        <div
-                            key={students
-                                .map((student) => student.id)
-                                .join(",")}
-                            className="grid animate-in gap-2 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none lg:grid-cols-2"
+                        <AnimatedGrid
+                            ids={students.map((student) => student.id)}
+                            className="gap-2 lg:grid-cols-2"
                         >
                             {students.map((student) => (
                                 <article
@@ -317,7 +298,7 @@ export function StudentsPanel({
                                     </div>
                                 </article>
                             ))}
-                        </div>
+                        </AnimatedGrid>
                     )}
                     <Pagination
                         currentPage={studentList.page}

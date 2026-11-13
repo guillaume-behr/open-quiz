@@ -13,6 +13,7 @@ import { LoaderCircle, Play } from "lucide-react"
 import { useEffect, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+import { AnimatedGrid } from "@/components/ui/animated-grid"
 
 export function MakeupSessionsPanel() {
     const { t } = useTranslation()
@@ -208,9 +209,9 @@ export function MakeupSessionsPanel() {
                     </FieldGroup>
                 </form>
             </section>
-            <div
-                key={live.sessions.map((session) => session.id).join(",")}
-                className="grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+            <AnimatedGrid
+                ids={live.sessions.map((session) => session.id)}
+                className="gap-3"
             >
                 {live.sessions.map((item) => (
                     <article
@@ -249,7 +250,7 @@ export function MakeupSessionsPanel() {
                         </div>
                     </article>
                 ))}
-            </div>
+            </AnimatedGrid>
             <LiveSessionDialogs kind="makeup" live={live} />
         </div>
     )
