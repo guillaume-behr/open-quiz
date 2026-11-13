@@ -1,11 +1,12 @@
 """The expiry loop: sessions end on time without anybody reading them."""
 
 import asyncio
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import OperationalError
 
 from app import application
@@ -246,6 +247,35 @@ def test_shutdown_does_not_raise_what_a_background_task_raised(
         # Let the crashed task finish before shutting down.
         assert client.get("/api/health").status_code == 200
     assert logged == [("Background task %s failed", "session expiry")]
+
+
+def test_shutdown_waits_for_a_query_still_running_in_a_thread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A connection handed back after its pool is disposed is never closed."""
+    started = threading.Event()
+    finished: list[bool] = []
+    finished_at_dispose: list[bool] = []
+    with make_client(settings_for(tmp_path / "thread-at-shutdown")) as client:
+        engine = client.app.state.session_factory.kw["bind"]
+        dispose = engine.dispose
+
+        def recording_dispose() -> None:
+            finished_at_dispose.append(bool(finished))
+            dispose()
+
+        monkeypatch.setattr(engine, "dispose", recording_dispose)
+
+        def slow_query() -> None:
+            with client.app.state.session_factory() as session:
+                started.set()
+                session.execute(text("SELECT pg_sleep(0.3)"))
+            finished.append(True)
+
+        # What a live feed cancelled by the shutdown leaves behind.
+        client.portal.start_task_soon(asyncio.to_thread, slow_query)
+        assert started.wait(5)
+    assert finished_at_dispose == [True]
 
 
 def test_a_tick_skips_a_session_another_request_holds(tmp_path: Path) -> None:

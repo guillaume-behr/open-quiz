@@ -48,6 +48,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 - The exam screen no longer shows the class name, and the time left sits in
   the top corner of the question card.
 
+### Fixed
+
+- Stopping the API waits for queries still running for a live feed before
+  closing the database pool, so their connections are closed too.
+
 ### Security
 
 - dnspython upgraded to 2.9.2, past CVE-2026-128089.
