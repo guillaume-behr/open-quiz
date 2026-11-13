@@ -424,6 +424,18 @@ jobs:
           previous_head=$(query "SELECT version_num FROM alembic_version")
           # Data written before the update must come back with the rollback.
           query "CREATE TABLE written_before_update (id integer)"
+          # An update whose build fails leaves the deployment running...
+          printf 'RUN false\n' >>open-quiz-frontend/Dockerfile
+          git -c user.name=CI -c user.email=ci@example.invalid \
+            commit --quiet --all --message "CI: a build that fails"
+          if sh ./update.sh --no-pull --wait-timeout 60; then
+            echo "::error::an update whose build fails reported success"
+            exit 1
+          fi
+          # ...and taking writes, which the rollback after a retry must keep.
+          query "CREATE TABLE written_after_failed_build (id integer)"
+          git -c user.name=CI -c user.email=ci@example.invalid \
+            revert --no-edit HEAD >/dev/null
           # A new revision whose migration fails, as one meeting bad data would.
           cat >open-quiz-backend/migrations/versions/9999_ci_failing.py <<EOF
           """Fails on purpose, to test update.sh --rollback in CI."""
@@ -461,6 +473,10 @@ jobs:
           fi
           if [ "$(query "SELECT count(*) FROM pg_tables WHERE tablename = 'written_before_update'")" != 1 ]; then
             echo "::error::the rollback lost data written before the update"
+            exit 1
+          fi
+          if [ "$(query "SELECT count(*) FROM pg_tables WHERE tablename = 'written_after_failed_build'")" != 1 ]; then
+            echo "::error::the rollback restored a backup older than the retried update"
             exit 1
           fi
           docker compose exec -T open-quiz-backend \

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit_event
 from app.dependencies import DbSession, ProfessorUser
+from app.enums import AnswerMode
 from app.errors import ApiError, ErrorCode
 from app.image_responses import image_response
 from app.images import (
@@ -124,7 +125,11 @@ def owned_question(
         )
     )
     if for_update:
-        statement = statement.with_for_update(of=Question)
+        # populate_existing: a question read earlier in the request is
+        # reloaded under the lock rather than kept as it was read.
+        statement = statement.with_for_update(of=Question).execution_options(
+            populate_existing=True
+        )
     question = session.scalar(statement)
     if question is None:
         raise ApiError(
@@ -253,6 +258,8 @@ def regrade_affected_sessions(
     professor_id: int,
     request: Request,
     session: DbSession,
+    *,
+    became_written: bool,
 ) -> None:
     """Regrade the sessions that follow the edit and notify their views.
 
@@ -266,7 +273,7 @@ def regrade_affected_sessions(
             QuizSession.makeup_session_id,
         ).where(QuizSession.id.in_(sessions_using_questions([question.id])))
     ).all()
-    regrade_question(question, choices, session)
+    regrade_question(question, choices, session, became_written=became_written)
     if published_session_ids:
         audit_event(
             "question.published_sessions_not_regraded",
@@ -499,13 +506,25 @@ def update_question(
     image: Annotated[UploadFile | None, File()] = None,
 ) -> QuestionUpdateResponse:
     """Update a professor's question and replace its answer configuration."""
+    owned_question(question_id, professor, session)
+    require_no_active_exam(question_id, session)
+    question_payload = parsed_question_update(payload)
+    # Decoding an image can take a while: end the transaction first, so that
+    # neither a lock nor a pooled connection waits on it, as create_question
+    # does. The question is locked and checked again afterwards.
+    session.commit()
+    uploaded_image = normalized_uploaded_image(image)
     # Locked: two edits of one question would otherwise both freeze a copy.
     question = owned_question(question_id, professor, session, for_update=True)
     require_no_active_exam(question.id, session)
-    question_payload = parsed_question_update(payload)
+    # Answers to a choice question carry automatic marks: once it is written,
+    # a teacher has to mark them.
+    became_written = (
+        question.answer_mode != AnswerMode.WRITTEN
+        and question_payload.answer_mode == AnswerMode.WRITTEN
+    )
     # Before any field changes: the copy keeps the question as it stands.
     published_session_ids = freeze_for_published_sessions(question, session)
-    uploaded_image = normalized_uploaded_image(image)
     apply_question_fields(question, question_payload, uploaded_image, session)
     existing_choices_by_id = parked_choices(question, session)
     plans = choice_image_plans(question_payload, existing_choices_by_id)
@@ -516,7 +535,13 @@ def update_question(
     )
     session.flush()
     regrade_affected_sessions(
-        question, choices, published_session_ids, professor.id, request, session
+        question,
+        choices,
+        published_session_ids,
+        professor.id,
+        request,
+        session,
+        became_written=became_written,
     )
     session.refresh(question)
     return QuestionUpdateResponse(

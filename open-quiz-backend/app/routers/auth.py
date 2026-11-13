@@ -683,12 +683,22 @@ def retire_refresh_session(
 ) -> RefreshSessionFamily:
     """Revoke the session being rotated, and return the family it belongs to."""
     # Startup revokes every live session without a family
-    # (app/security_state.py), so the one being rotated has one.
+    # (app/security_state.py), so the one being rotated has one, unless a
+    # sign-in on another device deleted it past the session cap since it was
+    # read: that cookie is simply no longer valid.
     family = session.execute(
         select(RefreshSessionFamily).where(
             RefreshSessionFamily.session_id == stored_session.id
         )
-    ).scalar_one()
+    ).scalar_one_or_none()
+    if family is None:
+        session.rollback()
+        audit_event("auth.refresh_rejected")
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.AUTH_REFRESH_SESSION_INVALID,
+            "Session de connexion invalide",
+        )
     if (
         revoke_refresh_sessions(session, now, RefreshSession.id == stored_session.id)
         != 1

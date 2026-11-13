@@ -92,6 +92,8 @@ export type QuestionBank = {
     hard_question_count: number
     /** Questions a training can draw: every question but the written ones. */
     trainable_question_count: number
+    /** Quizzes that draw from the bank: deleting it takes it out of them. */
+    quiz_count: number
     training_question_count?: number | null
 }
 

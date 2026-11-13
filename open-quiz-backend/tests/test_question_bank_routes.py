@@ -12,7 +12,8 @@ from typing import Any
 import pytest
 from PIL import Image
 from pydantic import ValidationError
-from sqlalchemy import delete, event, select
+from sqlalchemy import delete, event, select, text
+from sqlalchemy.exc import OperationalError
 
 from app import maintenance, question_history, question_records
 from app.images import (
@@ -1114,26 +1115,9 @@ def stored_sessions(client: Any) -> list[int]:
         return [quiz_session.id for quiz_session in session.query(QuizSession)]
 
 
-def test_turning_a_question_written_keeps_teacher_marks_and_zeroes_pending_ones(
-    environment,
-) -> None:
-    """Rescoring a written question follows compute_final_scores' rule."""
-    client = environment["client"]
-    question = environment["question"]
-    graded = finished_exam_with_a_wrong_answer(environment)
-    pending = finished_exam_with_a_wrong_answer(environment)
-    with client.app.state.session_factory() as session:
-        for session_id, score, is_graded in (
-            (graded["id"], 1.5, True),
-            (pending["id"], 1.5, False),
-        ):
-            answer = session.query(QuizAnswer).filter_by(session_id=session_id).one()
-            answer.score = score
-            answer.is_graded = is_graded
-        session.commit()
-
-    updated = client.post(
-        f"/api/question-banks/questions/{question['id']}/update",
+def written_update(client: Any, environment: dict[str, Any]) -> Any:
+    return client.post(
+        f"/api/question-banks/questions/{environment['question']['id']}/update",
         headers=environment["teacher_headers"],
         data={
             "payload": json.dumps(
@@ -1145,9 +1129,123 @@ def test_turning_a_question_written_keeps_teacher_marks_and_zeroes_pending_ones(
         },
     )
 
-    assert updated.status_code == 200
+
+def test_turning_a_choice_question_written_sends_its_answers_to_grading(
+    environment,
+) -> None:
+    """Automatic marks of the choice question no longer stand: a teacher marks."""
+    client = environment["client"]
+    finished = finished_exam_with_a_wrong_answer(environment)
+    assert stored_scores(client, finished["id"]) == [(0.0, True)]
+
+    assert written_update(client, environment).status_code == 200
+
+    assert stored_scores(client, finished["id"]) == [(0.0, False)]
+    participant = client.get(
+        f"/api/quizzes/sessions/{finished['id']}",
+        headers=environment["teacher_headers"],
+    ).json()["participants"][0]
+    assert participant["pending_manual_grading_count"] == 1
+
+
+def test_editing_a_written_question_keeps_teacher_marks_and_zeroes_pending_ones(
+    environment,
+) -> None:
+    """Rescoring a written question follows compute_final_scores' rule."""
+    client = environment["client"]
+    graded = finished_exam_with_a_wrong_answer(environment)
+    pending = finished_exam_with_a_wrong_answer(environment)
+    assert written_update(client, environment).status_code == 200
+    with client.app.state.session_factory() as session:
+        for session_id, score, is_graded in (
+            (graded["id"], 1.5, True),
+            (pending["id"], 1.5, False),
+        ):
+            answer = session.query(QuizAnswer).filter_by(session_id=session_id).one()
+            answer.score = score
+            answer.is_graded = is_graded
+        session.commit()
+
+    # Still written: the teacher's mark stands.
+    assert written_update(client, environment).status_code == 200
+
     assert stored_scores(client, graded["id"]) == [(1.5, True)]
     assert stored_scores(client, pending["id"]) == [(0.0, False)]
+
+
+def test_an_edit_decodes_its_image_without_holding_the_question(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A slow decode must not keep the question, or its sessions, locked."""
+    client = environment["client"]
+    question_id = environment["question"]["id"]
+    locked_while_decoding: list[bool] = []
+
+    def decode_and_probe(data: bytes, content_type: str) -> tuple[bytes, str]:
+        with client.app.state.session_factory() as other:
+            other.execute(text("SET lock_timeout = '100ms'"))
+            try:
+                other.execute(
+                    select(Question.id)
+                    .where(Question.id == question_id)
+                    .with_for_update(nowait=True)
+                )
+                locked_while_decoding.append(False)
+            except OperationalError:
+                locked_while_decoding.append(True)
+            other.rollback()
+        return normalize_image(data, content_type)
+
+    monkeypatch.setattr(questions, "normalize_image", decode_and_probe)
+
+    updated = client.post(
+        f"/api/question-banks/questions/{question_id}/update",
+        headers=environment["teacher_headers"],
+        data={"payload": json.dumps(question_payload())},
+        files={"image": ("image.png", VALID_PNG, "image/png")},
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["has_image"] is True
+    assert locked_while_decoding == [False]
+
+
+def test_banks_say_how_many_quizzes_draw_from_them(environment) -> None:
+    """The delete dialog warns when quizzes would lose the bank."""
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    unused = client.post(
+        "/api/question-banks",
+        headers=headers,
+        json={"grade_level": "5e", "chapter": "Unused"},
+    ).json()
+    assert unused["quiz_count"] == 0
+    second_quiz = client.post(
+        "/api/quizzes",
+        headers=headers,
+        json={
+            "title": "Second quiz",
+            "question_bank_ids": [environment["bank_id"]],
+            "easy_question_count": 1,
+            "medium_question_count": 0,
+            "hard_question_count": 0,
+        },
+    )
+    assert second_quiz.status_code == 201
+
+    counts = {
+        bank["id"]: (bank["quiz_count"], bank["question_count"])
+        for bank in client.get("/api/question-banks", headers=headers).json()
+    }
+
+    # Two quizzes, and the question is still counted once.
+    assert counts == {environment["bank_id"]: (2, 1), unused["id"]: (0, 0)}
+    renamed = client.post(
+        f"/api/question-banks/{environment['bank_id']}/update",
+        headers=headers,
+        json={"grade_level": "5e", "chapter": "Renamed"},
+    )
+    assert renamed.json()["quiz_count"] == 2
 
 
 def answer_reviews(client: Any, headers: dict[str, str], session_id: int) -> list:

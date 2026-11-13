@@ -6,10 +6,10 @@ from typing import Any
 import pytest
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
-from sqlalchemy import event, select, update
+from sqlalchemy import delete, event, select, update
 
 from app import auth_guards, security
-from app.models import StudentAccount, User
+from app.models import RefreshSession, StudentAccount, User
 from app.routers import auth, student_auth
 from app.routers.auth import REFRESH_COOKIE
 
@@ -79,6 +79,34 @@ def test_a_session_evicted_by_the_cap_is_not_reported_as_reuse(
         assert (
             client.post("/api/auth/refresh", headers=refresh_headers(client))
         ).status_code == 200
+
+
+def test_a_session_evicted_while_it_is_refreshed_gets_a_plain_401(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sign-in elsewhere deletes the session between its read and rotation."""
+    with make_client(settings_for(tmp_path / "evicted-race")) as client:
+        complete_first_login(client, "root-admin", ADMIN_PASSWORD)
+        events: list[str] = []
+        monkeypatch.setattr(auth, "audit_event", lambda name, **_: events.append(name))
+        presented = auth.presented_refresh_session
+
+        def evicted_meanwhile(request: Any, session: Any, now: int) -> Any:
+            stored = presented(request, session, now)
+            with client.app.state.session_factory() as other:
+                other.execute(
+                    delete(RefreshSession).where(RefreshSession.id == stored.id)
+                )
+                other.commit()
+            return stored
+
+        monkeypatch.setattr(auth, "presented_refresh_session", evicted_meanwhile)
+
+        refreshed = client.post("/api/auth/refresh", headers=refresh_headers(client))
+
+        assert refreshed.status_code == 401
+        assert refreshed.json()["detail"]["code"] == "AUTH_REFRESH_SESSION_INVALID"
+        assert "auth.refresh_reuse_detected" not in events
 
 
 def test_an_outdated_password_hash_is_upgraded_at_login(tmp_path: Path) -> None:

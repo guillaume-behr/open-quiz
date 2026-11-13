@@ -134,6 +134,7 @@ async function mockTeacherApi(page: Page) {
         medium_question_count: 10,
         hard_question_count: 10,
         trainable_question_count: 30,
+        quiz_count: 1,
     }
     const otherGradeBank = {
         ...bank,
@@ -348,6 +349,7 @@ async function mockTeacherApi(page: Page) {
                     medium_question_count: 0,
                     hard_question_count: 0,
                     trainable_question_count: 0,
+                    quiz_count: 0,
                 }
                 questionBanks = [...questionBanks, created]
                 return route.fulfill({ status: 201, json: created })
@@ -939,15 +941,25 @@ test("teacher creates, exports, imports, and deletes question banks", async ({
         "New question bank created with 1 question."
     )
 
+    // A bank quizzes draw from warns that they lose it; a new one does not.
+    const quizWarning = /a quiz that draws only from it needs another bank/
+    await existingBank
+        .getByRole("button", { name: "Delete question bank" })
+        .click()
+    const deleteDialog = page.getByRole("dialog", {
+        name: "Delete question bank",
+    })
+    await expect(deleteDialog).toContainText(quizWarning)
+    await deleteDialog.getByRole("button", { name: "Cancel" }).click()
+    await expect(deleteDialog).toHaveCount(0)
+
     const createdBank = page.getByRole("listitem").filter({
         hasText: "Thermodynamics",
     })
     await createdBank
         .getByRole("button", { name: "Delete question bank" })
         .click()
-    const deleteDialog = page.getByRole("dialog", {
-        name: "Delete question bank",
-    })
+    await expect(deleteDialog).not.toContainText(quizWarning)
     await deleteDialog
         .getByRole("button", { name: "Delete question bank" })
         .click()
