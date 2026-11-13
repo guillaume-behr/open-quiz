@@ -1,8 +1,8 @@
 import { lazy } from "react"
 
-export const StudentPage = lazy(() =>
-    import("./StudentPage.tsx").then(({ StudentPage }) => ({
-        default: StudentPage,
+export const StudentDashboard = lazy(() =>
+    import("./StudentDashboard.tsx").then(({ StudentDashboard }) => ({
+        default: StudentDashboard,
     }))
 )
 
@@ -18,9 +18,9 @@ export const TrainingPage = lazy(() =>
     }))
 )
 
-export const TeacherPage = lazy(() =>
-    import("./TeacherPage.tsx").then(({ TeacherPage }) => ({
-        default: TeacherPage,
+export const TeacherDashboard = lazy(() =>
+    import("./TeacherDashboard.tsx").then(({ TeacherDashboard }) => ({
+        default: TeacherDashboard,
     }))
 )
 
