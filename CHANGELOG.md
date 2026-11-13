@@ -20,20 +20,21 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Added
 
-- A student can skip a question during a quiz (“Skip the question”), when
+- A student can skip a question during an exam (“Skip the question”), when
   the quiz lets them go back to earlier questions. A skip is no answer: it is
   not counted as one, and the question stays within reach. When the session
   ends, each skipped question still unanswered gets an empty answer that
   scores zero; a blank written answer needs no marking.
-- Skipped questions left unanswered open the review step even on a quiz
-  without it: the last answer no longer hands the paper in before the
-  student could come back to them, or hand it in with them blank.
-- The teacher's live view shows how many questions each student skipped and
-  has not answered yet.
+- A student who skipped a question confirms their paper on the review step
+  even on a quiz without it: the last answer no longer hands the paper in
+  before they could come back to what they skipped.
+- The teacher's live view and the results show how many questions each
+  student skipped and left unanswered; they are not counted as answered.
 - The student state gains `answered_question_numbers` and
   `skipped_question_numbers`, the teacher's participant `skipped_count`, and
   `POST /api/quizzes/student/sessions/{join_code}/skip` takes the
-  `question_id` shown, like an answer.
+  `question_id` shown, like an answer. It answers `QUIZ_SKIP_UNAVAILABLE` in
+  a training, or when the quiz does not allow going back.
 
 ### Changed
 

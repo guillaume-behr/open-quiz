@@ -777,6 +777,7 @@
     "error-quiz-answers-incomplete": "Answer every question before handing in your paper.",
     "error-quiz-review-unavailable": "Reviewing your answers is not available for this quiz.",
     "error-quiz-previous-question-locked": "This quiz does not allow going back to earlier questions.",
+    "error-quiz-skip-unavailable": "This question cannot be skipped.",
     "error-training-class-required": "You need to be in a class to train. Ask your teacher.",
     "error-training-not-found": "This training is no longer available.",
     "error-training-bank-empty": "This training does not contain any questions yet.",

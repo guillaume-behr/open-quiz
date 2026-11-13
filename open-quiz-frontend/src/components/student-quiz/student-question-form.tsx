@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react"
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { ProtectedQuizImage } from "./protected-quiz-image"
@@ -29,7 +29,7 @@ type StudentQuestionFormProps = {
     onWrittenAnswerChange: (answer: string) => void
     onNavigate: (questionNumber: number) => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
-    /** Leaves the question blank; without it, no skip button is offered. */
+    /** Skips the question; without it, no skip button is offered. */
     onSkip?: () => void
 }
 
@@ -235,6 +235,17 @@ function QuestionNavigation({
         { length: Math.min(QUESTION_NAVIGATION_PAGE_SIZE, total - first + 1) },
         (_, index) => first + index
     )
+    // On a narrow screen the numbers scroll: bring the current one into view
+    // when the question or the page changes, not while the student scrolls.
+    const currentNumber = useRef<HTMLButtonElement>(null)
+    useEffect(() => {
+        // Optional call: jsdom has no scrollIntoView.
+        currentNumber.current?.scrollIntoView?.({
+            block: "nearest",
+            inline: "center",
+        })
+    }, [questionNumber, page])
+
     const accessible = new Set(session.accessible_question_numbers)
     const answered = new Set(session.answered_question_numbers)
     const skipped = new Set(session.skipped_question_numbers)
@@ -282,6 +293,7 @@ function QuestionNavigation({
                         return (
                             <Button
                                 key={number}
+                                ref={isCurrent ? currentNumber : undefined}
                                 className={cn(
                                     "size-9 shrink-0 p-0 sm:size-10",
                                     !isCurrent &&

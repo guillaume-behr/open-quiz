@@ -600,7 +600,8 @@ def test_a_skipped_question_is_no_answer_until_the_session_ends(
     )
     assert stored[second_id] == {}
     assert stored[first_id] != {}
-    assert teacher_counts() == (2, 0)
+    # The blank is no answer given: the results still count it as skipped.
+    assert teacher_counts() == (1, 1)
     # A repeat of the skip once the paper is in changes nothing.
     repeat = client.post(
         f"{url}/skip", headers=headers, json={"question_id": second_id}
@@ -614,7 +615,7 @@ def test_without_review_skipped_questions_are_reviewed_before_handing_in(
 ) -> None:
     client = environment["client"]
     environment = two_question_quiz(client, environment, allow_answer_review=False)
-    _launched, headers, url = started(client, environment)
+    launched, headers, url = started(client, environment)
 
     skip_current(client, url, headers)
     last = answer_current(client, url, headers)
@@ -630,10 +631,24 @@ def test_without_review_skipped_questions_are_reviewed_before_handing_in(
     assert client.post(f"{url}/review", headers=headers).status_code == 200
     client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
     assert answer_current(client, url, headers).json()["question_number"] == 2
-    # Nothing skipped is left: the last answer hands the paper in again.
-    done = answer_current(client, url, headers)
-    assert done.json()["status"] == "finished"
-    assert done.json()["allow_answer_review"] is False
+    # Answering what was skipped does not take the review away: the student
+    # goes straight back to it and hands the paper in from there.
+    reviewing = client.post(f"{url}/review", headers=headers)
+    assert reviewing.status_code == 200
+    assert reviewing.json()["allow_answer_review"] is True
+    assert reviewing.json()["awaiting_final_submission"] is True
+    assert hand_in_quiz(client, launched["join_code"], headers)["status"] == "finished"
+
+
+def test_skipping_needs_an_exam_that_allows_going_back(environment) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment, allow_previous_questions=False)
+    _launched, headers, url = started(client, environment)
+
+    refused = skip_current(client, url, headers)
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "QUIZ_SKIP_UNAVAILABLE"
+    assert client.get(url, headers=headers).json()["skipped_question_numbers"] == []
 
 
 def test_without_review_a_paper_with_skips_can_be_handed_in_blank(
@@ -672,6 +687,7 @@ def test_a_skipped_written_question_needs_no_marking(environment) -> None:
         json={
             "title": "Written",
             "question_bank_ids": [environment["question"]["question_bank_id"]],
+            "allow_previous_questions": True,
             "easy_question_count": 0,
             "medium_question_count": 0,
             "hard_question_count": 1,

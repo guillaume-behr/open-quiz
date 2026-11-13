@@ -35,6 +35,7 @@ from app.records.quiz_sessions import (
     release_join_codes,
 )
 from app.services.grading import (
+    BLANK_ANSWER_DATA,
     compute_final_scores,
 )
 
@@ -108,20 +109,17 @@ def handed_in_question_ids(
 
 
 def final_review_offered(
-    quiz_session: QuizSession,
-    quiz: Quiz,
-    participant: QuizParticipant,
-    session: Session,
+    quiz_session: QuizSession, quiz: Quiz, participant: QuizParticipant
 ) -> bool:
     """Whether this participant confirms their paper before handing it in.
 
-    The quiz may ask for it. Otherwise, questions they skipped and left
-    unanswered call for it too: without it, the last answer would hand the
-    paper in before they could come back to them.
+    The quiz may ask for it. Otherwise, having skipped a question calls for
+    it too: without it, the last answer would hand the paper in before they
+    could come back to what they skipped. It stays offered once they did,
+    so answering a skipped question never takes the review away from them.
     """
     return answer_review_enabled(quiz_session, quiz) or bool(
-        set(participant.skipped_question_ids)
-        - answered_question_ids(quiz_session, participant, session)
+        participant.skipped_question_ids
     )
 
 
@@ -139,7 +137,7 @@ def store_blank_answers_for_skipped_questions(
             "session_id": quiz_session.id,
             "participant_id": participant.id,
             "question_id": question_id,
-            "answer_data": "{}",
+            "answer_data": BLANK_ANSWER_DATA,
             "score": 0,
             "is_graded": False,
         }
@@ -331,8 +329,8 @@ def finish_when_nobody_can_answer(
         # reviewing their answers still has to confirm them.
         still_working = or_(still_working, QuizParticipant.submitted_at.is_(None))
     else:
-        # Without the review step, the last answer hands the paper in unless
-        # skipped questions are left: that participant reviews them first.
+        # Without the review step, the last answer hands the paper in, except
+        # for a participant who skipped a question (final_review_offered).
         still_working = or_(
             still_working,
             and_(

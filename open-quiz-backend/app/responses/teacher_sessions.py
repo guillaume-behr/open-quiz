@@ -36,6 +36,7 @@ from app.services.question_assignments import (
     load_session_question_assignments,
 )
 from app.services.results import (
+    NO_ANSWER_STATISTICS,
     AnswerStatistics,
     answer_statistics,
     participant_response,
@@ -96,7 +97,7 @@ def listed_participants(
         elif not took_part(
             participant,
             quiz_session,
-            statistics.get((quiz_session.id, participant.id), (0, 0, 0))[0],
+            statistics.get((quiz_session.id, participant.id), NO_ANSWER_STATISTICS)[0],
         ):
             continue
         listed[quiz_session.id].append(participant)
@@ -106,7 +107,11 @@ def listed_participants(
 def unanswered_skip_counts(
     participants: Sequence[QuizParticipant], session: Session
 ) -> dict[int, int]:
-    """For each participant, the questions skipped and not answered since."""
+    """For each participant, the questions skipped and not answered since.
+
+    Once a session is over an empty answer stands for each of them, so its
+    participants count none here: answer_statistics counts those blanks.
+    """
     skipping = {
         participant.id: set(participant.skipped_question_ids)
         for participant in participants
@@ -158,6 +163,15 @@ def session_responses(
     )
 
     responses = []
+    # One read for every session: the questions skipped and not answered yet.
+    skip_counts = unanswered_skip_counts(
+        [
+            participant
+            for participants in participants_by_session.values()
+            for participant in participants
+        ],
+        session,
+    )
     for quiz_session, quiz in rows:
         participants = participants_by_session[quiz_session.id]
         maximum_scores = {
@@ -182,12 +196,11 @@ def session_responses(
         )
         review_enabled = answer_review_enabled(quiz_session, quiz)
         finished_session = quiz_session.status == SessionStatus.FINISHED
-        skip_counts = (
-            {} if finished_session else unanswered_skip_counts(participants, session)
-        )
         participant_responses = []
         for participant in participants:
-            counts = statistics.get((quiz_session.id, participant.id), (0, 0, 0))
+            counts = statistics.get(
+                (quiz_session.id, participant.id), NO_ANSWER_STATISTICS
+            )
             participant_responses.append(
                 participant_response(
                     participant,

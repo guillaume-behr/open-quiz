@@ -246,8 +246,8 @@ def student_state_response(
     saved_choice_ids = saved_answer.get("selected_choice_ids")
     tokens = ChoiceTokens(session, quiz_session, participant)
     answered_count = len(answered_ids)
-    # Skipped questions left unanswered offer the review step as well.
-    review_enabled = final_review_offered(quiz_session, quiz, participant, session)
+    # Having skipped a question offers the review step as well.
+    review_enabled = final_review_offered(quiz_session, quiz, participant)
     # A participant done with every question (answered or skipped) but who
     # has not confirmed yet keeps
     # the session open for themselves: they may re-read, and correct when the

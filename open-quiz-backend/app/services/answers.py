@@ -258,21 +258,18 @@ def advance_participant(
     if (
         participant.current_position is None
         and participant.submitted_at is None
-        and not final_review_offered(quiz_session, quiz, participant, session)
+        and not final_review_offered(quiz_session, quiz, participant)
     ):
         # Without the review step the last answer is the final submission,
-        # unless skipped questions are left: the review then lists them.
+        # unless the participant skipped a question: they review first.
         participant.submitted_at = datetime.now(UTC)
 
 
 def require_answer_review_offered(
-    quiz_session: QuizSession,
-    quiz: Quiz,
-    participant: QuizParticipant,
-    session: Session,
+    quiz_session: QuizSession, quiz: Quiz, participant: QuizParticipant
 ) -> None:
     """Reject a review request when this participant has no final step."""
-    if not final_review_offered(quiz_session, quiz, participant, session):
+    if not final_review_offered(quiz_session, quiz, participant):
         raise ApiError(
             status.HTTP_409_CONFLICT,
             ErrorCode.QUIZ_REVIEW_UNAVAILABLE,

@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.schemas.quizzes import QuizParticipantResponse, QuizSessionResponse
 from app.services.grading import (
+    BLANK_ANSWER_DATA,
     question_maximum_scores,
     rounded_score,
 )
@@ -53,24 +54,40 @@ def safe_spreadsheet_cell(value: str) -> str:
     return value
 
 
-AnswerStatistics = dict[tuple[int, int], tuple[int, float, int]]
+AnswerStatistics = dict[tuple[int, int], tuple[int, float, int, int]]
+NO_ANSWER_STATISTICS = (0, 0.0, 0, 0)
 
 
 def answer_statistics(session_ids: list[int], session: Session) -> AnswerStatistics:
-    """Answers given, score and answers awaiting grading, per participant."""
+    """Answers given, score, answers awaiting grading and skipped questions
+    handed in blank, per participant.
+
+    The empty answer the end of a session stores for a skipped question is
+    not an answer given: it is counted apart.
+    """
+    is_blank = QuizAnswer.answer_data == BLANK_ANSWER_DATA
     return {
         (session_id, participant_id): (
             answered_count,
             rounded_score(score),
             pending_count or 0,
+            blank_count,
         )
-        for session_id, participant_id, answered_count, score, pending_count in session.execute(
+        for (
+            session_id,
+            participant_id,
+            answered_count,
+            score,
+            pending_count,
+            blank_count,
+        ) in session.execute(
             select(
                 QuizAnswer.session_id,
                 QuizAnswer.participant_id,
-                func.count(QuizAnswer.id),
+                func.count(QuizAnswer.id).filter(~is_blank),
                 func.coalesce(func.sum(QuizAnswer.score), 0),
                 func.sum(case((QuizAnswer.is_graded.is_(False), 1), else_=0)),
+                func.count(QuizAnswer.id).filter(is_blank),
             )
             .where(QuizAnswer.session_id.in_(session_ids))
             .group_by(QuizAnswer.session_id, QuizAnswer.participant_id)
@@ -93,7 +110,7 @@ def counted_participants(
     for participant in participants:
         qs = sessions_by_id.get(participant.session_id)
         answered_count = statistics.get(
-            (participant.session_id, participant.id), (0, 0, 0)
+            (participant.session_id, participant.id), NO_ANSWER_STATISTICS
         )[0]
         if qs is not None and not took_part(participant, qs, answered_count):
             continue
@@ -134,7 +151,7 @@ def students_and_classes(
 
 def participant_response(
     participant: QuizParticipant,
-    counts: tuple[int, float, int],
+    counts: tuple[int, float, int, int],
     maximum_score: float,
     students_by_id: dict[int, Student],
     *,
@@ -144,10 +161,13 @@ def participant_response(
 ) -> QuizParticipantResponse:
     """One participant's line in a teacher's view of a session.
 
-    ``counts`` holds the answers given, the score and the answers awaiting
-    grading. A running session hides the score and the grading backlog.
+    ``counts`` holds the answers given, the score, the answers awaiting
+    grading and the skipped questions handed in blank. A running session
+    hides the score and the grading backlog. ``skipped_count`` is the
+    questions skipped and still unanswered while the session runs; once it is
+    over, the blank answers stand for them.
     """
-    answered_count, score, pending = counts
+    answered_count, score, pending, blank_count = counts
     return QuizParticipantResponse(
         id=participant.id,
         student_identifier=participant.student_identifier,
@@ -157,7 +177,7 @@ def participant_response(
             else participant.student_display_name
         ),
         answered_count=answered_count,
-        skipped_count=skipped_count,
+        skipped_count=skipped_count + blank_count,
         has_finished=has_finished,
         score=score if show_grades else 0,
         maximum_score=maximum_score,
@@ -256,7 +276,9 @@ def finished_session_responses(
                 participants=[
                     participant_response(
                         participant,
-                        statistics.get((quiz_session.id, participant.id), (0, 0, 0)),
+                        statistics.get(
+                            (quiz_session.id, participant.id), NO_ANSWER_STATISTICS
+                        ),
                         participant_maximums[participant.id],
                         students_by_id,
                     )

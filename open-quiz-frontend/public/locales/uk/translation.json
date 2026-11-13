@@ -811,6 +811,7 @@
     "error-quiz-answers-incomplete": "Дайте відповідь на всі запитання, перш ніж здавати роботу.",
     "error-quiz-review-unavailable": "Перегляд відповідей недоступний для цієї вікторини.",
     "error-quiz-previous-question-locked": "Ця вікторина не дозволяє повертатися до попередніх запитань.",
+    "error-quiz-skip-unavailable": "Це питання не можна пропустити.",
     "error-training-class-required": "Щоб тренуватися, потрібно належати до класу. Зверніться до вчителя.",
     "error-training-not-found": "Це тренування більше недоступне.",
     "error-training-bank-empty": "Це тренування ще не містить запитань.",

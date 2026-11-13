@@ -778,6 +778,7 @@
     "error-quiz-answers-incomplete": "Répondez à toutes les questions avant de rendre votre copie.",
     "error-quiz-review-unavailable": "La relecture des réponses n’est pas disponible pour ce quiz.",
     "error-quiz-previous-question-locked": "Ce quiz ne permet pas de revenir aux questions précédentes.",
+    "error-quiz-skip-unavailable": "Cette question ne peut pas être passée.",
     "error-training-class-required": "Vous devez appartenir à une classe pour vous entraîner. Adressez-vous à votre enseignant.",
     "error-training-not-found": "Cet entraînement n’est plus disponible.",
     "error-training-bank-empty": "Cet entraînement ne contient encore aucune question.",

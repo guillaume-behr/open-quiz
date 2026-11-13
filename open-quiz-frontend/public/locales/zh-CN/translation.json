@@ -777,6 +777,7 @@
     "error-quiz-answers-incomplete": "交卷前请回答所有问题。",
     "error-quiz-review-unavailable": "此测验不提供答案检查。",
     "error-quiz-previous-question-locked": "此测验不允许返回之前的问题。",
+    "error-quiz-skip-unavailable": "此题不能跳过。",
     "error-training-class-required": "你需要加入一个班级才能练习，请联系老师。",
     "error-training-not-found": "此练习已不可用。",
     "error-training-bank-empty": "此练习暂无题目。",

@@ -777,6 +777,7 @@
     "error-quiz-answers-incomplete": "Beantworten Sie alle Fragen, bevor Sie Ihre Arbeit abgeben.",
     "error-quiz-review-unavailable": "Für dieses Quiz ist das Überprüfen der Antworten nicht verfügbar.",
     "error-quiz-previous-question-locked": "Bei diesem Quiz ist das Zurückkehren zu früheren Fragen nicht erlaubt.",
+    "error-quiz-skip-unavailable": "Diese Frage kann nicht übersprungen werden.",
     "error-training-class-required": "Zum Trainieren müssen Sie einer Klasse angehören. Wenden Sie sich an Ihre Lehrkraft.",
     "error-training-not-found": "Dieses Training ist nicht mehr verfügbar.",
     "error-training-bank-empty": "Dieses Training enthält noch keine Fragen.",

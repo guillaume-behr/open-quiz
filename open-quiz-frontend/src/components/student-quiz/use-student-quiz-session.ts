@@ -372,8 +372,8 @@ export function useStudentQuizSession(
                     participantToken,
                     question.id
                 )
-                // The question is handed in blank: coming back to it must not
-                // show a selection the server never received.
+                // The question is skipped unanswered: coming back to it must
+                // not show a selection the server never received.
                 drafts.clearDraft(question.id)
                 return updated
             },

@@ -363,8 +363,14 @@ def test_final_scores_handle_deleted_and_ungraded_written_questions() -> None:
     skipped = SimpleNamespace(
         question_id=2, answer_data="{}", score=4.0, is_graded=False
     )
+    # An unreadable row is not a skip: it keeps waiting for a teacher.
+    unreadable = SimpleNamespace(
+        question_id=2, answer_data="not json", score=4.0, is_graded=False
+    )
     written = SimpleNamespace(id=2, answer_mode="written")
-    session = _ScriptedSession([deleted, ungraded, graded, skipped], [], [written])
+    session = _ScriptedSession(
+        [deleted, ungraded, graded, skipped, unreadable], [], [written]
+    )
 
     compute_final_scores(SimpleNamespace(id=1, allow_negative_points=False), session)
 
@@ -372,6 +378,7 @@ def test_final_scores_handle_deleted_and_ungraded_written_questions() -> None:
     assert (ungraded.score, ungraded.is_graded) == (0, False)
     assert (graded.score, graded.is_graded) == (4.0, True)
     assert (skipped.score, skipped.is_graded) == (0, True)
+    assert (unreadable.score, unreadable.is_graded) == (0, False)
 
 
 def test_final_scores_without_answers_do_not_load_choices() -> None:

@@ -346,8 +346,13 @@ describe("StudentQuestionForm", () => {
         expect(first()).toHaveTextContent("1")
         expect(first()?.parentElement).not.toHaveClass("animate-in")
 
+        // The current number is brought into view when the question changes.
+        const scrollIntoView = vi.fn()
+        Element.prototype.scrollIntoView = scrollIntoView
         view.rerender(at(11))
         expect(first()).toHaveTextContent("11")
+        expect(scrollIntoView).toHaveBeenCalledOnce()
+        expect(scrollIntoView.mock.contexts[0]).toBe(first())
         expect(first()?.parentElement).toHaveClass("slide-in-from-right-8")
     })
 })

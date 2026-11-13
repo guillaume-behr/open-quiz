@@ -778,6 +778,7 @@
     "error-quiz-answers-incomplete": "Responda a todas as perguntas antes de entregar a sua prova.",
     "error-quiz-review-unavailable": "A revisão das respostas não está disponível para este quiz.",
     "error-quiz-previous-question-locked": "Este quiz não permite voltar às perguntas anteriores.",
+    "error-quiz-skip-unavailable": "Esta pergunta não pode ser pulada.",
     "error-training-class-required": "Precisa de pertencer a uma turma para treinar. Fale com o seu professor.",
     "error-training-not-found": "Este treino já não está disponível.",
     "error-training-bank-empty": "Este treino ainda não contém perguntas.",

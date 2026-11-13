@@ -131,8 +131,8 @@ class QuizParticipantResponse(BaseModel):
     student_identifier: str
     student_display_name: str | None
     answered_count: int = 0
-    # Questions skipped and still unanswered: none once the session is over,
-    # when an empty answer stands for each.
+    # Questions skipped and left unanswered: still open while the session
+    # runs, handed in blank once it is over.
     skipped_count: int = 0
     has_finished: bool = False
     score: float = 0

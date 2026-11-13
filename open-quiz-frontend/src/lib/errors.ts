@@ -30,6 +30,7 @@ const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     QUIZ_ANSWERS_INCOMPLETE: "error-quiz-answers-incomplete",
     QUIZ_REVIEW_UNAVAILABLE: "error-quiz-review-unavailable",
     QUIZ_PREVIOUS_QUESTION_LOCKED: "error-quiz-previous-question-locked",
+    QUIZ_SKIP_UNAVAILABLE: "error-quiz-skip-unavailable",
     TRAINING_CLASS_REQUIRED: "error-training-class-required",
     TRAINING_NOT_FOUND: "error-training-not-found",
     TRAINING_BANK_EMPTY: "error-training-bank-empty",

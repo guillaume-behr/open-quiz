@@ -89,17 +89,18 @@ def decoded_answer_payload(answer_data: str) -> dict[str, Any]:
     return submitted if isinstance(submitted, dict) else {}
 
 
-def is_blank_answer_payload(answer_data: str) -> bool:
-    """Whether a stored answer holds nothing: a question the student skipped.
+BLANK_ANSWER_DATA = "{}"
 
-    Skipping stores an empty answer, so the question counts as handed in and
-    scores zero without a teacher having to mark it.
+
+def is_blank_answer_payload(answer_data: str) -> bool:
+    """Whether a stored answer is the empty one of a skipped question.
+
+    The end of a session stores it for each question skipped and left
+    unanswered (store_blank_answers_for_skipped_questions): it scores zero
+    without a teacher having to mark it. An unreadable row is not blank: it
+    keeps waiting for a teacher.
     """
-    submitted = decoded_answer_payload(answer_data)
-    written = submitted.get("written_answer")
-    return not submitted.get("selected_choice_ids") and not (
-        isinstance(written, str) and written.strip()
-    )
+    return answer_data == BLANK_ANSWER_DATA
 
 
 def selected_choice_ids(answer: QuizAnswer) -> set[int]:

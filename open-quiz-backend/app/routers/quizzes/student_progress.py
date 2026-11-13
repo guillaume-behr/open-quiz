@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request, status
 from app.core.dependencies import DbSession
 from app.core.errors import ApiError, ErrorCode
 from app.domain.choice_tokens import ChoiceTokens
-from app.enums import SessionStatus
+from app.enums import QuizMode, SessionStatus
 from app.live.updates import publish_quiz_update
 from app.responses.student_sessions import student_state_response
 from app.schemas.student_quizzes import (
@@ -140,6 +140,14 @@ def skip_student_question(
     expire_quiz_session(quiz_session, quiz, session)
     lock_for_participant_write(quiz_session, participant, session)
     require_answer_accepted(quiz_session, participant, session)
+    if quiz.mode != QuizMode.EXAM or not previous_questions_allowed(quiz_session, quiz):
+        # A skipped question must stay within reach: an exam the student
+        # cannot go back in would lose it, and a training has no review.
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SKIP_UNAVAILABLE,
+            "Cette question ne peut pas être passée",
+        )
     question, _, retargeting = answered_question(quiz_session, participant, session)
     if payload.question_id != question.id:
         raise ApiError(
@@ -190,7 +198,7 @@ def review_student_answers(
     )
     expire_quiz_session(quiz_session, quiz, session)
     lock_for_participant_write(quiz_session, participant, session)
-    require_answer_review_offered(quiz_session, quiz, participant, session)
+    require_answer_review_offered(quiz_session, quiz, participant)
     if participant.submitted_at is not None:
         return student_state_response(quiz_session, quiz, participant, session)
     require_reviewable_participant(quiz_session, participant, session)
@@ -225,7 +233,7 @@ def submit_student_quiz(
     )
     expire_quiz_session(quiz_session, quiz, session)
     lock_for_participant_write(quiz_session, participant, session)
-    require_answer_review_offered(quiz_session, quiz, participant, session)
+    require_answer_review_offered(quiz_session, quiz, participant)
     if participant.submitted_at is not None:
         # A duplicate confirmation must not fail the student whose paper is
         # already handed in.
@@ -268,7 +276,7 @@ def navigate_student_quiz(
     reviewing = (
         participant.current_position is None
         and participant.submitted_at is None
-        and final_review_offered(quiz_session, quiz, participant, session)
+        and final_review_offered(quiz_session, quiz, participant)
         and bool(question_ids)
         and set(question_ids).issubset(handed_in)
     )

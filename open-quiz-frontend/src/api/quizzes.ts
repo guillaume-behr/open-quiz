@@ -356,7 +356,7 @@ export function submitStudentQuizAnswer(
     )
 }
 
-/** Leaves the current question blank and moves on: an empty answer. */
+/** Skips the current question and moves on: it stays unanswered, in reach. */
 export function skipStudentQuestion(
     joinCode: string,
     participantToken: string,

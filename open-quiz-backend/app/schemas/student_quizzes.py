@@ -71,7 +71,7 @@ class StudentQuizStateResponse(StudentQuizSessionResponse):
     answer_summaries: list[StudentAnswerSummary] = Field(default_factory=list)
     accessible_question_numbers: list[int] = Field(default_factory=list)
     # The questions this participant has answered, for the numbered
-    # navigation; a skipped question is left blank and is not among them.
+    # navigation; a skipped question has no answer and is not among them.
     answered_question_numbers: list[int] = Field(default_factory=list)
     # The questions this participant skipped, answered since or not.
     skipped_question_numbers: list[int] = Field(default_factory=list)
