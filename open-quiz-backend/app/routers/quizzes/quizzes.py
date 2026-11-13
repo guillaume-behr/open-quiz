@@ -54,8 +54,8 @@ from app.responses.teacher_sessions import (
     active_session_responses,
     session_response,
 )
-from app.schemas import (
-    QuestionResponse,
+from app.schemas.questions import QuestionResponse
+from app.schemas.quizzes import (
     QuizCreate,
     QuizLaunch,
     QuizResponse,

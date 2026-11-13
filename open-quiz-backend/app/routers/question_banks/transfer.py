@@ -9,7 +9,6 @@ format with sample questions.
 import json
 from base64 import b64encode
 from collections.abc import Iterator
-from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -21,13 +20,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import APP_DIR
 from app.core.dependencies import DbSession, ProfessorUser
 from app.core.errors import ApiError, ErrorCode
-from app.domain.unique_names import (
-    QUESTION_BANK_NAME_CONSTRAINT,
-    QUESTION_BANK_NAME_TAKEN_MESSAGE,
-    write_unique_name,
-)
 from app.enums import Difficulty
 from app.models import (
     Question,
@@ -44,8 +39,13 @@ from app.records.questions import (
     decode_image_payload,
     owned_question_bank,
 )
+from app.records.unique_names import (
+    QUESTION_BANK_NAME_CONSTRAINT,
+    QUESTION_BANK_NAME_TAKEN_MESSAGE,
+    write_unique_name,
+)
 from app.responses.questions import question_response
-from app.schemas import (
+from app.schemas.questions import (
     QuestionBankResponse,
     QuestionBatchImport,
     QuestionBatchImportResponse,
@@ -55,9 +55,7 @@ from app.schemas import (
 router = APIRouter(prefix="/api/question-banks", tags=["question banks"])
 # The questions of the downloadable example; the route adds the grade level,
 # which depends on the teacher's own levels.
-EXAMPLE_FILE = (
-    Path(__file__).resolve().parents[2] / "data" / "question_bank_example.json"
-)
+EXAMPLE_FILE = APP_DIR / "data" / "question_bank_example.json"
 
 
 def downloadable_json(content: object, filename: str) -> Response:

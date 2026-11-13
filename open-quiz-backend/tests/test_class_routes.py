@@ -13,7 +13,7 @@ from app.models import (
     MakeupSession,
     StudentAccount,
 )
-from app.schemas import StudentAccountUpdate
+from app.schemas.classes import StudentAccountUpdate
 
 from support import (
     complete_first_login,

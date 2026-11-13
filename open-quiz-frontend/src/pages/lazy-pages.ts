@@ -37,25 +37,25 @@ export const AdminDashboard = lazy(() =>
 )
 
 export const LegalNoticesPage = lazy(() =>
-    import("./legal/legal-notices-page.tsx").then(({ LegalNoticesPage }) => ({
+    import("./legal/index.ts").then(({ LegalNoticesPage }) => ({
         default: LegalNoticesPage,
     }))
 )
 
 export const PrivacyPage = lazy(() =>
-    import("./legal/privacy-page.tsx").then(({ PrivacyPage }) => ({
+    import("./legal/index.ts").then(({ PrivacyPage }) => ({
         default: PrivacyPage,
     }))
 )
 
 export const AccessibilityPage = lazy(() =>
-    import("./legal/accessibility-page.tsx").then(({ AccessibilityPage }) => ({
+    import("./legal/index.ts").then(({ AccessibilityPage }) => ({
         default: AccessibilityPage,
     }))
 )
 
 export const CookiesPage = lazy(() =>
-    import("./legal/cookies-page.tsx").then(({ CookiesPage }) => ({
+    import("./legal/index.ts").then(({ CookiesPage }) => ({
         default: CookiesPage,
     }))
 )

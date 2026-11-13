@@ -12,9 +12,7 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
-from app.schemas import (
-    StudentAccountResponse,
-)
+from app.schemas.classes import StudentAccountResponse
 
 READABLE_CONSONANTS = "BCDFGHJKMNPRSTVWXYZ"
 READABLE_VOWELS = "AEU"

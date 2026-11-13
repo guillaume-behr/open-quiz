@@ -23,7 +23,7 @@ from app.models import (
     StudentClass,
     User,
 )
-from app.schemas import (
+from app.schemas.quizzes import (
     MakeupParticipantResponse,
     MakeupQuizOption,
     MakeupSessionResponse,

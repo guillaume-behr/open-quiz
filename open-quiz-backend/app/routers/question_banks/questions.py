@@ -64,8 +64,8 @@ from app.records.questions import (
 from app.records.stored_images import store_image, stored_image_sizes
 from app.responses.images import image_response
 from app.responses.questions import load_question_responses, question_response
-from app.schemas import (
-    MAX_QUESTIONS_PER_BANK,
+from app.schemas.common import MAX_QUESTIONS_PER_BANK
+from app.schemas.questions import (
     QuestionCreate,
     QuestionResponse,
     QuestionUpdate,

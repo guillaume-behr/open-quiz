@@ -1,7 +1,6 @@
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, cast
 
 from alembic import command
@@ -10,7 +9,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import URL, CursorResult, Engine, Result, make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-MIGRATIONS_DIRECTORY = Path(__file__).resolve().parents[2] / "migrations"
+from app.core.config import BASE_DIR
+
+MIGRATIONS_DIRECTORY = BASE_DIR / "migrations"
 # Arbitrary application-wide key for pg_advisory_xact_lock: "openquiz" read as
 # a big-endian 64-bit integer.
 MIGRATION_LOCK_KEY = 0x6F70656E7175697A

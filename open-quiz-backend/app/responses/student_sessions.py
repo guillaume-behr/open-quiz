@@ -25,7 +25,7 @@ from app.models import (
     StudentClass,
 )
 from app.records.questions import load_question_records
-from app.schemas import (
+from app.schemas.student_quizzes import (
     StudentAnswerSummary,
     StudentQuizChoiceResponse,
     StudentQuizQuestionResponse,

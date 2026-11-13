@@ -26,7 +26,7 @@ from app.models import (
     StudentAccount,
 )
 from app.records.stored_images import store_image
-from app.schemas import StudentQuizAnswer
+from app.schemas.student_quizzes import StudentQuizAnswer
 from app.services import question_draws
 from app.services.session_lifecycle import expire_due_quiz_sessions
 

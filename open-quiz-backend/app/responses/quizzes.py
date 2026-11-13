@@ -5,7 +5,7 @@ from sqlalchemy import case, func, select
 from app.core.dependencies import DbSession
 from app.enums import Difficulty
 from app.models import Question, QuestionBank, Quiz, QuizQuestionBank
-from app.schemas import QuizBankSummary, QuizResponse
+from app.schemas.quizzes import QuizBankSummary, QuizResponse
 
 
 def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:

@@ -36,7 +36,7 @@ from app.records import question_history
 from app.records import questions as question_records
 from app.routers.question_banks import questions
 from app.routers.question_banks import transfer as question_bank_transfer
-from app.schemas import (
+from app.schemas.questions import (
     QuestionBatchImport,
     QuestionChoiceCreate,
     QuestionCreate,

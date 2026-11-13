@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.core.dependencies import CurrentUser
 from app.models import User
-from app.schemas import UserResponse
+from app.schemas.accounts import UserResponse
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 

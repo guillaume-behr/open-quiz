@@ -31,7 +31,7 @@ from app.models import (
 )
 from app.records.quiz_sessions import delete_quiz_session_records
 from app.records.stored_images import store_image
-from app.schemas import (
+from app.schemas.questions import (
     QuestionChoiceCreate,
     QuestionCreate,
     QuestionImportImage,

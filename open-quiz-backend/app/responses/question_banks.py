@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.enums import AnswerMode, Difficulty
 from app.models import Question, QuestionBank, QuizQuestionBank
-from app.schemas import QuestionBankResponse
+from app.schemas.questions import QuestionBankResponse
 
 
 def question_bank_summary_query() -> Select[

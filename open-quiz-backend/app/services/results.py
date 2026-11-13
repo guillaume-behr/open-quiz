@@ -27,10 +27,7 @@ from app.models import (
     Student,
     StudentClass,
 )
-from app.schemas import (
-    QuizParticipantResponse,
-    QuizSessionResponse,
-)
+from app.schemas.quizzes import QuizParticipantResponse, QuizSessionResponse
 from app.services.grading import (
     question_maximum_scores,
     rounded_score,

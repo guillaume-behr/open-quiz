@@ -47,7 +47,7 @@ from app.models import (
     TwoFactorCredential,
     User,
 )
-from app.schemas import (
+from app.schemas.accounts import (
     LoginRequest,
     LoginResponse,
     LoginSessionResponse,

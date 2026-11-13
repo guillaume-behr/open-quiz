@@ -1,1 +1,1 @@
-"""Pure domain rules shared by every layer, without database access."""
+"""Domain rules shared by every layer: they compute, and run no query."""

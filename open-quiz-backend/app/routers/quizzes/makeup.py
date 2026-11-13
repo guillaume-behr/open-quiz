@@ -56,16 +56,15 @@ from app.responses.teacher_sessions import (
     makeup_responses,
     makeup_session_response,
 )
-from app.schemas import (
+from app.schemas.quizzes import (
     MakeupQuizOption,
     MakeupQuizSelection,
     MakeupSessionCreate,
     MakeupSessionJoinResponse,
     MakeupSessionResponse,
-    QuizJoin,
     QuizResponse,
-    StudentQuizJoinResponse,
 )
+from app.schemas.student_quizzes import QuizJoin, StudentQuizJoinResponse
 from app.services.participants import (
     enforce_public_rate_limit,
     generate_join_code,

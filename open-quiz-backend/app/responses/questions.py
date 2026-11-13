@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Question, QuestionChoice, QuestionCode
 from app.records.questions import load_question_records
-from app.schemas import QuestionResponse
+from app.schemas.questions import QuestionResponse
 
 
 def question_response(

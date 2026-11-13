@@ -49,10 +49,10 @@ from app.records.questions import load_question_records
 from app.records.quizzes import owned_quiz, owned_quiz_session
 from app.records.student_accounts import owned_class
 from app.responses.teacher_sessions import session_response
-from app.schemas import (
+from app.schemas.quizzes import QuizSessionResponse
+from app.schemas.student_quizzes import (
     QuizAnswerGrade,
     QuizAnswerReview,
-    QuizSessionResponse,
     StudentQuizHistoryAnswer,
     StudentQuizHistoryItem,
 )

@@ -32,7 +32,7 @@ from app.models import (
     TwoFactorCredential,
 )
 from app.routers.auth import TWO_FACTOR_TRUST_COOKIE, TWO_FACTOR_TRUST_COOKIE_PATH
-from app.schemas import TwoFactorVerifyRequest
+from app.schemas.accounts import TwoFactorVerifyRequest
 from scripts.reset_two_factor import reset
 
 from support import (

@@ -14,7 +14,6 @@ from app.core.pagination import (
     contains_pattern,
 )
 from app.domain.session_status import ACTIVE_SESSION_STATUSES
-from app.domain.unique_names import write_unique_name
 from app.enums import QuizMode, SessionStatus
 from app.models import (
     ClassTrainingQuestionBank,
@@ -42,7 +41,8 @@ from app.records.student_memberships import (
     delete_student_membership,
     delete_unfinished_training_sessions,
 )
-from app.schemas import (
+from app.records.unique_names import write_unique_name
+from app.schemas.classes import (
     GradeLevelCreate,
     GradeLevelResponse,
     StudentClassCreate,

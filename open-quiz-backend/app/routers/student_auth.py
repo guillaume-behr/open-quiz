@@ -27,7 +27,7 @@ from app.models import (
     StudentAccount,
 )
 from app.records.student_accounts import student_account_response
-from app.schemas import (
+from app.schemas.classes import (
     StudentAccountResponse,
     StudentLoginRequest,
     StudentLoginResponse,

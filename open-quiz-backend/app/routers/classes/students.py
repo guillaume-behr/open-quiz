@@ -43,7 +43,7 @@ from app.records.student_memberships import (
     delete_student_membership,
     revoke_student_participations,
 )
-from app.schemas import (
+from app.schemas.classes import (
     StudentAccountCreate,
     StudentAccountCreatedResponse,
     StudentAccountResponse,

@@ -30,7 +30,11 @@ from app.models import (
     StudentAccount,
 )
 from app.responses.student_sessions import student_state_response
-from app.schemas import QuizJoin, StudentQuizJoinResponse, StudentQuizStateResponse
+from app.schemas.student_quizzes import (
+    QuizJoin,
+    StudentQuizJoinResponse,
+    StudentQuizStateResponse,
+)
 from app.services.participants import (
     SESSION_RESUMED_VIOLATION,
     CurrentParticipant,

@@ -15,7 +15,10 @@ from starlette.requests import HTTPConnection
 
 from app.core.audit import audit_event
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+# The only paths counted from a module's own location: every other one is
+# derived from them, so moving a module cannot silently misplace a file.
+APP_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = APP_DIR.parent
 ENV_FILE = BASE_DIR / ".env"
 
 # The image installs dependencies without the project itself, so there is no

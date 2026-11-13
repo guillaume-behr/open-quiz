@@ -18,7 +18,7 @@ from app.enums import AnswerMode, SessionStatus
 from app.live.updates import publish_quiz_update
 from app.models import Question, QuestionChoice, QuizParticipant, QuizSession
 from app.responses.images import image_response
-from app.schemas import StudentQuizViolation
+from app.schemas.student_quizzes import StudentQuizViolation
 from app.services.participants import (
     VIOLATION_DEDUPLICATION_SECONDS,
     ReportingParticipant,

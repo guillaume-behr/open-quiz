@@ -25,10 +25,7 @@ from app.records.grade_levels import (
     grade_level_import_context,
 )
 from app.records.student_accounts import generated_student_password
-from app.schemas import (
-    ClassBatchImport,
-    ClassBatchImportResponse,
-)
+from app.schemas.classes import ClassBatchImport, ClassBatchImportResponse
 
 router = APIRouter(prefix="/api/classes", tags=["classes and students"])
 

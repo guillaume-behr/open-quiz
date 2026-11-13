@@ -25,7 +25,7 @@ from app.models import (
     QuizSession,
 )
 from app.records.questions import load_question_records
-from app.schemas import StudentQuizAnswer, TrainingFeedback
+from app.schemas.student_quizzes import StudentQuizAnswer, TrainingFeedback
 from app.services.grading import decoded_answer_data
 from app.services.question_assignments import (
     current_question_id,

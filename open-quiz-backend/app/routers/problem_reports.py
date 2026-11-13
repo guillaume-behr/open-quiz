@@ -11,7 +11,7 @@ from app.core.pagination import (
     Paging,
 )
 from app.models import ProblemReport
-from app.schemas import ProblemReportCreate, ProblemReportResponse
+from app.schemas.problem_reports import ProblemReportCreate, ProblemReportResponse
 
 router = APIRouter(prefix="/api/problem-reports", tags=["problem reports"])
 

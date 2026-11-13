@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ApiError, ErrorCode
 from app.enums import AnswerMode, Difficulty
 from app.models import Question, Quiz, QuizQuestionBank
-from app.schemas import QuizCreate
+from app.schemas.quizzes import QuizCreate
 
 randomizer = SystemRandom()
 MAX_TRAINING_QUESTIONS = 200

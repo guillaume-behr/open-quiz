@@ -14,7 +14,7 @@ from app.core.pagination import contains_pattern
 from app.models import Question
 from app.records.questions import load_question_records
 from app.records.student_accounts import owned_student_account
-from app.schemas import MAX_QUESTIONS_PER_BANK
+from app.schemas.common import MAX_QUESTIONS_PER_BANK
 
 from support import (
     concurrent_writes,

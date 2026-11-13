@@ -5,8 +5,15 @@ from typing import Any
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from app import schemas
 from app.routers.quizzes import makeup
+from app.schemas.questions import QuestionChoiceResponse, QuestionContentResponse
+from app.schemas.quizzes import QuizParticipantResponse
+from app.schemas.student_quizzes import (
+    QuizAnswerReview,
+    StudentQuizChoiceResponse,
+    StudentQuizHistoryAnswer,
+    StudentQuizViolation,
+)
 
 CODE_LANGUAGES = [
     "javascript",
@@ -49,11 +56,11 @@ def test_cancelling_a_makeup_session_is_declared_as_204() -> None:
 
 def test_code_languages_are_the_request_vocabulary() -> None:
     fields: dict[type[BaseModel], list[str]] = {
-        schemas.QuestionChoiceResponse: ["code_language"],
-        schemas.QuestionContentResponse: ["code_language", "response_language"],
-        schemas.StudentQuizChoiceResponse: ["code_language"],
-        schemas.QuizAnswerReview: ["code_language", "response_language"],
-        schemas.StudentQuizHistoryAnswer: ["code_language", "response_language"],
+        QuestionChoiceResponse: ["code_language"],
+        QuestionContentResponse: ["code_language", "response_language"],
+        StudentQuizChoiceResponse: ["code_language"],
+        QuizAnswerReview: ["code_language", "response_language"],
+        StudentQuizHistoryAnswer: ["code_language", "response_language"],
     }
 
     for model, names in fields.items():
@@ -62,11 +69,11 @@ def test_code_languages_are_the_request_vocabulary() -> None:
 
 
 def test_last_violation_type_lists_every_recorded_alert() -> None:
-    reported = schemas.StudentQuizViolation.model_json_schema()["properties"][
-        "event_type"
-    ]["enum"]
+    reported = StudentQuizViolation.model_json_schema()["properties"]["event_type"][
+        "enum"
+    ]
 
-    assert enum_of(schemas.QuizParticipantResponse, "last_violation_type") == [
+    assert enum_of(QuizParticipantResponse, "last_violation_type") == [
         *reported,
         "session_resumed",
     ]

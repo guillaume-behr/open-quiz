@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ErrorCode
-from app.domain.unique_names import write_unique_name
+from app.records.unique_names import write_unique_name
 
 from support import (
     concurrent_writes,

@@ -21,7 +21,7 @@ from app.models import (
 )
 from app.records.grade_levels import ensure_default_grade_levels
 from app.records.users import delete_user_records
-from app.schemas import (
+from app.schemas.accounts import (
     UserCreate,
     UserCredentialReset,
     UserResponse,

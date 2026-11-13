@@ -36,12 +36,8 @@ from app.records.quizzes import training_profile_quiz
 from app.records.student_accounts import owned_class
 from app.responses.question_banks import load_question_bank_summaries
 from app.responses.student_sessions import student_state_response
-from app.schemas import (
-    QuestionBankResponse,
-    StudentQuizJoinResponse,
-    TrainingHistoryItem,
-    TrainingQuestionBankSelection,
-)
+from app.schemas.questions import QuestionBankResponse, TrainingQuestionBankSelection
+from app.schemas.student_quizzes import StudentQuizJoinResponse, TrainingHistoryItem
 from app.services.grading import (
     training_result,
 )

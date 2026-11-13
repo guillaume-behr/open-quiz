@@ -59,10 +59,8 @@ from app.routers.auth import (
     REFRESH_PROOF_HEADER,
     TWO_FACTOR_TRUST_COOKIE,
 )
-from app.schemas import (
-    LoginRequest,
-    StudentLoginRequest,
-)
+from app.schemas.accounts import LoginRequest
+from app.schemas.classes import StudentLoginRequest
 from app.services import maintenance, security_state
 from scripts.reset_two_factor import reset
 

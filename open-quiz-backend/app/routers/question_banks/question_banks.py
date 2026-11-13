@@ -15,7 +15,6 @@ from app.core.pagination import (
     contains_pattern,
     focused_page,
 )
-from app.domain.unique_names import commit_unique_bank
 from app.models import (
     ClassTrainingQuestionBank,
     Question,
@@ -29,11 +28,12 @@ from app.records.question_history import (
     remove_questions,
 )
 from app.records.questions import owned_question_bank
+from app.records.unique_names import commit_unique_bank
 from app.responses.question_banks import (
     question_bank_summary_query,
     question_bank_summary_response,
 )
-from app.schemas import (
+from app.schemas.questions import (
     QuestionBankCreate,
     QuestionBankResponse,
     QuestionBankUpdate,

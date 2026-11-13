@@ -39,16 +39,20 @@ superutilisateur ; `scripts/database-roles.sql` le crée.
 
 Le paquet `open-quiz-backend/app` est découpé en couches. Chacune n’importe
 que les couches situées au-dessous d’elle ; `tests/test_layers.py` le vérifie.
+Seuls `core/` et `models.py`, sur la même ligne, s’importent l’un l’autre.
 
-| Couche (de bas en haut)                      | Contenu                                                                                                    |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `core/`, `models.py`, `enums.py`, `schemas/` | configuration, base de données, sécurité, middleware, limites de débit ; tables ; corps des requêtes       |
-| `domain/`, `live/`                           | règles pures sans accès à la base (images, libellés, jetons de choix) ; diffusion temps réel entre workers |
-| `records/`                                   | lecture et écriture des lignes : recherches, contrôles de propriété, créations                             |
-| `services/`                                  | opérations métier : réponses, notation, tirages, cycle de vie des sessions, maintenance                    |
-| `responses/`                                 | corps des réponses envoyées aux enseignants et aux élèves                                                  |
-| `routers/`                                   | routes HTTP et WebSocket, regroupées par ressource (`quizzes/`, `question_banks/`, `classes/`)             |
-| `application.py`                             | assemblage de l’application : routes, middleware et tâches de fond                                         |
+| Couche (de bas en haut) | Contenu                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| `enums.py`              | valeurs énumérées partagées par toutes les couches                                             |
+| `core/`, `models.py`    | configuration, base de données, sécurité, middleware, limites de débit ; tables                |
+| `schemas/`              | corps des requêtes et des réponses, un module par ressource                                    |
+| `domain/`               | règles qui calculent sans exécuter de requête (images, libellés, jetons de choix)              |
+| `records/`              | lecture et écriture des lignes : recherches, contrôles de propriété, créations, noms uniques   |
+| `live/`                 | diffusion temps réel : hub WebSocket, relais entre workers, notifications des sessions         |
+| `services/`             | opérations métier : réponses, notation, tirages, cycle de vie des sessions, maintenance        |
+| `responses/`            | corps des réponses envoyées aux enseignants et aux élèves                                      |
+| `routers/`              | routes HTTP et WebSocket, regroupées par ressource (`quizzes/`, `question_banks/`, `classes/`) |
+| `application.py`        | assemblage de l’application : routes, middleware et tâches de fond                             |
 
 `app/data/` contient les fichiers fournis avec l’API, comme l’exemple de
 banque de questions téléchargeable. Les tests de `tests/` sont rangés par

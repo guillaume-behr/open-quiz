@@ -5,18 +5,20 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.schemas import (
+from app.schemas.classes import (
     GradeLevelCreate,
-    ProblemReportCreate,
-    QuestionBankCreate,
-    QuestionChoiceCreate,
-    QuestionCreate,
-    QuizCreate,
     StudentAccountCreate,
     StudentAccountUpdate,
     StudentClassCreate,
+)
+from app.schemas.problem_reports import ProblemReportCreate
+from app.schemas.questions import (
+    QuestionBankCreate,
+    QuestionChoiceCreate,
+    QuestionCreate,
     TrainingQuestionBankSelection,
 )
+from app.schemas.quizzes import QuizCreate
 
 
 def valid_question(**overrides: Any) -> dict[str, Any]:
