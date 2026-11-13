@@ -20,6 +20,10 @@ DUMMY_PASSWORD_HASH = password_hash.hash(token_urlsafe(32))
 # hold that memory once per thread; past this many they wait their turn.
 MAX_CONCURRENT_PASSWORD_HASHES = 4
 password_hashing = BoundedSemaphore(MAX_CONCURRENT_PASSWORD_HASHES)
+# Bulk work such as a class import hashes one password per student. It takes
+# one of these slots before a hashing slot, so imports can hold every slot
+# but one, which stays free for sign-ins.
+bulk_password_hashing = BoundedSemaphore(MAX_CONCURRENT_PASSWORD_HASHES - 1)
 ACCESS_TOKEN_REQUIRED_CLAIMS = ["sub", "type", "ver", "iat", "exp"]
 TWO_FACTOR_TOKEN_REQUIRED_CLAIMS = ["sub", "type", "jti", "iat", "exp"]
 TWO_FACTOR_TRUST_TOKEN_TYPE = "two_factor_trust"  # noqa: S105 - a JWT type.
@@ -31,6 +35,15 @@ TWO_FACTOR_TRUST_MAXIMUM = timedelta(hours=24)
 def hash_password(password: str) -> str:
     with password_hashing:
         return password_hash.hash(password)
+
+
+def hash_passwords(passwords: list[str]) -> list[str]:
+    """Hash many passwords, leaving a hashing slot to sign-ins meanwhile."""
+    hashes = []
+    for password in passwords:
+        with bulk_password_hashing:
+            hashes.append(hash_password(password))
+    return hashes
 
 
 def verify_password(password: str, encoded: str) -> bool:

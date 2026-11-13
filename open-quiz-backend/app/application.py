@@ -5,7 +5,9 @@ from asyncio import CancelledError, create_task
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from app.choice_tokens import CHOICE_HMAC_ENTRY
 from app.config import (
@@ -15,6 +17,7 @@ from app.config import (
     warn_missing_public_information,
 )
 from app.database import build_session_factory, postgres_url
+from app.errors import server_busy_response
 from app.live_quiz import LiveQuizHub
 from app.live_relay import PostgresLiveRelay
 from app.maintenance import (
@@ -52,6 +55,12 @@ from app.security_state import synchronize_security_state
 logger = logging.getLogger("open_quiz")
 
 
+async def answer_pool_timeout(_: Request, error: Exception) -> JSONResponse:
+    """Every pooled connection stayed taken: answer 503 rather than 500."""
+    logger.warning("Database pool exhausted: %s", error)
+    return server_busy_response()
+
+
 def include_routers(app: FastAPI) -> None:
     app.include_router(health.router)
     app.include_router(problem_reports.router)
@@ -78,7 +87,12 @@ def include_routers(app: FastAPI) -> None:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    session_factory = build_session_factory(settings.database_url)
+    session_factory = build_session_factory(
+        settings.database_url,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
+        pool_timeout=settings.database_pool_timeout_seconds,
+    )
     session_factory.configure(
         info={CHOICE_HMAC_ENTRY: choice_token_key(settings.jwt_secret)}
     )
@@ -141,5 +155,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.live_quiz_hub.attach_relay(live_relay.send)
     attach_rate_limiters(app, settings)
     add_middleware(app, settings, session_factory)
+    app.add_exception_handler(PoolTimeoutError, answer_pool_timeout)
     include_routers(app)
     return app

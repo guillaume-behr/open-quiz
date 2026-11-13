@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse, Response
@@ -13,7 +14,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.access_log import AccessLogMiddleware
 from app.config import Settings
 from app.dependencies import authenticated_user_from_token
-from app.errors import ApiError, ErrorCode, api_error
+from app.errors import ApiError, ErrorCode, api_error, server_busy_response
 from app.models import User
 
 # JSON imports base64-encode up to 64 MiB of decoded images. Reserve enough
@@ -102,7 +103,12 @@ class RequestBodyLimitMiddleware:
 
         Returns whether it was answered.
         """
-        user = await to_thread(self._authenticated_user, scope)
+        try:
+            user = await to_thread(self._authenticated_user, scope)
+        except PoolTimeoutError:
+            # Outside the routes, so FastAPI's handler does not see it.
+            await server_busy_response()(scope, receive, send)
+            return True
         if user is None:
             await self._respond(
                 scope,
@@ -252,7 +258,12 @@ def add_middleware(
         response.headers["Permissions-Policy"] = (
             "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
         )
-        if request.url.path.startswith("/api"):
+        # Images set their own private caching (app/image_responses.py);
+        # every other API response stays out of caches.
+        if (
+            request.url.path.startswith("/api")
+            and "Cache-Control" not in response.headers
+        ):
             response.headers["Cache-Control"] = "no-store"
         if production:
             response.headers["Strict-Transport-Security"] = (

@@ -15,6 +15,7 @@ from app.choice_tokens import ChoiceTokens
 from app.dependencies import DbSession
 from app.enums import AnswerMode, SessionStatus
 from app.errors import ApiError, ErrorCode
+from app.image_responses import image_response
 from app.live_updates import publish_quiz_update
 from app.models import Question, QuestionChoice, QuizParticipant, QuizSession
 from app.participants import (
@@ -120,14 +121,11 @@ def get_student_question_image(
             status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
     question = session.get(Question, question_id)
-    if question is None or question.image is None:
+    if question is None or question.image_sha256 is None:
         raise ApiError(
             status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
-    return Response(
-        content=question.image.data,
-        media_type=question.image.content_type,
-    )
+    return image_response(question.image_sha256, request, session)
 
 
 @router.get("/student/sessions/{join_code}/choices/{choice_token}/image")
@@ -162,11 +160,8 @@ def get_student_choice_image(
         (choice for choice in choices if tokens.token(choice.id) == choice_token),
         None,
     )
-    if choice is None or choice.image is None:
+    if choice is None or choice.image_sha256 is None:
         raise ApiError(
             status.HTTP_404_NOT_FOUND, ErrorCode.IMAGE_NOT_FOUND, missing_detail
         )
-    return Response(
-        content=choice.image.data,
-        media_type=choice.image.content_type,
-    )
+    return image_response(choice.image_sha256, request, session)
