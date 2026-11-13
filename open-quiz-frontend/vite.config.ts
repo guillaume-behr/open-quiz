@@ -36,6 +36,41 @@ export default defineConfig({
             },
         },
     },
+    build: {
+        rolldownOptions: {
+            output: {
+                // Libraries every page needs get stable, named chunks that
+                // stay cached across releases of the app's own code. Prism
+                // is only needed by the pages that show code.
+                codeSplitting: {
+                    groups: [
+                        {
+                            name: "react",
+                            test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+                        },
+                        {
+                            name: "router",
+                            test: /node_modules[\\/]react-router[\\/]/,
+                        },
+                        {
+                            name: "i18n",
+                            test: /node_modules[\\/](i18next[^\\/]*|react-i18next)[\\/]/,
+                        },
+                        {
+                            // Before Prism, which would otherwise take clsx
+                            // along and be preloaded by every page.
+                            name: "class-names",
+                            test: /node_modules[\\/](clsx|tailwind-merge|class-variance-authority)[\\/]/,
+                        },
+                        {
+                            name: "prism",
+                            test: /node_modules[\\/]prism-react-renderer[\\/]/,
+                        },
+                    ],
+                },
+            },
+        },
+    },
     test: {
         // Unit tests only: the Playwright specs under tests/e2e run apart.
         include: ["src/**/*.test.{ts,tsx}"],

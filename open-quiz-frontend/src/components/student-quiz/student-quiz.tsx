@@ -4,6 +4,7 @@ import { NavbarAction } from "@/components/navigation/navbar-action"
 import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
 import { LogOut } from "lucide-react"
+import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { FullscreenPrompt } from "./fullscreen-prompt"
 import { StudentQuizPage } from "./student-quiz-page"
@@ -41,7 +42,15 @@ export function StudentQuiz({
         void quiz.leave(translation.reset)
     }
 
-    if (!session || !participantToken) {
+    // Kept across keystrokes, so that what only reads the session (the header
+    // and its timer) does not re-render while the student types.
+    const answerSummaries = translation.answerSummaries
+    const pageSession = useMemo(
+        () => session && { ...session, answer_summaries: answerSummaries },
+        [session, answerSummaries]
+    )
+
+    if (!session || !pageSession || !participantToken) {
         return (
             <JoinQuizForm
                 joinCode={quiz.joinCode}
@@ -84,10 +93,7 @@ export function StudentQuiz({
                 onLeave={leaveQuiz}
             />
             <StudentQuizPage
-                session={{
-                    ...session,
-                    answer_summaries: translation.answerSummaries,
-                }}
+                session={pageSession}
                 question={translation.question}
                 participantToken={participantToken}
                 title={translation.title}

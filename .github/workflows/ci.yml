@@ -130,6 +130,8 @@ jobs:
       - run: pnpm test:coverage
       # Type-checks everything first (tsc -b), as pnpm typecheck would.
       - run: pnpm build
+      # What every visitor downloads before the first page renders.
+      - run: pnpm check:bundle-size
       - run: pnpm audit --audit-level low
 
   e2e:

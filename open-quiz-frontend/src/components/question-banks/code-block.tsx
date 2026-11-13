@@ -8,7 +8,10 @@ import { LoaderCircle, Play } from "lucide-react"
 import { Highlight, themes } from "prism-react-renderer"
 import {
     type KeyboardEvent,
+    memo,
+    type Ref,
     type UIEvent,
+    useDeferredValue,
     useEffect,
     useId,
     useRef,
@@ -92,6 +95,70 @@ export function StaticCodeBlock({
     )
 }
 
+/**
+ * The highlighted lines under the editor. Memoised so that a render that does
+ * not change the code (a deferred keystroke, a sibling's state) skips Prism.
+ */
+const HighlightedCode = memo(function HighlightedCode({
+    code,
+    language,
+    className: extraClassName,
+    label,
+    ref,
+}: {
+    code: string
+    language: CodeLanguage
+    className: string
+    label: string
+    ref: Ref<HTMLPreElement>
+}) {
+    return (
+        <Highlight theme={themes.vsDark} code={code} language={language}>
+            {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                <pre
+                    ref={ref}
+                    className={`${className} p-4 font-mono text-sm leading-6 [font-variant-ligatures:none] ${extraClassName}`}
+                    style={style}
+                    tabIndex={0}
+                    role="region"
+                    aria-label={label}
+                >
+                    <code className="table min-w-full" dir="ltr">
+                        {tokens.map((line, lineIndex) => (
+                            <span
+                                key={lineIndex}
+                                {...getLineProps({ line })}
+                                className="table-row"
+                            >
+                                <span
+                                    className="table-cell w-10 pr-3 text-right text-white/40 select-none"
+                                    aria-hidden="true"
+                                >
+                                    {lineIndex + 1}
+                                </span>
+                                <span className="table-cell whitespace-pre">
+                                    {line.length === 0 ||
+                                    (line.length === 1 &&
+                                        line[0]?.content === "") ? (
+                                        <span>&#8203;</span>
+                                    ) : (
+                                        line.map((token, tokenIndex) => (
+                                            <span
+                                                key={tokenIndex}
+                                                {...getTokenProps({ token })}
+                                            />
+                                        ))
+                                    )}
+                                </span>
+                            </span>
+                        ))}
+                    </code>
+                </pre>
+            )}
+        </Highlight>
+    )
+})
+
 type CodeBlockProps = {
     code: string
     language: CodeLanguage
@@ -138,6 +205,10 @@ export function CodeBlock({
     }, [])
 
     const canRun = runnable && language === "python"
+    // Prism re-tokenises the whole program: the textarea follows each
+    // keystroke at once, and the highlighting under it catches up in a render
+    // React may interrupt for the next keystroke.
+    const highlightedCode = useDeferredValue(code)
 
     function syncCodeScroll(event: UIEvent<HTMLTextAreaElement>) {
         const highlightedCode = highlightedCodeRef.current
@@ -175,109 +246,60 @@ export function CodeBlock({
 
     return (
         <div className="overflow-hidden rounded-xl border">
-            <Highlight theme={themes.vsDark} code={code} language={language}>
-                {({
-                    className,
-                    style,
-                    tokens,
-                    getLineProps,
-                    getTokenProps,
-                }) => (
-                    <div className="relative" dir="ltr">
-                        {canRun && (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                className="absolute top-2 right-2 z-20"
-                                onClick={() => void runPython()}
-                                disabled={isRunning}
-                            >
-                                {isRunning ? (
-                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                                ) : (
-                                    <Play />
-                                )}
-                                {t(isRunning ? "running-python" : "run-python")}
-                            </Button>
+            <div className="relative" dir="ltr">
+                {canRun && (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="absolute top-2 right-2 z-20"
+                        onClick={() => void runPython()}
+                        disabled={isRunning}
+                    >
+                        {isRunning ? (
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                        ) : (
+                            <Play />
                         )}
-                        <pre
-                            ref={highlightedCodeRef}
-                            className={`${className} p-4 font-mono text-sm leading-6 [font-variant-ligatures:none] ${
-                                editable
-                                    ? `overflow-hidden ${editorClassName}`
-                                    : "overflow-x-auto"
-                            } ${canRun ? "pr-28" : ""}`}
-                            style={style}
-                            // The editable textarea above is the tab stop.
-                            tabIndex={editable ? undefined : 0}
-                            role="region"
-                            aria-label={t("code-block-region")}
-                        >
-                            <code className="table min-w-full" dir="ltr">
-                                {tokens.map((line, lineIndex) => (
-                                    <span
-                                        key={lineIndex}
-                                        {...getLineProps({ line })}
-                                        className="table-row"
-                                    >
-                                        <span
-                                            className="table-cell w-10 pr-3 text-right text-white/40 select-none"
-                                            aria-hidden="true"
-                                        >
-                                            {lineIndex + 1}
-                                        </span>
-                                        <span className="table-cell whitespace-pre">
-                                            {line.length === 0 ||
-                                            (line.length === 1 &&
-                                                line[0]?.content === "") ? (
-                                                <span>&#8203;</span>
-                                            ) : (
-                                                line.map(
-                                                    (token, tokenIndex) => (
-                                                        <span
-                                                            key={tokenIndex}
-                                                            {...getTokenProps({
-                                                                token,
-                                                            })}
-                                                        />
-                                                    )
-                                                )
-                                            )}
-                                        </span>
-                                    </span>
-                                ))}
-                            </code>
-                        </pre>
-                        {editable && (
-                            <textarea
-                                wrap="off"
-                                className={`absolute inset-0 z-10 h-full w-full resize-none overflow-auto border-0 bg-transparent pt-4 pr-4 pb-4 pl-14 font-mono text-sm leading-6 text-transparent caret-white outline-none [font-variant-ligatures:none] selection:bg-primary/40 ${
-                                    canRun ? "pr-28" : ""
-                                }`}
-                                value={code}
-                                onChange={(event) =>
-                                    changeCode(event.target.value)
-                                }
-                                onKeyDown={onCodeKeyDown}
-                                onScroll={syncCodeScroll}
-                                maxLength={maxLength}
-                                required={required}
-                                spellCheck={false}
-                                autoCorrect="off"
-                                autoCapitalize="off"
-                                aria-label={t("source-code")}
-                                aria-describedby={editorHintId}
-                            />
-                        )}
-                        {editable && (
-                            <span id={editorHintId} className="sr-only">
-                                {t("code-editor-keyboard-hint")}
-                            </span>
-                        )}
-                    </div>
+                        {t(isRunning ? "running-python" : "run-python")}
+                    </Button>
                 )}
-            </Highlight>
+                <HighlightedCode
+                    ref={highlightedCodeRef}
+                    code={highlightedCode}
+                    language={language}
+                    className={`${
+                        editable
+                            ? `overflow-hidden ${editorClassName}`
+                            : "overflow-x-auto"
+                    } ${canRun ? "pr-28" : ""}`}
+                    label={t("code-block-region")}
+                />
+                {editable && (
+                    <textarea
+                        wrap="off"
+                        className={`absolute inset-0 z-10 h-full w-full resize-none overflow-auto border-0 bg-transparent pt-4 pr-4 pb-4 pl-14 font-mono text-sm leading-6 text-transparent caret-white outline-none [font-variant-ligatures:none] selection:bg-primary/40 ${
+                            canRun ? "pr-28" : ""
+                        }`}
+                        value={code}
+                        onChange={(event) => changeCode(event.target.value)}
+                        onKeyDown={onCodeKeyDown}
+                        onScroll={syncCodeScroll}
+                        maxLength={maxLength}
+                        required={required}
+                        spellCheck={false}
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        aria-label={t("source-code")}
+                        aria-describedby={editorHintId}
+                    />
+                )}
+                {editable && (
+                    <span id={editorHintId} className="sr-only">
+                        {t("code-editor-keyboard-hint")}
+                    </span>
+                )}
+            </div>
             {result !== null && (
                 <div
                     className="border-t bg-muted/40 p-3"
