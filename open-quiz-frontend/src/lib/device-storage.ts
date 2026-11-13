@@ -1,6 +1,6 @@
 // Keys this application writes in browser storage: every one it owns starts
 // with this prefix, besides the language and theme preferences below.
-export const STORAGE_KEY_PREFIX = "open-quiz-"
+const STORAGE_KEY_PREFIX = "open-quiz-"
 const PREFERENCE_KEYS = ["i18nextLng", "vite-ui-theme"]
 
 function clearStorage(storage: Storage): void {
