@@ -55,7 +55,9 @@ createRoot(document.getElementById("root")!).render(
                                 />
                                 <Route
                                     path="student/dashboard"
-                                    element={<StudentDashboard page="dashboard" />}
+                                    element={
+                                        <StudentDashboard page="dashboard" />
+                                    }
                                 />
                                 <Route
                                     path="student/results"
@@ -80,7 +82,9 @@ createRoot(document.getElementById("root")!).render(
                                 />
                                 <Route
                                     path="teacher/dashboard"
-                                    element={<TeacherDashboard page="dashboard" />}
+                                    element={
+                                        <TeacherDashboard page="dashboard" />
+                                    }
                                 />
                                 <Route
                                     path="admin/dashboard"
