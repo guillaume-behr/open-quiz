@@ -600,8 +600,12 @@ def test_a_skipped_question_is_no_answer_until_the_session_ends(
     )
     assert stored[second_id] == {}
     assert stored[first_id] != {}
-    # The blank is no answer given: the results still count it as skipped.
+    # The blank is no answer given: the results still count it as skipped,
+    # and so does the student's own state.
     assert teacher_counts() == (1, 1)
+    finished = client.get(url, headers=headers).json()
+    assert finished["answered_count"] == 1
+    assert finished["answered_question_numbers"] == [1]
     # A repeat of the skip once the paper is in changes nothing.
     repeat = client.post(
         f"{url}/skip", headers=headers, json={"question_id": second_id}
@@ -637,6 +641,13 @@ def test_without_review_skipped_questions_are_reviewed_before_handing_in(
     assert reviewing.status_code == 200
     assert reviewing.json()["allow_answer_review"] is True
     assert reviewing.json()["awaiting_final_submission"] is True
+    # Every question answered, but the paper is not in: not finished yet.
+    teacher_view = client.get(
+        f"/api/quizzes/sessions/{launched['id']}",
+        headers=environment["teacher_headers"],
+    ).json()
+    assert teacher_view["participants"][0]["answered_count"] == 2
+    assert teacher_view["participants"][0]["has_finished"] is False
     assert hand_in_quiz(client, launched["join_code"], headers)["status"] == "finished"
 
 
@@ -1243,6 +1254,28 @@ def test_a_repeated_last_training_answer_returns_the_same_feedback(
     assert repeated.json()["status"] == "finished"
     assert repeated.json()["training_feedback"] == answered.json()["training_feedback"]
     assert repeated.json()["training_feedback"]["is_correct"] is True
+
+
+def test_a_training_question_cannot_be_skipped(environment) -> None:
+    client = environment["client"]
+    bank_id = environment["question"]["question_bank_id"]
+    client.put(
+        f"/api/quizzes/training/classes/{environment['student_class']['id']}"
+        "/question-banks",
+        headers=environment["teacher_headers"],
+        json=training_banks(bank_id),
+    )
+    training = client.post(
+        f"/api/quizzes/training/{bank_id}/start",
+        headers=environment["student_headers"],
+    )
+    assert training.status_code == 201
+    token_headers = {"X-Quiz-Token": training.json()["participant_token"]}
+    url = f"/api/quizzes/student/sessions/{training.json()['join_code']}"
+
+    refused = skip_current(client, url, token_headers)
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "QUIZ_SKIP_UNAVAILABLE"
 
 
 def test_quiz_join_requires_an_authenticated_student(tmp_path: Path) -> None:

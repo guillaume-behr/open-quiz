@@ -42,7 +42,7 @@ from app.services.results import (
     participant_response,
     students_and_classes,
 )
-from app.services.session_lifecycle import answer_review_enabled, quiz_ends_at
+from app.services.session_lifecycle import final_review_offered, quiz_ends_at
 
 
 def participant_has_finished(
@@ -194,7 +194,6 @@ def session_responses(
         total_questions = len(common[quiz_session.id]) or personalized_counts.get(
             quiz_session.id, 0
         )
-        review_enabled = answer_review_enabled(quiz_session, quiz)
         finished_session = quiz_session.status == SessionStatus.FINISHED
         participant_responses = []
         for participant in participants:
@@ -208,7 +207,11 @@ def session_responses(
                     maximum_scores[participant.id],
                     students_by_id,
                     has_finished=participant_has_finished(
-                        participant, counts[0], review_enabled, total_questions
+                        participant,
+                        counts[0],
+                        # A skip brings the review to a quiz without it.
+                        final_review_offered(quiz_session, quiz, participant),
+                        total_questions,
                     ),
                     show_grades=finished_session,
                     skipped_count=skip_counts.get(participant.id, 0),

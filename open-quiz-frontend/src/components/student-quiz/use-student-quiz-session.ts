@@ -365,18 +365,10 @@ export function useStudentQuizSession(
         if (!session?.question || !participantToken) return
         const { join_code, question } = session
         setError(null)
+        // What the student entered stays a draft of the question: skipping it
+        // to come back later must not lose it.
         await runSessionRequest(
-            async () => {
-                const updated = await skipStudentQuestion(
-                    join_code,
-                    participantToken,
-                    question.id
-                )
-                // The question is skipped unanswered: coming back to it must
-                // not show a selection the server never received.
-                drafts.clearDraft(question.id)
-                return updated
-            },
+            () => skipStudentQuestion(join_code, participantToken, question.id),
             "student-answer-error",
             (caught) => showServerQuestionOnMismatch(caught, join_code)
         )

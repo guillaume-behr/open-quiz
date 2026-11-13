@@ -347,12 +347,27 @@ describe("StudentQuestionForm", () => {
         expect(first()?.parentElement).not.toHaveClass("animate-in")
 
         // The current number is brought into view when the question changes.
+        // A stand-in for this test only, put back afterwards.
+        const original = Object.getOwnPropertyDescriptor(
+            Element.prototype,
+            "scrollIntoView"
+        )
         const scrollIntoView = vi.fn()
         Element.prototype.scrollIntoView = scrollIntoView
-        view.rerender(at(11))
-        expect(first()).toHaveTextContent("11")
-        expect(scrollIntoView).toHaveBeenCalledOnce()
-        expect(scrollIntoView.mock.contexts[0]).toBe(first())
+        try {
+            view.rerender(at(11))
+            expect(first()).toHaveTextContent("11")
+            expect(scrollIntoView).toHaveBeenCalledOnce()
+            expect(scrollIntoView.mock.contexts[0]).toBe(first())
+        } finally {
+            if (original)
+                Object.defineProperty(
+                    Element.prototype,
+                    "scrollIntoView",
+                    original
+                )
+            else Reflect.deleteProperty(Element.prototype, "scrollIntoView")
+        }
         expect(first()?.parentElement).toHaveClass("slide-in-from-right-8")
     })
 })

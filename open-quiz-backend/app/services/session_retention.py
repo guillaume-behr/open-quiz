@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.domain.session_status import ACTIVE_SESSION_STATUSES
 from app.enums import QuizMode, SessionStatus
-from app.models import Quiz, QuizAnswer, QuizSession
+from app.models import Quiz, QuizSession
 from app.records.quiz_sessions import delete_quiz_session_records
-from app.services.session_lifecycle import finish_session
+from app.services.session_lifecycle import anyone_took_a_question, finish_session
 
 
 def _active_sessions_before(
@@ -37,21 +37,18 @@ def close_abandoned_sessions(cutoff: datetime, session: Session) -> tuple[int, i
     quiz lasts at most eight hours, so anything still open long past the
     cutoff is over.
 
-    An exam that collected answers is graded and then kept under the ordinary
-    result retention; one that collected none holds nothing but the names of a
-    waiting room, and training attempts are disposable, so both are deleted.
+    An exam that collected answers or skips is graded and then kept under the
+    ordinary result retention; one that collected neither holds nothing but
+    the names of a waiting room, and training attempts are disposable, so both are deleted.
 
     Returns the number of sessions finished and the number deleted.
     """
     finished = 0
     discarded: list[int] = []
     for quiz_session, quiz in _active_sessions_before(cutoff, QuizMode.EXAM, session):
-        answered = session.scalar(
-            select(QuizAnswer.id)
-            .where(QuizAnswer.session_id == quiz_session.id)
-            .limit(1)
-        )
-        if answered is None:
+        # Skipped questions count as work: the exam is graded, with them at
+        # zero, rather than discarded as an empty waiting room.
+        if not anyone_took_a_question(quiz_session, session):
             discarded.append(quiz_session.id)
             continue
         if finish_session(

@@ -590,8 +590,12 @@ def seeded_exam_session(
     status_value: str,
     created_at: datetime,
     with_answer: bool,
+    with_skip: bool = False,
 ) -> int:
-    """Build a session an owner never came back to close."""
+    """Build a session an owner never came back to close.
+
+    ``with_skip``: its participant skipped the question instead.
+    """
     bank = QuestionBank(
         owner_id=owner_id,
         grade_level="6e",
@@ -633,6 +637,7 @@ def seeded_exam_session(
         student_identifier=f"pupil.{join_code.lower()}",
         student_display_name="Abandoned Pupil",
         current_position=0,
+        skipped_question_ids=[question.id] if with_skip else [],
     )
     session.add(participant)
     session.flush()

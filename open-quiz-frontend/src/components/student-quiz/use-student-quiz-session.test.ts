@@ -301,6 +301,21 @@ describe("useStudentQuizSession", () => {
         expect(hook.result.current.session?.question?.id).toBe(3)
     })
 
+    it("keeps what was entered when the question is skipped", async () => {
+        const { hook } = await joined()
+        act(() => hook.result.current.setSelectedChoiceIds(["b"]))
+        api.skipStudentQuestion.mockResolvedValue(
+            quizSession({ question: { id: 2 } as never })
+        )
+
+        await act(() => hook.result.current.skipQuestion())
+        expect(hook.result.current.selectedChoiceIds).toEqual([])
+
+        // Coming back to the skipped question shows the draft again.
+        act(() => liveOptions().onData(quizSession()))
+        expect(hook.result.current.selectedChoiceIds).toEqual(["b"])
+    })
+
     it("leaves the exam and clears what it kept", async () => {
         const { hook, onSessionCleared } = await joined()
         api.leaveStudentQuiz.mockResolvedValue(undefined)

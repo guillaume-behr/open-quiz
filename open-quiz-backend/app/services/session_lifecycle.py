@@ -88,12 +88,17 @@ def previous_questions_allowed(quiz_session: QuizSession, quiz: Quiz) -> bool:
 def answered_question_ids(
     quiz_session: QuizSession, participant: QuizParticipant, session: Session
 ) -> set[int]:
-    """The questions a participant already answered in a session."""
+    """The questions a participant already answered in a session.
+
+    The empty answer the end of a session stores for a skipped question is
+    no answer given: it is left out, as answer_statistics leaves it out.
+    """
     return set(
         session.scalars(
             select(QuizAnswer.question_id).where(
                 QuizAnswer.session_id == quiz_session.id,
                 QuizAnswer.participant_id == participant.id,
+                QuizAnswer.answer_data != BLANK_ANSWER_DATA,
             )
         )
     )
@@ -156,6 +161,28 @@ def store_blank_answers_for_skipped_questions(
     if rows:
         # An answer given since the skip stays: the blank only fills a gap.
         session.execute(insert(QuizAnswer).values(rows).on_conflict_do_nothing())
+
+
+def anyone_took_a_question(quiz_session: QuizSession, session: Session) -> bool:
+    """Whether someone answered or skipped a question in a session.
+
+    A session where nobody did holds nothing to grade: only the names of its
+    waiting room. Skips are only read when no answer exists, which is rare.
+    """
+    answered = session.scalar(
+        select(QuizAnswer.id).where(QuizAnswer.session_id == quiz_session.id).limit(1)
+    )
+    if answered is not None:
+        return True
+    skipped = session.scalar(
+        select(QuizParticipant.id)
+        .where(
+            QuizParticipant.session_id == quiz_session.id,
+            func.cardinality(QuizParticipant.skipped_question_ids) > 0,
+        )
+        .limit(1)
+    )
+    return skipped is not None
 
 
 def quiz_session_is_due(
@@ -314,18 +341,7 @@ def finish_when_nobody_can_answer(
     """
     if quiz_session.status != SessionStatus.IN_PROGRESS:
         return
-    answered = session.scalar(
-        select(QuizAnswer.id).where(QuizAnswer.session_id == quiz_session.id).limit(1)
-    )
-    skipped = session.scalar(
-        select(QuizParticipant.id)
-        .where(
-            QuizParticipant.session_id == quiz_session.id,
-            func.cardinality(QuizParticipant.skipped_question_ids) > 0,
-        )
-        .limit(1)
-    )
-    if answered is None and skipped is None:
+    if not anyone_took_a_question(quiz_session, session):
         return
     still_working: ColumnElement[bool] = QuizParticipant.current_position.is_not(None)
     if answer_review_enabled(quiz_session, quiz):
