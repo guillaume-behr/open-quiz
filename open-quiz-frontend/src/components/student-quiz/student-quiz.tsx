@@ -7,7 +7,7 @@ import { LogOut } from "lucide-react"
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { FullscreenPrompt } from "./fullscreen-prompt"
-import { StudentQuizPage } from "./student-quiz-page"
+import { StudentQuizView } from "./student-quiz-view"
 import { useQuizMonitoring } from "./use-quiz-monitoring"
 import { useQuizTranslation } from "./use-quiz-translation"
 import { useStudentQuizSession } from "./use-student-quiz-session"
@@ -92,7 +92,7 @@ export function StudentQuiz({
                 finished={["cancelled", "finished"].includes(session.status)}
                 onLeave={leaveQuiz}
             />
-            <StudentQuizPage
+            <StudentQuizView
                 session={pageSession}
                 question={translation.question}
                 participantToken={participantToken}

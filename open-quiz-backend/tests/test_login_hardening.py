@@ -3,18 +3,21 @@
 from pathlib import Path
 from typing import Any
 
+import jwt
 import pytest
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from sqlalchemy import delete, event, select, update
 
-from app import auth_guards, security
+from app.core import auth_guards, security
+from app.core.security import create_access_token
 from app.models import RefreshSession, StudentAccount, User
 from app.routers import auth, student_auth
 from app.routers.auth import REFRESH_COOKIE
 
 from support import (
     ADMIN_PASSWORD,
+    JWT_SECRET,
     complete_first_login,
     exam_environment,
     make_client,
@@ -216,3 +219,20 @@ def test_a_teachers_outdated_password_hash_is_upgraded_too(tmp_path: Path) -> No
             ).one()
         assert stored != weak_hash
         assert not security.password_hash.current_hasher.check_needs_rehash(stored)
+
+
+def test_access_tokens_never_outlive_their_session() -> None:
+    from time import time
+
+    session_expires_at = int(time()) + 30
+    token = create_access_token(
+        1, JWT_SECRET, 15, "version", session_expires_at=session_expires_at
+    )
+    payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    assert payload["exp"] == session_expires_at
+    unbounded = jwt.decode(
+        create_access_token(1, JWT_SECRET, 15, "version"),
+        JWT_SECRET,
+        algorithms=["HS256"],
+    )
+    assert unbounded["exp"] > session_expires_at

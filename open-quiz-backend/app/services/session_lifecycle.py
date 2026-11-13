@@ -16,7 +16,8 @@ from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.database import EXPIRY_LOCK_KEY, affected_rows
+from app.core.database import EXPIRY_LOCK_KEY, affected_rows
+from app.domain.session_status import ACTIVE_SESSION_STATUSES
 from app.enums import QuizMode, SessionStatus
 from app.models import (
     MakeupSession,
@@ -28,14 +29,13 @@ from app.models import (
     Student,
     StudentAccount,
 )
-from app.quiz_session_records import (
+from app.records.quiz_sessions import (
     delete_quiz_session_records,
     release_join_codes,
 )
 from app.services.grading import (
     compute_final_scores,
 )
-from app.session_status import ACTIVE_SESSION_STATUSES
 
 logger = logging.getLogger("open_quiz")
 

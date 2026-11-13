@@ -10,19 +10,19 @@ from time import time
 from sqlalchemy import ColumnElement, delete, update
 from sqlalchemy.orm import Session
 
-from app.auth_guards import (
+from app.core.auth_guards import (
     password_rate_subject,
     trusted_password_rate_subject,
     two_factor_rate_subject,
 )
-from app.database import affected_rows
+from app.core.database import affected_rows
+from app.core.rate_limit import CredentialRateLimiters
 from app.models import (
     AuthenticationChallenge,
     RefreshSession,
     TwoFactorCredential,
     User,
 )
-from app.rate_limit import CredentialRateLimiters
 
 
 def revoke_refresh_sessions(

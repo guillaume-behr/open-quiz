@@ -12,12 +12,10 @@ from fastapi import status
 from sqlalchemy import update
 from starlette.websockets import WebSocketDisconnect
 
-from app.live_quiz import LiveQuizHub, LiveSocketLimitError
-from app.models import (
-    QuizSession,
-)
-from app.routers import live, quizzes
-from app.routers import live as live_router
+from app.live.hub import LiveQuizHub, LiveSocketLimitError
+from app.models import QuizSession
+from app.routers.quizzes import live, quizzes
+from app.routers.quizzes import live as live_router
 
 from support import (
     FRONTEND_ORIGIN,
@@ -449,7 +447,7 @@ def test_live_teacher_session_pushes_student_join(
             "Bearer "
         )
         monkeypatch.setattr(
-            "app.routers.live.LIVE_TEACHER_RECONCILIATION_SECONDS",
+            "app.routers.quizzes.live.LIVE_TEACHER_RECONCILIATION_SECONDS",
             0.01,
         )
 

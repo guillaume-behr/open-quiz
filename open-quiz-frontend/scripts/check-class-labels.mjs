@@ -1,5 +1,5 @@
 // formatClassName duplicates format_class_name from
-// open-quiz-backend/app/class_names.py. The two build the label shown on
+// open-quiz-backend/app/domain/class_names.py. The two build the label shown on
 // results and written into session snapshots, so a difference between them
 // makes the interface disagree with the API it renders. This table is the one
 // in test_class_labels_are_built_without_repeating_the_level; keep them equal.

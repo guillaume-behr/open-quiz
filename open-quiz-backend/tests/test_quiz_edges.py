@@ -10,7 +10,6 @@ import pytest
 from sqlalchemy import select, text, update
 from starlette.websockets import WebSocketDisconnect
 
-from app import student_state
 from app.models import (
     QuizAnswer,
     QuizParticipant,
@@ -18,7 +17,8 @@ from app.models import (
     QuizSessionStudentQuestion,
     TrainingQuizProfile,
 )
-from app.routers import live, results
+from app.responses import student_sessions as student_state
+from app.routers.quizzes import live, results
 from app.services import answers, session_lifecycle
 
 from support import (

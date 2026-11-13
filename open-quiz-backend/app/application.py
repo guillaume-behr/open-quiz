@@ -9,48 +9,47 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
-from app.choice_tokens import CHOICE_HMAC_ENTRY
-from app.config import (
+from app.core.config import (
     VERSION,
     Settings,
     get_settings,
     warn_missing_public_information,
 )
-from app.database import build_session_factory, postgres_url
-from app.errors import server_busy_response
-from app.live_quiz import LiveQuizHub
-from app.live_relay import PostgresLiveRelay
-from app.maintenance import (
+from app.core.database import build_session_factory, postgres_url
+from app.core.errors import server_busy_response
+from app.core.middleware import add_middleware
+from app.core.rate_limit import attach_rate_limiters
+from app.core.security import choice_token_key
+from app.domain.choice_tokens import CHOICE_HMAC_ENTRY
+from app.live.hub import LiveQuizHub
+from app.live.relay import PostgresLiveRelay
+from app.routers import (
+    admin,
+    auth,
+    health,
+    problem_reports,
+    student_auth,
+    users,
+)
+from app.routers.classes import class_imports, classes, students
+from app.routers.question_banks import question_banks, questions
+from app.routers.question_banks import transfer as question_bank_transfer
+from app.routers.quizzes import (
+    live,
+    makeup,
+    quizzes,
+    results,
+    student_join,
+    student_progress,
+    student_sessions,
+    training,
+)
+from app.services.maintenance import (
     enforce_data_retention,
     expire_sessions_periodically,
     maintain_data_retention_periodically,
 )
-from app.middleware import add_middleware
-from app.rate_limit import attach_rate_limiters
-from app.routers import (
-    admin,
-    auth,
-    class_imports,
-    classes,
-    health,
-    live,
-    makeup,
-    problem_reports,
-    question_bank_transfer,
-    question_banks,
-    questions,
-    quizzes,
-    results,
-    student_auth,
-    student_join,
-    student_progress,
-    student_sessions,
-    students,
-    training,
-    users,
-)
-from app.security import choice_token_key
-from app.security_state import synchronize_security_state
+from app.services.security_state import synchronize_security_state
 
 logger = logging.getLogger("open_quiz")
 

@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine, event, inspect, select, text, update
 from sqlalchemy.orm import Session
 
-from app.database import postgres_url
+from app.core.database import postgres_url
 from app.models import (
     Question,
     QuizAnswer,
@@ -25,12 +25,10 @@ from app.models import (
     Student,
     StudentAccount,
 )
-from app.schemas import (
-    StudentQuizAnswer,
-)
+from app.records.stored_images import store_image
+from app.schemas.student_quizzes import StudentQuizAnswer
 from app.services import question_draws
 from app.services.session_lifecycle import expire_due_quiz_sessions
-from app.stored_images import store_image
 
 from support import (
     VALID_PNG,
@@ -435,7 +433,7 @@ def test_answering_requires_a_current_question_and_a_student(environment) -> Non
 def test_an_orphaned_participant_cannot_answer(environment, monkeypatch) -> None:
     client = environment["client"]
     _launched, headers, url = started(client, environment)
-    from app import participants
+    from app.services import participants
 
     original = participants.authenticated_participant
 

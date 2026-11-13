@@ -7,11 +7,14 @@ from hashlib import sha256
 from pathlib import Path
 from threading import Thread
 
+import pytest
+from PIL import Image
 from sqlalchemy import event, func, select, update
 
-from app import maintenance
+from app.domain.images import InvalidImageError, normalize_image
 from app.models import Question, StoredImage
-from app.stored_images import delete_unreferenced_images, store_image
+from app.records.stored_images import delete_unreferenced_images, store_image
+from app.services import maintenance
 
 from support import (
     VALID_PNG,
@@ -373,3 +376,16 @@ def test_exporting_releases_the_request_connection_while_streaming(
             "Pictured",
         ]
         assert b64decode(questions[1]["image"]["data_base64"]).startswith(b"\x89PNG")
+
+
+def test_normalized_image_must_fit_the_size_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.domain.images.MAX_IMAGE_BYTES", len(VALID_PNG))
+    monkeypatch.setattr(
+        Image.Image,
+        "save",
+        lambda self, output, **_: output.write(b"x" * (len(VALID_PNG) + 1)),
+    )
+    with pytest.raises(InvalidImageError, match="trop volumineuse"):
+        normalize_image(VALID_PNG, "image/png")

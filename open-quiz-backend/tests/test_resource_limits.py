@@ -7,8 +7,10 @@ from threading import Event, Semaphore, Thread
 
 import pytest
 
-from app import images, question_records, security
-from app.routers import questions
+from app.core import security
+from app.domain import images
+from app.records import questions as question_records
+from app.routers.question_banks import questions
 
 from support import VALID_PNG, exam_environment, make_client, settings_for
 

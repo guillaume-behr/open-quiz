@@ -1,6 +1,6 @@
 /**
  * Values of HTML pattern attributes, mirroring the API's regular expressions
- * (open-quiz-backend/app/schemas.py). Browsers compile them with the v flag,
+ * (open-quiz-backend/app/schemas/). Browsers compile them with the v flag,
  * where a literal "-" inside a character class must be escaped.
  */
 

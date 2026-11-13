@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
-from app.database import Base
+from app.core.database import Base
 from app.models import GradeLevel, QuizAnswer, QuizParticipant
 
 from support import (

@@ -17,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func, text
 
-from app.database import Base
+from app.core.database import Base
 from app.enums import (
     AnswerMode,
     Difficulty,
@@ -203,7 +203,7 @@ class Question(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # NULL once detached: removed from its bank, but kept for the exam sessions
-    # that drew it (app/question_history.py).
+    # that drew it (app/records/question_history.py).
     question_bank_id: Mapped[int | None] = mapped_column(
         ForeignKey("question_banks.id", ondelete="CASCADE"), nullable=True, index=True
     )
@@ -278,7 +278,7 @@ class Quiz(Base):
     allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_answer_review: Mapped[bool] = mapped_column(Boolean, default=True)
     # Whether students see the correction, as provisional, before the grades
-    # are published (app/routers/results.py, history_item).
+    # are published (app/routers/quizzes/results.py, history_item).
     show_provisional_grades: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true"
     )

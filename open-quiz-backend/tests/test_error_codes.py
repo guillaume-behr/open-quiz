@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from app.errors import ApiError, ErrorCode, api_error
+from app.core.errors import ApiError, ErrorCode, api_error
 
 BACKEND = Path(__file__).resolve().parents[1]
 

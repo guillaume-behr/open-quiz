@@ -5,7 +5,7 @@ import json
 from base64 import b64encode
 from pathlib import Path
 
-from app import maintenance
+from app.services import maintenance
 
 from support import (
     ADMIN_PASSWORD,

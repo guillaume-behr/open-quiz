@@ -1,7 +1,7 @@
 """Let a question outlive its bank while past sessions still need it.
 
 Deleting a question, or its bank, now detaches the questions that exam
-sessions drew or answered: their bank becomes NULL (app/question_history.py).
+sessions drew or answered: their bank becomes NULL (app/records/question_history.py).
 Nothing is detached by the upgrade itself.
 
 Revision ID: 0012

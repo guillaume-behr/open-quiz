@@ -1,7 +1,7 @@
 """Alembic environment for Open Quiz.
 
 At startup the application applies pending migrations itself through
-app.database.migrate_database(), which passes its own connection in
+app.core.database.migrate_database(), which passes its own connection in
 config.attributes. The alembic command line connects with DATABASE_URL
 instead, read from the environment or from open-quiz-backend/.env.
 """
@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 from sqlalchemy import Connection, create_engine, text
 
 import app.models  # noqa: F401 - registers every table on Base.metadata
-from app.config import ENV_FILE
-from app.database import MIGRATION_LOCK_KEY, Base, postgres_url
+from app.core.config import ENV_FILE
+from app.core.database import MIGRATION_LOCK_KEY, Base, postgres_url
 
 config = context.config
 

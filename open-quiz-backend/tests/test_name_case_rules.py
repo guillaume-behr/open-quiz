@@ -1,6 +1,7 @@
 """Grade levels, class names and bank names are unique per teacher, ignoring case."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
@@ -9,8 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.errors import ErrorCode
-from app.unique_names import write_unique_name
+from app.core.errors import ErrorCode
+from app.records.unique_names import write_unique_name
 
 from support import (
     concurrent_writes,
@@ -205,3 +206,11 @@ def test_other_integrity_errors_are_not_reported_as_a_taken_name() -> None:
         )
     assert raised.value is failure
     session.rollback.assert_called_once_with()
+
+
+def test_a_session_without_a_class_keeps_its_recorded_class_name() -> None:
+
+    from app.responses.student_sessions import quiz_session_class_name
+
+    detached = SimpleNamespace(class_id=None, class_name="2nde B")
+    assert quiz_session_class_name(detached, None) == "2nde B"

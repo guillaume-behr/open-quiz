@@ -8,10 +8,10 @@ import pytest
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 
-from app import application, maintenance
-from app.database import EXPIRY_LOCK_KEY
+from app import application
+from app.core.database import EXPIRY_LOCK_KEY
 from app.models import QuizSession, User
-from app.services import session_lifecycle
+from app.services import maintenance, session_lifecycle
 
 from support import (
     choice_answer,

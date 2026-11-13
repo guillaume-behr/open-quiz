@@ -4,7 +4,7 @@ import { ANSWER_MODES, QUESTION_DIFFICULTIES } from "./types"
 
 // Runtime schemas of the responses the interface cannot work without: the
 // authentication responses, the student's quiz state and the envelope of the
-// live updates. Each mirrors its model in open-quiz-backend/app/schemas.py,
+// live updates. Each mirrors its model in open-quiz-backend/app/schemas/,
 // and the TypeScript types in ./types are derived from them. A field the
 // backend model gives a default keeps that default here.
 
@@ -146,7 +146,7 @@ export const StudentQuizJoinSchema = v.object({
 })
 
 /**
- * Every message of a live feed (app/routers/live.py): a heartbeat, the
+ * Every message of a live feed (app/routers/quizzes/live.py): a heartbeat, the
  * deletion of the watched session, or a new state of what it watches.
  */
 export const LiveMessageSchema = v.variant("type", [

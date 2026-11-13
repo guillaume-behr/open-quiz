@@ -1,5 +1,5 @@
 // The backend answers errors with stable codes, the ErrorCode members of
-// open-quiz-backend/app/errors.py, and the interface translates them through
+// open-quiz-backend/app/core/errors.py, and the interface translates them through
 // API_ERROR_TRANSLATION_KEYS in src/lib/errors.ts. A code missing there falls
 // back to a generic message, so every backend code must have a key, every key
 // a translation, and the table no code the backend has stopped sending.
@@ -8,7 +8,10 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const frontend = fileURLToPath(new URL("../", import.meta.url))
-const errorsModule = path.join(frontend, "../open-quiz-backend/app/errors.py")
+const errorsModule = path.join(
+    frontend,
+    "../open-quiz-backend/app/core/errors.py"
+)
 
 const backendCodes = new Set(
     [

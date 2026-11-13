@@ -7,7 +7,6 @@ from time import time
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
-from app import maintenance
 from app.models import (
     AuthenticationChallenge,
     ProblemReport,
@@ -20,7 +19,8 @@ from app.models import (
     RefreshSessionFamily,
     User,
 )
-from app.session_retention import close_abandoned_sessions
+from app.services import maintenance
+from app.services.session_retention import close_abandoned_sessions
 
 from support import (
     FRONTEND_ORIGIN,

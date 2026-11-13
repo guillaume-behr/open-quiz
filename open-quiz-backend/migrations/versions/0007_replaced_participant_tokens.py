@@ -1,7 +1,7 @@
 """Remember the participant token a resumed exam replaced.
 
 A student who lost their participant token joins again and gets a new one
-(app/routers/student_sessions.py, rejoin_quiz). The replaced token's hash is
+(app/routers/quizzes/student_sessions.py, rejoin_quiz). The replaced token's hash is
 kept so the tab still holding it can be told the exam was resumed elsewhere.
 
 Revision ID: 0007

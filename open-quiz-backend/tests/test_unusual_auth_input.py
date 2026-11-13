@@ -5,12 +5,12 @@ from pathlib import Path
 
 from sqlalchemy import Connection, text
 
-from app.models import TwoFactorCredential, User
-from app.security import (
+from app.core.security import (
     encrypt_totp_secret,
     generate_totp_secret,
     verify_totp_code,
 )
+from app.models import TwoFactorCredential, User
 
 from support import (
     concurrent_writes,

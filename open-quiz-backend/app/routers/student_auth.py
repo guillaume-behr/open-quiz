@@ -3,16 +3,20 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy import select, update
 
-from app.audit import audit_event
-from app.auth_guards import (
+from app.core.audit import audit_event
+from app.core.auth_guards import (
     check_password,
     student_password_rate_subject,
     validate_origin,
 )
-from app.config import app_settings
-from app.dependencies import (
+from app.core.config import app_settings
+from app.core.dependencies import (
     DbSession,
     current_student,
+)
+from app.core.security import (
+    access_token_version,
+    create_student_access_token,
 )
 from app.enums import QuizMode
 from app.models import (
@@ -22,16 +26,12 @@ from app.models import (
     Student,
     StudentAccount,
 )
-from app.schemas import (
+from app.records.student_accounts import student_account_response
+from app.schemas.classes import (
     StudentAccountResponse,
     StudentLoginRequest,
     StudentLoginResponse,
 )
-from app.security import (
-    access_token_version,
-    create_student_access_token,
-)
-from app.student_accounts import student_account_response
 
 router = APIRouter(prefix="/api/student-auth", tags=["student authentication"])
 

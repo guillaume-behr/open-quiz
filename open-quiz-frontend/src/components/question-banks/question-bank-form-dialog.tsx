@@ -1,6 +1,6 @@
 import type { GradeLevel, QuestionBank } from "@/api/types"
 import { DialogFormActions } from "@/components/forms/dialog-form-actions"
-import { GradeLevelField } from "@/components/forms/grade-level-field"
+import { GradeLevelField } from "@/components/grade-levels/grade-level-field"
 import { Dialog } from "@/components/ui/dialog"
 import {
     Field,

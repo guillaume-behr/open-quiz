@@ -9,6 +9,7 @@ import pytest
 from fastapi import status
 from sqlalchemy import select
 
+from app.core.security import refresh_request_proof
 from app.models import (
     Base,
     QuestionBank,
@@ -23,9 +24,6 @@ from app.models import (
     User,
 )
 from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
-from app.security import (
-    refresh_request_proof,
-)
 
 from support import (
     ADMIN_PASSWORD,

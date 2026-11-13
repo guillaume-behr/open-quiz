@@ -9,8 +9,8 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.audit import audit_event
-from app.auth_guards import (
+from app.core.audit import audit_event
+from app.core.auth_guards import (
     check_password,
     enforce_global_auth_limit,
     password_rate_subject,
@@ -18,26 +18,11 @@ from app.auth_guards import (
     two_factor_rate_subject,
     validate_origin,
 )
-from app.config import app_settings
-from app.database import affected_rows
-from app.dependencies import DbSession
-from app.errors import ApiError, ErrorCode
-from app.models import (
-    AuthenticationChallenge,
-    RefreshSession,
-    RefreshSessionFamily,
-    TwoFactorCredential,
-    User,
-)
-from app.schemas import (
-    LoginRequest,
-    LoginResponse,
-    LoginSessionResponse,
-    LogoutRequest,
-    TokenResponse,
-    TwoFactorVerifyRequest,
-)
-from app.security import (
+from app.core.config import app_settings
+from app.core.database import affected_rows
+from app.core.dependencies import DbSession
+from app.core.errors import ApiError, ErrorCode
+from app.core.security import (
     access_token_version,
     create_access_token,
     create_refresh_token,
@@ -54,6 +39,21 @@ from app.security import (
     refresh_request_proof,
     two_factor_trust_version,
     verify_totp_code,
+)
+from app.models import (
+    AuthenticationChallenge,
+    RefreshSession,
+    RefreshSessionFamily,
+    TwoFactorCredential,
+    User,
+)
+from app.schemas.accounts import (
+    LoginRequest,
+    LoginResponse,
+    LoginSessionResponse,
+    LogoutRequest,
+    TokenResponse,
+    TwoFactorVerifyRequest,
 )
 from app.services.credentials import revoke_refresh_sessions, revoke_user_sessions
 
@@ -688,7 +688,7 @@ def retire_refresh_session(
 ) -> RefreshSessionFamily:
     """Revoke the session being rotated, and return the family it belongs to."""
     # Startup revokes every live session without a family
-    # (app/security_state.py), so the one being rotated has one, unless a
+    # (app/services/security_state.py), so the one being rotated has one, unless a
     # sign-in on another device deleted it past the session cap since it was
     # read: that cookie is simply no longer valid.
     family = session.execute(

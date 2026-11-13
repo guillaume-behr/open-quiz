@@ -1,6 +1,6 @@
 import { ApiError, UNEXPECTED_RESPONSE_CODE } from "@/api/client"
 
-// Every ErrorCode member of open-quiz-backend/app/errors.py needs a key here:
+// Every ErrorCode member of open-quiz-backend/app/core/errors.py needs a key here:
 // scripts/check-error-codes.mjs fails `pnpm test` when one is missing.
 const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     AUTH_ORIGIN_REJECTED: "auth-origin-rejected",
@@ -122,7 +122,7 @@ const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
 
 // Codes the interface gives an ApiError itself, never sent by the backend:
 // kept out of the table above, which scripts/check-error-codes.mjs matches
-// against open-quiz-backend/app/errors.py.
+// against open-quiz-backend/app/core/errors.py.
 const CLIENT_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     [UNEXPECTED_RESPONSE_CODE]: "error-unexpected-response",
 }

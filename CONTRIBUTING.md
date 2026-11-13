@@ -134,7 +134,7 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
 - vérifiez les permissions avec les rôles administrateur, enseignant et élève ;
 - préservez l’atomicité des imports et opérations concurrentes ;
 - levez chaque erreur d’API par `ApiError(statut, ErrorCode.…, "message")`
-  (`open-quiz-backend/app/errors.py`) et ajoutez la traduction du code dans
+  (`open-quiz-backend/app/core/errors.py`) et ajoutez la traduction du code dans
   `open-quiz-frontend/src/lib/errors.ts` et les huit catalogues : un test
   backend et `pnpm test` refusent sinon l’erreur ;
 - placez la logique métier réutilisable dans `open-quiz-backend/app/services/`

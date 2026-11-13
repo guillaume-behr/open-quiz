@@ -16,7 +16,8 @@ from statistics import median
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from app.class_names import format_class_name
+from app.domain.class_names import format_class_name
+from app.domain.session_status import took_part
 from app.enums import QuizMode, SessionStatus
 from app.models import (
     Quiz,
@@ -26,10 +27,7 @@ from app.models import (
     Student,
     StudentClass,
 )
-from app.schemas import (
-    QuizParticipantResponse,
-    QuizSessionResponse,
-)
+from app.schemas.quizzes import QuizParticipantResponse, QuizSessionResponse
 from app.services.grading import (
     question_maximum_scores,
     rounded_score,
@@ -41,8 +39,7 @@ from app.services.question_assignments import (
 from app.services.session_lifecycle import (
     quiz_ends_at,
 )
-from app.session_retention import retained_exam_result
-from app.session_status import took_part
+from app.services.session_retention import retained_exam_result
 
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
