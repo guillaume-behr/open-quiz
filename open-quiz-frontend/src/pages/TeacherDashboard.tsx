@@ -78,7 +78,7 @@ const ClassTrainingBanksPanel = lazy(() =>
     )
 )
 
-export function Dashboard({ page }: { page: "login" | "dashboard" }) {
+export function TeacherDashboard({ page }: { page: "login" | "dashboard" }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const session = useStaffSession("professor")

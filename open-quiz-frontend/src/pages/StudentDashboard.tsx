@@ -71,7 +71,7 @@ const StudentMakeupPanel = lazy(() =>
 
 type StudentSection = "exam" | "training" | "makeup" | "results"
 
-export function HomePage({
+export function StudentDashboard({
     page,
     initialSection = "exam",
 }: {
