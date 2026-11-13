@@ -67,17 +67,37 @@ def migrate_database(engine: Engine) -> None:
         command.upgrade(config, "head")
 
 
-def build_session_factory(
-    database_url: str, *, migrate: bool = True
-) -> sessionmaker[Session]:
-    """Sessions on the database, migrated first unless migrate is False.
+# The defaults of Settings.database_pool_size and its neighbours; scripts and
+# tests that build a factory without settings get the same pool.
+DEFAULT_POOL_SIZE = 5
+DEFAULT_POOL_OVERFLOW = 10
+DEFAULT_POOL_TIMEOUT_SECONDS = 10
 
-    The application migrates at startup; maintenance scripts pass
-    migrate=False, so that running one never changes the schema.
+
+def build_session_factory(
+    database_url: str,
+    *,
+    pool_size: int = DEFAULT_POOL_SIZE,
+    max_overflow: int = DEFAULT_POOL_OVERFLOW,
+    pool_timeout: int = DEFAULT_POOL_TIMEOUT_SECONDS,
+    migrate: bool = True,
+) -> sessionmaker[Session]:
+    """A session factory on a pool sized for one worker's requests.
+
+    The database is migrated first unless ``migrate`` is False: the
+    application migrates at startup, and maintenance scripts pass False so
+    that running one never changes the schema.
+
+    A request that finds every connection taken waits ``pool_timeout``
+    seconds, then fails with sqlalchemy.exc.TimeoutError, which the
+    application answers with 503 SERVER_BUSY.
     """
     engine = create_engine(
         postgres_url(database_url),
         pool_pre_ping=True,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_timeout=pool_timeout,
     )
     if migrate:
         migrate_database(engine)

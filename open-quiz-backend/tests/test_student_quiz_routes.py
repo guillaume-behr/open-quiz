@@ -2349,6 +2349,25 @@ def test_student_images_are_scoped_to_the_current_question(tmp_path: Path) -> No
             headers={"X-Quiz-Token": quiz_token},
         )
         assert served_choice.status_code == 200
+        # A browser that holds an image revalidates it without its bytes.
+        for url, response in (
+            (image_url, served),
+            (
+                f"/api/quizzes/student/sessions/{join_code}"
+                f"/choices/{choice_with_image}/image",
+                served_choice,
+            ),
+        ):
+            assert "private" in response.headers["Cache-Control"]
+            revalidated = client.get(
+                url,
+                headers={
+                    "X-Quiz-Token": quiz_token,
+                    "If-None-Match": response.headers["ETag"],
+                },
+            )
+            assert revalidated.status_code == 304
+            assert revalidated.content == b""
 
         # A question the student has not reached must stay private.
         assert (

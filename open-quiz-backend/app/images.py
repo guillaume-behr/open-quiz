@@ -4,6 +4,8 @@ from threading import BoundedSemaphore
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from app.errors import ServerBusyError
+
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_IMAGE_PIXELS = 20_000_000
 MAX_IMAGE_DIMENSION = 8192
@@ -17,6 +19,9 @@ ACCEPTED_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP", "GIF")
 # uploads multiplies that by the size of the request thread pool.
 MAX_CONCURRENT_IMAGE_DECODES = 2
 image_decoding = BoundedSemaphore(MAX_CONCURRENT_IMAGE_DECODES)
+# How long an image waits for a decoding slot before its request answers 503:
+# past it, the request thread would only pile up behind large imports.
+IMAGE_DECODING_WAIT_SECONDS = 30.0
 
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
@@ -52,8 +57,10 @@ def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
     if not data or len(data) > MAX_IMAGE_BYTES:
         raise InvalidImageError("L’image est vide ou trop volumineuse")
 
+    if not image_decoding.acquire(timeout=IMAGE_DECODING_WAIT_SECONDS):
+        raise ServerBusyError()
     try:
-        with image_decoding, warnings.catch_warnings():
+        with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(BytesIO(data), formats=ACCEPTED_IMAGE_FORMATS) as candidate:
                 candidate.verify()
@@ -107,6 +114,8 @@ def normalize_image(data: bytes, declared_type: str) -> tuple[bytes, str]:
         raise InvalidImageError(
             "Le fichier envoyé n’est pas une image valide"
         ) from error
+    finally:
+        image_decoding.release()
 
     normalized_data = output.getvalue()
     if not normalized_data or len(normalized_data) > MAX_IMAGE_BYTES:
