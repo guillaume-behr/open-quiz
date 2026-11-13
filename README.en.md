@@ -119,9 +119,9 @@ sh ./install.sh
 
 The script asks for the domain name, without `https://` or a trailing `/`. It
 generates the secrets and the administrator password, writes
-`open-quiz-backend/.env` and `open-quiz-backend/.env.database`, then builds and starts the containers. Pass
-`--domain quiz.example.com` for a non-interactive installation, and `--help`
-for the other options. Docker Compose settings (API workers, memory, internal
+`open-quiz-backend/.env` and `open-quiz-backend/.env.database`, then builds
+and starts the containers. Pass `--domain quiz.example.com` for a
+non-interactive installation, and `--help` to show the usage. Docker Compose settings (API workers, memory, internal
 subnet) belong in the root `.env`, created from [`.env.example`](.env.example);
 never pass them on the command line, where the next update would not see them.
 
@@ -296,6 +296,7 @@ are welcome.
 | -------------------------------------------------------------------- | --------------------------------------------- | --------------- |
 | [Changelog](CHANGELOG.md)                                            | changes and upgrade actions per version       | English         |
 | [Deployment and operations](docs/deployment.md)                      | production, backups, updates, troubleshooting | French          |
+| [Architecture](docs/architecture.md)                                 | services, networks, state and API layers      | French          |
 | [Backend documentation](open-quiz-backend/README.md)                 | API, security, storage and operations         | French          |
 | [Frontend documentation](open-quiz-frontend/README.md)               | interface, routes, translation, browser tests | French          |
 | [Contributing guide](CONTRIBUTING.md)                                | environment, conventions and checks           | French          |

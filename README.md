@@ -121,9 +121,9 @@ sh ./install.sh
 
 Le script demande le nom de domaine, sans `https://` ni `/` final. Il génère
 les secrets et le mot de passe administrateur, écrit
-`open-quiz-backend/.env` et `open-quiz-backend/.env.database`, puis construit et démarre les conteneurs. Passez
-`--domain quiz.example.com` pour une installation non interactive, et
-`--help` pour les autres options. Les réglages de Docker Compose (nombre de
+`open-quiz-backend/.env` et `open-quiz-backend/.env.database`, puis construit
+et démarre les conteneurs. Passez `--domain quiz.example.com` pour une
+installation non interactive, et `--help` pour afficher l’aide. Les réglages de Docker Compose (nombre de
 workers, mémoire, sous-réseau) vont dans le fichier `.env` de la racine, créé
 depuis [`.env.example`](.env.example) : ne les passez pas dans la ligne de
 commande, que la mise à jour suivante ne verrait pas.
@@ -307,6 +307,7 @@ exécuter avant une pull request.
 | ------------------------------------------------------ | -------------------------------------------------- |
 | [Journal des modifications](CHANGELOG.md)              | changements et actions de mise à jour, en anglais  |
 | [Déploiement et exploitation](docs/deployment.md)      | production, sauvegardes, mises à jour et dépannage |
+| [Architecture](docs/architecture.md)                   | services, réseaux, état et couches de l’API        |
 | [Documentation backend](open-quiz-backend/README.md)   | API, sécurité, stockage et exploitation            |
 | [Documentation frontend](open-quiz-frontend/README.md) | interface, routes, traduction et tests navigateur  |
 | [Guide de contribution](CONTRIBUTING.md)               | environnement, conventions et vérifications        |

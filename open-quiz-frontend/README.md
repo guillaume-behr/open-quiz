@@ -60,19 +60,21 @@ Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 
 ## ⌨️ Commandes disponibles
 
-| Commande            | Rôle                                                          |
-| ------------------- | ------------------------------------------------------------- |
-| `pnpm dev`          | démarre Vite avec le proxy de développement                   |
-| `pnpm build`        | vérifie les types puis produit `dist/`                        |
-| `pnpm preview`      | sert le build localement, avec le même proxy `/api`           |
-| `pnpm lint`         | exécute ESLint                                                |
-| `pnpm format`       | applique Prettier aux sources et catalogues                   |
-| `pnpm format:check` | vérifie le formatage                                          |
-| `pnpm test`         | valide catalogues, étiquettes, codes d’erreur et lance Vitest |
-| `pnpm typecheck`    | vérifie `src/`, les tests e2e et la configuration Vite        |
-| `pnpm test:e2e`     | lance les parcours Playwright dans Chromium                   |
-| `pnpm test:e2e:ui`  | ouvre l’interface Playwright                                  |
-| `pnpm test:e2e:production` | smoke tests contre les conteneurs (`docker compose up`) |
+| Commande                   | Rôle                                                          |
+| -------------------------- | ------------------------------------------------------------- |
+| `pnpm dev`                 | démarre Vite avec le proxy de développement                   |
+| `pnpm build`               | vérifie les types puis produit `dist/`                        |
+| `pnpm preview`             | sert le build localement, avec le même proxy `/api`           |
+| `pnpm lint`                | exécute ESLint                                                |
+| `pnpm format`              | applique Prettier aux sources et catalogues                   |
+| `pnpm format:check`        | vérifie le formatage                                          |
+| `pnpm test`                | valide catalogues, étiquettes, codes d’erreur et lance Vitest |
+| `pnpm test:coverage`       | `pnpm test` avec la couverture et ses seuils                  |
+| `pnpm typecheck`           | vérifie `src/`, les tests e2e et la configuration Vite        |
+| `pnpm check:bundle-size`   | contrôle la taille du bundle initial, après `pnpm build`      |
+| `pnpm test:e2e`            | lance les parcours Playwright dans Chromium                   |
+| `pnpm test:e2e:ui`         | ouvre l’interface Playwright                                  |
+| `pnpm test:e2e:production` | smoke tests contre les conteneurs (`docker compose up`)       |
 
 `pnpm preview` transmet `/api` comme `pnpm dev` (même `VITE_API_PROXY_TARGET`),
 mais sans les en-têtes de Caddy (CSP, cache) : pour les vérifier, utilisez les
@@ -126,7 +128,8 @@ src/
 │   └── ui/           composants d’interface génériques
 ├── hooks/        chargement de données et actions asynchrones partagés
 ├── lib/          traduction, mises à jour temps réel et utilitaires
-└── pages/        points d’entrée chargés à la demande (legal/ : pages légales)
+├── pages/        points d’entrée chargés à la demande (legal/ : pages légales)
+└── test/         configuration et aides communes des tests Vitest
 
 public/
 ├── locales/      catalogues i18next
@@ -168,8 +171,10 @@ Le backend FastAPI n’est donc pas nécessaire pour cette suite. Les ports 4173
 et 4180 doivent être disponibles. Les tests couvrent aussi le proxy HTTP et
 WebSocket local.
 
-La CI principale exécute ESLint, Prettier, la validation des catalogues, le
-typecheck, le build et l’audit des dépendances. Le job `e2e` lance ensuite
+La CI principale exécute ESLint, Prettier, `pnpm test:coverage` (validation
+des catalogues et tests unitaires avec leurs seuils), le build, qui vérifie
+aussi les types, le contrôle de la taille du bundle et l’audit des
+dépendances. Le job `e2e` lance ensuite
 cette suite Playwright sur chaque pull request et conserve les traces des tests
 en échec comme artefact `playwright-test-results`.
 
