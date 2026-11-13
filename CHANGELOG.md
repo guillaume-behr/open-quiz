@@ -99,6 +99,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- `scripts/reset_two_factor.py` now resets an account exactly like
+  **Recover access** with a 2FA reset: it also empties the account's password
+  attempt buckets, and revokes its sessions instead of deleting them. It no
+  longer migrates the database; run it once the backend has started. A
+  student sign-in refused by its attempt limit is now audited
+  (`student_auth.login_rate_limited`), like a teacher's.
 - Slow work no longer holds a database connection: question images decode,
   class imports hash their passwords and bank exports stream after the
   request has given its connection back. Class imports use at most three of

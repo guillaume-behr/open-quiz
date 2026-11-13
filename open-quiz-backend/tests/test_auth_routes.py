@@ -479,7 +479,13 @@ def test_admin_account_management_edge_cases(tmp_path: Path) -> None:
         assert missing_report.status_code == 404
 
 
-def test_student_login_is_rate_limited_per_identifier(tmp_path: Path) -> None:
+def test_student_login_is_rate_limited_per_identifier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(
+        "app.auth_guards.audit_event", lambda name, **_: events.append(name)
+    )
     with make_client(settings_for(tmp_path / "student-limit", login_attempts=3)) as (
         client
     ):
@@ -491,6 +497,10 @@ def test_student_login_is_rate_limited_per_identifier(tmp_path: Path) -> None:
             for _ in range(4)
         ]
         assert statuses == [401, 401, 401, 429]
+    # Rate-limited student sign-ins are audited like the teachers' ones.
+    assert events == ["student_auth.login_failed"] * 3 + [
+        "student_auth.login_rate_limited"
+    ]
 
 
 def test_grade_levels_survive_concurrent_creation(tmp_path: Path) -> None:
@@ -1002,7 +1012,7 @@ def test_login_rate_limit_reserves_concurrent_attempts_atomically(
         return False, None
 
     monkeypatch.setattr(
-        "app.routers.auth.verify_password_and_update",
+        "app.auth_guards.verify_password_and_update",
         held_invalid_password,
     )
 
@@ -1035,11 +1045,9 @@ def test_global_auth_rate_limit_is_shared_across_login_flows(
         tmp_path / "global-auth-limit.db",
         global_login_attempts=50,
     )
+    # Teachers and students share one password check.
     monkeypatch.setattr(
-        "app.routers.auth.verify_password_and_update", lambda *_: (False, None)
-    )
-    monkeypatch.setattr(
-        "app.routers.student_auth.verify_password_and_update", lambda *_: (False, None)
+        "app.auth_guards.verify_password_and_update", lambda *_: (False, None)
     )
 
     with make_client(app_settings) as client:
@@ -1079,7 +1087,7 @@ def test_an_exhausted_global_budget_still_admits_a_known_teacher(
     )
     with make_client(app_settings) as client:
         monkeypatch.setattr(
-            "app.routers.auth.verify_password_and_update",
+            "app.auth_guards.verify_password_and_update",
             lambda password, _: (password == ADMIN_PASSWORD, None),
         )
         for attempt in range(50):
@@ -1149,11 +1157,10 @@ def test_an_exhausted_global_budget_admits_only_active_students(
         ).json()
         student_password = account["generated_password"]
 
+        # Teachers and students share one password check; the teacher
+        # attempts below all send another password.
         monkeypatch.setattr(
-            "app.routers.auth.verify_password_and_update", lambda *_: (False, None)
-        )
-        monkeypatch.setattr(
-            "app.routers.student_auth.verify_password_and_update",
+            "app.auth_guards.verify_password_and_update",
             lambda password, _: (password == student_password, None),
         )
         for attempt in range(50):
@@ -1286,7 +1293,7 @@ def test_student_login_verifies_password_for_unknown_accounts(
         verifications.append((password, encoded))
         return False, None
 
-    monkeypatch.setattr("app.routers.student_auth.verify_password_and_update", spy)
+    monkeypatch.setattr("app.auth_guards.verify_password_and_update", spy)
     with make_client(settings_for(tmp_path / "student-timing.db")) as client:
         response = client.post(
             "/api/student-auth/login",

@@ -1,30 +1,23 @@
 from time import time
 
 from fastapi import APIRouter, Request, Response, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.audit import audit_event
-from app.auth_guards import (
-    password_rate_subject,
-    trusted_password_rate_subject,
-    two_factor_rate_subject,
-)
 from app.dependencies import AdminUser, DbSession
 from app.enums import QuizMode
 from app.errors import ApiError, ErrorCode
 from app.grade_levels import ensure_default_grade_levels
 from app.models import (
-    AuthenticationChallenge,
     Quiz,
     QuizSession,
-    RefreshSession,
-    TwoFactorCredential,
     User,
 )
 from app.pagination import (
     Paging,
 )
+from app.rate_limit import CredentialRateLimiters
 from app.schemas import (
     UserCreate,
     UserCredentialReset,
@@ -32,6 +25,7 @@ from app.schemas import (
     UserStatusUpdate,
 )
 from app.security import hash_password
+from app.services.credentials import reset_credentials, revoke_user_sessions
 from app.session_status import ACTIVE_SESSION_STATUSES
 from app.user_records import delete_user_records
 
@@ -47,22 +41,6 @@ def professor_account(user_id: int, session: DbSession) -> User:
             "Compte enseignant introuvable",
         )
     return user
-
-
-def revoke_user_sessions(user_id: int, session: DbSession) -> None:
-    session.execute(
-        update(RefreshSession)
-        .where(
-            RefreshSession.user_id == user_id,
-            RefreshSession.revoked_at.is_(None),
-        )
-        .values(revoked_at=int(time()))
-    )
-    session.execute(
-        delete(AuthenticationChallenge).where(
-            AuthenticationChallenge.user_id == user_id
-        )
-    )
 
 
 @router.get("/users", response_model=list[UserResponse])
@@ -138,7 +116,7 @@ def update_user_status(
     if status_changed:
         user.access_token_generation += 1
     if status_changed and not payload.is_active:
-        revoke_user_sessions(user.id, session)
+        revoke_user_sessions(session, user.id, int(time()))
     session.commit()
     session.refresh(user)
     audit_event(
@@ -164,18 +142,14 @@ def reset_user_credentials(
     """Reset a professor password, sessions, and optionally 2FA enrollment."""
     user = professor_account(user_id, session)
     user.password_hash = hash_password(payload.password)
-    revoke_user_sessions(user.id, session)
-    if payload.reset_two_factor:
-        session.execute(
-            delete(TwoFactorCredential).where(TwoFactorCredential.user_id == user.id)
-        )
-    session.commit()
-    limiter = request.app.state.login_rate_limiter
-    limiter.clear_subject(password_rate_subject(user.username))
-    limiter.clear_subject(trusted_password_rate_subject(user.id))
-    limiter.clear_subject(two_factor_rate_subject(user.id))
-    request.app.state.two_factor_daily_rate_limiter.clear_subject(
-        two_factor_rate_subject(user.id)
+    reset_credentials(
+        user,
+        session,
+        CredentialRateLimiters(
+            login=request.app.state.login_rate_limiter,
+            two_factor_daily=request.app.state.two_factor_daily_rate_limiter,
+        ),
+        two_factor=payload.reset_two_factor,
     )
     session.refresh(user)
     audit_event(

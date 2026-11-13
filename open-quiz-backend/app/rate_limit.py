@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 from hashlib import sha256
 from hmac import new as hmac_new
 from time import time
@@ -169,25 +170,44 @@ class FixedWindowRateLimiter:
         return f"{self.namespace}:{digest}"
 
 
+@dataclass(frozen=True)
+class CredentialRateLimiters:
+    """The per-account limiters on passwords and two-factor codes."""
+
+    login: LoginRateLimiter
+    two_factor_daily: LoginRateLimiter
+
+
+def build_credential_rate_limiters(
+    sessions: LimiterSessions, settings: Settings
+) -> CredentialRateLimiters:
+    """The per-account limiters, as the app and the scripts both build them."""
+    return CredentialRateLimiters(
+        login=LoginRateLimiter(
+            sessions,
+            settings.login_attempts,
+            settings.login_window_seconds,
+            settings.jwt_secret,
+        ),
+        # Caps how many codes one account may try per day, so that someone who
+        # holds the password cannot keep guessing at the short window's pace.
+        two_factor_daily=LoginRateLimiter(
+            sessions,
+            settings.two_factor_daily_attempts,
+            TWO_FACTOR_DAILY_WINDOW_SECONDS,
+            settings.jwt_secret,
+            namespace=TWO_FACTOR_DAILY_NAMESPACE,
+        ),
+    )
+
+
 def attach_rate_limiters(app: FastAPI, settings: Settings) -> None:
     """Give the app its limiters, which count attempts in a pool of their own."""
     limiter_sessions = build_rate_limiter_session_factory(settings.database_url)
     app.state.rate_limiter_sessions = limiter_sessions
-    app.state.login_rate_limiter = LoginRateLimiter(
-        limiter_sessions,
-        settings.login_attempts,
-        settings.login_window_seconds,
-        settings.jwt_secret,
-    )
-    # Caps how many codes one account may try per day, so that someone who
-    # holds the password cannot keep guessing at the short window's pace.
-    app.state.two_factor_daily_rate_limiter = LoginRateLimiter(
-        limiter_sessions,
-        settings.two_factor_daily_attempts,
-        TWO_FACTOR_DAILY_WINDOW_SECONDS,
-        settings.jwt_secret,
-        namespace=TWO_FACTOR_DAILY_NAMESPACE,
-    )
+    credential_limiters = build_credential_rate_limiters(limiter_sessions, settings)
+    app.state.login_rate_limiter = credential_limiters.login
+    app.state.two_factor_daily_rate_limiter = credential_limiters.two_factor_daily
     app.state.auth_global_rate_limiter = FixedWindowRateLimiter(
         limiter_sessions,
         settings.global_login_attempts,

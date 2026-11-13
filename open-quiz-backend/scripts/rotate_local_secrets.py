@@ -2,11 +2,9 @@ from pathlib import Path
 from secrets import token_urlsafe
 from time import time
 
-from sqlalchemy import update
-
 from app.config import get_settings, secure_private_file, write_private_file
 from app.database import database_sessions
-from app.models import RefreshSession
+from app.services.credentials import revoke_refresh_sessions
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 ROTATED_KEYS = ("JWT_SECRET", "ADMIN_PASSWORD")
@@ -48,11 +46,7 @@ def rotate() -> None:
         database_sessions(settings.database_url) as session_factory,
         session_factory() as session,
     ):
-        session.execute(
-            update(RefreshSession)
-            .where(RefreshSession.revoked_at.is_(None))
-            .values(revoked_at=now)
-        )
+        revoke_refresh_sessions(session, now)
         session.commit()
     print(f"Backup written to {backup}")
     print("Secrets rotated. Restart the service to reload them.")
