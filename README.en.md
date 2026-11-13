@@ -166,7 +166,7 @@ and first exam — is in [First steps](#-first-steps).
 ### Updates
 
 ```shell
-sh ./update.sh --version v1.0.0
+sh ./update.sh --version v1.1.0
 ```
 
 Without `--version`, `update.sh` follows the clone's branch, unreleased changes

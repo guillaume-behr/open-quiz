@@ -170,7 +170,7 @@ premier examen — se trouve dans [Premiers pas](#-premiers-pas).
 ### Mises à jour
 
 ```shell
-sh ./update.sh --version v1.0.0
+sh ./update.sh --version v1.1.0
 ```
 
 Sans `--version`, `update.sh` suit la branche du clone, changements non publiés

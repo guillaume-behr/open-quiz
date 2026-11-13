@@ -13,6 +13,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-13
+
 ### Upgrade actions
 
 - Migration 0012 lets a question exist without a bank, for the exams that
@@ -631,7 +633,8 @@ the upgrade path changes the major number.
 
 First version described in this changelog; `v0.1.0` is an earlier tag.
 
-[Unreleased]: https://github.com/guillaume-behr/open-quiz/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/guillaume-behr/open-quiz/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/guillaume-behr/open-quiz/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/guillaume-behr/open-quiz/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/guillaume-behr/open-quiz/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/guillaume-behr/open-quiz/compare/v0.3.0...v0.3.5
