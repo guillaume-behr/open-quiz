@@ -7,10 +7,10 @@ import { ThemeProvider } from "@/components/theme/theme-provider.tsx"
 
 import "./lib/i18n.ts"
 
-import { MainLayout } from "./layouts/main-layout.tsx"
+import { MainLayout } from "@/components/navigation/main-layout"
 
 import { LanguageDirection } from "@/components/language/language-direction"
-import { RouteErrorBoundary } from "@/components/error-boundary"
+import { RouteErrorBoundary } from "@/components/shared/error-boundary"
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager"
 import {
     AccessibilityPage,

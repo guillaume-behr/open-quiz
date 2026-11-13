@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
 
-import { StudentQuizPage } from "./student-quiz-page"
+import { StudentQuizView } from "./student-quiz-view"
 
 const timerRenders = vi.hoisted(() => ({ count: 0 }))
 vi.mock("@/components/quizzes/quiz-timer", () => ({
@@ -35,7 +35,7 @@ const question = { id: 1 } as unknown as StudentQuizQuestion
 
 function page(writtenAnswer: string) {
     return (
-        <StudentQuizPage
+        <StudentQuizView
             session={session}
             question={question}
             participantToken="token"
@@ -65,7 +65,7 @@ function page(writtenAnswer: string) {
     )
 }
 
-describe("StudentQuizPage", () => {
+describe("StudentQuizView", () => {
     it("does not re-render the header and its timer while the student types", () => {
         const { rerender } = render(page("a"))
         rerender(page("ab"))

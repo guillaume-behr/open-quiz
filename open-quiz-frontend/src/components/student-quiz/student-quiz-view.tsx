@@ -1,5 +1,5 @@
 import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
-import { LiveReconnectingNotice } from "@/components/live-reconnecting-notice"
+import { LiveReconnectingNotice } from "@/components/shared/live-reconnecting-notice"
 import { QuizTimer } from "@/components/quizzes/quiz-timer"
 import { Button } from "@/components/ui/button"
 import { ListChecks, LoaderCircle } from "lucide-react"
@@ -13,7 +13,7 @@ import {
     type TranslationViewState,
 } from "./translation-notice"
 
-type StudentQuizPageProps = {
+type StudentQuizViewProps = {
     session: StudentQuizSession
     question: StudentQuizQuestion | null
     participantToken: string
@@ -35,7 +35,7 @@ type StudentQuizPageProps = {
     onReturnHome: () => void
 }
 
-export function StudentQuizPage({
+export function StudentQuizView({
     session,
     question,
     participantToken,
@@ -55,7 +55,7 @@ export function StudentQuizPage({
     onBackToReview,
     onSubmitQuiz,
     onReturnHome,
-}: StudentQuizPageProps) {
+}: StudentQuizViewProps) {
     const { t } = useTranslation()
     const isReviewing =
         session.awaiting_final_submission && session.status === "in_progress"

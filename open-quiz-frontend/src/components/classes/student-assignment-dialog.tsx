@@ -1,5 +1,5 @@
 import type { GradeLevel, StudentAccount, StudentClass } from "@/api/types"
-import { GradeLevelSelect } from "@/components/grade-level-select"
+import { GradeLevelSelect } from "@/components/grade-levels/grade-level-select"
 import { Button } from "@/components/ui/button"
 import { CollapsibleFilters } from "@/components/ui/collapsible-filters"
 import { Dialog } from "@/components/ui/dialog"

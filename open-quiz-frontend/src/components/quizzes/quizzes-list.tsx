@@ -1,5 +1,5 @@
 import type { GradeLevel, Quiz, QuizSession } from "@/api/types"
-import { GradeLevelSelect } from "@/components/grade-level-select"
+import { GradeLevelSelect } from "@/components/grade-levels/grade-level-select"
 import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"

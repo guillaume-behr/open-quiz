@@ -120,18 +120,22 @@ Toute route inconnue affiche la page 404.
 ```text
 src/
 ├── api/          client HTTP, types et rotation des sessions
-├── components/   composants d’interface et fonctionnalités métier
+├── components/   un dossier par fonctionnalité (classes/, quizzes/, results/…)
+│   ├── navigation/   structure commune des pages et navigation
+│   ├── shared/       composants utilisés par plusieurs fonctionnalités
+│   └── ui/           composants d’interface génériques
 ├── hooks/        chargement de données et actions asynchrones partagés
-├── layouts/      structure commune des pages
 ├── lib/          traduction, mises à jour temps réel et utilitaires
-└── pages/        points d’entrée chargés à la demande
+└── pages/        points d’entrée chargés à la demande (legal/ : pages légales)
 
 public/
 ├── locales/      catalogues i18next
 └── pyodide/      runtime Python, copié depuis node_modules (non versionné)
 
-tests/e2e/        parcours Playwright
+tests/e2e/        parcours Playwright, un fichier par espace ou panneau
 ```
+
+Les fichiers sont nommés en kebab-case, pages comprises.
 
 Les règles métier, les autorisations, les tirages et la notation restent côté
 backend. Le frontend conserve les jetons d’accès privilégiés en mémoire et les

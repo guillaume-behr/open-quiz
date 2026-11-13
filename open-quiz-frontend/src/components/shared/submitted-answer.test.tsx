@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { SubmittedAnswer } from "@/components/submitted-answer"
+import { SubmittedAnswer } from "@/components/shared/submitted-answer"
 
 describe("SubmittedAnswer", () => {
     afterEach(cleanup)
