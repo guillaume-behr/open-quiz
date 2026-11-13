@@ -230,7 +230,7 @@ export type ReportedViolationType =
     | "print_attempt"
 
 /** A participant's last alert: one reported, or one the server recorded. */
-export type QuizViolationType = ReportedViolationType | "session_resumed"
+type QuizViolationType = ReportedViolationType | "session_resumed"
 
 export type QuizParticipant = {
     id: number
