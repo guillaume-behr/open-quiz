@@ -331,6 +331,23 @@ describe("requests and errors", () => {
         await expect((await requestBlob("/api/a")).text()).resolves.toBe("file")
     })
 
+    it("falls back on malformed paging headers instead of NaN", async () => {
+        stubFetch(() =>
+            json(["a", "b"], 200, {
+                "X-Page": "two",
+                "X-Page-Size": "0",
+                "X-Total-Count": "-3",
+            })
+        )
+        await expect(requestPage("/api/a")).resolves.toEqual({
+            items: ["a", "b"],
+            page: 1,
+            pageSize: 2,
+            total: 2,
+            totalPages: 1,
+        })
+    })
+
     it("refreshes once on 401 for concurrent requests, then retries", async () => {
         setSessionTokens("old", "proof")
         let refreshes = 0

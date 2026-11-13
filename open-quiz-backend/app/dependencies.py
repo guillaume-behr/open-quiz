@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
+from app.config import app_settings
 from app.errors import ApiError, ErrorCode
 from app.models import StudentAccount, TwoFactorCredential, User
 from app.security import (
@@ -35,7 +36,7 @@ def authenticated_user_from_token(
 ) -> User | None:
     try:
         user_id, token_version = decode_access_token(
-            token, request.app.state.settings.jwt_secret
+            token, app_settings(request).jwt_secret
         )
     except jwt.PyJWTError, ValueError, KeyError:
         return None
@@ -51,7 +52,7 @@ def authenticated_user_from_token(
             token_version,
             access_token_version(
                 user.password_hash,
-                request.app.state.settings.jwt_secret,
+                app_settings(request).jwt_secret,
                 user.access_token_generation,
             ),
         )
@@ -117,7 +118,7 @@ def student_from_token(
 ) -> StudentAccount | None:
     try:
         student_id, version = decode_student_access_token(
-            token, request.app.state.settings.jwt_secret
+            token, app_settings(request).jwt_secret
         )
     except jwt.PyJWTError, ValueError, KeyError:
         return None
@@ -129,7 +130,7 @@ def student_from_token(
             version,
             access_token_version(
                 account.password_hash,
-                request.app.state.settings.jwt_secret,
+                app_settings(request).jwt_secret,
                 account.access_token_generation,
             ),
         )

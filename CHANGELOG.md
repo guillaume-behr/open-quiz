@@ -189,6 +189,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Cancelling a quiz session or a make-up session can no longer delete an
+  answer a student submitted at the same moment: the check that nobody has
+  answered now holds the session's lock until the session is deleted.
+- A malformed paging header from the server no longer shows `NaN` pages.
+
 - The last answer or hand-in that ends an exam now tells every student at
   once; those who had already handed in waited up to 25 seconds to see it.
 - Turning a choice question that students already answered into a written

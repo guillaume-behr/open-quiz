@@ -31,6 +31,7 @@ from app.models import (
     User,
 )
 from app.participants import generate_join_code
+from app.routers import quizzes as quiz_routes
 from app.services.grading import (
     question_maximum_scores,
     selected_choice_score,
@@ -52,6 +53,7 @@ from support import (
     launch_and_join,
     login_admin,
     make_client,
+    row_is_locked,
     settings_for,
     training_banks,
     written_answer,
@@ -285,6 +287,31 @@ def test_session_control_conflicts(environment) -> None:
     cancelled = client.post(f"{session_url}/cancel", headers=headers)
     assert cancelled.status_code == 409
     assert cancelled.json()["detail"]["code"] == "QUIZ_SESSION_NOT_CANCELLABLE"
+
+
+def test_cancelling_holds_the_session_lock_until_the_delete(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An answer, which locks the session row, cannot land between the check
+    for answers and the delete, which would discard it with the session."""
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    launched, _ = launch_and_join(client, environment)
+    locked_at_delete: list[bool] = []
+    delete_records = quiz_routes.delete_quiz_session_records
+
+    def probe_then_delete(session_ids: list[int], session: Any) -> None:
+        locked_at_delete.append(row_is_locked(client, QuizSession, launched["id"]))
+        delete_records(session_ids, session)
+
+    monkeypatch.setattr(quiz_routes, "delete_quiz_session_records", probe_then_delete)
+
+    cancelled = client.post(
+        f"/api/quizzes/sessions/{launched['id']}/cancel", headers=headers
+    )
+
+    assert cancelled.status_code == 204
+    assert locked_at_delete == [True]
 
 
 def test_starting_requires_a_present_participant_and_survives_races(

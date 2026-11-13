@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import ColumnElement, func, select
 
 from app.audit import audit_event
+from app.config import app_settings
 from app.dependencies import AdminUser, DbSession
 from app.errors import ApiError, ErrorCode
 from app.models import ProblemReport
@@ -22,7 +23,7 @@ def retained_report(request: Request) -> ColumnElement[bool]:
     already hidden.
     """
     cutoff = datetime.now(UTC) - timedelta(
-        days=request.app.state.settings.problem_report_retention_days
+        days=app_settings(request).problem_report_retention_days
     )
     return ProblemReport.created_at > cutoff
 

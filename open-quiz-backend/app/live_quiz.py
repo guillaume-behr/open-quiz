@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 
 from fastapi import WebSocket
 
+from app.config import app_settings
+
 # One person following one feed from a few tabs is ordinary; past that, the
 # sockets are refused. Each one holds a connection of the server's shared
 # limit for as long as it stays open, so without a bound a single account
@@ -124,7 +126,7 @@ class LiveQuizHub:
 
 def websocket_origin_allowed(websocket: WebSocket) -> bool:
     origin = websocket.headers.get("origin")
-    settings = websocket.app.state.settings
+    settings = app_settings(websocket)
     expected = settings.frontend_origin.rstrip("/")
     if origin is not None and origin.rstrip("/") == expected:
         return True

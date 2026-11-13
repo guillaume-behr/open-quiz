@@ -17,6 +17,7 @@ import pyotp
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection, create_engine, event, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import maintenance
@@ -129,6 +130,20 @@ def database_url_for(database: Path) -> str:
     return base_url.update_query_dict(
         {"options": f"-csearch_path={schema}"}
     ).render_as_string(hide_password=False)
+
+
+def row_is_locked(client: TestClient, model: Any, row_id: int) -> bool:
+    """Whether another transaction holds a lock on this row right now."""
+    with client.app.state.session_factory() as other:
+        try:
+            other.execute(
+                select(model.id).where(model.id == row_id).with_for_update(nowait=True)
+            )
+        except OperationalError:
+            return True
+        finally:
+            other.rollback()
+    return False
 
 
 @contextmanager

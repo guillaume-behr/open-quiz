@@ -6,13 +6,14 @@ from fastapi import Request, status
 from sqlalchemy.orm import Session
 
 from app.audit import audit_event
+from app.config import app_settings
 from app.errors import ApiError, ErrorCode
 from app.security import DUMMY_PASSWORD_HASH, verify_password_and_update
 
 
 def validate_origin(request: Request) -> None:
     origin = request.headers.get("origin")
-    settings = request.app.state.settings
+    settings = app_settings(request)
     expected = settings.frontend_origin.rstrip("/")
     is_allowed = origin is not None and origin.rstrip("/") == expected
     if origin is not None and settings.environment == "development":

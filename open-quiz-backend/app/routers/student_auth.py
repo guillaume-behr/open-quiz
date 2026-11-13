@@ -9,6 +9,7 @@ from app.auth_guards import (
     student_password_rate_subject,
     validate_origin,
 )
+from app.config import app_settings
 from app.dependencies import (
     DbSession,
     current_student,
@@ -64,13 +65,13 @@ def login_student(
         audit_event("student_auth.password_hash_upgraded", account_id=account.id)
     token = create_student_access_token(
         account.id,
-        request.app.state.settings.jwt_secret,
+        app_settings(request).jwt_secret,
         access_token_version(
             account.password_hash,
-            request.app.state.settings.jwt_secret,
+            app_settings(request).jwt_secret,
             account.access_token_generation,
         ),
-        request.app.state.settings.student_access_token_hours,
+        app_settings(request).student_access_token_hours,
     )
     return StudentLoginResponse(
         access_token=token, student=student_account_response(account, session)
