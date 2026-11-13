@@ -166,7 +166,7 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
             connection.exec_driver_sql("ALTER TABLE quiz_answers DROP COLUMN feedback")
             # Added by 0013, long after 0.4.0.
             connection.exec_driver_sql(
-                "ALTER TABLE quiz_answers DROP COLUMN was_skipped"
+                "ALTER TABLE quiz_participants DROP COLUMN skipped_question_ids"
             )
             connection.exec_driver_sql(
                 "ALTER TABLE quiz_participants DROP COLUMN submitted_at"

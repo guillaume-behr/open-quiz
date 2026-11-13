@@ -41,6 +41,7 @@ from app.services.session_lifecycle import (
     answered_question_ids,
     expire_quiz_session,
     finish_when_nobody_can_answer,
+    handed_in_question_ids,
     lock_for_participant_write,
     previous_questions_allowed,
 )
@@ -124,11 +125,12 @@ def skip_student_question(
     request: Request,
     session: DbSession,
 ) -> StudentQuizStateResponse:
-    """Leave the current question blank and move on, as an empty answer.
+    """Leave the current question unanswered and move on.
 
-    The question then counts as handed in: it scores zero unless the student
-    comes back to answer it, and the quiz ends or offers its review as after
-    any other answer.
+    A skip is no answer: the participant only remembers the question, which
+    stays within reach. The quiz ends or offers its review as after an answer,
+    and the session's end stores an empty answer, scoring zero, for each
+    skipped question still unanswered.
     """
     quiz_session, quiz, participant = (
         context.session,
@@ -149,8 +151,14 @@ def skip_student_question(
         # The paper is already handed in: a late skip changes nothing.
         return student_state_response(quiz_session, quiz, participant, session)
     # Skipping a question answered earlier keeps that answer: it only moves on.
-    if question.id not in answered_question_ids(quiz_session, participant, session):
-        store_answer(quiz_session, participant, question.id, {}, session, skipped=True)
+    if (
+        question.id not in answered_question_ids(quiz_session, participant, session)
+        and question.id not in participant.skipped_question_ids
+    ):
+        participant.skipped_question_ids = [
+            *participant.skipped_question_ids,
+            question.id,
+        ]
     advance_participant(quiz_session, quiz, participant, session)
     session.flush()
     finish_when_nobody_can_answer(quiz_session, quiz, session)
@@ -251,10 +259,10 @@ def navigate_student_quiz(
     lock_for_participant_write(quiz_session, participant, session)
     target_position = payload.question_number - 1
     question_ids = session_question_ids(quiz_session, session, participant)
-    answered_ids = answered_question_ids(quiz_session, participant, session)
+    handed_in = handed_in_question_ids(quiz_session, participant, session)
     accessible_positions = accessible_question_positions(
         question_ids,
-        answered_ids,
+        handed_in,
         participant.current_position,
     )
     reviewing = (
@@ -262,7 +270,7 @@ def navigate_student_quiz(
         and participant.submitted_at is None
         and answer_review_enabled(quiz_session, quiz)
         and bool(question_ids)
-        and set(question_ids).issubset(answered_ids)
+        and set(question_ids).issubset(handed_in)
     )
     if (
         quiz_session.status != SessionStatus.IN_PROGRESS

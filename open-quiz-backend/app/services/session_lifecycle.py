@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from math import ceil
 
 from sqlalchemy import Select, delete, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -97,6 +98,46 @@ def answered_question_ids(
     )
 
 
+def handed_in_question_ids(
+    quiz_session: QuizSession, participant: QuizParticipant, session: Session
+) -> set[int]:
+    """The questions a participant is done with: answered, or skipped."""
+    return answered_question_ids(quiz_session, participant, session) | set(
+        participant.skipped_question_ids
+    )
+
+
+def store_blank_answers_for_skipped_questions(
+    quiz_session: QuizSession, session: Session
+) -> None:
+    """At the end of a session, hand in each skipped question left unanswered.
+
+    A skip is no answer while the session runs, so it never counts as one.
+    Once the session is over, an empty answer stands for it: it scores zero,
+    and a written one needs no marking (compute_final_scores).
+    """
+    rows = [
+        {
+            "session_id": quiz_session.id,
+            "participant_id": participant.id,
+            "question_id": question_id,
+            "answer_data": "{}",
+            "score": 0,
+            "is_graded": False,
+        }
+        for participant in session.scalars(
+            select(QuizParticipant).where(
+                QuizParticipant.session_id == quiz_session.id,
+                func.cardinality(QuizParticipant.skipped_question_ids) > 0,
+            )
+        )
+        for question_id in participant.skipped_question_ids
+    ]
+    if rows:
+        # An answer given since the skip stays: the blank only fills a gap.
+        session.execute(insert(QuizAnswer).values(rows).on_conflict_do_nothing())
+
+
 def quiz_session_is_due(
     quiz_session: QuizSession, quiz: Quiz, now: datetime | None = None
 ) -> bool:
@@ -141,6 +182,7 @@ def finish_session(
         select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
     ):
         participant.current_position = None
+    store_blank_answers_for_skipped_questions(quiz_session, session)
     if quiz.mode == QuizMode.EXAM:
         compute_final_scores(quiz_session, session)
     return True
@@ -246,15 +288,24 @@ def finish_when_nobody_can_answer(
     answer and being the last to leave both empty that set, so both paths
     call this.
 
-    A session where nobody ever answered is left running: there is nothing to
-    grade, and finishing it would deny the rejoin its students still need.
+    A session where nobody ever answered or skipped a question is left
+    running: there is nothing to grade, and finishing it would deny the rejoin
+    its students still need.
     """
     if quiz_session.status != SessionStatus.IN_PROGRESS:
         return
     answered = session.scalar(
         select(QuizAnswer.id).where(QuizAnswer.session_id == quiz_session.id).limit(1)
     )
-    if answered is None:
+    skipped = session.scalar(
+        select(QuizParticipant.id)
+        .where(
+            QuizParticipant.session_id == quiz_session.id,
+            func.cardinality(QuizParticipant.skipped_question_ids) > 0,
+        )
+        .limit(1)
+    )
+    if answered is None and skipped is None:
         return
     still_working: ColumnElement[bool] = QuizParticipant.current_position.is_not(None)
     if answer_review_enabled(quiz_session, quiz):

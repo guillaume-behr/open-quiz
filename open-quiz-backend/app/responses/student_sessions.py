@@ -34,7 +34,6 @@ from app.schemas.student_quizzes import (
 )
 from app.services.grading import (
     decoded_answer_data,
-    is_blank_answer_payload,
     question_maximum_scores,
     training_result,
 )
@@ -101,6 +100,8 @@ def student_answer_summaries(
 ) -> list[StudentAnswerSummary]:
     """What a participant answered, for the review before final submission.
 
+    Skipped questions still unanswered are listed with no answer.
+
     Only the participant's own wording is returned: nothing here discloses the
     expected answer of a question that is still running for the class.
     """
@@ -118,9 +119,12 @@ def student_answer_summaries(
     for position, question_id in enumerate(question_ids):
         question = questions_by_id.get(question_id)
         answer = answers.get(question_id)
-        if question is None or answer is None:
+        if question is None or (
+            answer is None and question_id not in participant.skipped_question_ids
+        ):
             continue
-        submitted = decoded_answer_data(answer)
+        # A skipped question still unanswered is listed with no answer.
+        submitted = decoded_answer_data(answer) if answer is not None else {}
         if question.answer_mode == AnswerMode.WRITTEN:
             submitted_answers = [str(submitted.get("written_answer", ""))]
         else:
@@ -205,27 +209,6 @@ def student_question_response(
     )
 
 
-def skipped_and_blank_question_ids(
-    quiz_session: QuizSession, participant: QuizParticipant, session: DbSession
-) -> tuple[set[int], set[int]]:
-    """The questions a participant ever skipped, and those still left blank."""
-    skipped: set[int] = set()
-    blank: set[int] = set()
-    for question_id, answer_data, was_skipped in session.execute(
-        select(
-            QuizAnswer.question_id, QuizAnswer.answer_data, QuizAnswer.was_skipped
-        ).where(
-            QuizAnswer.session_id == quiz_session.id,
-            QuizAnswer.participant_id == participant.id,
-        )
-    ):
-        if was_skipped:
-            skipped.add(question_id)
-        if is_blank_answer_payload(answer_data):
-            blank.add(question_id)
-    return skipped, blank
-
-
 def student_state_response(
     quiz_session: QuizSession,
     quiz: Quiz,
@@ -235,19 +218,16 @@ def student_state_response(
     question_ids = session_question_ids(quiz_session, session, participant)
     question_id = current_question_id(quiz_session, participant, session)
     answered_ids = answered_question_ids(quiz_session, participant, session)
-    # A skipped question holds an empty answer: handed in, but not filled in.
-    skipped_ids, blank_ids = skipped_and_blank_question_ids(
-        quiz_session, participant, session
-    )
-    filled_ids = answered_ids - blank_ids
+    # A skipped question has no answer, but the participant is done with it.
+    handed_in = answered_ids | set(participant.skipped_question_ids)
     # A participant who has submitted every assigned answer has no current
     # question while classmates may still be working. Keep that completed
     # state explicit so the frontend can render its waiting message instead of
     # an otherwise empty in-progress page.
     has_answered = (
-        question_id in filled_ids
+        question_id in answered_ids
         if question_id is not None
-        else bool(question_ids) and set(question_ids).issubset(answered_ids)
+        else bool(question_ids) and set(question_ids).issubset(handed_in)
     )
     existing_answer = (
         session.scalar(
@@ -267,7 +247,8 @@ def student_state_response(
     tokens = ChoiceTokens(session, quiz_session, participant)
     answered_count = len(answered_ids)
     review_enabled = answer_review_enabled(quiz_session, quiz)
-    # A participant who answered everything but has not confirmed yet keeps
+    # A participant done with every question (answered or skipped) but who
+    # has not confirmed yet keeps
     # the session open for themselves: they may re-read, and correct when the
     # quiz allows going back, until they submit their paper.
     awaiting_final_submission = (
@@ -276,11 +257,11 @@ def student_state_response(
         and participant.submitted_at is None
         and participant.current_position is None
         and bool(question_ids)
-        and set(question_ids).issubset(answered_ids)
+        and set(question_ids).issubset(handed_in)
     )
     accessible_positions = accessible_question_positions(
         question_ids,
-        answered_ids,
+        handed_in,
         participant.current_position,
     )
     state = StudentQuizStateResponse(
@@ -310,12 +291,12 @@ def student_state_response(
         answered_question_numbers=[
             position + 1
             for position, answered_id in enumerate(question_ids)
-            if answered_id in filled_ids
+            if answered_id in answered_ids
         ],
         skipped_question_numbers=[
             position + 1
             for position, skipped_id in enumerate(question_ids)
-            if skipped_id in skipped_ids
+            if skipped_id in participant.skipped_question_ids
         ],
         selected_choice_ids=(
             [

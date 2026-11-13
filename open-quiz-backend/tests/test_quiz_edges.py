@@ -111,7 +111,7 @@ def test_summaries_skip_missing_questions(
         lambda *_: ({1: written, 2: choice}, {1: [], 2: []}),
     )
     quiz_session = SimpleNamespace(id=1)
-    participant = SimpleNamespace(id=1)
+    participant = SimpleNamespace(id=1, skipped_question_ids=[])
 
     summaries = student_state.student_answer_summaries(
         quiz_session, participant, [3, 1, 2], _Answers(answers)

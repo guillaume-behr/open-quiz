@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    ARRAY,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -496,6 +497,13 @@ class QuizParticipant(Base):
         String(64), nullable=True, index=True
     )
     current_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The questions this participant skipped, in the order skipped. A skip is
+    # no answer: the session's end stores an empty one for each skipped
+    # question still unanswered. The list stays once a question is answered,
+    # so the navigation keeps it marked.
+    skipped_question_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer), default=list, server_default="{}"
+    )
     violation_count: Mapped[int] = mapped_column(Integer, default=0)
     last_violation_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     last_violation_at: Mapped[datetime | None] = mapped_column(
@@ -534,11 +542,6 @@ class QuizAnswer(Base):
     answer_data: Mapped[str] = mapped_column(Text)
     score: Mapped[float] = mapped_column(Float, default=0.0)
     is_graded: Mapped[bool] = mapped_column(Boolean, default=False)
-    # The student skipped this question at some point. It stays set when they
-    # come back to answer it, so the navigation keeps the question marked.
-    was_skipped: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false"
-    )
     feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now

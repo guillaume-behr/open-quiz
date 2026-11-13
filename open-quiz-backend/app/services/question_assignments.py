@@ -164,14 +164,15 @@ def last_answered_question_id(
 
 def accessible_question_positions(
     question_ids: list[int],
-    answered_question_ids: set[int],
+    handed_in_question_ids: set[int],
     current_position: int | None,
 ) -> set[int]:
-    """Positions a participant may reach: answered ones, the next, the current."""
+    """Positions a participant may reach: those answered or skipped, the next
+    one, and the current one."""
     positions = {
         position
         for position, question_id in enumerate(question_ids)
-        if question_id in answered_question_ids
+        if question_id in handed_in_question_ids
     }
     if positions:
         next_position = max(positions) + 1
