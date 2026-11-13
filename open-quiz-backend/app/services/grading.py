@@ -89,6 +89,20 @@ def decoded_answer_payload(answer_data: str) -> dict[str, Any]:
     return submitted if isinstance(submitted, dict) else {}
 
 
+BLANK_ANSWER_DATA = "{}"
+
+
+def is_blank_answer_payload(answer_data: str) -> bool:
+    """Whether a stored answer is the empty one of a skipped question.
+
+    The end of a session stores it for each question skipped and left
+    unanswered (store_blank_answers_for_skipped_questions): it scores zero
+    without a teacher having to mark it. An unreadable row is not blank: it
+    keeps waiting for a teacher.
+    """
+    return answer_data == BLANK_ANSWER_DATA
+
+
 def selected_choice_ids(answer: QuizAnswer) -> set[int]:
     return stored_choice_ids(answer.answer_data)
 
@@ -139,6 +153,8 @@ def compute_final_scores(quiz_session: QuizSession, session: Session) -> None:
         elif question.answer_mode == AnswerMode.WRITTEN:
             if not answer.is_graded:
                 answer.score = 0
+                # A skipped question has nothing for a teacher to mark.
+                answer.is_graded = is_blank_answer_payload(answer.answer_data)
         else:
             answer.score = selected_choice_score(
                 choices,
@@ -184,8 +200,12 @@ def regrade_question(
         # A written answer keeps the mark a teacher gave it; one still waiting
         # for a mark counts as zero, as compute_final_scores does.
         changes = [
-            {"id": answer_id, "score": 0.0, "is_graded": False}
-            for answer_id, _, is_graded, _ in rows
+            {
+                "id": answer_id,
+                "score": 0.0,
+                "is_graded": is_blank_answer_payload(answer_data),
+            }
+            for answer_id, answer_data, is_graded, _ in rows
             if became_written or not is_graded
         ]
     else:

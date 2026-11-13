@@ -523,6 +523,224 @@ def test_review_and_navigation_rules(environment) -> None:
     assert client.post(f"{url}/review", headers=headers).status_code == 200
 
 
+def skip_current(client, url: str, headers: dict[str, str]):
+    question = client.get(url, headers=headers).json()["question"]
+    return client.post(
+        f"{url}/skip", headers=headers, json={"question_id": question["id"]}
+    )
+
+
+def test_a_skipped_question_is_no_answer_until_the_session_ends(
+    environment,
+) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment)
+    launched, headers, url = started(client, environment)
+    teacher_url = f"/api/quizzes/sessions/{launched['id']}"
+
+    def teacher_counts() -> tuple[int, int]:
+        state = client.get(teacher_url, headers=environment["teacher_headers"])
+        participant = state.json()["participants"][0]
+        return participant["answered_count"], participant["skipped_count"]
+
+    def teacher_answered_count() -> int:
+        return teacher_counts()[0]
+
+    stale = client.post(f"{url}/skip", headers=headers, json={"question_id": -1})
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "ANSWER_QUESTION_MISMATCH"
+
+    skipped = skip_current(client, url, headers)
+    assert skipped.status_code == 200
+    assert skipped.json()["question_number"] == 2
+    # Not an answer: nothing is counted, but the question stays within reach.
+    assert skipped.json()["answered_count"] == 0
+    # The teacher sees it apart, as skipped.
+    assert teacher_counts() == (0, 1)
+    assert skipped.json()["accessible_question_numbers"] == [1, 2]
+    assert skipped.json()["answered_question_numbers"] == []
+    assert skipped.json()["skipped_question_numbers"] == [1]
+    # Skipping it twice records it once.
+    client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
+    again = skip_current(client, url, headers)
+    assert again.json()["skipped_question_numbers"] == [1]
+
+    # Skipping the last question too opens the review, both left unanswered.
+    last = skip_current(client, url, headers)
+    assert last.json()["awaiting_final_submission"] is True
+    assert [
+        summary["submitted_answers"] for summary in last.json()["answer_summaries"]
+    ] == [[], []]
+    assert teacher_answered_count() == 0
+
+    # Coming back answers the first one; it stays marked as skipped.
+    back = client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
+    assert back.json()["has_answered"] is False
+    assert back.json()["selected_choice_ids"] is None
+    answered = answer_current(client, url, headers)
+    assert answered.json()["answered_question_numbers"] == [1]
+    assert answered.json()["skipped_question_numbers"] == [1, 2]
+    assert teacher_counts() == (1, 1)
+    # Skipping a question answered earlier keeps the answer.
+    client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
+    kept = skip_current(client, url, headers)
+    assert kept.json()["answered_question_numbers"] == [1]
+
+    # The end of the session stores an empty answer for the one still skipped.
+    assert hand_in_quiz(client, launched["join_code"], headers)["status"] == "finished"
+    with client.app.state.session_factory() as session:
+        stored = {
+            answer.question_id: json.loads(answer.answer_data)
+            for answer in session.scalars(
+                select(QuizAnswer).where(QuizAnswer.session_id == launched["id"])
+            )
+        }
+    first_id, second_id = (
+        summary["question_id"] for summary in last.json()["answer_summaries"]
+    )
+    assert stored[second_id] == {}
+    assert stored[first_id] != {}
+    # The blank is no answer given: the results still count it as skipped,
+    # and so does the student's own state.
+    assert teacher_counts() == (1, 1)
+    finished = client.get(url, headers=headers).json()
+    assert finished["answered_count"] == 1
+    assert finished["answered_question_numbers"] == [1]
+    # A repeat of the skip once the paper is in changes nothing.
+    repeat = client.post(
+        f"{url}/skip", headers=headers, json={"question_id": second_id}
+    )
+    assert repeat.status_code == 200
+    assert repeat.json()["status"] == "finished"
+
+
+def test_without_review_skipped_questions_are_reviewed_before_handing_in(
+    environment,
+) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment, allow_answer_review=False)
+    launched, headers, url = started(client, environment)
+
+    skip_current(client, url, headers)
+    last = answer_current(client, url, headers)
+    # The last answer does not hand the paper in while a skip is left: the
+    # review lists it, to come back to it or to hand in with it blank.
+    assert last.json()["status"] == "in_progress"
+    assert last.json()["allow_answer_review"] is True
+    assert last.json()["awaiting_final_submission"] is True
+    assert last.json()["answer_summaries"][0]["submitted_answers"] == []
+
+    back = client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
+    assert back.json()["question_number"] == 1
+    assert client.post(f"{url}/review", headers=headers).status_code == 200
+    client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
+    assert answer_current(client, url, headers).json()["question_number"] == 2
+    # Answering what was skipped does not take the review away: the student
+    # goes straight back to it and hands the paper in from there.
+    reviewing = client.post(f"{url}/review", headers=headers)
+    assert reviewing.status_code == 200
+    assert reviewing.json()["allow_answer_review"] is True
+    assert reviewing.json()["awaiting_final_submission"] is True
+    # Every question answered, but the paper is not in: not finished yet.
+    teacher_view = client.get(
+        f"/api/quizzes/sessions/{launched['id']}",
+        headers=environment["teacher_headers"],
+    ).json()
+    assert teacher_view["participants"][0]["answered_count"] == 2
+    assert teacher_view["participants"][0]["has_finished"] is False
+    assert hand_in_quiz(client, launched["join_code"], headers)["status"] == "finished"
+
+
+def test_skipping_needs_an_exam_that_allows_going_back(environment) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(
+        client,
+        environment,
+        allow_previous_questions=False,
+        allow_answer_review=False,
+    )
+    launched, headers, url = started(client, environment)
+
+    refused = skip_current(client, url, headers)
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "QUIZ_SKIP_UNAVAILABLE"
+    assert client.get(url, headers=headers).json()["skipped_question_numbers"] == []
+
+    # Even with a skip on record, a quiz without going back and without the
+    # review step never gains a review screen: the last answer hands in.
+    state = client.get(url, headers=headers).json()
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(QuizParticipant)
+            .where(QuizParticipant.session_id == launched["id"])
+            .values(skipped_question_ids=[state["question"]["id"]])
+        )
+        session.commit()
+    assert answer_current(client, url, headers).json()["question_number"] == 2
+    done = answer_current(client, url, headers)
+    assert done.json()["allow_answer_review"] is False
+    assert done.json()["awaiting_final_submission"] is False
+    assert done.json()["status"] == "finished"
+
+
+def test_without_review_a_paper_with_skips_can_be_handed_in_blank(
+    environment,
+) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment, allow_answer_review=False)
+    launched, headers, url = started(client, environment)
+
+    skip_current(client, url, headers)
+    reviewing = skip_current(client, url, headers)
+    assert reviewing.json()["awaiting_final_submission"] is True
+    assert hand_in_quiz(client, launched["join_code"], headers)["status"] == "finished"
+    with client.app.state.session_factory() as session:
+        assert [
+            json.loads(answer.answer_data)
+            for answer in session.scalars(
+                select(QuizAnswer).where(QuizAnswer.session_id == launched["id"])
+            )
+        ] == [{}, {}]
+
+
+def test_a_skipped_written_question_needs_no_marking(environment) -> None:
+    client = environment["client"]
+    add_question(
+        client,
+        environment,
+        prompt="Explain why",
+        difficulty="hard",
+        answer_mode="written",
+        choices=[{"label": "Because", "is_correct": True, "points": 2}],
+    )
+    quiz = client.post(
+        "/api/quizzes",
+        headers=environment["teacher_headers"],
+        json={
+            "title": "Written",
+            "question_bank_ids": [environment["question"]["question_bank_id"]],
+            "allow_previous_questions": True,
+            "easy_question_count": 0,
+            "medium_question_count": 0,
+            "hard_question_count": 1,
+        },
+    )
+    assert quiz.status_code == 201
+    environment = {**environment, "quiz": quiz.json()}
+    launched, headers, url = started(client, environment)
+
+    assert skip_current(client, url, headers).status_code == 200
+    hand_in_quiz(client, launched["join_code"], headers)
+    with client.app.state.session_factory() as session:
+        answer = session.scalars(
+            select(QuizAnswer).where(QuizAnswer.session_id == launched["id"])
+        ).one()
+        assert json.loads(answer.answer_data) == {}
+        # Nothing to mark: the blank answer is graded zero at once.
+        assert answer.is_graded is True
+        assert answer.score == 0
+
+
 def test_student_images_require_a_running_session_and_an_image(environment) -> None:
     client = environment["client"]
     launched, headers, url = started(client, environment)
@@ -1036,6 +1254,28 @@ def test_a_repeated_last_training_answer_returns_the_same_feedback(
     assert repeated.json()["status"] == "finished"
     assert repeated.json()["training_feedback"] == answered.json()["training_feedback"]
     assert repeated.json()["training_feedback"]["is_correct"] is True
+
+
+def test_a_training_question_cannot_be_skipped(environment) -> None:
+    client = environment["client"]
+    bank_id = environment["question"]["question_bank_id"]
+    client.put(
+        f"/api/quizzes/training/classes/{environment['student_class']['id']}"
+        "/question-banks",
+        headers=environment["teacher_headers"],
+        json=training_banks(bank_id),
+    )
+    training = client.post(
+        f"/api/quizzes/training/{bank_id}/start",
+        headers=environment["student_headers"],
+    )
+    assert training.status_code == 201
+    token_headers = {"X-Quiz-Token": training.json()["participant_token"]}
+    url = f"/api/quizzes/student/sessions/{training.json()['join_code']}"
+
+    refused = skip_current(client, url, token_headers)
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "QUIZ_SKIP_UNAVAILABLE"
 
 
 def test_quiz_join_requires_an_authenticated_student(tmp_path: Path) -> None:

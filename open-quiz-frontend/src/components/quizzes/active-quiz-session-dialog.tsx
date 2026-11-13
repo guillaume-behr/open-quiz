@@ -345,6 +345,13 @@ function Participants({ session }: { session: QuizSession | MakeupSession }) {
                                         })}
                                     </span>
                                 )}
+                                {participant.skipped_count > 0 && (
+                                    <span className="mt-1 inline-flex rounded-md bg-orange-200 px-2 py-0.5 text-xs font-medium text-orange-950 dark:bg-orange-400/30 dark:text-orange-100">
+                                        {t("teacher-student-skipped", {
+                                            count: participant.skipped_count,
+                                        })}
+                                    </span>
+                                )}
                                 {participant.violation_count > 0 &&
                                     !["paste_attempt", "copy_attempt"].includes(
                                         participant.last_violation_type ?? ""

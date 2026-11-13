@@ -70,6 +70,11 @@ class StudentQuizStateResponse(StudentQuizSessionResponse):
     awaiting_final_submission: bool = False
     answer_summaries: list[StudentAnswerSummary] = Field(default_factory=list)
     accessible_question_numbers: list[int] = Field(default_factory=list)
+    # The questions this participant has answered, for the numbered
+    # navigation; a skipped question has no answer and is not among them.
+    answered_question_numbers: list[int] = Field(default_factory=list)
+    # The questions this participant skipped, answered since or not.
+    skipped_question_numbers: list[int] = Field(default_factory=list)
     selected_choice_ids: list[str] | None = None
     written_answer: str | None = None
     question: StudentQuizQuestionResponse | None
@@ -93,6 +98,14 @@ class StudentQuizAnswer(BaseModel):
         default=None, min_length=1, max_length=12
     )
     written_answer: str | None = Field(default=None, max_length=20000)
+
+
+class StudentQuizSkip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The question shown when the student skipped it, as for an answer
+    # (ANSWER_QUESTION_MISMATCH).
+    question_id: int
 
 
 class QuizAnswerGrade(BaseModel):

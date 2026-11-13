@@ -10,6 +10,7 @@ import {
     navigateStudentQuiz,
     reviewStudentAnswers,
     submitStudentQuiz,
+    skipStudentQuestion,
     submitStudentQuizAnswer,
 } from "@/api/quizzes"
 import { StudentQuizSessionSchema } from "@/api/schemas"
@@ -356,24 +357,42 @@ export function useStudentQuizSession(
                 return updated
             },
             "student-answer-error",
-            async (caught) => {
-                // The page showed another question than the server's current
-                // one: show the right one. The answer stays a draft of its
-                // question.
-                if (
-                    !(caught instanceof ApiError) ||
-                    caught.code !== "ANSWER_QUESTION_MISMATCH"
-                )
-                    return
-                try {
-                    applySession(
-                        await getStudentQuizSession(join_code, participantToken)
-                    )
-                } catch {
-                    // The message above already asks to try again.
-                }
-            }
+            (caught) => showServerQuestionOnMismatch(caught, join_code)
         )
+    }
+
+    async function skipQuestion() {
+        if (!session?.question || !participantToken) return
+        const { join_code, question } = session
+        setError(null)
+        // What the student entered stays a draft of the question: skipping it
+        // to come back later must not lose it.
+        await runSessionRequest(
+            () => skipStudentQuestion(join_code, participantToken, question.id),
+            "student-answer-error",
+            (caught) => showServerQuestionOnMismatch(caught, join_code)
+        )
+    }
+
+    // The page showed another question than the server's current one: show
+    // the right one. What the student entered stays a draft of its question.
+    async function showServerQuestionOnMismatch(
+        caught: unknown,
+        joinCode: string
+    ) {
+        if (
+            !participantToken ||
+            !(caught instanceof ApiError) ||
+            caught.code !== "ANSWER_QUESTION_MISMATCH"
+        )
+            return
+        try {
+            applySession(
+                await getStudentQuizSession(joinCode, participantToken)
+            )
+        } catch {
+            // The message above already asks to try again.
+        }
     }
 
     function updateJoinCode(value: string) {
@@ -401,5 +420,6 @@ export function useStudentQuizSession(
         backToReview,
         submitQuiz,
         submitAnswer,
+        skipQuestion,
     }
 }

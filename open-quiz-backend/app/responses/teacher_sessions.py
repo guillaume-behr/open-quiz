@@ -18,6 +18,7 @@ from app.models import (
     MakeupSession,
     MakeupSessionQuiz,
     Quiz,
+    QuizAnswer,
     QuizParticipant,
     QuizSession,
     StudentClass,
@@ -35,12 +36,13 @@ from app.services.question_assignments import (
     load_session_question_assignments,
 )
 from app.services.results import (
+    NO_ANSWER_STATISTICS,
     AnswerStatistics,
     answer_statistics,
     participant_response,
     students_and_classes,
 )
-from app.services.session_lifecycle import answer_review_enabled, quiz_ends_at
+from app.services.session_lifecycle import final_review_offered, quiz_ends_at
 
 
 def participant_has_finished(
@@ -95,11 +97,31 @@ def listed_participants(
         elif not took_part(
             participant,
             quiz_session,
-            statistics.get((quiz_session.id, participant.id), (0, 0, 0))[0],
+            statistics.get((quiz_session.id, participant.id), NO_ANSWER_STATISTICS)[0],
         ):
             continue
         listed[quiz_session.id].append(participant)
     return listed
+
+
+def unanswered_skip_counts(
+    participants: Sequence[QuizParticipant], session: Session
+) -> dict[int, int]:
+    """For each participant, the questions skipped and not answered since."""
+    skipping = {
+        participant.id: set(participant.skipped_question_ids)
+        for participant in participants
+        if participant.skipped_question_ids
+    }
+    if not skipping:
+        return {}
+    for participant_id, question_id in session.execute(
+        select(QuizAnswer.participant_id, QuizAnswer.question_id).where(
+            QuizAnswer.participant_id.in_(skipping)
+        )
+    ):
+        skipping[participant_id].discard(question_id)
+    return {participant_id: len(left) for participant_id, left in skipping.items()}
 
 
 def session_responses(
@@ -137,6 +159,17 @@ def session_responses(
     )
 
     responses = []
+    # One read for every running session: the questions skipped and not
+    # answered yet. A finished session's blanks are in answer_statistics.
+    skip_counts = unanswered_skip_counts(
+        [
+            participant
+            for quiz_session, _ in rows
+            if quiz_session.status != SessionStatus.FINISHED
+            for participant in participants_by_session[quiz_session.id]
+        ],
+        session,
+    )
     for quiz_session, quiz in rows:
         participants = participants_by_session[quiz_session.id]
         maximum_scores = {
@@ -159,11 +192,12 @@ def session_responses(
         total_questions = len(common[quiz_session.id]) or personalized_counts.get(
             quiz_session.id, 0
         )
-        review_enabled = answer_review_enabled(quiz_session, quiz)
         finished_session = quiz_session.status == SessionStatus.FINISHED
         participant_responses = []
         for participant in participants:
-            counts = statistics.get((quiz_session.id, participant.id), (0, 0, 0))
+            counts = statistics.get(
+                (quiz_session.id, participant.id), NO_ANSWER_STATISTICS
+            )
             participant_responses.append(
                 participant_response(
                     participant,
@@ -171,9 +205,14 @@ def session_responses(
                     maximum_scores[participant.id],
                     students_by_id,
                     has_finished=participant_has_finished(
-                        participant, counts[0], review_enabled, total_questions
+                        participant,
+                        counts[0],
+                        # A skip brings the review to a quiz without it.
+                        final_review_offered(quiz_session, quiz, participant),
+                        total_questions,
                     ),
                     show_grades=finished_session,
+                    skipped_count=skip_counts.get(participant.id, 0),
                 )
             )
         student_class = (

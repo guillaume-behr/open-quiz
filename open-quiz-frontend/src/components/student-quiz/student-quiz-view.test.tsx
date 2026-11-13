@@ -14,8 +14,14 @@ vi.mock("@/components/quizzes/quiz-timer", () => ({
     },
 }))
 vi.mock("./student-question-form", () => ({
-    StudentQuestionForm: (props: { writtenAnswer: string }) => (
-        <p>answer: {props.writtenAnswer}</p>
+    StudentQuestionForm: (props: {
+        writtenAnswer: string
+        onSkip?: () => void
+    }) => (
+        <>
+            <p>answer: {props.writtenAnswer}</p>
+            {props.onSkip && <p>skip offered</p>}
+        </>
     ),
 }))
 
@@ -33,10 +39,18 @@ const session = {
 
 const question = { id: 1 } as unknown as StudentQuizQuestion
 
-function page(writtenAnswer: string) {
+function page(
+    writtenAnswer: string,
+    overrides: Partial<StudentQuizSession> = {}
+) {
     return (
         <StudentQuizView
-            session={session}
+            // The same object when unchanged, as the memoised header expects.
+            session={
+                Object.keys(overrides).length > 0
+                    ? { ...session, ...overrides }
+                    : session
+            }
             question={question}
             participantToken="token"
             title="Quiz"
@@ -58,6 +72,7 @@ function page(writtenAnswer: string) {
             onWrittenAnswerChange={() => undefined}
             onNavigate={() => undefined}
             onSubmitAnswer={() => undefined}
+            onSkipQuestion={() => undefined}
             onBackToReview={() => undefined}
             onSubmitQuiz={() => undefined}
             onReturnHome={() => undefined}
@@ -73,5 +88,39 @@ describe("StudentQuizView", () => {
 
         expect(screen.getByText("answer: abc")).toBeInTheDocument()
         expect(timerRenders.count).toBe(1)
+    })
+
+    it("offers the skip only when the student may come back", () => {
+        const { rerender } = render(
+            page("", { allow_previous_questions: true })
+        )
+        expect(screen.getByText("skip offered")).toBeInTheDocument()
+
+        rerender(page("", { allow_previous_questions: false }))
+        expect(screen.queryByText("skip offered")).not.toBeInTheDocument()
+    })
+
+    it("leads back to the review once every question is answered or skipped", () => {
+        const { rerender } = render(
+            page("", {
+                allow_answer_review: true,
+                answered_question_numbers: [1, 2],
+                skipped_question_numbers: [2],
+            })
+        )
+        expect(
+            screen.queryByRole("button", { name: /back-to-answer-review/ })
+        ).not.toBeInTheDocument()
+
+        rerender(
+            page("", {
+                allow_answer_review: true,
+                answered_question_numbers: [1, 2],
+                skipped_question_numbers: [3],
+            })
+        )
+        expect(
+            screen.getByRole("button", { name: /back-to-answer-review/ })
+        ).toBeInTheDocument()
     })
 })

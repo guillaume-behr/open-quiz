@@ -34,8 +34,8 @@ from app.services.question_assignments import (
 )
 from app.services.session_lifecycle import (
     active_exam_bank_ids_for_class,
-    answer_review_enabled,
-    answered_question_ids,
+    final_review_offered,
+    handed_in_question_ids,
 )
 
 
@@ -258,15 +258,18 @@ def advance_participant(
     if (
         participant.current_position is None
         and participant.submitted_at is None
-        and not answer_review_enabled(quiz_session, quiz)
+        and not final_review_offered(quiz_session, quiz, participant)
     ):
-        # Without the review step the last answer is the final submission.
+        # Without the review step the last answer is the final submission,
+        # unless the participant skipped a question: they review first.
         participant.submitted_at = datetime.now(UTC)
 
 
-def require_answer_review_offered(quiz_session: QuizSession, quiz: Quiz) -> None:
-    """Reject a review request on a quiz that has no final submission step."""
-    if not answer_review_enabled(quiz_session, quiz):
+def require_answer_review_offered(
+    quiz_session: QuizSession, quiz: Quiz, participant: QuizParticipant
+) -> None:
+    """Reject a review request when this participant has no final step."""
+    if not final_review_offered(quiz_session, quiz, participant):
         raise ApiError(
             status.HTTP_409_CONFLICT,
             ErrorCode.QUIZ_REVIEW_UNAVAILABLE,
@@ -282,7 +285,7 @@ def require_reviewable_participant(
     """Reject a participant who may not reach the answer review step.
 
     The session must still be running and every assigned question must already
-    have an answer.
+    have an answer or have been skipped.
     """
     if quiz_session.status != SessionStatus.IN_PROGRESS:
         raise ApiError(
@@ -291,8 +294,8 @@ def require_reviewable_participant(
             "La relecture des réponses n’est pas disponible",
         )
     question_ids = session_question_ids(quiz_session, session, participant)
-    answered_ids = answered_question_ids(quiz_session, participant, session)
-    if not question_ids or not set(question_ids).issubset(answered_ids):
+    handed_in = handed_in_question_ids(quiz_session, participant, session)
+    if not question_ids or not set(question_ids).issubset(handed_in):
         raise ApiError(
             status.HTTP_409_CONFLICT,
             ErrorCode.QUIZ_ANSWERS_INCOMPLETE,

@@ -157,6 +157,15 @@ def test_retention_settles_sessions_their_teacher_never_closed(
             created_at=abandoned_at,
             with_answer=False,
         )
+        skipped_id = seeded_exam_session(
+            session,
+            admin.id,
+            join_code="SKIPPED",
+            status_value="in_progress",
+            created_at=abandoned_at,
+            with_answer=False,
+            with_skip=True,
+        )
         recent_id = seeded_exam_session(
             session,
             admin.id,
@@ -184,6 +193,16 @@ def test_retention_settles_sessions_their_teacher_never_closed(
         )
         assert participant is not None
         assert participant.current_position is None
+
+        # Only skips: still an exam to grade, the skip handed in blank at zero.
+        skipped = session.get(QuizSession, skipped_id)
+        assert skipped is not None
+        assert skipped.status == "finished"
+        blank = session.scalar(
+            select(QuizAnswer).where(QuizAnswer.session_id == skipped_id)
+        )
+        assert blank is not None
+        assert (blank.answer_data, blank.score, blank.is_graded) == ("{}", 0, True)
 
         # A waiting room nobody used holds names and nothing to grade.
         assert session.get(QuizSession, empty_id) is None

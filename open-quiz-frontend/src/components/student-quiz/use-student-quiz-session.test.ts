@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
     leaveStudentQuiz: vi.fn(),
     navigateStudentQuiz: vi.fn(),
     reviewStudentAnswers: vi.fn(),
+    skipStudentQuestion: vi.fn(),
     submitStudentQuiz: vi.fn(),
     submitStudentQuizAnswer: vi.fn(),
 }))
@@ -273,6 +274,46 @@ describe("useStudentQuizSession", () => {
 
         expect(hook.result.current.session?.question?.id).toBe(3)
         expect(hook.result.current.error).not.toBeNull()
+    })
+
+    it("skips the current question, or reloads it when it was another", async () => {
+        const { hook } = await joined()
+        api.skipStudentQuestion.mockResolvedValueOnce(
+            quizSession({ question: { id: 2 } as never })
+        )
+
+        await act(() => hook.result.current.skipQuestion())
+
+        expect(api.skipStudentQuestion).toHaveBeenCalledWith(
+            "ABC123",
+            "participant",
+            1
+        )
+        expect(hook.result.current.session?.question?.id).toBe(2)
+
+        api.skipStudentQuestion.mockRejectedValueOnce(
+            new ApiError("mismatch", 409, { code: "ANSWER_QUESTION_MISMATCH" })
+        )
+        api.getStudentQuizSession.mockResolvedValue(
+            quizSession({ question: { id: 3 } as never })
+        )
+        await act(() => hook.result.current.skipQuestion())
+        expect(hook.result.current.session?.question?.id).toBe(3)
+    })
+
+    it("keeps what was entered when the question is skipped", async () => {
+        const { hook } = await joined()
+        act(() => hook.result.current.setSelectedChoiceIds(["b"]))
+        api.skipStudentQuestion.mockResolvedValue(
+            quizSession({ question: { id: 2 } as never })
+        )
+
+        await act(() => hook.result.current.skipQuestion())
+        expect(hook.result.current.selectedChoiceIds).toEqual([])
+
+        // Coming back to the skipped question shows the draft again.
+        act(() => liveOptions().onData(quizSession()))
+        expect(hook.result.current.selectedChoiceIds).toEqual(["b"])
     })
 
     it("leaves the exam and clears what it kept", async () => {

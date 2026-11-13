@@ -356,6 +356,24 @@ export function submitStudentQuizAnswer(
     )
 }
 
+/** Skips the current question and moves on: it stays unanswered, in reach. */
+export function skipStudentQuestion(
+    joinCode: string,
+    participantToken: string,
+    questionId: number
+): Promise<StudentQuizSession> {
+    return requestParsed(
+        StudentQuizSessionSchema,
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/skip`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+            body: JSON.stringify({ question_id: questionId }),
+        },
+        false
+    )
+}
+
 export function reviewStudentAnswers(
     joinCode: string,
     participantToken: string

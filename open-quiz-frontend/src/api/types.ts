@@ -237,6 +237,8 @@ export type QuizParticipant = {
     student_identifier: string
     student_display_name: string | null
     answered_count: number
+    /** Skipped and left unanswered: handed in blank once the session is over. */
+    skipped_count: number
     has_finished: boolean
     score: number
     maximum_score: number

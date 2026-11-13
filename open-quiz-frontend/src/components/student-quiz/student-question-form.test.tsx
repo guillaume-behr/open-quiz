@@ -78,6 +78,7 @@ function form(
         written?: string
         busy?: boolean
         error?: string
+        session?: Partial<StudentQuizSession>
     } = {}
 ) {
     const handlers = {
@@ -87,10 +88,11 @@ function form(
         onSubmit: vi.fn((event: { preventDefault: () => void }) =>
             event.preventDefault()
         ),
+        onSkip: vi.fn(),
     }
     render(
         <StudentQuestionForm
-            session={session}
+            session={{ ...session, ...state.session }}
             question={value}
             participantToken="token"
             contentDirection="ltr"
@@ -192,7 +194,8 @@ describe("StudentQuestionForm", () => {
         })
         expect(screen.getByText("Too late")).toBeInTheDocument()
         const previous = screen.getByRole("button", {
-            name: 'student-question-progress {"current":1,"total":4}',
+            // session has no answered_question_numbers: reached, unanswered.
+            name: 'student-question-progress {"current":1,"total":4}, student-question-state-unanswered',
         })
         await userEvent.click(previous)
         expect(handlers.onNavigate).toHaveBeenCalledWith(1)
@@ -201,5 +204,170 @@ describe("StudentQuestionForm", () => {
                 name: 'student-question-progress {"current":2,"total":4}',
             })
         ).toBeDisabled()
+    })
+
+    it("numbers every question and marks each one's state", () => {
+        form(question({}), {
+            session: {
+                question_number: 3,
+                total_questions: 6,
+                accessible_question_numbers: [1, 2, 3, 4, 5],
+                answered_question_numbers: [1, 5],
+                skipped_question_numbers: [2, 5],
+            },
+        })
+        const number = (current: number) =>
+            screen.getByRole("button", {
+                name: new RegExp(
+                    `^student-question-progress \\{"current":${current},"total":6\\}`
+                ),
+            })
+        // Each state is said, not only coloured.
+        expect(number(1)).toHaveAccessibleName(
+            'student-question-progress {"current":1,"total":6}, student-question-state-answered'
+        )
+        expect(number(2)).toHaveAccessibleName(
+            /student-question-state-skipped$/
+        )
+        expect(number(3)).toHaveAccessibleName(
+            'student-question-progress {"current":3,"total":6}'
+        )
+        expect(number(4)).toHaveAccessibleName(
+            /student-question-state-unanswered$/
+        )
+        expect(number(6)).toHaveAccessibleName(/student-question-state-unseen$/)
+        // Answered: plain and reachable.
+        expect(number(1)).toBeEnabled()
+        expect(number(1)).not.toHaveClass("bg-muted")
+        // Skipped, then answered or not: orange, reachable.
+        expect(number(2)).toBeEnabled()
+        expect(number(2)).toHaveClass("bg-orange-200")
+        expect(number(5)).toHaveClass("bg-orange-200")
+        // The current question.
+        expect(number(3)).toHaveAttribute("aria-current", "step")
+        // Reached but unanswered: grey, reachable.
+        expect(number(4)).toBeEnabled()
+        expect(number(4)).toHaveClass("bg-muted")
+        // Not seen yet: dark grey, out of reach.
+        expect(number(6)).toBeDisabled()
+        expect(number(6)).toHaveClass("bg-muted-foreground/70")
+        // Six questions fit on one page: no arrows.
+        expect(
+            screen.queryByRole("button", {
+                name: "student-question-navigation-next",
+            })
+        ).not.toBeInTheDocument()
+    })
+
+    it("pages through more than ten questions with the arrows", async () => {
+        form(question({}), {
+            session: {
+                question_number: 12,
+                total_questions: 25,
+                accessible_question_numbers: Array.from(
+                    { length: 12 },
+                    (_, index) => index + 1
+                ),
+                answered_question_numbers: Array.from(
+                    { length: 11 },
+                    (_, index) => index + 1
+                ),
+            },
+        })
+        const shown = () =>
+            screen
+                .getAllByRole("button", { name: /student-question-progress/ })
+                .map((button) => Number(button.textContent))
+        const previous = screen.getByRole("button", {
+            name: "student-question-navigation-previous",
+        })
+        const next = screen.getByRole("button", {
+            name: "student-question-navigation-next",
+        })
+        // The page holding the current question opens first.
+        expect(shown()).toEqual([11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+
+        await userEvent.click(next)
+        expect(shown()).toEqual([21, 22, 23, 24, 25])
+        expect(next).toBeDisabled()
+
+        await userEvent.click(previous)
+        await userEvent.click(previous)
+        expect(shown()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        expect(previous).toBeDisabled()
+        // Each page turn slides in from the side it comes from.
+        const page = () =>
+            screen.getAllByRole("button", { name: /progress/ })[0]
+                ?.parentElement
+        expect(page()).toHaveClass("slide-in-from-left-8")
+        await userEvent.click(next)
+        expect(page()).toHaveClass("slide-in-from-right-8")
+    })
+
+    it("skips the question without submitting it", async () => {
+        const handlers = form(question({}))
+        await userEvent.click(
+            screen.getByRole("button", { name: "student-skip-question" })
+        )
+        expect(handlers.onSkip).toHaveBeenCalledOnce()
+        expect(handlers.onSubmit).not.toHaveBeenCalled()
+    })
+
+    it("turns the page by itself when the question moves to the next ten", () => {
+        const at = (questionNumber: number) => (
+            <StudentQuestionForm
+                session={{
+                    ...session,
+                    question_number: questionNumber,
+                    total_questions: 15,
+                    accessible_question_numbers: Array.from(
+                        { length: questionNumber },
+                        (_, index) => index + 1
+                    ),
+                }}
+                question={question({})}
+                participantToken="token"
+                contentDirection="ltr"
+                selectedChoiceIds={[]}
+                writtenAnswer=""
+                isBusy={false}
+                error={null}
+                onSelectedChoiceIdsChange={vi.fn()}
+                onWrittenAnswerChange={vi.fn()}
+                onNavigate={vi.fn()}
+                onSubmit={vi.fn()}
+            />
+        )
+        const first = () =>
+            screen.getAllByRole("button", {
+                name: /student-question-progress/,
+            })[0]
+        const view = render(at(10))
+        expect(first()).toHaveTextContent("1")
+        expect(first()?.parentElement).not.toHaveClass("animate-in")
+
+        // The current number is brought into view when the question changes.
+        // A stand-in for this test only, put back afterwards.
+        const original = Object.getOwnPropertyDescriptor(
+            Element.prototype,
+            "scrollIntoView"
+        )
+        const scrollIntoView = vi.fn()
+        Element.prototype.scrollIntoView = scrollIntoView
+        try {
+            view.rerender(at(11))
+            expect(first()).toHaveTextContent("11")
+            expect(scrollIntoView).toHaveBeenCalledOnce()
+            expect(scrollIntoView.mock.contexts[0]).toBe(first())
+        } finally {
+            if (original)
+                Object.defineProperty(
+                    Element.prototype,
+                    "scrollIntoView",
+                    original
+                )
+            else Reflect.deleteProperty(Element.prototype, "scrollIntoView")
+        }
+        expect(first()?.parentElement).toHaveClass("slide-in-from-right-8")
     })
 })

@@ -164,6 +164,10 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
                 "ALTER TABLE refresh_session_families ADD parent_session_id integer"
             )
             connection.exec_driver_sql("ALTER TABLE quiz_answers DROP COLUMN feedback")
+            # Added by 0013, long after 0.4.0.
+            connection.exec_driver_sql(
+                "ALTER TABLE quiz_participants DROP COLUMN skipped_question_ids"
+            )
             connection.exec_driver_sql(
                 "ALTER TABLE quiz_participants DROP COLUMN submitted_at"
             )
@@ -695,5 +699,54 @@ def test_upgrade_to_0012_lets_a_question_leave_its_bank(tmp_path: Path) -> None:
             assert connection.execute(
                 text("SELECT prompt FROM questions")
             ).scalars().all() == ["Detached"]
+    finally:
+        engine.dispose()
+
+
+def test_upgrade_to_0013_gives_existing_participants_no_skip(tmp_path: Path) -> None:
+    """A participant from before 0013 skipped nothing: an empty list, not NULL."""
+    database_url = database_url_for(tmp_path / "upgrade-0013")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0012")
+        with DbSession(engine) as session:
+            teacher = User(username="teacher", display_name="T", password_hash="x")
+            session.add(teacher)
+            session.flush()
+            quiz = Quiz(owner_id=teacher.id, title="Quiz", question_count=1)
+            session.add(quiz)
+            session.flush()
+            quiz_session = QuizSession(
+                quiz_id=quiz.id,
+                class_name="C",
+                join_code="OLD013",
+                status=SessionStatus.IN_PROGRESS,
+            )
+            session.add(quiz_session)
+            session.commit()
+            session_id = quiz_session.id
+        with engine.begin() as connection:
+            # Raw SQL: the participant model already carries the 0013 column.
+            connection.execute(
+                text(
+                    "INSERT INTO quiz_participants (session_id, "
+                    "student_identifier, violation_count, joined_at) "
+                    "VALUES (:session_id, 'pupil', 0, now())"
+                ),
+                {"session_id": session_id},
+            )
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with engine.begin() as connection:
+            assert connection.execute(
+                text("SELECT skipped_question_ids FROM quiz_participants")
+            ).scalars().all() == [[]]
     finally:
         engine.dispose()

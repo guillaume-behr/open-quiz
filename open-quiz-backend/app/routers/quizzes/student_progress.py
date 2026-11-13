@@ -1,7 +1,8 @@
 """Student progress through a running quiz: answering, reviewing, navigating.
 
-The participant answers the current question, goes back to an earlier one
-when the quiz allows it, reviews the given answers and hands in the paper.
+The participant answers the current question or skips it, goes back to an
+earlier one when the quiz allows it, reviews the given answers and hands in
+the paper.
 """
 
 from datetime import UTC, datetime
@@ -11,12 +12,13 @@ from fastapi import APIRouter, Request, status
 from app.core.dependencies import DbSession
 from app.core.errors import ApiError, ErrorCode
 from app.domain.choice_tokens import ChoiceTokens
-from app.enums import SessionStatus
+from app.enums import QuizMode, SessionStatus
 from app.live.updates import publish_quiz_update
 from app.responses.student_sessions import student_state_response
 from app.schemas.student_quizzes import (
     StudentQuizAnswer,
     StudentQuizNavigation,
+    StudentQuizSkip,
     StudentQuizStateResponse,
 )
 from app.services.answers import (
@@ -35,10 +37,11 @@ from app.services.question_assignments import (
     session_question_ids,
 )
 from app.services.session_lifecycle import (
-    answer_review_enabled,
     answered_question_ids,
     expire_quiz_session,
+    final_review_offered,
     finish_when_nobody_can_answer,
+    handed_in_question_ids,
     lock_for_participant_write,
     previous_questions_allowed,
 )
@@ -113,6 +116,72 @@ def submit_student_answer(
 
 
 @router.post(
+    "/student/sessions/{join_code}/skip",
+    response_model=StudentQuizStateResponse,
+)
+def skip_student_question(
+    payload: StudentQuizSkip,
+    context: CurrentParticipant,
+    request: Request,
+    session: DbSession,
+) -> StudentQuizStateResponse:
+    """Leave the current question unanswered and move on.
+
+    A skip is no answer: the participant only remembers the question, which
+    stays within reach. The quiz ends or offers its review as after an answer,
+    and the session's end stores an empty answer, scoring zero, for each
+    skipped question still unanswered.
+    """
+    quiz_session, quiz, participant = (
+        context.session,
+        context.quiz,
+        context.participant,
+    )
+    expire_quiz_session(quiz_session, quiz, session)
+    lock_for_participant_write(quiz_session, participant, session)
+    require_answer_accepted(quiz_session, participant, session)
+    if quiz.mode != QuizMode.EXAM or not previous_questions_allowed(quiz_session, quiz):
+        # A skipped question must stay within reach: an exam the student
+        # cannot go back in would lose it, and a training has no review.
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SKIP_UNAVAILABLE,
+            "Cette question ne peut pas être passée",
+        )
+    question, _, retargeting = answered_question(quiz_session, participant, session)
+    if payload.question_id != question.id:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.ANSWER_QUESTION_MISMATCH,
+            "La réponse concerne une autre question que la question en cours",
+        )
+    if retargeting:
+        # The paper is already handed in: a late skip changes nothing.
+        return student_state_response(quiz_session, quiz, participant, session)
+    # Skipping a question answered earlier keeps that answer: it only moves on.
+    if (
+        question.id not in answered_question_ids(quiz_session, participant, session)
+        and question.id not in participant.skipped_question_ids
+    ):
+        participant.skipped_question_ids = [
+            *participant.skipped_question_ids,
+            question.id,
+        ]
+    advance_participant(quiz_session, quiz, participant, session)
+    session.flush()
+    finish_when_nobody_can_answer(quiz_session, quiz, session)
+    session.commit()
+    publish_quiz_update(
+        request,
+        quiz_session,
+        session,
+        makeup_sessions_changed=participant.current_position is None,
+        participant=participant,
+    )
+    return student_state_response(quiz_session, quiz, participant, session)
+
+
+@router.post(
     "/student/sessions/{join_code}/review",
     response_model=StudentQuizStateResponse,
 )
@@ -129,7 +198,7 @@ def review_student_answers(
     )
     expire_quiz_session(quiz_session, quiz, session)
     lock_for_participant_write(quiz_session, participant, session)
-    require_answer_review_offered(quiz_session, quiz)
+    require_answer_review_offered(quiz_session, quiz, participant)
     if participant.submitted_at is not None:
         return student_state_response(quiz_session, quiz, participant, session)
     require_reviewable_participant(quiz_session, participant, session)
@@ -164,7 +233,7 @@ def submit_student_quiz(
     )
     expire_quiz_session(quiz_session, quiz, session)
     lock_for_participant_write(quiz_session, participant, session)
-    require_answer_review_offered(quiz_session, quiz)
+    require_answer_review_offered(quiz_session, quiz, participant)
     if participant.submitted_at is not None:
         # A duplicate confirmation must not fail the student whose paper is
         # already handed in.
@@ -198,18 +267,18 @@ def navigate_student_quiz(
     lock_for_participant_write(quiz_session, participant, session)
     target_position = payload.question_number - 1
     question_ids = session_question_ids(quiz_session, session, participant)
-    answered_ids = answered_question_ids(quiz_session, participant, session)
+    handed_in = handed_in_question_ids(quiz_session, participant, session)
     accessible_positions = accessible_question_positions(
         question_ids,
-        answered_ids,
+        handed_in,
         participant.current_position,
     )
     reviewing = (
         participant.current_position is None
         and participant.submitted_at is None
-        and answer_review_enabled(quiz_session, quiz)
+        and final_review_offered(quiz_session, quiz, participant)
         and bool(question_ids)
-        and set(question_ids).issubset(answered_ids)
+        and set(question_ids).issubset(handed_in)
     )
     if (
         quiz_session.status != SessionStatus.IN_PROGRESS

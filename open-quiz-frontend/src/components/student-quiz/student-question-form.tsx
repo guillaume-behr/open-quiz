@@ -10,8 +10,9 @@ import { indentCode } from "@/components/question-banks/code-editor-utils"
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
-import { LoaderCircle } from "lucide-react"
-import type { FormEvent } from "react"
+import { ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { ProtectedQuizImage } from "./protected-quiz-image"
 
@@ -28,6 +29,8 @@ type StudentQuestionFormProps = {
     onWrittenAnswerChange: (answer: string) => void
     onNavigate: (questionNumber: number) => void
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
+    /** Skips the question; without it, no skip button is offered. */
+    onSkip?: () => void
 }
 
 export function StudentQuestionForm({
@@ -43,6 +46,7 @@ export function StudentQuestionForm({
     onWrittenAnswerChange,
     onNavigate,
     onSubmit,
+    onSkip,
 }: StudentQuestionFormProps) {
     const { t } = useTranslation()
     const questionNumber = session.question_number ?? 1
@@ -125,51 +129,24 @@ export function StudentQuestionForm({
             )}
             {error && <FieldError>{error}</FieldError>}
             <div
-                className="flex min-w-0 items-center justify-end gap-3 border-t pt-5"
+                className="flex min-w-0 items-center justify-between gap-3 border-t pt-5"
                 dir="ltr"
             >
-                {session.allow_previous_questions && (
-                    <nav
-                        className="min-w-0 flex-1 overflow-x-auto"
-                        aria-label={t("student-question-progress", {
-                            current: questionNumber,
-                            total: session.total_questions,
-                        })}
+                {onSkip ? (
+                    <Button
+                        className="shrink-0"
+                        size="lg"
+                        type="button"
+                        variant="outline"
+                        dir="auto"
+                        disabled={isBusy}
+                        onClick={onSkip}
                     >
-                        <div className="flex w-max gap-2 py-1">
-                            {session.accessible_question_numbers.map(
-                                (number) => {
-                                    const isCurrent = number === questionNumber
-                                    return (
-                                        <Button
-                                            key={number}
-                                            className="size-10 shrink-0 p-0"
-                                            type="button"
-                                            variant={
-                                                isCurrent
-                                                    ? "default"
-                                                    : "outline"
-                                            }
-                                            aria-current={
-                                                isCurrent ? "step" : undefined
-                                            }
-                                            aria-label={t(
-                                                "student-question-progress",
-                                                {
-                                                    current: number,
-                                                    total: session.total_questions,
-                                                }
-                                            )}
-                                            disabled={isBusy || isCurrent}
-                                            onClick={() => onNavigate(number)}
-                                        >
-                                            {number}
-                                        </Button>
-                                    )
-                                }
-                            )}
-                        </div>
-                    </nav>
+                        {t("student-skip-question")}
+                    </Button>
+                ) : (
+                    // Keeps the submit button on the right.
+                    <span />
                 )}
                 <Button
                     className="shrink-0 sm:min-w-64"
@@ -189,7 +166,192 @@ export function StudentQuestionForm({
                     {t("student-submit-answer")}
                 </Button>
             </div>
+            {session.allow_previous_questions && (
+                <QuestionNavigation
+                    session={session}
+                    isBusy={isBusy}
+                    onNavigate={onNavigate}
+                />
+            )}
         </form>
+    )
+}
+
+/** How many question numbers the navigation bar shows at once. */
+const QUESTION_NAVIGATION_PAGE_SIZE = 10
+
+/**
+ * The numbered back-navigation, outside the question card: a bar fixed at
+ * the bottom centre of the screen, so it stays in reach on a long question.
+ * Portalled to the body so no ancestor's transform can unpin it.
+ *
+ * Every question is numbered, ten at a time with arrows beyond that: the
+ * current one in the primary colour, skipped ones in orange (even once
+ * answered), answered ones plain, the ones reached but unanswered in grey,
+ * and those not seen yet in dark grey, disabled.
+ *
+ * Reaching a question on another page of ten turns the page by itself, and
+ * every page turn slides the numbers in from the side it comes from.
+ */
+function QuestionNavigation({
+    session,
+    isBusy,
+    onNavigate,
+}: {
+    session: StudentQuizSession
+    isBusy: boolean
+    onNavigate: (questionNumber: number) => void
+}) {
+    const { t } = useTranslation()
+    const questionNumber = session.question_number ?? 1
+    const total = session.total_questions
+    const pageCount = Math.max(
+        1,
+        Math.ceil(total / QUESTION_NAVIGATION_PAGE_SIZE)
+    )
+    const currentPage = Math.floor(
+        (questionNumber - 1) / QUESTION_NAVIGATION_PAGE_SIZE
+    )
+    // The page the student browsed to, until the question changes: moving
+    // to another question brings back the page that holds it.
+    const [browsed, setBrowsed] = useState({
+        questionNumber,
+        page: currentPage,
+    })
+    const page =
+        browsed.questionNumber === questionNumber
+            ? Math.min(browsed.page, pageCount - 1)
+            : currentPage
+    const showPage = (next: number) =>
+        setBrowsed({ questionNumber, page: next })
+    // The direction of the last page turn, for the slide. Updated during
+    // render, as React recommends for state derived from a change.
+    const [turn, setTurn] = useState({ page, direction: 0 })
+    if (turn.page !== page)
+        setTurn({ page, direction: page > turn.page ? 1 : -1 })
+
+    const first = page * QUESTION_NAVIGATION_PAGE_SIZE + 1
+    const numbers = Array.from(
+        { length: Math.min(QUESTION_NAVIGATION_PAGE_SIZE, total - first + 1) },
+        (_, index) => first + index
+    )
+    // On a narrow screen the numbers scroll: bring the current one into view
+    // when the question or the page changes, not while the student scrolls.
+    const currentNumber = useRef<HTMLButtonElement>(null)
+    useEffect(() => {
+        // Optional call: jsdom has no scrollIntoView.
+        currentNumber.current?.scrollIntoView?.({
+            block: "nearest",
+            inline: "center",
+        })
+    }, [questionNumber, page])
+
+    const accessible = new Set(session.accessible_question_numbers)
+    const answered = new Set(session.answered_question_numbers)
+    const skipped = new Set(session.skipped_question_numbers)
+
+    return createPortal(
+        <div
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4"
+            dir="ltr"
+        >
+            <nav
+                className="pointer-events-auto flex max-w-full items-center gap-1 rounded-2xl border bg-secondary px-2 py-2 shadow-lg sm:px-3"
+                aria-label={t("student-question-progress", {
+                    current: questionNumber,
+                    total,
+                })}
+            >
+                {pageCount > 1 && (
+                    <Button
+                        className="size-10 shrink-0"
+                        type="button"
+                        variant="ghost"
+                        aria-label={t("student-question-navigation-previous")}
+                        disabled={page === 0}
+                        onClick={() => showPage(page - 1)}
+                    >
+                        <ChevronLeft className="size-5" />
+                    </Button>
+                )}
+                <div
+                    key={page}
+                    className={cn(
+                        // On a narrow screen the numbers scroll between the
+                        // arrows, which stay in reach.
+                        "flex min-w-0 gap-1.5 overflow-x-auto py-1 sm:gap-2",
+                        turn.direction !== 0 &&
+                            "animate-in duration-300 ease-out fade-in-0 motion-reduce:animate-none",
+                        turn.direction > 0 && "slide-in-from-right-8",
+                        turn.direction < 0 && "slide-in-from-left-8"
+                    )}
+                >
+                    {numbers.map((number) => {
+                        const isCurrent = number === questionNumber
+                        const isSeen = accessible.has(number)
+                        const isSkipped = !isCurrent && skipped.has(number)
+                        return (
+                            <Button
+                                key={number}
+                                ref={isCurrent ? currentNumber : undefined}
+                                className={cn(
+                                    "size-9 shrink-0 p-0 sm:size-10",
+                                    !isCurrent &&
+                                        !isSkipped &&
+                                        isSeen &&
+                                        !answered.has(number) &&
+                                        "border-transparent bg-muted text-muted-foreground",
+                                    isSkipped &&
+                                        "border-transparent bg-orange-200 text-orange-950 hover:bg-orange-300 hover:text-orange-950 dark:bg-orange-400/30 dark:text-orange-100 dark:hover:bg-orange-400/40",
+                                    !isSeen &&
+                                        "border-transparent bg-muted-foreground/70 text-background disabled:opacity-100"
+                                )}
+                                type="button"
+                                variant={isCurrent ? "default" : "outline"}
+                                aria-current={isCurrent ? "step" : undefined}
+                                // The state is said, not only coloured.
+                                aria-label={[
+                                    t("student-question-progress", {
+                                        current: number,
+                                        total,
+                                    }),
+                                    isCurrent
+                                        ? null
+                                        : t(
+                                              !isSeen
+                                                  ? "student-question-state-unseen"
+                                                  : isSkipped
+                                                    ? "student-question-state-skipped"
+                                                    : answered.has(number)
+                                                      ? "student-question-state-answered"
+                                                      : "student-question-state-unanswered"
+                                          ),
+                                ]
+                                    .filter(Boolean)
+                                    .join(", ")}
+                                disabled={isBusy || isCurrent || !isSeen}
+                                onClick={() => onNavigate(number)}
+                            >
+                                {number}
+                            </Button>
+                        )
+                    })}
+                </div>
+                {pageCount > 1 && (
+                    <Button
+                        className="size-10 shrink-0"
+                        type="button"
+                        variant="ghost"
+                        aria-label={t("student-question-navigation-next")}
+                        disabled={page === pageCount - 1}
+                        onClick={() => showPage(page + 1)}
+                    >
+                        <ChevronRight className="size-5" />
+                    </Button>
+                )}
+            </nav>
+        </div>,
+        document.body
     )
 }
 

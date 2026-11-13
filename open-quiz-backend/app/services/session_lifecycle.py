@@ -12,7 +12,8 @@ from collections.abc import Collection, Iterable
 from datetime import UTC, datetime, timedelta
 from math import ceil
 
-from sqlalchemy import Select, delete, func, or_, select, update
+from sqlalchemy import Select, and_, delete, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -34,6 +35,7 @@ from app.records.quiz_sessions import (
     release_join_codes,
 )
 from app.services.grading import (
+    BLANK_ANSWER_DATA,
     compute_final_scores,
 )
 
@@ -86,15 +88,101 @@ def previous_questions_allowed(quiz_session: QuizSession, quiz: Quiz) -> bool:
 def answered_question_ids(
     quiz_session: QuizSession, participant: QuizParticipant, session: Session
 ) -> set[int]:
-    """The questions a participant already answered in a session."""
+    """The questions a participant already answered in a session.
+
+    The empty answer the end of a session stores for a skipped question is
+    no answer given: it is left out, as answer_statistics leaves it out.
+    """
     return set(
         session.scalars(
             select(QuizAnswer.question_id).where(
                 QuizAnswer.session_id == quiz_session.id,
                 QuizAnswer.participant_id == participant.id,
+                QuizAnswer.answer_data != BLANK_ANSWER_DATA,
             )
         )
     )
+
+
+def handed_in_question_ids(
+    quiz_session: QuizSession, participant: QuizParticipant, session: Session
+) -> set[int]:
+    """The questions a participant is done with: answered, or skipped."""
+    return answered_question_ids(quiz_session, participant, session) | set(
+        participant.skipped_question_ids
+    )
+
+
+def final_review_offered(
+    quiz_session: QuizSession, quiz: Quiz, participant: QuizParticipant
+) -> bool:
+    """Whether this participant confirms their paper before handing it in.
+
+    The quiz may ask for it. Otherwise, having skipped a question calls for
+    it too: without it, the last answer would hand the paper in before they
+    could come back to what they skipped. It stays offered once they did,
+    so answering a skipped question never takes the review away from them.
+
+    A quiz that does not allow going back never gains the review this way:
+    there would be nothing to come back to.
+    """
+    return answer_review_enabled(quiz_session, quiz) or (
+        bool(participant.skipped_question_ids)
+        and previous_questions_allowed(quiz_session, quiz)
+    )
+
+
+def store_blank_answers_for_skipped_questions(
+    quiz_session: QuizSession, session: Session
+) -> None:
+    """At the end of a session, hand in each skipped question left unanswered.
+
+    A skip is no answer while the session runs, so it never counts as one.
+    Once the session is over, an empty answer stands for it: it scores zero,
+    and a written one needs no marking (compute_final_scores).
+    """
+    rows = [
+        {
+            "session_id": quiz_session.id,
+            "participant_id": participant.id,
+            "question_id": question_id,
+            "answer_data": BLANK_ANSWER_DATA,
+            "score": 0,
+            "is_graded": False,
+        }
+        for participant in session.scalars(
+            select(QuizParticipant).where(
+                QuizParticipant.session_id == quiz_session.id,
+                func.cardinality(QuizParticipant.skipped_question_ids) > 0,
+            )
+        )
+        for question_id in participant.skipped_question_ids
+    ]
+    if rows:
+        # An answer given since the skip stays: the blank only fills a gap.
+        session.execute(insert(QuizAnswer).values(rows).on_conflict_do_nothing())
+
+
+def anyone_took_a_question(quiz_session: QuizSession, session: Session) -> bool:
+    """Whether someone answered or skipped a question in a session.
+
+    A session where nobody did holds nothing to grade: only the names of its
+    waiting room. Skips are only read when no answer exists, which is rare.
+    """
+    answered = session.scalar(
+        select(QuizAnswer.id).where(QuizAnswer.session_id == quiz_session.id).limit(1)
+    )
+    if answered is not None:
+        return True
+    skipped = session.scalar(
+        select(QuizParticipant.id)
+        .where(
+            QuizParticipant.session_id == quiz_session.id,
+            func.cardinality(QuizParticipant.skipped_question_ids) > 0,
+        )
+        .limit(1)
+    )
+    return skipped is not None
 
 
 def quiz_session_is_due(
@@ -141,6 +229,7 @@ def finish_session(
         select(QuizParticipant).where(QuizParticipant.session_id == quiz_session.id)
     ):
         participant.current_position = None
+    store_blank_answers_for_skipped_questions(quiz_session, session)
     if quiz.mode == QuizMode.EXAM:
         compute_final_scores(quiz_session, session)
     return True
@@ -246,21 +335,29 @@ def finish_when_nobody_can_answer(
     answer and being the last to leave both empty that set, so both paths
     call this.
 
-    A session where nobody ever answered is left running: there is nothing to
-    grade, and finishing it would deny the rejoin its students still need.
+    A session where nobody ever answered or skipped a question is left
+    running: there is nothing to grade, and finishing it would deny the rejoin
+    its students still need.
     """
     if quiz_session.status != SessionStatus.IN_PROGRESS:
         return
-    answered = session.scalar(
-        select(QuizAnswer.id).where(QuizAnswer.session_id == quiz_session.id).limit(1)
-    )
-    if answered is None:
+    if not anyone_took_a_question(quiz_session, session):
         return
     still_working: ColumnElement[bool] = QuizParticipant.current_position.is_not(None)
     if answer_review_enabled(quiz_session, quiz):
         # The last answer no longer ends the session on its own: a participant
         # reviewing their answers still has to confirm them.
         still_working = or_(still_working, QuizParticipant.submitted_at.is_(None))
+    elif previous_questions_allowed(quiz_session, quiz):
+        # Without the review step, the last answer hands the paper in, except
+        # for a participant who skipped a question (final_review_offered).
+        still_working = or_(
+            still_working,
+            and_(
+                QuizParticipant.submitted_at.is_(None),
+                func.cardinality(QuizParticipant.skipped_question_ids) > 0,
+            ),
+        )
     unfinished_count = session.scalar(
         select(func.count(QuizParticipant.id)).where(
             QuizParticipant.session_id == quiz_session.id,
