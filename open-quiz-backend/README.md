@@ -325,11 +325,12 @@ développement à jour, générez-la puis relisez-la :
 
 ```shell
 uv run alembic upgrade head
-uv run alembic revision --autogenerate --rev-id 0005 -m "describe the change"
+uv run alembic revision --autogenerate --rev-id NNNN -m "describe the change"
 ```
 
-La commande lit `DATABASE_URL` dans l’environnement ou dans `.env`. Numérotez
-les révisions à la suite et vérifiez que la migration préserve les données des
+La commande lit `DATABASE_URL` dans l’environnement ou dans `.env`. Remplacez
+`NNNN` par le numéro qui suit la dernière révision de `migrations/versions/`
+(`uv run alembic heads` l’indique) et vérifiez que la migration préserve les données des
 instances en service : une colonne obligatoire ajoutée à une table existante
 doit par exemple recevoir une valeur par défaut. Le test
 `test_migrations_build_the_schema_the_models_describe` échoue tant qu’un modèle
