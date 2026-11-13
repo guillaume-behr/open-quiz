@@ -12,6 +12,7 @@ import { FieldError } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
 import { LoaderCircle } from "lucide-react"
 import type { FormEvent } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { ProtectedQuizImage } from "./protected-quiz-image"
 
@@ -125,52 +126,9 @@ export function StudentQuestionForm({
             )}
             {error && <FieldError>{error}</FieldError>}
             <div
-                className="sticky bottom-0 z-10 flex min-w-0 items-center justify-end gap-3 border-t bg-secondary py-4"
+                className="flex min-w-0 items-center justify-end gap-3 border-t pt-5"
                 dir="ltr"
             >
-                {session.allow_previous_questions && (
-                    <nav
-                        className="min-w-0 flex-1 overflow-x-auto"
-                        aria-label={t("student-question-progress", {
-                            current: questionNumber,
-                            total: session.total_questions,
-                        })}
-                    >
-                        <div className="flex w-max gap-2 py-1">
-                            {session.accessible_question_numbers.map(
-                                (number) => {
-                                    const isCurrent = number === questionNumber
-                                    return (
-                                        <Button
-                                            key={number}
-                                            className="size-10 shrink-0 p-0"
-                                            type="button"
-                                            variant={
-                                                isCurrent
-                                                    ? "default"
-                                                    : "outline"
-                                            }
-                                            aria-current={
-                                                isCurrent ? "step" : undefined
-                                            }
-                                            aria-label={t(
-                                                "student-question-progress",
-                                                {
-                                                    current: number,
-                                                    total: session.total_questions,
-                                                }
-                                            )}
-                                            disabled={isBusy || isCurrent}
-                                            onClick={() => onNavigate(number)}
-                                        >
-                                            {number}
-                                        </Button>
-                                    )
-                                }
-                            )}
-                        </div>
-                    </nav>
-                )}
                 <Button
                     className="shrink-0 sm:min-w-64"
                     size="lg"
@@ -189,7 +147,71 @@ export function StudentQuestionForm({
                     {t("student-submit-answer")}
                 </Button>
             </div>
+            {session.allow_previous_questions && (
+                <QuestionNavigation
+                    session={session}
+                    isBusy={isBusy}
+                    onNavigate={onNavigate}
+                />
+            )}
         </form>
+    )
+}
+
+/**
+ * The numbered back-navigation, outside the question card: a bar fixed at
+ * the bottom centre of the screen, so it stays in reach on a long question.
+ * Portalled to the body so no ancestor's transform can unpin it.
+ */
+function QuestionNavigation({
+    session,
+    isBusy,
+    onNavigate,
+}: {
+    session: StudentQuizSession
+    isBusy: boolean
+    onNavigate: (questionNumber: number) => void
+}) {
+    const { t } = useTranslation()
+    const questionNumber = session.question_number ?? 1
+
+    return createPortal(
+        <div
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4"
+            dir="ltr"
+        >
+            <nav
+                className="pointer-events-auto max-w-full overflow-x-auto rounded-2xl border bg-secondary px-3 py-2 shadow-lg"
+                aria-label={t("student-question-progress", {
+                    current: questionNumber,
+                    total: session.total_questions,
+                })}
+            >
+                <div className="flex w-max gap-2 py-1">
+                    {session.accessible_question_numbers.map((number) => {
+                        const isCurrent = number === questionNumber
+                        return (
+                            <Button
+                                key={number}
+                                className="size-10 shrink-0 p-0"
+                                type="button"
+                                variant={isCurrent ? "default" : "outline"}
+                                aria-current={isCurrent ? "step" : undefined}
+                                aria-label={t("student-question-progress", {
+                                    current: number,
+                                    total: session.total_questions,
+                                })}
+                                disabled={isBusy || isCurrent}
+                                onClick={() => onNavigate(number)}
+                            >
+                                {number}
+                            </Button>
+                        )
+                    })}
+                </div>
+            </nav>
+        </div>,
+        document.body
     )
 }
 

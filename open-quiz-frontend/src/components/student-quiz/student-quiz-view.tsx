@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { ListChecks, LoaderCircle } from "lucide-react"
 import { type FormEvent, memo } from "react"
 import { useTranslation } from "react-i18next"
+import { cn } from "@/lib/utils"
 import { AnswerReview } from "./answer-review"
 import { StudentNameBadge } from "./fullscreen-prompt"
 import { StudentQuestionForm } from "./student-question-form"
@@ -66,9 +67,20 @@ export function StudentQuizView({
         !session.awaiting_final_submission &&
         session.total_questions > 0 &&
         session.answered_count >= session.total_questions
+    const showsQuestionNavigation =
+        !isReviewing &&
+        session.status === "in_progress" &&
+        question !== null &&
+        session.allow_previous_questions
 
     return (
-        <div className="flex w-full max-w-7xl flex-col gap-6 rounded-2xl border bg-secondary px-5 py-6 shadow-lg sm:px-8 sm:py-8 lg:px-12">
+        <div
+            className={cn(
+                "flex w-full max-w-7xl flex-col gap-6 rounded-2xl border bg-secondary px-5 py-6 shadow-lg sm:px-8 sm:py-8 lg:px-12",
+                // Room for the question navigation fixed below the card.
+                showsQuestionNavigation && "mb-20"
+            )}
+        >
             <StudentNameBadge name={session.student_name} />
             <QuizHeader
                 session={session}
