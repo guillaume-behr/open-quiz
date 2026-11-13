@@ -125,7 +125,7 @@ export function StudentQuestionForm({
             )}
             {error && <FieldError>{error}</FieldError>}
             <div
-                className="flex min-w-0 items-center justify-end gap-3 border-t pt-5"
+                className="sticky bottom-0 z-10 flex min-w-0 items-center justify-end gap-3 border-t bg-secondary py-4"
                 dir="ltr"
             >
                 {session.allow_previous_questions && (
