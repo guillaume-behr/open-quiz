@@ -5,19 +5,16 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Grade } from "@/components/ui/grade"
 import { StaticCodeBlock } from "@/components/question-banks/code-block"
+import { SubmittedAnswer } from "@/components/submitted-answer"
 import { formatScore, scoreTone, type ScoreTone } from "@/lib/grades"
 import { cn, scoreGradientStyle } from "@/lib/utils"
 import { Accordion } from "@base-ui/react/accordion"
-import {
-    BookOpenCheck,
-    ChevronDown,
-    LoaderCircle,
-    TriangleAlert,
-} from "lucide-react"
+import { BookOpenCheck, ChevronDown, TriangleAlert } from "lucide-react"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocale } from "@/lib/locale"
 import { useResource } from "@/hooks/use-resource"
+import { LoadingState } from "@/components/ui/loading-state"
 
 const SCORE_TONE_CLASS_NAMES: Record<ScoreTone, string> = {
     success: "bg-success/10 text-success",
@@ -91,19 +88,7 @@ export function StudentQuizHistory({ token }: { token: string }) {
         }
     }
 
-    if (isLoading)
-        return (
-            <div
-                className="flex justify-center py-10"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle
-                    className="size-7 animate-spin text-primary motion-reduce:animate-none"
-                    aria-hidden="true"
-                />
-            </div>
-        )
+    if (isLoading) return <LoadingState className="py-10" />
 
     if (hasError)
         return (
@@ -276,33 +261,15 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                         </span>
                                                     )}
                                                 </p>
-                                                {answer.response_language &&
-                                                answer.submitted_answers.some(
-                                                    (item) => item.trim() !== ""
-                                                ) ? (
-                                                    <div className="mt-2">
-                                                        <StaticCodeBlock
-                                                            code={answer.submitted_answers.join(
-                                                                "\n"
-                                                            )}
-                                                            language={
-                                                                answer.response_language
-                                                            }
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <p className="mt-1 whitespace-pre-wrap">
-                                                        {answer.submitted_answers.filter(
-                                                            (item) =>
-                                                                item.trim() !==
-                                                                ""
-                                                        ).length > 0
-                                                            ? answer.submitted_answers.join(
-                                                                  ", "
-                                                              )
-                                                            : t("no-answer")}
-                                                    </p>
-                                                )}
+                                                <SubmittedAnswer
+                                                    values={
+                                                        answer.submitted_answers
+                                                    }
+                                                    language={
+                                                        answer.response_language
+                                                    }
+                                                    placeholder={t("no-answer")}
+                                                />
                                                 {item.correction_available &&
                                                     answer.is_correct ===
                                                         null && (
@@ -318,34 +285,15 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                                     <p className="font-medium text-success">
                                                         {t("correct-answer")}
                                                     </p>
-                                                    {answer.response_language &&
-                                                    answer.expected_answers.some(
-                                                        (item) =>
-                                                            item.trim() !== ""
-                                                    ) ? (
-                                                        <div className="mt-2">
-                                                            <StaticCodeBlock
-                                                                code={answer.expected_answers.join(
-                                                                    "\n"
-                                                                )}
-                                                                language={
-                                                                    answer.response_language
-                                                                }
-                                                            />
-                                                        </div>
-                                                    ) : (
-                                                        <p className="mt-1 whitespace-pre-wrap">
-                                                            {answer.expected_answers.filter(
-                                                                (item) =>
-                                                                    item.trim() !==
-                                                                    ""
-                                                            ).length > 0
-                                                                ? answer.expected_answers.join(
-                                                                      ", "
-                                                                  )
-                                                                : "—"}
-                                                        </p>
-                                                    )}
+                                                    <SubmittedAnswer
+                                                        values={
+                                                            answer.expected_answers
+                                                        }
+                                                        language={
+                                                            answer.response_language
+                                                        }
+                                                        placeholder="—"
+                                                    />
                                                 </div>
                                             )}
                                         </div>

@@ -21,7 +21,7 @@ import { QuestionBanksList } from "@/components/question-banks/question-banks-li
 import {
     QuestionsManager,
     type QuestionsView,
-} from "@/components/question-banks/questions-dialog"
+} from "@/components/question-banks/questions-manager"
 import { type FormEvent, useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"

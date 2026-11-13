@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { ApiError } from "@/api/client"
-import { API_ERROR_TRANSLATION_KEYS, apiErrorMessage } from "@/lib/errors"
+import { apiErrorMessage } from "@/lib/errors"
 
 const translate = (key: string) => `translated:${key}`
 
@@ -12,7 +12,7 @@ describe("apiErrorMessage", () => {
             message: "Quiz introuvable",
         })
         expect(apiErrorMessage(error, translate, "fallback")).toBe(
-            `translated:${API_ERROR_TRANSLATION_KEYS.QUIZ_NOT_FOUND}`
+            "translated:error-quiz-not-found"
         )
     })
 

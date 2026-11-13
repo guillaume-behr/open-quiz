@@ -1,19 +1,21 @@
 import type { GradeLevel, QuestionBank } from "@/api/types"
 import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
 import {
     BookOpenText,
     Download,
     FileJson,
-    LoaderCircle,
     Pencil,
     Trash2,
     Upload,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { LoadingState } from "@/components/ui/loading-state"
+import { AnimatedGrid } from "@/components/ui/animated-grid"
+import { FilterSidebar } from "@/components/ui/filter-sidebar"
 
 type QuestionBanksListProps = {
     banks: QuestionBank[]
@@ -68,47 +70,38 @@ export function QuestionBanksList({
 
     return (
         <div className="grid gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-            <aside className="h-fit rounded-xl border bg-background p-4">
-                <h3 className="font-semibold">{t("filters")}</h3>
-                <FieldGroup className="mt-4 gap-4">
-                    <Field>
-                        <FieldLabel htmlFor="question-bank-title-filter">
-                            {t("search")}
-                        </FieldLabel>
-                        <Input
-                            id="question-bank-title-filter"
-                            value={titleFilter}
-                            onChange={(event) =>
-                                onTitleFilterChange(event.target.value)
-                            }
-                            placeholder={t("search-question-bank")}
-                        />
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="question-bank-grade-filter">
-                            {t("grade-level")}
-                        </FieldLabel>
-                        <GradeLevelSelect
-                            id="question-bank-grade-filter"
-                            value={gradeLevelFilter}
-                            levels={gradeLevels}
-                            onChange={onGradeLevelFilterChange}
-                            onDelete={onDeleteGradeLevel}
-                            required={false}
-                            placeholder={t("all-grade-levels")}
-                        />
-                    </Field>
-                    {(titleFilter || gradeLevelFilter) && (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={clearFilters}
-                        >
-                            {t("clear-filters")}
-                        </Button>
-                    )}
-                </FieldGroup>
-            </aside>
+            <FilterSidebar
+                hasFilters={Boolean(titleFilter || gradeLevelFilter)}
+                onClear={clearFilters}
+            >
+                <Field>
+                    <FieldLabel htmlFor="question-bank-title-filter">
+                        {t("search")}
+                    </FieldLabel>
+                    <Input
+                        id="question-bank-title-filter"
+                        value={titleFilter}
+                        onChange={(event) =>
+                            onTitleFilterChange(event.target.value)
+                        }
+                        placeholder={t("search-question-bank")}
+                    />
+                </Field>
+                <Field>
+                    <FieldLabel htmlFor="question-bank-grade-filter">
+                        {t("grade-level")}
+                    </FieldLabel>
+                    <GradeLevelSelect
+                        id="question-bank-grade-filter"
+                        value={gradeLevelFilter}
+                        levels={gradeLevels}
+                        onChange={onGradeLevelFilterChange}
+                        onDelete={onDeleteGradeLevel}
+                        required={false}
+                        placeholder={t("all-grade-levels")}
+                    />
+                </Field>
+            </FilterSidebar>
             <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="font-semibold">{t("my-question-banks")}</h3>
@@ -192,19 +185,7 @@ function BanksContent({
     onPageChange: (page: number) => void
 }) {
     const { t } = useTranslation()
-    if (isLoading)
-        return (
-            <div
-                className="flex min-h-32 items-center justify-center"
-                role="status"
-                aria-label={t("page-loading")}
-            >
-                <LoaderCircle
-                    className="size-6 animate-spin text-primary motion-reduce:animate-none"
-                    aria-hidden="true"
-                />
-            </div>
-        )
+    if (isLoading) return <LoadingState className="min-h-32" size={6} />
     if (loadError)
         return (
             <p
@@ -239,9 +220,10 @@ function BanksContent({
 
     return (
         <>
-            <ul
-                key={banks.map((bank) => bank.id).join(",")}
-                className="mt-3 grid animate-in gap-3 duration-300 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none sm:grid-cols-2"
+            <AnimatedGrid
+                as="ul"
+                ids={banks.map((bank) => bank.id)}
+                className="mt-3 gap-3 sm:grid-cols-2"
             >
                 {banks.map((bank) => (
                     <li
@@ -308,7 +290,7 @@ function BanksContent({
                         </div>
                     </li>
                 ))}
-            </ul>
+            </AnimatedGrid>
             <Pagination
                 currentPage={page}
                 totalPages={totalPages}

@@ -1,17 +1,16 @@
 import { RichText } from "@/components/ui/rich-text"
-import type {
-    CodeLanguage,
-    QuizAnswerReview,
-    QuizParticipant,
-} from "@/api/types"
+import type { QuizAnswerReview, QuizParticipant } from "@/api/types"
 import { answerOutcomeKey, formatScore } from "@/lib/grades"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { StaticCodeBlock } from "@/components/question-banks/code-block"
 import { scoreGradientStyle } from "@/lib/utils"
+import { SubmittedAnswer } from "@/components/submitted-answer"
 import { LoaderCircle, Save } from "lucide-react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+import { LoadingState } from "@/components/ui/loading-state"
 
 type ParticipantAnswersDialogProps = {
     participant: QuizParticipant | null
@@ -60,16 +59,7 @@ export function ParticipantAnswersDialog({
             size="xl"
         >
             {isLoading ? (
-                <div
-                    className="flex min-h-40 items-center justify-center"
-                    role="status"
-                    aria-label={t("page-loading")}
-                >
-                    <LoaderCircle
-                        className="size-7 animate-spin text-primary motion-reduce:animate-none"
-                        aria-hidden="true"
-                    />
-                </div>
+                <LoadingState />
             ) : (
                 <div className="space-y-3">
                     {error && (
@@ -123,22 +113,6 @@ function AnswerReview({
     onGrade: () => void
 }) {
     const { t } = useTranslation()
-    const hasStudentAnswer =
-        answer.submitted_answers.length > 0 &&
-        answer.submitted_answers.some((item) => item.trim() !== "")
-    const studentAnswerValue = hasStudentAnswer
-        ? answer.response_language
-            ? answer.submitted_answers.join("\n")
-            : answer.submitted_answers.join(", ")
-        : t("no-answer")
-    const hasExpectedAnswer =
-        answer.expected_answers.length > 0 &&
-        answer.expected_answers.some((item) => item.trim() !== "")
-    const expectedAnswerValue = hasExpectedAnswer
-        ? answer.response_language
-            ? answer.expected_answers.join("\n")
-            : answer.expected_answers.join(", ")
-        : "—"
 
     return (
         <article className="rounded-xl border p-4">
@@ -168,18 +142,23 @@ function AnswerReview({
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <AnswerText
                     label={t("student-answer")}
-                    value={studentAnswerValue}
-                    language={answer.response_language}
                     graded={answer.is_correct !== null}
                     score={answer.score}
                     maxScore={answer.max_score}
-                />
-                <AnswerText
-                    label={t("expected-answer-help")}
-                    value={expectedAnswerValue}
-                    language={answer.response_language}
-                    highlighted
-                />
+                >
+                    <SubmittedAnswer
+                        values={answer.submitted_answers}
+                        language={answer.response_language}
+                        placeholder={t("no-answer")}
+                    />
+                </AnswerText>
+                <AnswerText label={t("expected-answer-help")} highlighted>
+                    <SubmittedAnswer
+                        values={answer.expected_answers}
+                        language={answer.response_language}
+                        placeholder="—"
+                    />
+                </AnswerText>
             </div>
             {answer.answer_mode === "written" && (
                 <div className="mt-3 space-y-3 border-t pt-3">
@@ -254,29 +233,24 @@ function AnswerReview({
 
 function AnswerText({
     label,
-    value,
-    language,
     highlighted = false,
     graded = false,
     score,
     maxScore,
+    children,
 }: {
     label: string
-    value: string
-    language?: CodeLanguage | null
     highlighted?: boolean
     graded?: boolean
     score?: number
     maxScore?: number
+    children: ReactNode
 }) {
     const { t } = useTranslation()
     const style =
         graded && score !== undefined && maxScore !== undefined
             ? scoreGradientStyle(score, maxScore)
             : undefined
-    const isCode = Boolean(
-        language && value && value !== t("no-answer") && value !== "—"
-    )
 
     return (
         <div
@@ -297,13 +271,7 @@ function AnswerText({
                     </span>
                 )}
             </p>
-            {isCode ? (
-                <div className="mt-2">
-                    <StaticCodeBlock code={value} language={language!} />
-                </div>
-            ) : (
-                <p className="mt-1 text-sm whitespace-pre-wrap">{value}</p>
-            )}
+            {children}
         </div>
     )
 }

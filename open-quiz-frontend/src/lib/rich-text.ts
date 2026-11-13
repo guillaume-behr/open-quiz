@@ -289,7 +289,7 @@ function isWrapped(before: string, after: string, marker: string) {
         : starsBefore >= 2 && starsAfter >= 2
 }
 
-export type RichTextSelection = {
+type RichTextSelection = {
     value: string
     selectionStart: number
     selectionEnd: number

@@ -6,6 +6,8 @@ import { Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { apiErrorMessage } from "@/lib/errors"
+import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
+import { cn } from "@/lib/utils"
 
 type GradeLevelSelectProps = {
     id: string
@@ -70,7 +72,7 @@ export function GradeLevelSelect({
                         onChange(event.target.value)
                     }}
                     disabled={disabled}
-                    className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    className={cn(NATIVE_SELECT_CLASS_NAME, "min-w-0 flex-1")}
                     required={required}
                 >
                     <option value="" disabled={required}>

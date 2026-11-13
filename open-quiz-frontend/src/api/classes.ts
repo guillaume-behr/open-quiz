@@ -1,6 +1,7 @@
 import { PAGE_SIZE } from "@/lib/utils"
 
 import { request, requestBlob, requestPage } from "./client"
+import { ALL_PAGES_SIZE, fetchAllPages } from "./pagination"
 import type { GradeLevel, Page, StudentClass } from "./types"
 
 export function getStudentClasses(
@@ -19,14 +20,10 @@ export function getStudentClasses(
     return requestPage<StudentClass>(`/api/classes?${params}`, { signal })
 }
 
-export async function getAllStudentClasses(): Promise<StudentClass[]> {
-    const first = await getStudentClasses(1, "", "", 100)
-    const remaining = await Promise.all(
-        Array.from({ length: first.totalPages - 1 }, (_, index) =>
-            getStudentClasses(index + 2, "", "", 100)
-        )
+export function getAllStudentClasses(): Promise<StudentClass[]> {
+    return fetchAllPages((page) =>
+        getStudentClasses(page, "", "", ALL_PAGES_SIZE)
     )
-    return [first, ...remaining].flatMap((result) => result.items)
 }
 
 export function createStudentClass(

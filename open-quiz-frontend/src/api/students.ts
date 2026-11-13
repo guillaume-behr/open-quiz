@@ -1,4 +1,5 @@
 import { request, requestBlob, requestPage } from "./client"
+import { ALL_PAGES_SIZE, fetchAllPages } from "./pagination"
 import type {
     CreatedStudentAccount,
     Page,
@@ -25,14 +26,8 @@ export function getStudents(
     return requestPage<StudentAccount>(`/api/students?${params}`, { signal })
 }
 
-export async function getAllStudents(): Promise<StudentAccount[]> {
-    const first = await getStudents(1, "", 100)
-    const rest = await Promise.all(
-        Array.from({ length: first.totalPages - 1 }, (_, index) =>
-            getStudents(index + 2, "", 100)
-        )
-    )
-    return [first, ...rest].flatMap((page) => page.items)
+export function getAllStudents(): Promise<StudentAccount[]> {
+    return fetchAllPages((page) => getStudents(page, "", ALL_PAGES_SIZE))
 }
 
 export function createStudentAccount(payload: {

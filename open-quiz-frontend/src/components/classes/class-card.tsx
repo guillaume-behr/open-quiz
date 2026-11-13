@@ -1,13 +1,14 @@
 import type { GradeLevel, StudentClass } from "@/api/types"
 import { GradeLevelSelect } from "@/components/grade-level-select"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { formatClassName } from "@/lib/utils"
 import { Pencil, Printer, Trash2, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { FilterSidebar } from "@/components/ui/filter-sidebar"
 
-export type ClassFilterValues = { search: string; gradeLevel: string }
+type ClassFilterValues = { search: string; gradeLevel: string }
 
 export function ClassFilters({
     filters,
@@ -24,51 +25,40 @@ export function ClassFilters({
 }) {
     const { t } = useTranslation()
     return (
-        <aside className="h-fit rounded-xl border bg-background p-4">
-            <h3 className="font-semibold">{t("filters")}</h3>
-            <FieldGroup className="mt-4 gap-4">
-                <Field>
-                    <FieldLabel htmlFor="class-filter-search">
-                        {t("search")}
-                    </FieldLabel>
-                    <Input
-                        id="class-filter-search"
-                        value={filters.search}
-                        onChange={(event) => {
-                            onFilterChange("search", event.target.value)
-                        }}
-                        placeholder={t("search-class")}
-                    />
-                </Field>
-                <Field>
-                    <FieldLabel htmlFor="class-filter-grade-level">
-                        {t("grade-level")}
-                    </FieldLabel>
-                    <GradeLevelSelect
-                        id="class-filter-grade-level"
-                        value={filters.gradeLevel}
-                        levels={gradeLevels}
-                        onChange={(value) => {
-                            onFilterChange("gradeLevel", value)
-                        }}
-                        onDelete={onDeleteGradeLevel}
-                        required={false}
-                        placeholder={t("all-grade-levels")}
-                    />
-                </Field>
-                {(filters.search || filters.gradeLevel) && (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                            onReset()
-                        }}
-                    >
-                        {t("clear-filters")}
-                    </Button>
-                )}
-            </FieldGroup>
-        </aside>
+        <FilterSidebar
+            hasFilters={Boolean(filters.search || filters.gradeLevel)}
+            onClear={onReset}
+        >
+            <Field>
+                <FieldLabel htmlFor="class-filter-search">
+                    {t("search")}
+                </FieldLabel>
+                <Input
+                    id="class-filter-search"
+                    value={filters.search}
+                    onChange={(event) => {
+                        onFilterChange("search", event.target.value)
+                    }}
+                    placeholder={t("search-class")}
+                />
+            </Field>
+            <Field>
+                <FieldLabel htmlFor="class-filter-grade-level">
+                    {t("grade-level")}
+                </FieldLabel>
+                <GradeLevelSelect
+                    id="class-filter-grade-level"
+                    value={filters.gradeLevel}
+                    levels={gradeLevels}
+                    onChange={(value) => {
+                        onFilterChange("gradeLevel", value)
+                    }}
+                    onDelete={onDeleteGradeLevel}
+                    required={false}
+                    placeholder={t("all-grade-levels")}
+                />
+            </Field>
+        </FilterSidebar>
     )
 }
 

@@ -6,6 +6,7 @@ import {
     requestBlob,
     requestPage,
 } from "./client"
+import { ALL_PAGES_SIZE, fetchAllPages } from "./pagination"
 import type {
     NewQuestion,
     NewQuestionBank,
@@ -39,14 +40,10 @@ export function getQuestionBanks(
     })
 }
 
-export async function getAllQuestionBanks(): Promise<QuestionBank[]> {
-    const first = await getQuestionBanks(1, "", "", 100)
-    const remaining = await Promise.all(
-        Array.from({ length: first.totalPages - 1 }, (_, index) =>
-            getQuestionBanks(index + 2, "", "", 100)
-        )
+export function getAllQuestionBanks(): Promise<QuestionBank[]> {
+    return fetchAllPages((page) =>
+        getQuestionBanks(page, "", "", ALL_PAGES_SIZE)
     )
-    return [first, ...remaining].flatMap((result) => result.items)
 }
 
 export function createQuestionBank(
