@@ -1,8 +1,8 @@
 import { lazy } from "react"
 
-export const HomePage = lazy(() =>
-    import("./HomePage.tsx").then(({ HomePage }) => ({
-        default: HomePage,
+export const StudentPage = lazy(() =>
+    import("./StudentPage.tsx").then(({ StudentPage }) => ({
+        default: StudentPage,
     }))
 )
 
@@ -18,9 +18,9 @@ export const TrainingPage = lazy(() =>
     }))
 )
 
-export const Dashboard = lazy(() =>
-    import("./Dashboard.tsx").then(({ Dashboard }) => ({
-        default: Dashboard,
+export const TeacherPage = lazy(() =>
+    import("./TeacherPage.tsx").then(({ TeacherPage }) => ({
+        default: TeacherPage,
     }))
 )
 

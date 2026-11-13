@@ -16,9 +16,9 @@ import {
     AccessibilityPage,
     AdminDashboard,
     CookiesPage,
-    Dashboard,
+    TeacherPage,
     ExamPage,
-    HomePage,
+    StudentPage,
     LegalNoticesPage,
     NotFoundPage,
     PrivacyPage,
@@ -51,16 +51,16 @@ createRoot(document.getElementById("root")!).render(
                                 />
                                 <Route
                                     path="student/login"
-                                    element={<HomePage page="login" />}
+                                    element={<StudentPage page="login" />}
                                 />
                                 <Route
                                     path="student/dashboard"
-                                    element={<HomePage page="dashboard" />}
+                                    element={<StudentPage page="dashboard" />}
                                 />
                                 <Route
                                     path="student/results"
                                     element={
-                                        <HomePage
+                                        <StudentPage
                                             page="dashboard"
                                             initialSection="results"
                                         />
@@ -76,11 +76,11 @@ createRoot(document.getElementById("root")!).render(
                                 />
                                 <Route
                                     path="teacher/login"
-                                    element={<Dashboard page="login" />}
+                                    element={<TeacherPage page="login" />}
                                 />
                                 <Route
                                     path="teacher/dashboard"
-                                    element={<Dashboard page="dashboard" />}
+                                    element={<TeacherPage page="dashboard" />}
                                 />
                                 <Route
                                     path="admin/dashboard"
