@@ -143,7 +143,7 @@ export function ResultsSchedule({
                         onWeekChange(addDays(weekStart, -DAYS_PER_WEEK))
                     }
                 >
-                    <ChevronLeft />
+                    <ChevronLeft className="rtl:rotate-180" />
                 </Button>
                 <h3 className="font-bold capitalize">
                     {rangeFormatter.format(weekStart)} –{" "}
@@ -159,7 +159,7 @@ export function ResultsSchedule({
                         onWeekChange(addDays(weekStart, DAYS_PER_WEEK))
                     }
                 >
-                    <ChevronRight />
+                    <ChevronRight className="rtl:rotate-180" />
                 </Button>
             </div>
             <div className="overflow-x-auto">
@@ -177,7 +177,7 @@ export function ResultsSchedule({
                         {days.map((day) => (
                             <div
                                 key={day.toISOString()}
-                                className="border-l px-2 py-2 text-center text-sm font-semibold capitalize"
+                                className="border-s px-2 py-2 text-center text-sm font-semibold capitalize"
                             >
                                 {dayFormatter.format(day)}
                             </div>
@@ -199,7 +199,7 @@ export function ResultsSchedule({
                                 )}
                                 style={{ top: `${index * HOUR_HEIGHT}px` }}
                             >
-                                <span className="absolute -top-2.5 left-0 w-14 bg-background text-right text-xs text-muted-foreground tabular-nums">
+                                <span className="absolute start-0 -top-2.5 w-14 bg-background text-end text-xs text-muted-foreground tabular-nums">
                                     {timeFormatter.format(
                                         new Date(
                                             weekStart.getFullYear(),
@@ -223,7 +223,7 @@ export function ResultsSchedule({
                                         days[dayIndex]?.toISOString() ??
                                         dayIndex
                                     }
-                                    className="relative border-l"
+                                    className="relative border-s"
                                 >
                                     {positioned.map(
                                         ({ result, start, end, lane }) => {
@@ -242,7 +242,7 @@ export function ResultsSchedule({
                                                 <button
                                                     key={result.id}
                                                     type="button"
-                                                    className="absolute z-20 overflow-hidden rounded-lg border border-primary/30 bg-primary/10 p-1 text-left shadow-sm transition-colors hover:bg-primary/15 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                                                    className="absolute z-20 overflow-hidden rounded-lg border border-primary/30 bg-primary/10 p-1 text-start shadow-sm transition-colors hover:bg-primary/15 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                                                     style={{
                                                         top: `${(startMinutes / 60) * HOUR_HEIGHT + 2}px`,
                                                         height: `${Math.max(40, (durationMinutes / 60) * HOUR_HEIGHT - 4)}px`,

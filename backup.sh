@@ -2,6 +2,7 @@
 
 set -eu
 
+# shellcheck disable=SC1007 # "CDPATH= cd" empties CDPATH for this cd only.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/scripts/common.sh"
 

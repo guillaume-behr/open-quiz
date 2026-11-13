@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
 
 test("theme selection is applied and persisted", async ({ page }) => {
     await page.getByRole("button", { name: "Change theme" }).click()
-    await page.getByRole("menuitem", { name: "Dark" }).click()
+    await page.getByRole("menuitemradio", { name: "Dark" }).click()
 
     await expect(page.locator("html")).toHaveClass(/dark/)
     await expect
@@ -22,7 +22,7 @@ test("language selection updates the interface and document direction", async ({
     page,
 }) => {
     await page.getByRole("button", { name: "Change language" }).click()
-    await page.getByRole("menuitem", { name: "العربية" }).click()
+    await page.getByRole("menuitemradio", { name: "العربية" }).click()
 
     await expect(
         page.getByRole("heading", { name: "مساحة الطالب" })

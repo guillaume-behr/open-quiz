@@ -253,7 +253,9 @@ function BanksContent({
                             size="icon-sm"
                             variant="ghost"
                             className="absolute end-12 top-4 z-10"
-                            aria-label={t("edit-question-bank")}
+                            aria-label={t("edit-question-bank-named", {
+                                name: bank.chapter,
+                            })}
                             title={t("edit-question-bank")}
                             onClick={() => onEdit(bank)}
                         >
@@ -264,7 +266,9 @@ function BanksContent({
                             size="icon-sm"
                             variant="destructive"
                             className="absolute end-4 top-4"
-                            aria-label={t("delete-question-bank")}
+                            aria-label={t("delete-question-bank-named", {
+                                name: bank.chapter,
+                            })}
                             title={t("delete-question-bank")}
                             onClick={() => onDelete(bank)}
                         >

@@ -722,7 +722,6 @@
     "allow-code-execution": "允许执行代码",
     "allow-code-execution-help": "The student can run their Python answer in the browser.",
     "show-password": "显示密码",
-    "hide-password": "隐藏密码",
     "saving": "正在保存",
     "training-history": "查看历史",
     "training-history-title": "历史 — {{bank}}",
@@ -846,5 +845,18 @@
     "error-username-taken": "此用户名已被其他账户使用。",
     "error-service-unavailable": "服务暂时不可用，请稍后重试。",
     "error-request-invalid": "发送的请求无效，请刷新页面后重试。",
-    "error-request-too-large": "发送的数据过大，请缩小图片或文件。"
+    "error-request-too-large": "发送的数据过大，请缩小图片或文件。",
+    "error-unexpected-response": "服务器返回了意外的响应，请刷新页面后重试。",
+    "code-editor-keyboard-hint": "Tab 增加缩进，Shift+Tab 减少缩进。按 Escape 后再按 Tab 可离开编辑器。",
+    "answer-partially-correct": "部分正确",
+    "training-potential-score-about": "关于此分数",
+    "edit-quiz-named": "编辑测验“{{title}}”",
+    "delete-quiz-named": "删除测验“{{title}}”",
+    "edit-question-bank-named": "编辑题库“{{name}}”",
+    "delete-question-bank-named": "删除题库“{{name}}”",
+    "edit-class-named": "编辑班级“{{name}}”",
+    "delete-class-named": "删除班级“{{name}}”",
+    "edit-student-named": "编辑学生“{{name}}”",
+    "delete-student-named": "删除学生“{{name}}”",
+    "delete-result-named": "删除“{{title}}”的结果"
 }

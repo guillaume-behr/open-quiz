@@ -126,6 +126,9 @@ def owned_makeup_session(
     return makeup
 
 
+# Kept on purpose: the interface follows make-up sessions on their WebSocket
+# feed (live.py), and this read-only list stays as a polling fallback for API
+# clients and the backend tests.
 @router.get("/makeup/sessions", response_model=list[MakeupSessionResponse])
 def list_makeup_sessions(
     professor: ProfessorUser, session: DbSession, paging: Paging
@@ -337,6 +340,12 @@ def apply_makeup_action(
 @router.post(
     "/makeup/sessions/{session_id}/{action}",
     response_model=MakeupSessionResponse,
+    # Cancelling deletes the make-up session: there is nothing left to return.
+    responses={
+        status.HTTP_204_NO_CONTENT: {
+            "description": "Make-up session cancelled (action `cancel`)"
+        }
+    },
 )
 def control_makeup_session(
     session_id: int,

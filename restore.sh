@@ -2,6 +2,7 @@
 
 set -eu
 
+# shellcheck disable=SC1007 # "CDPATH= cd" empties CDPATH for this cd only.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/scripts/common.sh"
 
@@ -50,6 +51,7 @@ done
 }
 [ -f "$backup_file" ] || fail "no such backup file: $backup_file"
 # Resolve the path before changing directory.
+# shellcheck disable=SC1007 # "CDPATH= cd" empties CDPATH for this cd only.
 backup_file=$(CDPATH= cd -- "$(dirname -- "$backup_file")" && pwd)/$(basename -- "$backup_file")
 
 open_quiz_banner 'Restoring your database'
@@ -114,6 +116,7 @@ step 'Restoring the backup'
 # and the API would refuse to start. The backup is first turned into SQL;
 # then the public schema is recreated as PostgreSQL creates it and the SQL
 # replayed, all in one transaction: any failure leaves the data unchanged.
+# shellcheck disable=SC2016 # Expanded by the shell inside the container.
 if ! compose exec -T open-quiz-database sh -c '
     set -eu
     sql_file=$(mktemp)

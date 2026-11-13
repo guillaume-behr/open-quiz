@@ -2131,7 +2131,9 @@ test("teacher reviews, grades, exports, and deletes quiz results", async ({
         })
     ).toBe(true)
 
-    await resultCard.getByRole("button", { name: "Delete this result" }).click()
+    await resultCard
+        .getByRole("button", { name: /^Delete the result of / })
+        .click()
     const deleteDialog = page.getByRole("dialog", {
         name: "Delete this result",
     })
@@ -2194,7 +2196,7 @@ test("signing in restores the session once, not again on the dashboard or a lang
     for (const section of ["Classes", "Results", "Students"] as const)
         await page.getByRole("button", { name: section, exact: true }).click()
     await page.getByRole("button", { name: "Change language" }).click()
-    await page.getByRole("menuitem", { name: "Français" }).click()
+    await page.getByRole("menuitemradio", { name: "Français" }).click()
     await expect(
         page.getByRole("heading", { name: "Bienvenue, Ada Lovelace" })
     ).toBeVisible()

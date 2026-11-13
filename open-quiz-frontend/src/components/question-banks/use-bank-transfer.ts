@@ -50,7 +50,10 @@ export function useBankTransfer({
                 ? t("json-import-duplicate-error")
                 : describeJsonImportFailure(
                       caughtError,
-                      t,
+                      t as unknown as (
+                          key: string,
+                          values?: Record<string, unknown>
+                      ) => string,
                       t("json-import-error")
                   )
         )

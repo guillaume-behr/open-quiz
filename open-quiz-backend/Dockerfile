@@ -21,6 +21,15 @@ FROM python:3.14.10-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# The API runs from the virtual environment uv built: pip, and the copies of
+# urllib3, msgpack and setuptools it vendors, are never used at runtime.
+# Debian security updates published since the base image was built (zlib
+# had two HIGH fixes the image scan reported); then no package lists left.
+RUN apt-get update \
+    && apt-get upgrade --yes --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall --yes pip
+
 WORKDIR /app
 
 # The same base image and path as the build stage: the virtual environment's

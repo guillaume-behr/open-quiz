@@ -1,11 +1,16 @@
-import { apiWebSocketUrl } from "@/api/client"
+import * as v from "valibot"
 
-type LiveMessage<T> =
-    { type: "ping" } | { type: "deleted" } | { type: string; data: T }
+import { apiWebSocketUrl } from "@/api/client"
+import { LiveMessageSchema } from "@/api/schemas"
 
 type LiveSocketOptions<T> = {
     path: string
     getToken: (forceRefresh: boolean) => Promise<string | null>
+    /**
+     * Checks each update before onData sees it; an update that fails is
+     * ignored. Without it, the feed's data is trusted as `T`.
+     */
+    schema?: v.GenericSchema<unknown, T>
     onData: (data: T) => void
     onDeleted?: () => void
     onUnavailable: () => void
@@ -33,9 +38,21 @@ export const LIVENESS_TIMEOUT_MS = 60_000
  */
 const STALE_AFTER_MS = SERVER_HEARTBEAT_MS + 5_000
 
+/**
+ * A malformed update is dropped: the screen keeps its last good state, and
+ * the next update (they are full states, not changes) brings it up to date.
+ */
+function ignoreMalformedUpdate(
+    path: string,
+    issues: [v.BaseIssue<unknown>, ...v.BaseIssue<unknown>[]]
+) {
+    console.warn("Ignored a malformed live update", path, v.flatten(issues))
+}
+
 export function connectLiveUpdates<T>({
     path,
     getToken,
+    schema,
     onData,
     onDeleted,
     onUnavailable,
@@ -158,12 +175,18 @@ export function connectLiveUpdates<T>({
         })
         currentSocket.addEventListener("message", (event) => {
             if (stopped || socket !== currentSocket) return
-            let message: LiveMessage<T>
+            let parsed: unknown
             try {
-                message = JSON.parse(String(event.data)) as LiveMessage<T>
+                parsed = JSON.parse(String(event.data))
             } catch {
                 return
             }
+            const envelope = v.safeParse(LiveMessageSchema, parsed)
+            if (!envelope.success) {
+                ignoreMalformedUpdate(path, envelope.issues)
+                return
+            }
+            const message = envelope.output
             if (connectionTimer !== null) {
                 window.clearTimeout(connectionTimer)
                 connectionTimer = null
@@ -180,11 +203,16 @@ export function connectLiveUpdates<T>({
                 onDeleted?.()
                 return
             }
-            if ("data" in message) {
-                attempts = 0
-                refreshAttempted = false
-                onData(message.data)
+            attempts = 0
+            refreshAttempted = false
+            if (!schema) {
+                // A feed without a schema is trusted as its caller types it.
+                onData(message.data as T)
+                return
             }
+            const data = v.safeParse(schema, message.data)
+            if (data.success) onData(data.output)
+            else ignoreMalformedUpdate(path, data.issues)
         })
         currentSocket.addEventListener("close", (event) => {
             // An abandoned socket was already replaced.
