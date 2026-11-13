@@ -1,6 +1,9 @@
 """Question images live in stored_images, once per distinct content."""
 
 import json
+from base64 import b64decode, b64encode
+from collections.abc import Callable
+from hashlib import sha256
 from pathlib import Path
 from threading import Thread
 
@@ -229,3 +232,144 @@ def test_exporting_a_bank_streams_every_question_and_its_image(
         assert images[1] is None
         assert images[0] == images[2]
         assert images[0]["content_type"] == "image/png"
+
+
+def record_statements(client) -> tuple[list[str], Callable[[], None]]:
+    engine = client.app.state.session_factory.kw["bind"]
+    statements: list[str] = []
+
+    def record(_connection, _cursor, statement, *_: object) -> None:
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    return statements, lambda: event.remove(engine, "before_cursor_execute", record)
+
+
+def test_images_are_revalidated_by_their_hash_without_loading_them(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "stored-images-etag")) as client:
+        environment = exam_environment(client)
+        headers = environment["teacher_headers"]
+        bank_id = environment["question"]["question_bank_id"]
+        payload = json.loads(question_payload("Pictured"))
+        payload["choices"][0]["image"] = {
+            "content_type": "image/png",
+            "data_base64": b64encode(VALID_PNG).decode(),
+        }
+        created = client.post(
+            f"/api/question-banks/{bank_id}/questions",
+            headers=headers,
+            data={"payload": json.dumps(payload)},
+            files={"image": ("image.png", VALID_PNG, "image/png")},
+        ).json()
+        choice_id = next(
+            choice["id"] for choice in created["choices"] if choice["has_image"]
+        )
+        for url in (
+            f"/api/question-banks/questions/{created['id']}/image",
+            f"/api/question-banks/choices/{choice_id}/image",
+        ):
+            served = client.get(url, headers=headers)
+            assert served.status_code == 200
+            etag = served.headers["ETag"]
+            assert etag == f'"{sha256(served.content).hexdigest()}"'
+            assert "no-store" not in served.headers["Cache-Control"]
+            assert "private" in served.headers["Cache-Control"]
+
+            statements, stop = record_statements(client)
+            try:
+                revalidated = client.get(
+                    url, headers={**headers, "If-None-Match": etag}
+                )
+            finally:
+                stop()
+            assert revalidated.status_code == 304
+            assert revalidated.content == b""
+            assert revalidated.headers["ETag"] == etag
+            assert statements
+            assert not [
+                statement for statement in statements if "stored_images" in statement
+            ]
+            changed = client.get(url, headers={**headers, "If-None-Match": '"other"'})
+            assert changed.status_code == 200
+            assert changed.content == served.content
+        imageless = client.get(
+            f"/api/question-banks/questions/{environment['question']['id']}/image",
+            headers=headers,
+        )
+        assert imageless.status_code == 404
+        assert imageless.json()["detail"]["code"] == "IMAGE_NOT_FOUND"
+        # Other API responses stay out of every cache.
+        listed = client.get(f"/api/question-banks/{bank_id}/questions", headers=headers)
+        assert listed.headers["Cache-Control"] == "no-store"
+
+
+def test_exporting_a_bank_takes_as_many_queries_whatever_its_size(
+    tmp_path: Path,
+) -> None:
+    with make_client(settings_for(tmp_path / "stored-images-export-n1")) as client:
+        environment = exam_environment(client)
+        headers = environment["teacher_headers"]
+        query_counts = []
+        for size in (1, 4):
+            bank = client.post(
+                "/api/question-banks",
+                headers=headers,
+                json={"grade_level": "5e", "chapter": f"Size {size}"},
+            ).json()
+            for index in range(size):
+                payload = json.loads(question_payload(f"Question {index}"))
+                payload["code_language"] = "python"
+                payload["code_content"] = "print(1)"
+                assert (
+                    client.post(
+                        f"/api/question-banks/{bank['id']}/questions",
+                        headers=headers,
+                        data={"payload": json.dumps(payload)},
+                    ).status_code
+                    == 201
+                )
+            statements, stop = record_statements(client)
+            try:
+                exported = client.get(
+                    f"/api/question-banks/{bank['id']}/export", headers=headers
+                )
+            finally:
+                stop()
+            assert exported.status_code == 200
+            questions = exported.json()["questions"]
+            assert len(questions) == size
+            assert all(question["code_content"] == "print(1)" for question in questions)
+            assert all(len(question["choices"]) == 2 for question in questions)
+            query_counts.append(len(statements))
+        assert query_counts[0] == query_counts[1]
+
+
+def test_exporting_releases_the_request_connection_while_streaming(
+    tmp_path: Path,
+) -> None:
+    settings = settings_for(
+        tmp_path / "stored-images-export-pool",
+        database_pool_size=1,
+        database_max_overflow=0,
+        database_pool_timeout_seconds=2,
+    )
+    with make_client(settings) as client:
+        environment = exam_environment(client)
+        headers = environment["teacher_headers"]
+        bank_id = environment["question"]["question_bank_id"]
+        client.post(
+            f"/api/question-banks/{bank_id}/questions",
+            headers=headers,
+            data={"payload": question_payload("Pictured")},
+            files={"image": ("image.png", VALID_PNG, "image/png")},
+        )
+        exported = client.get(f"/api/question-banks/{bank_id}/export", headers=headers)
+        assert exported.status_code == 200
+        questions = exported.json()["questions"]
+        assert [question["prompt"] for question in questions] == [
+            "One plus one?",
+            "Pictured",
+        ]
+        assert b64decode(questions[1]["image"]["data_base64"]).startswith(b"\x89PNG")

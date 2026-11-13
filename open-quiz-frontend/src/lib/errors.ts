@@ -115,6 +115,7 @@ const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
     TEACHER_IN_ACTIVE_EXAM: "error-teacher-in-active-exam",
     USERNAME_TAKEN: "error-username-taken",
     DATABASE_UNAVAILABLE: "error-service-unavailable",
+    SERVER_BUSY: "error-service-unavailable",
     REQUEST_CONTENT_LENGTH_INVALID: "error-request-invalid",
     REQUEST_BODY_TOO_LARGE: "error-request-too-large",
 }
