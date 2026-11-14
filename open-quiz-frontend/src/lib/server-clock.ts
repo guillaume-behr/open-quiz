@@ -25,15 +25,20 @@ function serverTimeNow(anchor: ServerClockAnchor | null): number {
     return anchor.serverTime + (performance.now() - anchor.monotonicTime)
 }
 
+/** Milliseconds left until `endsAt` on the server's clock; may be negative. */
+export function millisecondsLeft(
+    endsAt: string,
+    anchor: ServerClockAnchor | null
+): number {
+    return Date.parse(endsAt) - serverTimeNow(anchor)
+}
+
 /** Whole seconds left until `endsAt`, on the server's clock. */
 export function secondsLeft(
     endsAt: string,
     anchor: ServerClockAnchor | null
 ): number {
-    return Math.max(
-        0,
-        Math.floor((Date.parse(endsAt) - serverTimeNow(anchor)) / 1000)
-    )
+    return Math.max(0, Math.floor(millisecondsLeft(endsAt, anchor) / 1000))
 }
 
 // Minutes left at which a screen reader hears how much time remains.
