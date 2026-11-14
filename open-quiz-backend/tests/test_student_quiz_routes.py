@@ -26,6 +26,7 @@ from app.models import (
     StudentAccount,
 )
 from app.records.stored_images import store_image
+from app.routers.quizzes import student_join
 from app.schemas.student_quizzes import StudentQuizAnswer
 from app.services import question_draws
 from app.services.session_lifecycle import expire_due_quiz_sessions
@@ -970,6 +971,52 @@ def test_a_participant_who_left_the_waiting_room_can_rejoin_after_the_start(
     for _ in range(2):
         assert answer_current(client, url, rejoined_headers).status_code == 200
     assert hand_in_quiz(client, code, rejoined_headers)["status"] == "finished"
+
+
+def test_a_rejoin_racing_the_start_still_gets_a_question(
+    environment, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The start commits after the rejoin read the session, before it locks it.
+
+    The rejoin decided the student's position from the status it had read,
+    a waiting room, so they came back on no question while the class worked.
+    """
+    client = environment["client"]
+    environment = two_question_quiz(client, environment)
+    account_headers = add_classmate(client, environment)
+    launched, _ = launch_and_join(client, environment)
+    code = launched["join_code"]
+    leaver_headers = participant_headers_of(join(client, account_headers, code))
+    url = f"/api/quizzes/student/sessions/{code}"
+    assert client.post(f"{url}/leave", headers=leaver_headers).status_code == 204
+
+    read_session = student_join.joinable_session
+
+    def start_after_the_read(*arguments: Any) -> Any:
+        found = read_session(*arguments)
+        with client.app.state.session_factory() as other:
+            other.execute(
+                update(QuizSession)
+                .where(QuizSession.id == launched["id"])
+                .values(status="in_progress", started_at=datetime.now(UTC))
+            )
+            other.execute(
+                update(QuizParticipant)
+                .where(
+                    QuizParticipant.session_id == launched["id"],
+                    QuizParticipant.left_at.is_(None),
+                )
+                .values(current_position=0)
+            )
+            other.commit()
+        return found
+
+    monkeypatch.setattr(student_join, "joinable_session", start_after_the_read)
+    rejoined = join(client, account_headers, code)
+
+    assert rejoined["status"] == "in_progress"
+    assert rejoined["question_number"] == 1
+    assert rejoined["question"] is not None
 
 
 def test_a_participant_reviewing_their_answers_rejoins_the_review(

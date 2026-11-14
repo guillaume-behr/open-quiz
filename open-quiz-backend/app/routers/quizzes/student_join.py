@@ -134,6 +134,9 @@ def rejoin_quiz(
     if affected_rows(active_session) != 1:
         session.rollback()
         reject_quiz_join(request, join_subject)
+    # The update above holds the row until the commit; the status read before
+    # it may be stale, if the teacher started the session in between.
+    session.refresh(quiz_session)
     # Starting a session places only present participants on their first
     # question. Someone who left the waiting room and comes back after the
     # start has no position, which reads as "finished" everywhere: they
