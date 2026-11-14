@@ -750,3 +750,66 @@ def test_upgrade_to_0013_gives_existing_participants_no_skip(tmp_path: Path) -> 
             ).scalars().all() == [[]]
     finally:
         engine.dispose()
+
+
+def test_upgrade_to_0014_renames_usernames_differing_by_case(tmp_path: Path) -> None:
+    """The managed administrator, else the oldest account, keeps its name."""
+    database_url = database_url_for(tmp_path / "upgrade-0014")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0013")
+            for username, is_admin in (
+                ("alice", False),
+                ("Alice", False),
+                ("ALICE-2", False),
+                ("teacher", False),
+                ("Teacher", True),
+                ("bob", False),
+            ):
+                connection.execute(
+                    text(
+                        "INSERT INTO users (username, display_name, password_hash, "
+                        "access_token_generation, is_admin, is_active, created_at) "
+                        "VALUES (:username, 'U', 'x', 0, :is_admin, true, now())"
+                    ),
+                    {"username": username, "is_admin": is_admin},
+                )
+            connection.execute(
+                text(
+                    "INSERT INTO security_state (key, value) SELECT "
+                    "'managed_admin_user_id', id::text FROM users "
+                    "WHERE username = 'Teacher'"
+                )
+            )
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with engine.begin() as connection:
+            assert connection.execute(
+                text("SELECT username FROM users ORDER BY id")
+            ).scalars().all() == [
+                "alice",
+                # "alice-2" is taken by ALICE-2, whatever its case.
+                "Alice-3",
+                "ALICE-2",
+                "teacher-2",
+                "Teacher",
+                "bob",
+            ]
+            with pytest.raises(IntegrityError):
+                connection.execute(
+                    text(
+                        "INSERT INTO users (username, display_name, "
+                        "password_hash, access_token_generation, is_admin, "
+                        "is_active, created_at) "
+                        "VALUES ('BOB', 'U', 'x', 0, false, true, now())"
+                    )
+                )
+    finally:
+        engine.dispose()

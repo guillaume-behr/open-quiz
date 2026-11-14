@@ -42,7 +42,9 @@ def validate_origin(request: Request) -> None:
 
 
 def password_rate_subject(username: str) -> str:
-    return f"password:identity:{username}"
+    # Sign-in ignores the username's case, so its attempts count together:
+    # "Alice" and "ALICE" must not be two allowances against one account.
+    return f"password:identity:{username.lower()}"
 
 
 def trusted_password_rate_subject(user_id: int) -> str:
