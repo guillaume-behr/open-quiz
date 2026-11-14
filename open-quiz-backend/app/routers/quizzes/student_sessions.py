@@ -46,10 +46,12 @@ def report_student_violation(
         context.participant,
     )
     expire_quiz_session(quiz_session, quiz, session)
-    if (
-        quiz_session.status != SessionStatus.IN_PROGRESS
-        or participant.current_position is None
-    ):
+    # A participant on their final review has no current question, yet sees
+    # every prompt and may still go back: only a handed-in paper is done.
+    handed_in = (
+        participant.current_position is None and participant.submitted_at is not None
+    )
+    if quiz_session.status != SessionStatus.IN_PROGRESS or handed_in:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     now = datetime.now(UTC)
     last_violation_at = participant.last_violation_at
