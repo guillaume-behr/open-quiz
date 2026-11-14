@@ -105,6 +105,36 @@ def normalized_uploaded_image(
         ) from None
 
 
+# A choice's new image: its bytes and media type, or nothing.
+DecodedImage = tuple[bytes | None, str | None]
+
+
+def decoded_choice_images(
+    question_payload: QuestionCreate, choice_images: list[UploadFile] | None
+) -> list[DecodedImage]:
+    """Each choice's new image, from the file part it names or its payload.
+
+    The editor sends choice images as file parts: a form field holding them
+    in base64 would exceed the 1 MiB that a multipart field may carry.
+    """
+    files = choice_images or []
+    if any(
+        choice.image_file is not None and choice.image_file >= len(files)
+        for choice in question_payload.choices
+    ):
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.QUESTION_INVALID,
+            "Question invalide",
+        )
+    return [
+        normalized_uploaded_image(files[choice.image_file])
+        if choice.image_file is not None
+        else decode_image_payload(choice.image)
+        for choice in question_payload.choices
+    ]
+
+
 def owned_question(
     question_id: int,
     professor: ProfessorUser,
@@ -190,8 +220,9 @@ def create_question(
     session: DbSession,
     payload: Annotated[str, Form()],
     image: Annotated[UploadFile | None, File()] = None,
+    choice_images: Annotated[list[UploadFile] | None, File()] = None,
 ) -> QuestionResponse:
-    """Create a choice or written question, optionally with a private image."""
+    """Create a choice or written question, optionally with private images."""
     lock_bank_with_room(question_bank_id, professor, session)
     try:
         question_payload = QuestionCreate.model_validate(json.loads(payload))
@@ -207,13 +238,10 @@ def create_question(
     # the bank again afterwards.
     session.commit()
     image_data, image_content_type = normalized_uploaded_image(image)
-
-    choice_images = [
-        decode_image_payload(choice.image) for choice in question_payload.choices
-    ]
+    choice_image_data = decoded_choice_images(question_payload, choice_images)
     if (
         len(image_data or b"")
-        + sum(len(choice_image[0] or b"") for choice_image in choice_images)
+        + sum(len(choice_image[0] or b"") for choice_image in choice_image_data)
         > MAX_IMPORT_IMAGE_BYTES
     ):
         raise ApiError(
@@ -228,7 +256,7 @@ def create_question(
         session,
         image_data=image_data,
         image_content_type=image_content_type,
-        choice_images=choice_images,
+        choice_images=choice_image_data,
     )
     session.commit()
     session.refresh(question)
@@ -348,6 +376,7 @@ def parked_choices(question: Question, session: Session) -> dict[int, QuestionCh
 
 def choice_image_plans(
     question_payload: QuestionUpdate,
+    new_images: list[DecodedImage],
     existing_choices_by_id: dict[int, QuestionChoice],
 ) -> list[ChoiceImagePlan]:
     submitted_choice_ids = {
@@ -362,8 +391,9 @@ def choice_image_plans(
     # Each choice keeps its image (by key), replaces it (with new bytes) or
     # loses it.
     replacement_choice_images: list[ChoiceImagePlan] = []
-    for submitted in question_payload.choices:
-        new_image_data, new_image_content_type = decode_image_payload(submitted.image)
+    for submitted, (new_image_data, new_image_content_type) in zip(
+        question_payload.choices, new_images, strict=True
+    ):
         existing_choice = (
             existing_choices_by_id.get(submitted.id)
             if submitted.id is not None
@@ -504,6 +534,7 @@ def update_question(
     session: DbSession,
     payload: Annotated[str, Form()],
     image: Annotated[UploadFile | None, File()] = None,
+    choice_images: Annotated[list[UploadFile] | None, File()] = None,
 ) -> QuestionUpdateResponse:
     """Update a professor's question and replace its answer configuration."""
     owned_question(question_id, professor, session)
@@ -514,6 +545,7 @@ def update_question(
     # does. The question is locked and checked again afterwards.
     session.commit()
     uploaded_image = normalized_uploaded_image(image)
+    new_choice_images = decoded_choice_images(question_payload, choice_images)
     # Locked: two edits of one question would otherwise both freeze a copy.
     question = owned_question(question_id, professor, session, for_update=True)
     require_no_active_exam(question.id, session)
@@ -527,7 +559,9 @@ def update_question(
     published_session_ids = freeze_for_published_sessions(question, session)
     apply_question_fields(question, question_payload, uploaded_image, session)
     existing_choices_by_id = parked_choices(question, session)
-    plans = choice_image_plans(question_payload, existing_choices_by_id)
+    plans = choice_image_plans(
+        question_payload, new_choice_images, existing_choices_by_id
+    )
     require_choice_content(question_payload, plans)
     require_image_budget(question, plans, session)
     choices, code = write_choices_and_code(

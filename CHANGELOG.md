@@ -50,6 +50,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- A choice image larger than about 750 KB can be saved again in the question
+  editor. The editor sent each choice image in base64 inside the `payload`
+  form field, which a multipart request caps at 1 MiB; it now sends them as
+  `choice_images` file parts, like the question image, and each choice names
+  its new image by position with `image_file`. A choice may still carry an
+  `image` in base64, as a JSON import does.
 - Stopping the API waits for queries still running for a live feed before
   closing the database pool, so their connections are closed too.
 

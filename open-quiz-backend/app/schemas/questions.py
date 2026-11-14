@@ -97,6 +97,10 @@ class QuestionChoiceCreate(BaseModel):
     is_correct: bool = False
     points: float | None = Field(default=None, ge=-10000, le=10000)
     image: QuestionImportImage | None = None
+    # The editor's way to send a new image: the position of a file part among
+    # the request's choice_images, which no form field size limit applies to.
+    # A JSON import carries its images in ``image`` instead.
+    image_file: int | None = Field(default=None, ge=0, lt=12)
     remove_image: bool = False
     code_language: CodeLanguage | None = None
     code_content: str | None = Field(default=None, max_length=20000)
@@ -117,10 +121,13 @@ class QuestionChoiceCreate(BaseModel):
             raise ValueError(
                 "Le langage et le contenu du code doivent être renseignés ensemble"
             )
+        if self.image is not None and self.image_file is not None:
+            raise ValueError("Une proposition reçoit une seule image")
         may_retain_existing_image = self.id is not None and not self.remove_image
         if (
             not self.label
             and self.image is None
+            and self.image_file is None
             and self.code_content is None
             and not may_retain_existing_image
         ):
@@ -159,6 +166,13 @@ class QuestionCreate(BaseModel):
         ]
         if len(existing_choice_ids) != len(set(existing_choice_ids)):
             raise ValueError("Une proposition ne peut être utilisée qu’une fois")
+        image_files = [
+            choice.image_file
+            for choice in self.choices
+            if choice.image_file is not None
+        ]
+        if len(image_files) != len(set(image_files)):
+            raise ValueError("Une image ne peut servir qu’à une proposition")
         correct_count = sum(choice.is_correct for choice in self.choices)
         if self.answer_mode != AnswerMode.WRITTEN and len(self.choices) < 2:
             raise ValueError("Une question nécessite au moins deux propositions")
@@ -245,6 +259,13 @@ class QuestionUpdateResponse(QuestionResponse):
 
 class QuestionImportItem(QuestionCreate):
     image: QuestionImportImage | None = None
+
+    @model_validator(mode="after")
+    def validate_embedded_images(self) -> QuestionImportItem:
+        # A JSON document has no file parts: its images travel inside it.
+        if any(choice.image_file is not None for choice in self.choices):
+            raise ValueError("Une image importée doit être encodée dans le fichier")
+        return self
 
 
 class QuestionBatchImport(BaseModel):

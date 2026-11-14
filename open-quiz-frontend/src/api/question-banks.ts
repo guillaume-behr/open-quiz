@@ -86,14 +86,31 @@ export function deleteQuestion(questionId: number): Promise<void> {
     })
 }
 
-export function createQuestion(
-    questionBankId: number,
-    question: NewQuestion,
-    image?: File
-): Promise<Question> {
+/**
+ * The question as a multipart form. Images travel as file parts: a form
+ * field is capped at 1 MiB, which a choice image in base64 would exceed.
+ * A choice names its new image by position in `choiceImages`.
+ */
+function questionForm(
+    question: NewQuestion | QuestionUpdate,
+    image: File | undefined,
+    choiceImages: File[]
+): FormData {
     const formData = new FormData()
     formData.set("payload", JSON.stringify(question))
     if (image) formData.set("image", image)
+    for (const choiceImage of choiceImages)
+        formData.append("choice_images", choiceImage)
+    return formData
+}
+
+export function createQuestion(
+    questionBankId: number,
+    question: NewQuestion,
+    image?: File,
+    choiceImages: File[] = []
+): Promise<Question> {
+    const formData = questionForm(question, image, choiceImages)
     return request<Question>(
         `/api/question-banks/${questionBankId}/questions`,
         {
@@ -107,11 +124,10 @@ export function createQuestion(
 export function updateQuestion(
     questionId: number,
     question: QuestionUpdate,
-    image?: File
+    image?: File,
+    choiceImages: File[] = []
 ): Promise<UpdatedQuestion> {
-    const formData = new FormData()
-    formData.set("payload", JSON.stringify(question))
-    if (image) formData.set("image", image)
+    const formData = questionForm(question, image, choiceImages)
     return request<UpdatedQuestion>(
         `/api/question-banks/questions/${questionId}/update`,
         {

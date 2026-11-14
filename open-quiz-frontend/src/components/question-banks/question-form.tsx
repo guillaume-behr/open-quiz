@@ -3,7 +3,6 @@ import { createQuestion, updateQuestion } from "@/api/question-banks"
 import type {
     AnswerMode,
     CodeLanguage,
-    EncodedImage,
     NewQuestion,
     Question,
     QuestionDifficulty,
@@ -14,6 +13,7 @@ import { LoaderCircle, Pencil, Plus } from "lucide-react"
 import { type FormEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { fitChoicesToMode, nextChoiceUid } from "./answer-mode-choices"
+import { choicePayloads } from "./question-form-payload"
 import { QuestionChoicesEditor } from "./question-choices-editor"
 import { QuestionContentFields } from "./question-content-fields"
 import type { EditableChoice } from "./question-form-types"
@@ -26,41 +26,6 @@ type QuestionFormProps = {
     /** The second argument counts the published sessions an edit spared. */
     onSaved: (question: Question, publishedSessionsKept: number) => void
     onCancel: () => void
-}
-
-const ALLOWED_IMAGE_TYPES: ReadonlySet<string> = new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-])
-
-function encodeImage(file: File): Promise<EncodedImage> {
-    return new Promise((resolve, reject) => {
-        if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-            reject(new Error("Unsupported image type"))
-            return
-        }
-        const contentType = file.type as EncodedImage["content_type"]
-        const reader = new FileReader()
-        reader.onerror = () =>
-            reject(reader.error ?? new Error("The file could not be read"))
-        reader.onload = () => {
-            // readAsDataURL always produces a string.
-            const result =
-                typeof reader.result === "string" ? reader.result : ""
-            const separatorIndex = result.indexOf(",")
-            if (separatorIndex < 0) {
-                reject(new Error("Invalid image"))
-                return
-            }
-            resolve({
-                content_type: contentType,
-                data_base64: result.slice(separatorIndex + 1),
-            })
-        }
-        reader.readAsDataURL(file)
-    })
 }
 
 function initialChoices(question?: Question): EditableChoice[] {
@@ -219,20 +184,8 @@ export function QuestionForm({
         setIsCreating(true)
 
         try {
-            const encodedChoices = await Promise.all(
-                choices.map(async (choice) => ({
-                    id: choice.id,
-                    label: choice.label.trim(),
-                    is_correct: choice.is_correct,
-                    points: choice.points,
-                    image: choice.image
-                        ? await encodeImage(choice.image)
-                        : null,
-                    remove_image: choice.remove_image,
-                    code_language: choice.hasCode ? choice.codeLanguage : null,
-                    code_content: choice.hasCode ? choice.codeContent : null,
-                }))
-            )
+            const { payloads: choicePayload, images: choiceImages } =
+                choicePayloads(choices)
             const payload: NewQuestion = {
                 prompt: prompt.trim(),
                 difficulty,
@@ -246,20 +199,29 @@ export function QuestionForm({
                         : false,
                 code_language: hasCode ? codeLanguage : null,
                 code_content: hasCode ? codeContent : null,
-                choices: encodedChoices,
+                choices: choicePayload,
             }
             if (question) {
                 const updatedQuestion = await updateQuestion(
                     question.id,
                     { ...payload, remove_image: removeImage },
-                    image
+                    image,
+                    choiceImages
                 )
                 onSaved(
                     updatedQuestion,
                     updatedQuestion.published_sessions_not_regraded
                 )
             } else {
-                onSaved(await createQuestion(questionBankId, payload, image), 0)
+                onSaved(
+                    await createQuestion(
+                        questionBankId,
+                        payload,
+                        image,
+                        choiceImages
+                    ),
+                    0
+                )
             }
         } catch (caughtError) {
             setError(
