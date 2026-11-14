@@ -124,11 +124,6 @@ type QuestionChoice = {
     code_content: string | null
 }
 
-export type EncodedImage = {
-    content_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif"
-    data_base64: string
-}
-
 export type Question = {
     id: number
     question_bank_id: number
@@ -166,7 +161,8 @@ export type NewQuestion = {
         // Optional for the backend, which then splits one point across the
         // correct choices (choice_points); the question form always sends it.
         points?: number | null
-        image?: EncodedImage | null
+        /** Position of this choice's new image among the files sent. */
+        image_file?: number | null
         remove_image?: boolean
         code_language: CodeLanguage | null
         code_content: string | null
