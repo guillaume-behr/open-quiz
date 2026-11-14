@@ -41,8 +41,12 @@ def delete_unfinished_training_sessions(
 def revoke_student_participations(
     membership_id: int,
     session: Session,
-) -> None:
-    """Invalidate quiz capabilities after an account security change."""
+) -> list[int]:
+    """Invalidate quiz capabilities after an account security change.
+
+    Returns the open sessions the student was taking part in, which they
+    have now left: their live views need telling.
+    """
     session.execute(
         update(QuizParticipant)
         .where(QuizParticipant.student_id == membership_id)
@@ -51,14 +55,16 @@ def revoke_student_participations(
     active_session_ids = select(QuizSession.id).where(
         QuizSession.status.in_(ACTIVE_SESSION_STATUSES)
     )
-    session.execute(
-        update(QuizParticipant)
-        .where(
-            QuizParticipant.student_id == membership_id,
-            QuizParticipant.session_id.in_(active_session_ids),
-        )
-        .values(
-            left_at=datetime.now(UTC),
+    return list(
+        session.scalars(
+            update(QuizParticipant)
+            .where(
+                QuizParticipant.student_id == membership_id,
+                QuizParticipant.session_id.in_(active_session_ids),
+                QuizParticipant.left_at.is_(None),
+            )
+            .values(left_at=datetime.now(UTC))
+            .returning(QuizParticipant.session_id)
         )
     )
 

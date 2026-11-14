@@ -2152,6 +2152,90 @@ def test_student_password_reset_revokes_an_active_quiz_capability(
         assert rejoined.json()["question"] is not None
 
 
+def answered_then_account_changed(
+    client: Any, environment: dict[str, Any], change: dict[str, Any]
+) -> tuple[dict[str, Any], list[str]]:
+    """Start the exam, answer its question, then let the teacher save ``change``.
+
+    Returns the session as the teacher then sees it, and the live topics the
+    change woke.
+    """
+    launched, participant_headers = launch_and_join(client, environment)
+    assert (
+        client.post(
+            f"/api/quizzes/sessions/{launched['id']}/start",
+            headers=environment["teacher_headers"],
+        ).status_code
+        == 200
+    )
+    answered = client.post(
+        f"/api/quizzes/student/sessions/{launched['join_code']}/answer",
+        headers=participant_headers,
+        json=choice_answer(
+            client, participant_headers, correct_choice_id(environment["question"])
+        ),
+    )
+    # On the review, not handed in: the student still holds the session open.
+    assert answered.json()["awaiting_final_submission"] is True
+
+    published: list[str] = []
+    hub = client.app.state.live_quiz_hub
+    publish = hub.publish
+
+    def recording(topic: str) -> None:
+        published.append(topic)
+        publish(topic)
+
+    hub.publish = recording
+    account = environment["account"]
+    changed = client.post(
+        f"/api/students/{account['id']}/update",
+        headers=environment["teacher_headers"],
+        json={
+            "identifier": account["identifier"],
+            "display_name": account["display_name"],
+            **change,
+        },
+    )
+    hub.publish = publish
+    assert changed.status_code == 200
+    state = client.get(
+        f"/api/quizzes/sessions/{launched['id']}",
+        headers=environment["teacher_headers"],
+    ).json()
+    return state, published
+
+
+def test_deactivating_the_last_student_at_work_ends_the_exam(tmp_path: Path) -> None:
+    """They cannot come back: the exam ends as when its last student leaves."""
+    with make_client(settings_for(tmp_path / "deactivated-mid-exam")) as client:
+        environment = exam_environment(client)
+        state, published = answered_then_account_changed(
+            client, environment, {"is_active": False}
+        )
+
+        assert state["status"] == "finished"
+        assert state["participants"][0]["score"] > 0
+        assert f"quiz-session:{state['id']}" in published
+        assert f"student-session:{state['join_code']}" in published
+
+
+def test_a_new_password_mid_exam_updates_the_live_view_but_keeps_it_open(
+    tmp_path: Path,
+) -> None:
+    """The student signs in again and rejoins: their exam must wait for them."""
+    with make_client(settings_for(tmp_path / "password-mid-exam")) as client:
+        environment = exam_environment(client)
+        state, published = answered_then_account_changed(
+            client, environment, {"password": "Replacement-42", "is_active": True}
+        )
+
+        assert state["status"] == "in_progress"
+        # The teacher no longer lists the student among those present.
+        assert state["participants"] == []
+        assert f"quiz-session:{state['id']}" in published
+
+
 def test_completed_student_waits_for_classmates_without_a_blank_state(
     tmp_path: Path,
 ) -> None:
