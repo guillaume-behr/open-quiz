@@ -1,9 +1,9 @@
 """The FastAPI application: its state, middleware, routes and lifespan."""
 
 import logging
-from asyncio import CancelledError, create_task
+from asyncio import CancelledError, create_task, get_running_loop, wait_for
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -52,6 +52,9 @@ from app.services.maintenance import (
 from app.services.security_state import synchronize_security_state
 
 logger = logging.getLogger("open_quiz")
+# A query left running at shutdown is normally done in milliseconds; this
+# only bounds a stuck one, which then leaks its connection as before.
+SHUTDOWN_THREADS_TIMEOUT_SECONDS = 10
 
 
 async def answer_pool_timeout(_: Request, error: Exception) -> JSONResponse:
@@ -126,6 +129,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     # The loops survive their own errors; one that still
                     # ended a task must not abort the shutdown.
                     logger.exception("Background task %s failed", name)
+            # A cancelled task (a live feed, a loop above) may leave a query
+            # running in an asyncio.to_thread worker. Wait for those threads:
+            # a connection handed back after dispose() lands in the discarded
+            # pool and is never closed.
+            with suppress(TimeoutError):
+                await wait_for(
+                    get_running_loop().shutdown_default_executor(),
+                    SHUTDOWN_THREADS_TIMEOUT_SECONDS,
+                )
             # Close pooled connections now rather than when the engines are
             # garbage collected, so apps created one after another (tests,
             # reloads) do not pile up idle connections on the server.
