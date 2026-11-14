@@ -29,6 +29,7 @@ from app.live.updates import (
     publish_quiz_update,
 )
 from app.models import (
+    MakeupSession,
     MakeupSessionQuiz,
     QuestionBank,
     Quiz,
@@ -350,10 +351,16 @@ def delete_quiz(
             "Impossible de supprimer ce quiz car il possède des résultats "
             "qui doivent être conservés",
         )
+    # An open make-up may still draw it for a student. A finished one only
+    # offered it: its students' sessions of this quiz were refused above.
     if (
         session.scalar(
             select(MakeupSessionQuiz.session_id)
-            .where(MakeupSessionQuiz.quiz_id == quiz.id)
+            .join(MakeupSession, MakeupSession.id == MakeupSessionQuiz.session_id)
+            .where(
+                MakeupSessionQuiz.quiz_id == quiz.id,
+                MakeupSession.status.in_(ACTIVE_SESSION_STATUSES),
+            )
             .limit(1)
         )
         is not None
@@ -364,7 +371,7 @@ def delete_quiz(
             "Impossible de supprimer ce quiz car un rattrapage l’utilise",
         )
     # No session is left: active and finished ones were refused above. Bank
-    # links and the training profile cascade.
+    # links, make-up offers and the training profile cascade.
     session.execute(delete(Quiz).where(Quiz.id == quiz_id))
     session.commit()
     audit_event(

@@ -721,7 +721,12 @@ une salle d’attente jamais lancée ou une session laissée en pause reste acti
 jusqu’à ce que son enseignant la clôture. Passé
 `ABANDONED_SESSION_RETENTION_DAYS`, la maintenance s’en charge à sa place : un examen qui a recueilli des réponses est noté puis conservé au
 titre de `QUIZ_RESULT_RETENTION_DAYS`, tandis qu’une salle d’attente sans
-réponse et les entraînements interrompus sont supprimés. Un enseignant
+réponse et les entraînements interrompus sont supprimés. Une session de
+rattrapage jamais terminée est soldée de même avec les sessions de ses élèves,
+sauf tant que l’un d’eux compose encore : elle est conservée, terminée, tant
+qu’il lui reste une session, et supprimée sinon. Un rattrapage terminé
+disparaît avec la dernière de ses sessions, à l’échéance de
+`QUIZ_RESULT_RETENTION_DAYS` ou quand l’enseignant la supprime. Un enseignant
 désactivé ou parti ne laisse donc plus de données sans terme.
 
 `MAX_REQUEST_BODY_BYTES` ne couvre pas les routes authentifiées de création,
