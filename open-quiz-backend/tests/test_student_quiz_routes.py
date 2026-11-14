@@ -2210,22 +2210,31 @@ def test_completed_student_waits_for_classmates_without_a_blank_state(
         assert completed.json()["status"] == "in_progress"
         assert completed.json()["question"] is None
         assert completed.json()["has_answered"] is True
-        violation_after_completion = client.post(
-            f"/api/quizzes/student/sessions/{launched['join_code']}/violation",
-            headers=first_participant_headers,
-            json={"event_type": "fullscreen_exit"},
-        )
-        assert violation_after_completion.status_code == 204
-        teacher_state = client.get(
-            f"/api/quizzes/sessions/{launched['id']}",
-            headers=environment["teacher_headers"],
-        ).json()
-        completed_participant = next(
-            item
-            for item in teacher_state["participants"]
-            if item["student_identifier"] == environment["account"]["identifier"]
-        )
-        assert completed_participant["violation_count"] == 0
+        assert completed.json()["awaiting_final_submission"] is True
+
+        def report_and_count() -> int:
+            reported = client.post(
+                f"/api/quizzes/student/sessions/{launched['join_code']}/violation",
+                headers=first_participant_headers,
+                json={"event_type": "fullscreen_exit"},
+            )
+            assert reported.status_code == 204
+            teacher_state = client.get(
+                f"/api/quizzes/sessions/{launched['id']}",
+                headers=environment["teacher_headers"],
+            ).json()
+            return next(
+                item["violation_count"]
+                for item in teacher_state["participants"]
+                if item["student_identifier"] == environment["account"]["identifier"]
+            )
+
+        # The review lists every prompt and lets the student go back: it is
+        # watched like a question.
+        assert report_and_count() == 1
+        hand_in_quiz(client, launched["join_code"], first_participant_headers)
+        # Once the paper is handed in, nothing is left to protect.
+        assert report_and_count() == 1
 
 
 def test_concurrent_answer_submissions_keep_a_single_answer(
