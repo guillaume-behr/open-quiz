@@ -90,6 +90,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   cannot be created under a name another one has in a different case, and
   password attempts against one name count together whatever their case.
   `ADMIN_USERNAME` and the 2FA recovery script match names the same way.
+- Deactivating a student or giving them a new password during an exam
+  updates the teacher's live view at once, instead of at its next
+  reconciliation. A deactivated student cannot come back, so an exam in which
+  nobody else can still answer ends, as when its last student leaves; after a
+  new password the exam waits for the student to sign in and rejoin. A
+  student who had already left keeps the time they left at.
 - Stopping the API waits for queries still running for a live feed before
   closing the database pool, so their connections are closed too.
 

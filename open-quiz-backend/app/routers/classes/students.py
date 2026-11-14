@@ -25,6 +25,7 @@ from app.core.security import (
 )
 from app.domain.session_status import ACTIVE_SESSION_STATUSES
 from app.enums import QuizMode
+from app.live.updates import publish_quiz_update
 from app.models import (
     Quiz,
     QuizSession,
@@ -50,6 +51,7 @@ from app.schemas.classes import (
     StudentAccountUpdate,
     StudentCredentialResponse,
 )
+from app.services.session_lifecycle import finish_when_nobody_can_answer
 
 router = APIRouter(prefix="/api/students", tags=["student accounts"])
 
@@ -82,6 +84,33 @@ def generated_student_identifier(
         identifier = f"{base[:base_length].rstrip('.')}.{suffix_text}"
         suffix += 1
     return identifier
+
+
+def sessions_left_on_revocation(
+    membership_id: int, *, deactivated: bool, session: DbSession
+) -> list[tuple[QuizSession, Quiz]]:
+    """Revoke the student's participations; return the open sessions they left.
+
+    A deactivated student cannot come back: a session in which nobody else
+    can still answer ends, as when its last participant leaves. After a new
+    password the student may sign in again and rejoin, so theirs stays open.
+    """
+    session_ids = revoke_student_participations(membership_id, session)
+    if not session_ids:
+        return []
+    left = [
+        (quiz_session, quiz)
+        for quiz_session, quiz in session.execute(
+            select(QuizSession, Quiz)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(QuizSession.id.in_(session_ids))
+            .order_by(QuizSession.id)
+        )
+    ]
+    if deactivated:
+        for quiz_session, quiz in left:
+            finish_when_nobody_can_answer(quiz_session, quiz, session)
+    return left
 
 
 def credential_response(
@@ -314,11 +343,16 @@ def update_student_account(
         membership = session.scalar(
             select(Student).where(Student.account_id == account.id)
         )
+    left_sessions: list[tuple[QuizSession, Quiz]] = []
     if membership is not None:
         membership.identifier = account.identifier
         membership.display_name = account.display_name
         if credentials_changed:
-            revoke_student_participations(membership.id, session)
+            left_sessions = sessions_left_on_revocation(
+                membership.id,
+                deactivated=status_changed and not account.is_active,
+                session=session,
+            )
     try:
         session.commit()
     except IntegrityError:
@@ -335,6 +369,8 @@ def update_student_account(
     limiter = request.app.state.login_rate_limiter
     for identifier in {previous_identifier, account.identifier}:
         limiter.clear_subject(student_password_rate_subject(identifier))
+    for quiz_session, _ in left_sessions:
+        publish_quiz_update(request, quiz_session, session)
     audit_event(
         "students.account_updated",
         professor_id=professor.id,
