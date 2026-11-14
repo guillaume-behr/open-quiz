@@ -1,4 +1,4 @@
-from sqlalchemy import delete, or_, select
+from sqlalchemy import ColumnElement, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -14,6 +14,14 @@ from app.records.quiz_sessions import (
     delete_quiz_session_records,
     release_join_codes,
 )
+
+
+def username_matches(username: str) -> ColumnElement[bool]:
+    """The account of this username, whatever its case.
+
+    Both sides through PostgreSQL's lower(), as the unique index compares.
+    """
+    return func.lower(User.username) == func.lower(username)
 
 
 def delete_user_records(user_id: int, session: Session) -> None:

@@ -17,6 +17,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 - Migration 0013 adds `quiz_participants.skipped_question_ids`, empty for
   every existing participant. It changes no data.
+- Migration 0014 makes usernames unique ignoring case. Should two accounts
+  have names differing only by case, such as `alice` and `Alice`, the
+  managed administrator, or else the oldest account, keeps its name; the
+  other is renamed with a suffix (`Alice-2`), shown on the administration
+  page: tell that teacher their new username. Other accounts are unchanged.
 
 ### Added
 
@@ -50,6 +55,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Teacher and administrator usernames ignore case, as student identifiers
+  already did: signing in as `ALICE` opens the account `Alice`, an account
+  cannot be created under a name another one has in a different case, and
+  password attempts against one name count together whatever their case.
+  `ADMIN_USERNAME` and the 2FA recovery script match names the same way.
 - Stopping the API waits for queries still running for a live feed before
   closing the database pool, so their connections are closed too.
 

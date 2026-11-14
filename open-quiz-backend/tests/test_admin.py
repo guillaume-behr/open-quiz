@@ -501,3 +501,38 @@ def test_deleting_a_user_cascades_to_every_table_that_depends_on_it() -> None:
         and key.ondelete not in ("CASCADE", "SET NULL")
     }
     assert not_cascading == KEPT_REFERENCES
+
+
+def test_usernames_ignore_case(tmp_path: Path) -> None:
+    """One name, whatever its case: at creation and at sign-in."""
+    with make_client(settings_for(tmp_path / "username-case")) as client:
+        admin_headers = login_admin(client)
+        created = client.post(
+            "/api/admin/users",
+            headers=admin_headers,
+            json={
+                "username": "Alice.Teacher",
+                "display_name": "Alice",
+                "password": "a-secure-alice-password",
+            },
+        )
+        assert created.status_code == 201
+        duplicate = client.post(
+            "/api/admin/users",
+            headers=admin_headers,
+            json={
+                "username": "alice.teacher",
+                "display_name": "Other Alice",
+                "password": "a-secure-other-password",
+            },
+        )
+        assert duplicate.status_code == 409
+        assert duplicate.json()["detail"]["code"] == "USERNAME_TAKEN"
+
+        # Signed in under another case, it is the same account, and keeps
+        # the case it was created with.
+        teacher_headers, _ = complete_first_login(
+            client, "ALICE.TEACHER", "a-secure-alice-password"
+        )
+        me = client.get("/api/users/me", headers=teacher_headers).json()
+        assert (me["id"], me["username"]) == (created.json()["id"], "Alice.Teacher")

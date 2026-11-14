@@ -17,6 +17,7 @@ from app.core.config import Settings
 from app.core.database import MAINTENANCE_LOCK_KEY
 from app.core.security import hash_password, verify_password
 from app.models import RefreshSession, RefreshSessionFamily, SecurityState, User
+from app.records.users import username_matches
 from app.services.credentials import revoke_refresh_sessions, revoke_user_sessions
 
 JWT_FINGERPRINT_KEY = "jwt_secret_fingerprint"
@@ -78,8 +79,9 @@ def managed_administrator(session: Session, settings: Settings, now: int) -> Use
     other administrator; afterwards it follows ADMIN_USERNAME renames.
     """
     managed_state = session.get(SecurityState, MANAGED_ADMIN_KEY)
+    # Ignoring case, as sign-in and the unique index do.
     configured_user = session.scalar(
-        select(User).where(User.username == settings.admin_username)
+        select(User).where(username_matches(settings.admin_username))
     )
     if managed_state is None:
         administrators = list(

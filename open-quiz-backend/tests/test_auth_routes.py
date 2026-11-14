@@ -20,6 +20,7 @@ from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core import rate_limit, security
+from app.core.auth_guards import password_rate_subject
 from app.core.config import (
     PUBLIC_INFORMATION_VARIABLES,
     warn_missing_public_information,
@@ -223,6 +224,22 @@ def test_first_start_refuses_to_promote_an_existing_teacher(tmp_path: Path) -> N
         teacher = session.get(User, teacher_id)
         assert teacher.is_admin is False
         assert teacher.password_hash == password_before
+
+
+def test_admin_username_may_not_name_a_teacher_in_another_case(
+    tmp_path: Path,
+) -> None:
+    settings = settings_for(tmp_path / "teacher-named-admin-case")
+    session_factory = session_factory_for(settings.database_url)
+    add_user(session_factory, settings.admin_username.upper(), is_admin=False)
+
+    with pytest.raises(RuntimeError, match="ADMIN_USERNAME belongs to a teacher"):
+        security_state.synchronize_security_state(session_factory, settings)
+
+
+def test_password_attempts_count_together_whatever_the_case() -> None:
+    """Otherwise each case variant would be a fresh allowance of guesses."""
+    assert password_rate_subject("Alice") == password_rate_subject("ALICE")
 
 
 def test_a_single_unmanaged_administrator_takes_the_configured_name(

@@ -47,6 +47,7 @@ from app.models import (
     TwoFactorCredential,
     User,
 )
+from app.records.users import username_matches
 from app.schemas.accounts import (
     LoginRequest,
     LoginResponse,
@@ -314,7 +315,7 @@ def password_attempt_subject(
 
 def password_user(payload: LoginRequest, request: Request, session: Session) -> User:
     """The active account whose password this is, within the attempt limits."""
-    account = session.scalar(select(User).where(User.username == payload.username))
+    account = session.scalar(select(User).where(username_matches(payload.username)))
     active_user = account if account is not None and account.is_active else None
     user, upgraded_hash = check_password(
         payload.password,
