@@ -50,6 +50,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- A student who left the waiting room and joined again at the very moment
+  the teacher started the exam is placed on the first question. The rejoin
+  decided from the status it had read before the start, and left them on no
+  question while the class worked.
 - Stopping the API waits for queries still running for a live feed before
   closing the database pool, so their connections are closed too.
 
