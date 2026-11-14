@@ -50,6 +50,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- The exam monitoring keeps watching a student on the final review step,
+  where every prompt is listed and the student may still go back: leaving
+  full screen or switching tabs there warned no one. Only a handed-in paper
+  is no longer watched.
 - Stopping the API waits for queries still running for a live feed before
   closing the database pool, so their connections are closed too.
 

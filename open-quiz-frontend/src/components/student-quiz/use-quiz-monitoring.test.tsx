@@ -90,6 +90,33 @@ describe("useQuizMonitoring", () => {
         expect(reported()).toHaveLength(5)
     })
 
+    it("keeps watching the final review, not a handed-in paper", () => {
+        const reviewing = {
+            ...running,
+            question: null,
+            awaiting_final_submission: true,
+        } as unknown as StudentQuizSession
+        const { rerender } = renderHook(
+            ({ session }) =>
+                useQuizMonitoring(session, "token", { current: false }),
+            { initialProps: { session: reviewing } }
+        )
+        act(() => setFullscreen(true))
+        vi.advanceTimersByTime(2000)
+        window.dispatchEvent(new Event("blur"))
+        expect(reported()).toEqual(["window_blur"])
+
+        rerender({
+            session: {
+                ...reviewing,
+                awaiting_final_submission: false,
+            },
+        })
+        vi.advanceTimersByTime(2000)
+        window.dispatchEvent(new Event("blur"))
+        expect(reported()).toEqual(["window_blur"])
+    })
+
     it("stays silent when leaving the quiz, unmonitored or unmounted", () => {
         const { rerender, unmount } = monitor(true)
         act(() => setFullscreen(true))

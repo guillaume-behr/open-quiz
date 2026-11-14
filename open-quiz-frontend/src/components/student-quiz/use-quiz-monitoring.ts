@@ -22,8 +22,11 @@ export function useQuizMonitoring(
     const monitoringArmedAt = useRef<number | null>(null)
     const wasMonitoredFullscreen = useRef(false)
     const lastViolationAt = useRef<Partial<Record<ViolationType, number>>>({})
+    // The final review lists every prompt and lets the student go back, so it
+    // is watched like a question; a handed-in paper no longer is.
     const monitoredJoinCode =
-        session?.status === "in_progress" && session.question
+        session?.status === "in_progress" &&
+        (session.question || session.awaiting_final_submission)
             ? session.join_code
             : undefined
 
