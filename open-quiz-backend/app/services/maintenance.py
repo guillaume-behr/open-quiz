@@ -29,7 +29,9 @@ from app.records.quiz_sessions import delete_quiz_session_records
 from app.records.stored_images import delete_unreferenced_images
 from app.services.session_lifecycle import expire_due_quiz_sessions
 from app.services.session_retention import (
+    close_abandoned_makeups,
     close_abandoned_sessions,
+    delete_emptied_makeups,
     expired_exam_result_ids,
     expired_training_session_ids,
 )
@@ -61,6 +63,10 @@ def enforce_data_retention(
     with session_factory() as session:
         # Every worker runs this at startup: one at a time.
         session.execute(select(func.pg_advisory_xact_lock(MAINTENANCE_LOCK_KEY)))
+        # Make-ups first: they settle their children together.
+        makeups_closed, makeups_discarded = close_abandoned_makeups(
+            abandoned_cutoff, session
+        )
         closed_count, discarded_count = close_abandoned_sessions(
             abandoned_cutoff, session
         )
@@ -69,6 +75,8 @@ def enforce_data_retention(
 
         expired_training_ids = expired_training_session_ids(training_cutoff, session)
         delete_quiz_session_records(expired_training_ids, session)
+        # After the results above: a make-up goes with its last session.
+        emptied_makeups = delete_emptied_makeups(session)
 
         expired_refresh_session_ids = select(RefreshSession.id).where(
             RefreshSession.expires_at <= epoch
@@ -112,6 +120,9 @@ def enforce_data_retention(
             expired_training_ids,
             closed_count,
             discarded_count,
+            makeups_closed,
+            makeups_discarded,
+            emptied_makeups,
             expired_refresh_count,
             expired_challenge_count,
             expired_report_count,
@@ -124,6 +135,8 @@ def enforce_data_retention(
             training_sessions=len(expired_training_ids),
             abandoned_sessions_closed=closed_count,
             abandoned_sessions_discarded=discarded_count,
+            abandoned_makeups_closed=makeups_closed,
+            makeups_deleted=makeups_discarded + emptied_makeups,
             refresh_sessions=expired_refresh_count,
             authentication_challenges=expired_challenge_count,
             problem_reports=expired_report_count,

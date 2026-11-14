@@ -50,6 +50,17 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Make-up sessions no longer stay forever. The hourly maintenance settles
+  one its teacher never finished after `ABANDONED_SESSION_RETENTION_DAYS`,
+  with its students' sessions: those that collected answers or skips are
+  graded, the others discarded, and the make-up is kept, finished, while a
+  session remains, or deleted. One whose student is still taking the exam
+  waits for its timer. A finished make-up goes with its last session, at the
+  end of the result retention or when the teacher deletes it. Until now an
+  open make-up kept its class and banks from being deleted indefinitely, and
+  its rows outlived every retention period.
+- A quiz offered by a finished make-up can be deleted: only an open make-up,
+  which may still draw it, holds it.
 - Stopping the API waits for queries still running for a live feed before
   closing the database pool, so their connections are closed too.
 

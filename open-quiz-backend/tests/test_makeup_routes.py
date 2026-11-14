@@ -1,7 +1,7 @@
 """Make-up sessions: creation, joining, control and their child sessions."""
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier
 from typing import Any
@@ -15,12 +15,14 @@ from app.models import (
     MakeupSession,
     Quiz,
     QuizAnswer,
+    QuizJoinCode,
     QuizParticipant,
     QuizSession,
     User,
 )
 from app.responses.teacher_sessions import active_makeup_session_responses
 from app.routers.quizzes import makeup as makeup_routes
+from app.services import maintenance
 
 from support import (
     choice_answer,
@@ -1173,3 +1175,93 @@ def test_the_live_feed_lists_open_makeups_and_the_list_pages_all(environment) ->
         params={"page_size": 1, "page": 2},
     )
     assert [item["id"] for item in second_page.json()] == [finished["id"]]
+
+
+def run_retention(client, days_ago: int = 10, *makeup_ids: int) -> None:
+    """Age the make-ups and their sessions, then run the retention sweep."""
+    created_at = datetime.now(UTC) - timedelta(days=days_ago)
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(MakeupSession)
+            .where(MakeupSession.id.in_(makeup_ids))
+            .values(created_at=created_at)
+        )
+        session.execute(
+            update(QuizSession)
+            .where(QuizSession.makeup_session_id.in_(makeup_ids))
+            .values(created_at=created_at)
+        )
+        session.commit()
+    maintenance.enforce_data_retention(
+        client.app.state.session_factory, client.app.state.settings
+    )
+
+
+def makeup_row(client, makeup_id: int) -> MakeupSession | None:
+    with client.app.state.session_factory() as session:
+        return session.get(MakeupSession, makeup_id)
+
+
+def test_retention_deletes_an_abandoned_makeup_nobody_answered(environment) -> None:
+    """A make-up left waiting holds only names: it goes with its children."""
+    client = environment["client"]
+    makeup, child, _ = started_makeup_child(client, environment, start=False)
+    child_id = child_session(client, child["join_code"]).id
+    recent, _, _ = started_makeup_child(client, environment, start=False)
+
+    run_retention(client, 10, makeup["id"])
+
+    assert makeup_row(client, makeup["id"]) is None
+    with client.app.state.session_factory() as session:
+        assert session.get(QuizSession, child_id) is None
+        codes = set(session.scalars(select(QuizJoinCode.code)))
+        assert makeup["join_code"] not in codes
+        assert child["join_code"] not in codes
+    # One that is not abandoned yet stays open.
+    kept = makeup_row(client, recent["id"])
+    assert kept is not None
+    assert kept.status == "waiting"
+
+
+def test_retention_grades_an_abandoned_makeup_then_deletes_it_once_empty(
+    environment,
+) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    makeup, child, child_headers = started_makeup_child(client, environment)
+    answered = client.post(
+        f"/api/quizzes/student/sessions/{child['join_code']}/answer",
+        headers=child_headers,
+        json=choice_answer(
+            client, child_headers, correct_choice_id(environment["question"])
+        ),
+    )
+    assert answered.status_code == 200
+
+    # Running, the student's exam waits for its timer.
+    run_retention(client, 10, makeup["id"])
+    assert makeup_row(client, makeup["id"]).status == "in_progress"
+
+    paused = client.post(
+        f"/api/quizzes/makeup/sessions/{makeup['id']}/pause", headers=headers
+    )
+    assert paused.status_code == 200
+    run_retention(client, 10, makeup["id"])
+
+    assert makeup_row(client, makeup["id"]).status == "finished"
+    graded = child_session(client, child["join_code"])
+    assert graded.status == "finished"
+    with client.app.state.session_factory() as session:
+        answer = session.scalar(
+            select(QuizAnswer).where(QuizAnswer.session_id == graded.id)
+        )
+        assert answer is not None
+        assert answer.is_graded
+        assert answer.score > 0
+
+    # The result is kept with the make-up; deleting it lets the make-up go.
+    assert (
+        client.delete(f"/api/quizzes/sessions/{graded.id}", headers=headers)
+    ).status_code == 204
+    run_retention(client, 10, makeup["id"])
+    assert makeup_row(client, makeup["id"]) is None
