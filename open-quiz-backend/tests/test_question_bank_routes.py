@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 from base64 import b64encode
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -1201,16 +1202,179 @@ def test_an_edit_decodes_its_image_without_holding_the_question(
 
     monkeypatch.setattr(questions, "normalize_image", decode_and_probe)
 
+    choices = [
+        {"label": "Four", "is_correct": True, "image_file": 0},
+        {"label": "Five", "is_correct": False},
+    ]
     updated = client.post(
         f"/api/question-banks/questions/{question_id}/update",
         headers=environment["teacher_headers"],
-        data={"payload": json.dumps(question_payload())},
-        files={"image": ("image.png", VALID_PNG, "image/png")},
+        data={"payload": json.dumps(question_payload(choices=choices))},
+        files=[
+            ("image", ("image.png", VALID_PNG, "image/png")),
+            ("choice_images", ("choice.png", VALID_PNG, "image/png")),
+        ],
     )
 
     assert updated.status_code == 200
     assert updated.json()["has_image"] is True
-    assert locked_while_decoding == [False]
+    assert updated.json()["choices"][0]["has_image"] is True
+    assert locked_while_decoding == [False, False]
+
+
+def noisy_png(side: int) -> bytes:
+    """A PNG that compresses poorly: side 700 makes about 1.5 MB."""
+    image = Image.frombytes("RGB", (side, side), os.urandom(side * side * 3))
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def test_choice_images_travel_as_file_parts(environment) -> None:
+    """In base64 inside the payload field, one would hit the 1 MiB field cap."""
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    large = noisy_png(700)
+    assert len(large) > 1024 * 1024
+    choices = [
+        {"label": "", "is_correct": True, "image_file": 1},
+        {"label": "", "is_correct": False, "image_file": 0},
+    ]
+    created = client.post(
+        f"/api/question-banks/{environment['bank_id']}/questions",
+        headers=headers,
+        data={"payload": json.dumps(question_payload(choices=choices))},
+        files=[
+            ("choice_images", ("small.png", VALID_PNG, "image/png")),
+            ("choice_images", ("large.png", large, "image/png")),
+        ],
+    )
+    assert created.status_code == 201, created.text
+    first, second = created.json()["choices"]
+    assert first["has_image"] is True
+    assert second["has_image"] is True
+    first_image = client.get(
+        f"/api/question-banks/choices/{first['id']}/image", headers=headers
+    )
+    # The large image went to the first choice, which named file part 1.
+    assert len(first_image.content) > len(VALID_PNG)
+
+    # An edit keeps one image by id and replaces the other from a file part.
+    kept = client.post(
+        f"/api/question-banks/questions/{created.json()['id']}/update",
+        headers=headers,
+        data={
+            "payload": json.dumps(
+                question_payload(
+                    choices=[
+                        {"id": first["id"], "label": "", "is_correct": True},
+                        {
+                            "id": second["id"],
+                            "label": "",
+                            "is_correct": False,
+                            "image_file": 0,
+                        },
+                    ]
+                )
+            )
+        },
+        files=[("choice_images", ("large.png", large, "image/png"))],
+    )
+    assert kept.status_code == 200, kept.text
+    assert [choice["has_image"] for choice in kept.json()["choices"]] == [True, True]
+    second_image = client.get(
+        f"/api/question-banks/choices/{second['id']}/image", headers=headers
+    )
+    assert second_image.content == first_image.content
+
+
+def test_choice_image_files_are_checked(environment) -> None:
+    client = environment["client"]
+    headers = environment["teacher_headers"]
+    url = f"/api/question-banks/{environment['bank_id']}/questions"
+
+    def post(choices: list[dict[str, Any]], files: list[Any]) -> Any:
+        return client.post(
+            url,
+            headers=headers,
+            data={"payload": json.dumps(question_payload(choices=choices))},
+            files=files,
+        )
+
+    one_file = [("choice_images", ("a.png", VALID_PNG, "image/png"))]
+    missing = post(
+        [
+            {"label": "Four", "is_correct": True, "image_file": 1},
+            {"label": "Five", "is_correct": False},
+        ],
+        one_file,
+    )
+    assert missing.status_code == 422
+    assert missing.json()["detail"]["code"] == "QUESTION_INVALID"
+
+    shared = post(
+        [
+            {"label": "Four", "is_correct": True, "image_file": 0},
+            {"label": "Five", "is_correct": False, "image_file": 0},
+        ],
+        one_file,
+    )
+    assert shared.status_code == 422
+    assert shared.json()["detail"]["code"] == "QUESTION_INVALID"
+
+    both = post(
+        [
+            {
+                "label": "Four",
+                "is_correct": True,
+                "image_file": 0,
+                "image": png_image(),
+            },
+            {"label": "Five", "is_correct": False},
+        ],
+        one_file,
+    )
+    assert both.status_code == 422
+    assert both.json()["detail"]["code"] == "QUESTION_INVALID"
+
+    unsupported = post(
+        [
+            {"label": "Four", "is_correct": True, "image_file": 0},
+            {"label": "Five", "is_correct": False},
+        ],
+        [("choice_images", ("a.svg", b"<svg/>", "image/svg+xml"))],
+    )
+    assert unsupported.status_code == 415
+    assert unsupported.json()["detail"]["code"] == "IMAGE_TYPE_UNSUPPORTED"
+
+    image_only = post(
+        [
+            {"label": "", "is_correct": True, "image_file": 0},
+            {"label": "Five", "is_correct": False},
+        ],
+        [("choice_images", ("a.png", b"", "image/png"))],
+    )
+    # An empty file is no image: the choice is left without content.
+    assert image_only.status_code == 422
+    assert image_only.json()["detail"]["code"] == "CHOICE_CONTENT_REQUIRED"
+
+
+def test_a_json_import_cannot_name_a_file_part() -> None:
+    with pytest.raises(ValidationError, match="encodée dans le fichier"):
+        QuestionBatchImport.model_validate(
+            {
+                "version": 1,
+                "question_bank": {"grade_level": "5e", "chapter": "Files"},
+                "questions": [
+                    question_payload(
+                        choices=[
+                            {"label": "Four", "is_correct": True, "image_file": 0},
+                            {"label": "Five", "is_correct": False},
+                        ]
+                    )
+                ],
+            }
+        )
 
 
 def test_banks_say_how_many_quizzes_draw_from_them(environment) -> None:
