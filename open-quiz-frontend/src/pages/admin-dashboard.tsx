@@ -1,4 +1,4 @@
-import { AdminWorkspace } from "@/components/admin/admin-workspace"
+import { AdminWorkspace } from "@/features/admin/admin-workspace"
 import { DashboardAuthentication } from "@/components/forms/dashboard-authentication"
 import { PageLoader } from "@/components/ui/page-loader"
 import { useStaffSession } from "@/hooks/use-staff-session"

@@ -43,39 +43,39 @@ const dashboardSections = [
 type DashboardSection = (typeof dashboardSections)[number]
 
 const ClassesPanel = lazy(() =>
-    import("@/components/classes/classes-panel").then((module) => ({
+    import("@/features/classes/classes-panel").then((module) => ({
         default: module.ClassesPanel,
     }))
 )
 const QuestionBanksPanel = lazy(() =>
-    import("@/components/question-banks/question-banks-panel").then(
-        (module) => ({ default: module.QuestionBanksPanel })
-    )
+    import("@/features/question-banks/question-banks-panel").then((module) => ({
+        default: module.QuestionBanksPanel,
+    }))
 )
 const QuizzesPanel = lazy(() =>
-    import("@/components/quizzes/quizzes-panel").then((module) => ({
+    import("@/features/quizzes/quizzes-panel").then((module) => ({
         default: module.QuizzesPanel,
     }))
 )
 const MakeupSessionsPanel = lazy(() =>
-    import("@/components/quizzes/makeup-sessions-panel").then((module) => ({
+    import("@/features/quizzes/makeup-sessions-panel").then((module) => ({
         default: module.MakeupSessionsPanel,
     }))
 )
 const ResultsPanel = lazy(() =>
-    import("@/components/results/results-panel").then((module) => ({
+    import("@/features/results/results-panel").then((module) => ({
         default: module.ResultsPanel,
     }))
 )
 const StudentsPanel = lazy(() =>
-    import("@/components/students/students-panel").then((module) => ({
+    import("@/features/students/students-panel").then((module) => ({
         default: module.StudentsPanel,
     }))
 )
 const ClassTrainingBanksPanel = lazy(() =>
-    import("@/components/training/class-training-banks-panel").then(
-        (module) => ({ default: module.ClassTrainingBanksPanel })
-    )
+    import("@/features/training/class-training-banks-panel").then((module) => ({
+        default: module.ClassTrainingBanksPanel,
+    }))
 )
 
 export function TeacherDashboard({ page }: { page: "login" | "dashboard" }) {

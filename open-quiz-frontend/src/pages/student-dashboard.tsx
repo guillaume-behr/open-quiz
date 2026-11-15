@@ -22,7 +22,7 @@ import {
 import {
     readStoredQuizSession,
     storeQuizSession,
-} from "@/components/student-quiz/student-quiz-session"
+} from "@/features/student-quiz/student-quiz-session"
 import { Button } from "@/components/ui/button"
 import { PageLoader } from "@/components/ui/page-loader"
 import {
@@ -54,17 +54,17 @@ function routeSection(state: unknown): StudentSection | null {
 }
 
 const TrainingQuizzesPanel = lazy(() =>
-    import("@/components/training/training-quizzes-panel").then((module) => ({
+    import("@/features/training/training-quizzes-panel").then((module) => ({
         default: module.TrainingQuizzesPanel,
     }))
 )
 const StudentQuizHistory = lazy(() =>
-    import("@/components/student-quiz/student-quiz-history").then((module) => ({
+    import("@/features/student-quiz/student-quiz-history").then((module) => ({
         default: module.StudentQuizHistory,
     }))
 )
 const StudentMakeupPanel = lazy(() =>
-    import("@/components/student-quiz/student-makeup-panel").then((module) => ({
+    import("@/features/student-quiz/student-makeup-panel").then((module) => ({
         default: module.StudentMakeupPanel,
     }))
 )

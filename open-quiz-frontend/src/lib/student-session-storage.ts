@@ -51,7 +51,7 @@ export function removeStudentItem(key: string): void {
 
 /** Forget every token and the signed-in student. */
 // Unsubmitted exam answers, one key per question: `<prefix><joinCode>:<id>`
-// (src/components/student-quiz/answer-drafts.ts).
+// (src/features/student-quiz/answer-drafts.ts).
 export const EXAM_DRAFT_KEY_PREFIX = "open-quiz-exam-draft:"
 
 /** Keys in sessionStorage (or its memory fallback) that start with a prefix. */
