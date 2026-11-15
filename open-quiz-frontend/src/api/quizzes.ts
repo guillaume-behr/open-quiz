@@ -15,6 +15,7 @@ import type {
     QuizSession,
     ReportedViolationType,
     StudentQuizAnswer,
+    StudentQuizAnswerSave,
     StudentQuizJoin,
     StudentQuizSession,
     TrainingHistoryItem,
@@ -347,6 +348,28 @@ export function submitStudentQuizAnswer(
     return requestParsed(
         StudentQuizSessionSchema,
         `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/answer`,
+        {
+            method: "POST",
+            headers: { "X-Quiz-Token": participantToken },
+            body: JSON.stringify(answer),
+        },
+        false
+    )
+}
+
+/**
+ * Records the answer on screen for the current question without moving on.
+ * An empty answer removes the recorded one. Only for an exam the student may
+ * go back in.
+ */
+export function saveStudentQuizAnswer(
+    joinCode: string,
+    participantToken: string,
+    answer: StudentQuizAnswerSave
+): Promise<StudentQuizSession> {
+    return requestParsed(
+        StudentQuizSessionSchema,
+        `/api/quizzes/student/sessions/${encodeURIComponent(joinCode)}/save`,
         {
             method: "POST",
             headers: { "X-Quiz-Token": participantToken },

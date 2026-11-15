@@ -6,7 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ApiError } from "@/api/client"
 import type { StudentQuizSession } from "@/api/types"
 
-import { useStudentQuizSession } from "./use-student-quiz-session"
+import {
+    ANSWER_SAVE_DELAY_MS,
+    useStudentQuizSession,
+} from "./use-student-quiz-session"
 
 const api = vi.hoisted(() => ({
     getStudentQuizSession: vi.fn(),
@@ -14,6 +17,7 @@ const api = vi.hoisted(() => ({
     leaveStudentQuiz: vi.fn(),
     navigateStudentQuiz: vi.fn(),
     reviewStudentAnswers: vi.fn(),
+    saveStudentQuizAnswer: vi.fn(),
     skipStudentQuestion: vi.fn(),
     submitStudentQuiz: vi.fn(),
     submitStudentQuizAnswer: vi.fn(),
@@ -377,5 +381,153 @@ describe("useStudentQuizSession", () => {
         expect(hook.result.current.session).not.toBeNull()
         expect(hook.result.current.error).toBe("student-session-error")
         expect(hook.result.current.isLeavingQuiz.current).toBe(false)
+    })
+
+    // An exam the student may go back in, on its first question of two.
+    function examSession(overrides: Partial<StudentQuizSession> = {}) {
+        return quizSession({
+            status: "in_progress",
+            allow_previous_questions: true,
+            question_number: 1,
+            total_questions: 2,
+            answered_question_numbers: [],
+            skipped_question_numbers: [],
+            ...overrides,
+        })
+    }
+
+    async function joinedExam(overrides: Partial<StudentQuizSession> = {}) {
+        api.joinQuiz.mockResolvedValue({
+            ...examSession(overrides),
+            participant_token: "participant",
+        })
+        const hook = renderHook(() => useStudentQuizSession("student"))
+        act(() => hook.result.current.updateJoinCode("ABC123"))
+        await act(() => hook.result.current.join(formEvent()))
+        return hook
+    }
+
+    it("saves a change to a question already answered by itself", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+        try {
+            const hook = await joinedExam({
+                answered_question_numbers: [1],
+                selected_choice_ids: ["a"],
+            })
+            expect(hook.result.current.offersNextQuestion).toBe(true)
+            api.saveStudentQuizAnswer.mockResolvedValue(
+                examSession({
+                    answered_question_numbers: [1],
+                    selected_choice_ids: ["b"],
+                })
+            )
+
+            act(() => hook.result.current.setSelectedChoiceIds(["b"]))
+            await act(() =>
+                vi.advanceTimersByTimeAsync(ANSWER_SAVE_DELAY_MS - 1)
+            )
+            expect(api.saveStudentQuizAnswer).not.toHaveBeenCalled()
+            await act(() => vi.advanceTimersByTimeAsync(1))
+
+            expect(api.saveStudentQuizAnswer).toHaveBeenCalledExactlyOnceWith(
+                "ABC123",
+                "participant",
+                { question_id: 1, selected_choice_ids: ["b"] }
+            )
+            // Saved: nothing more is sent, and the screen keeps the answer.
+            await act(() =>
+                vi.advanceTimersByTimeAsync(ANSWER_SAVE_DELAY_MS * 2)
+            )
+            expect(api.saveStudentQuizAnswer).toHaveBeenCalledTimes(1)
+            expect(hook.result.current.selectedChoiceIds).toEqual(["b"])
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it("leaves a question unanswered as it is until the student moves on", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+        try {
+            const hook = await joinedExam()
+            expect(hook.result.current.offersNextQuestion).toBe(false)
+            act(() => hook.result.current.setSelectedChoiceIds(["a"]))
+            await act(() =>
+                vi.advanceTimersByTimeAsync(ANSWER_SAVE_DELAY_MS * 2)
+            )
+            expect(api.saveStudentQuizAnswer).not.toHaveBeenCalled()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it("saves the answer on screen before going to another question", async () => {
+        const hook = await joinedExam({
+            question_number: 2,
+            question: { id: 2, answer_mode: "written" } as never,
+            answered_question_numbers: [1],
+        })
+        api.saveStudentQuizAnswer.mockResolvedValue(
+            examSession({
+                question_number: 2,
+                question: { id: 2, answer_mode: "written" } as never,
+                answered_question_numbers: [1, 2],
+                written_answer: "Draft",
+            })
+        )
+        api.navigateStudentQuiz.mockResolvedValue(
+            examSession({ answered_question_numbers: [1, 2] })
+        )
+
+        act(() => hook.result.current.setWrittenAnswer("Draft"))
+        await act(() => hook.result.current.goToQuestion(1))
+
+        expect(api.saveStudentQuizAnswer).toHaveBeenCalledWith(
+            "ABC123",
+            "participant",
+            { question_id: 2, written_answer: "Draft" }
+        )
+        expect(
+            api.saveStudentQuizAnswer.mock.invocationCallOrder[0]
+        ).toBeLessThan(api.navigateStudentQuiz.mock.invocationCallOrder[0] ?? 0)
+        expect(hook.result.current.session?.question_number).toBe(1)
+    })
+
+    it("stays on the question when its answer cannot be saved", async () => {
+        const hook = await joinedExam({ answered_question_numbers: [1] })
+        api.saveStudentQuizAnswer.mockRejectedValue(new Error("offline"))
+
+        act(() => hook.result.current.setSelectedChoiceIds(["a"]))
+        await act(() => hook.result.current.goToNextQuestion())
+
+        expect(api.navigateStudentQuiz).not.toHaveBeenCalled()
+        expect(hook.result.current.error).toBe("student-answer-error")
+        expect(hook.result.current.isBusy).toBe(false)
+    })
+
+    it("goes to the next question without a request when nothing changed", async () => {
+        const hook = await joinedExam({
+            answered_question_numbers: [1],
+            selected_choice_ids: ["a"],
+        })
+        api.navigateStudentQuiz.mockResolvedValue(
+            examSession({ question_number: 2, answered_question_numbers: [1] })
+        )
+
+        await act(() => hook.result.current.goToNextQuestion())
+
+        expect(api.saveStudentQuizAnswer).not.toHaveBeenCalled()
+        expect(api.navigateStudentQuiz).toHaveBeenCalledWith(
+            "ABC123",
+            "participant",
+            2
+        )
+    })
+
+    it("offers to submit, not to move on, on the last question", async () => {
+        const hook = await joinedExam({
+            question_number: 2,
+            answered_question_numbers: [1, 2],
+        })
+        expect(hook.result.current.offersNextQuestion).toBe(false)
     })
 })

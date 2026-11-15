@@ -79,6 +79,7 @@ function form(
         busy?: boolean
         error?: string
         session?: Partial<StudentQuizSession>
+        next?: boolean
     } = {}
 ) {
     const handlers = {
@@ -89,6 +90,7 @@ function form(
             event.preventDefault()
         ),
         onSkip: vi.fn(),
+        onNext: state.next ? vi.fn() : undefined,
     }
     render(
         <StudentQuestionForm
@@ -310,6 +312,22 @@ describe("StudentQuestionForm", () => {
             screen.getByRole("button", { name: "student-skip-question" })
         )
         expect(handlers.onSkip).toHaveBeenCalledOnce()
+        expect(handlers.onSubmit).not.toHaveBeenCalled()
+    })
+
+    it("moves on from a question already handed in", async () => {
+        // Even with nothing entered: the student only goes on.
+        const handlers = form(question({}), { next: true })
+        expect(
+            screen.queryByRole("button", { name: "student-submit-answer" })
+        ).not.toBeInTheDocument()
+        expect(
+            screen.queryByRole("button", { name: "student-skip-question" })
+        ).not.toBeInTheDocument()
+        await userEvent.click(
+            screen.getByRole("button", { name: "student-next-question" })
+        )
+        expect(handlers.onNext).toHaveBeenCalledOnce()
         expect(handlers.onSubmit).not.toHaveBeenCalled()
     })
 

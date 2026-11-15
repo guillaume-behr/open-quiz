@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime
 
 from fastapi import status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,7 @@ from app.services.question_assignments import (
 )
 from app.services.session_lifecycle import (
     active_exam_bank_ids_for_class,
+    answered_question_ids,
     final_review_offered,
     handed_in_question_ids,
 )
@@ -238,6 +239,34 @@ def store_answer(
             },
         )
     )
+
+
+def clear_answer(
+    quiz_session: QuizSession,
+    participant: QuizParticipant,
+    question_id: int,
+    session: Session,
+) -> None:
+    """Remove the answer the student cleared; the question counts as skipped.
+
+    Without an answer nor a skip, an earlier question would fall out of the
+    participant's reach.
+    """
+    was_answered = question_id in answered_question_ids(
+        quiz_session, participant, session
+    )
+    session.execute(
+        delete(QuizAnswer).where(
+            QuizAnswer.session_id == quiz_session.id,
+            QuizAnswer.participant_id == participant.id,
+            QuizAnswer.question_id == question_id,
+        )
+    )
+    if was_answered and question_id not in participant.skipped_question_ids:
+        participant.skipped_question_ids = [
+            *participant.skipped_question_ids,
+            question_id,
+        ]
 
 
 def advance_participant(

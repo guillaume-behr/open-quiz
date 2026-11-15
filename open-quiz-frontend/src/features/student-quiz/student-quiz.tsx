@@ -112,6 +112,11 @@ export function StudentQuiz({
                 }
                 onSubmitAnswer={(event) => void quiz.submitAnswer(event)}
                 onSkipQuestion={() => void quiz.skipQuestion()}
+                onNextQuestion={
+                    quiz.offersNextQuestion
+                        ? () => void quiz.goToNextQuestion()
+                        : undefined
+                }
                 onBackToReview={() => void quiz.backToReview()}
                 onSubmitQuiz={() => void quiz.submitQuiz()}
                 onReturnHome={leaveQuiz}

@@ -2878,6 +2878,75 @@
         }
       }
     },
+    "/api/quizzes/student/sessions/{join_code}/save": {
+      "post": {
+        "tags": [
+          "quizzes"
+        ],
+        "summary": "Save Student Answer",
+        "description": "Record the answer on screen for the current question, without moving on.\n\nIn an exam the student may go back in, the server holds what the screen\nshows: a change to a question, or what is entered when leaving it, is\nsaved as it is. An empty answer removes the one recorded; the question\nthen stays within reach as a skipped one.",
+        "operationId": "save_student_answer_api_quizzes_student_sessions__join_code__save_post",
+        "parameters": [
+          {
+            "name": "join_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Join Code"
+            }
+          },
+          {
+            "name": "X-Quiz-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Quiz-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentQuizAnswerSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentQuizStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/quizzes/student/sessions/{join_code}/skip": {
       "post": {
         "tags": [
@@ -7108,6 +7177,51 @@
           "question_id"
         ],
         "title": "StudentQuizAnswer"
+      },
+      "StudentQuizAnswerSave": {
+        "properties": {
+          "question_id": {
+            "type": "integer",
+            "title": "Question Id"
+          },
+          "selected_choice_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 32,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9_-]+$"
+                },
+                "type": "array",
+                "maxItems": 12
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Choice Ids"
+          },
+          "written_answer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Written Answer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_id"
+        ],
+        "title": "StudentQuizAnswerSave",
+        "description": "The answer on screen, saved without moving on.\n\nUnlike StudentQuizAnswer, an empty answer is allowed: it removes the\nanswer the student cleared, so the server keeps what the screen shows."
       },
       "StudentQuizChoiceResponse": {
         "properties": {

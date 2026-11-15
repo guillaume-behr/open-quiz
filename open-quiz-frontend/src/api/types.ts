@@ -117,3 +117,4 @@ export type TwoFactorChallenge = v.InferOutput<typeof TwoFactorChallengeSchema>
 // The question on screen goes with the answer: the server refuses an answer
 // for another one.
 export type StudentQuizAnswer = Schemas["StudentQuizAnswer"]
+export type StudentQuizAnswerSave = Schemas["StudentQuizAnswerSave"]

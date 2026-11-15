@@ -3217,3 +3217,108 @@ def test_leaving_without_answering_keeps_the_session_rejoinable(
             json={"join_code": join_code},
         )
         assert rejoined.status_code == 201
+
+
+def save_current(client, url: str, headers: dict[str, str], **payload: Any):
+    question = client.get(url, headers=headers).json()["question"]
+    return client.post(
+        f"{url}/save",
+        headers=headers,
+        json={"question_id": question["id"], **payload},
+    )
+
+
+def test_a_saved_answer_is_recorded_without_moving_on(environment) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment)
+    launched, headers, url = started(client, environment)
+    first = client.get(url, headers=headers).json()["question"]
+    [choice, other] = (item["id"] for item in first["choices"])
+
+    saved = save_current(client, url, headers, selected_choice_ids=[choice])
+    assert saved.status_code == 200
+    # Still on the question, now answered: the next one is within reach.
+    assert saved.json()["question_number"] == 1
+    assert saved.json()["selected_choice_ids"] == [choice]
+    assert saved.json()["answered_question_numbers"] == [1]
+    assert saved.json()["accessible_question_numbers"] == [1, 2]
+
+    # Going on and coming back: a change is saved as it is, in place.
+    client.post(f"{url}/navigate", headers=headers, json={"question_number": 2})
+    client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
+    changed = save_current(client, url, headers, selected_choice_ids=[other])
+    assert changed.json()["question_number"] == 1
+    assert changed.json()["selected_choice_ids"] == [other]
+
+    # Clearing it removes the answer; the question stays within reach, as
+    # a skipped one.
+    cleared = save_current(client, url, headers, selected_choice_ids=[])
+    assert cleared.status_code == 200
+    assert cleared.json()["selected_choice_ids"] is None
+    assert cleared.json()["answered_question_numbers"] == []
+    assert cleared.json()["skipped_question_numbers"] == [1]
+    assert cleared.json()["accessible_question_numbers"] == [1, 2]
+    with client.app.state.session_factory() as session:
+        assert (
+            session.scalars(
+                select(QuizAnswer).where(QuizAnswer.session_id == launched["id"])
+            ).all()
+            == []
+        )
+    # Clearing a question never answered changes nothing.
+    client.post(f"{url}/navigate", headers=headers, json={"question_number": 2})
+    untouched = save_current(client, url, headers, selected_choice_ids=[])
+    assert untouched.json()["skipped_question_numbers"] == [1]
+
+
+def test_saving_checks_the_question_and_the_quiz(environment) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment)
+    launched, headers, url = started(client, environment)
+    question = client.get(url, headers=headers).json()["question"]
+
+    stale = client.post(
+        f"{url}/save",
+        headers=headers,
+        json={"question_id": question["id"] + 999, "selected_choice_ids": []},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "ANSWER_QUESTION_MISMATCH"
+    invalid = save_current(client, url, headers, selected_choice_ids=["unknown"])
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"]["code"] == "ANSWER_CHOICE_INVALID"
+
+    # On the review, no question is current: nothing to save.
+    answer_current(client, url, headers)
+    reviewing = answer_current(client, url, headers)
+    assert reviewing.json()["awaiting_final_submission"] is True
+    no_question = client.post(
+        f"{url}/save",
+        headers=headers,
+        json={"question_id": question["id"], "selected_choice_ids": []},
+    )
+    assert no_question.status_code == 409
+    assert no_question.json()["detail"]["code"] == "QUIZ_NO_CURRENT_QUESTION"
+    # Once the session is over, nothing is saved any more.
+    assert hand_in_quiz(client, launched["join_code"], headers)["status"] == "finished"
+    finished = client.post(
+        f"{url}/save",
+        headers=headers,
+        json={"question_id": question["id"], "selected_choice_ids": []},
+    )
+    assert finished.status_code == 409
+    assert finished.json()["detail"]["code"] == "QUIZ_NOT_ACCEPTING_ANSWERS"
+
+
+def test_saving_needs_an_exam_that_allows_going_back(environment) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment, allow_previous_questions=False)
+    _, headers, url = started(client, environment)
+    question = client.get(url, headers=headers).json()["question"]
+
+    refused = save_current(
+        client, url, headers, selected_choice_ids=[question["choices"][0]["id"]]
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "ANSWER_SAVE_UNAVAILABLE"
+    assert client.get(url, headers=headers).json()["answered_question_numbers"] == []

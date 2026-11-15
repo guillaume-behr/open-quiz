@@ -9,6 +9,7 @@ import {
     leaveStudentQuiz,
     navigateStudentQuiz,
     reviewStudentAnswers,
+    saveStudentQuizAnswer,
     submitStudentQuiz,
     skipStudentQuestion,
     submitStudentQuizAnswer,
@@ -20,12 +21,23 @@ import { connectLiveUpdates } from "@/lib/live-updates"
 
 import { removeDrafts } from "./answer-drafts"
 import {
+    differsFromServer,
+    isHandedIn,
+    offersNextQuestion,
+    savesAnswerOnScreen,
+} from "./answer-sync"
+import {
     clearStoredQuizSession,
     readStoredQuizSession,
     storeQuizSession,
 } from "./student-quiz-session"
 import { useAnswerDrafts } from "./use-answer-drafts"
 import { useDeadlineSubmission } from "./use-deadline-submission"
+
+type SaveOutcome = "unchanged" | "saved" | "failed"
+
+/** How long after the last change a handed-in answer is saved. */
+export const ANSWER_SAVE_DELAY_MS = 800
 
 /**
  * A student's exam participation: the session restored from this tab, its
@@ -59,6 +71,12 @@ export function useStudentQuizSession(
         session?.join_code ?? restoredSession?.joinCode ?? null
     )
     const draftedQuestionIdRef = useRef<number | null>(null)
+    // The answer on screen, read by saves that run after a re-render.
+    const enteredRef = useRef({ selectedChoiceIds, writtenAnswer })
+    // Saves run one after another, so that an older one never lands last.
+    const saveQueueRef = useRef<Promise<SaveOutcome>>(
+        Promise.resolve("unchanged")
+    )
 
     const liveJoinCode = session?.join_code
     const isSessionOver = ["finished", "cancelled"].includes(
@@ -110,6 +128,10 @@ export function useStudentQuizSession(
     useEffect(() => {
         liveSessionRef.current = session
     }, [session])
+
+    useEffect(() => {
+        enteredRef.current = { selectedChoiceIds, writtenAnswer }
+    }, [selectedChoiceIds, writtenAnswer])
 
     useEffect(() => {
         const questionId = draftedQuestionIdRef.current
@@ -204,11 +226,11 @@ export function useStudentQuizSession(
     async function runSessionRequest(
         request: () => Promise<StudentQuizSession>,
         errorKey: string,
-        onError?: (caught: unknown) => Promise<void>
+        onError?: (caught: unknown) => Promise<void>,
+        liveRevision = liveRevisionRef.current
     ) {
         setIsBusy(true)
         sessionRequestVersion.current += 1
-        const liveRevision = liveRevisionRef.current
         try {
             const updated = await request()
             if (liveRevisionRef.current === liveRevision) applySession(updated)
@@ -289,6 +311,96 @@ export function useStudentQuizSession(
         }, 0)
     }
 
+    /**
+     * Saves the answer on screen when the server holds another one. The page stays usable: the
+     * student may keep typing while it is sent.
+     */
+    function saveAnswerOnScreen(): Promise<SaveOutcome> {
+        const run = saveQueueRef.current.then(sendAnswerOnScreen)
+        saveQueueRef.current = run.catch(() => "failed" as const)
+        return run
+    }
+
+    async function sendAnswerOnScreen(): Promise<SaveOutcome> {
+        const current = liveSessionRef.current
+        const entered = enteredRef.current
+        if (
+            !current?.question ||
+            !participantToken ||
+            !savesAnswerOnScreen(current) ||
+            !differsFromServer(current, entered)
+        )
+            return "unchanged"
+        const { join_code, question } = current
+        try {
+            const updated = await saveStudentQuizAnswer(
+                join_code,
+                participantToken,
+                {
+                    question_id: question.id,
+                    ...(question.answer_mode === "written"
+                        ? { written_answer: entered.writtenAnswer }
+                        : { selected_choice_ids: entered.selectedChoiceIds }),
+                }
+            )
+            // Only the session changes: what the student entered meanwhile
+            // stays on screen, and is saved next.
+            const latest = liveSessionRef.current
+            if (latest?.question?.id === updated.question?.id) {
+                const next = latest?.question
+                    ? { ...updated, question: latest.question }
+                    : updated
+                liveSessionRef.current = next
+                setSession(next)
+            }
+            return "saved"
+        } catch (caught) {
+            setError(apiErrorMessage(caught, t, t("student-answer-error")))
+            await showServerQuestionOnMismatch(caught, join_code)
+            return "failed"
+        }
+    }
+
+    // A change to a question already handed in is saved by itself, shortly
+    // after the student stops typing.
+    const savesChanges =
+        session !== null &&
+        savesAnswerOnScreen(session) &&
+        isHandedIn(session) &&
+        differsFromServer(session, { selectedChoiceIds, writtenAnswer })
+    useEffect(() => {
+        if (!savesChanges || isBusy) return
+        const timer = window.setTimeout(
+            () => void saveAnswerOnScreen(),
+            ANSWER_SAVE_DELAY_MS
+        )
+        return () => window.clearTimeout(timer)
+        // saveAnswerOnScreen reads the latest state through refs.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [savesChanges, isBusy, selectedChoiceIds, writtenAnswer])
+
+    /**
+     * Leaves the question on screen: what it shows is saved first, and the
+     * student stays on it when that fails.
+     */
+    async function leaveQuestion(
+        request: () => Promise<StudentQuizSession>,
+        errorKey: string,
+        onError?: (caught: unknown) => Promise<void>
+    ) {
+        setIsBusy(true)
+        // A live update arriving from now on is newer than the reply, except
+        // for the one the save itself sends.
+        let liveRevision = liveRevisionRef.current
+        const outcome = await saveAnswerOnScreen()
+        if (outcome === "failed") {
+            setIsBusy(false)
+            return
+        }
+        if (outcome === "saved") liveRevision = liveRevisionRef.current
+        await runSessionRequest(request, errorKey, onError, liveRevision)
+    }
+
     async function goToQuestion(questionNumber: number) {
         if (
             !session ||
@@ -297,7 +409,8 @@ export function useStudentQuizSession(
         )
             return
         const { join_code } = session
-        await runSessionRequest(
+        setError(null)
+        await leaveQuestion(
             () =>
                 navigateStudentQuiz(
                     join_code,
@@ -308,11 +421,17 @@ export function useStudentQuizSession(
         )
     }
 
+    /** "Next question", on a question already handed in. */
+    async function goToNextQuestion() {
+        if (!session || !offersNextQuestion(session)) return
+        await goToQuestion((session.question_number ?? 0) + 1)
+    }
+
     async function backToReview() {
         if (!session || !participantToken) return
         const { join_code } = session
         setError(null)
-        await runSessionRequest(
+        await leaveQuestion(
             () => reviewStudentAnswers(join_code, participantToken),
             "student-navigation-error"
         )
@@ -368,20 +487,25 @@ export function useStudentQuizSession(
 
     // Time running out ends the exam with the answers validated so far: what
     // is entered on screen is sent as it stands just before.
+    // Where the server holds what the screen shows, it is saved in place: the
+    // other questions already are.
     useDeadlineSubmission(
         session,
         { selectedChoiceIds, writtenAnswer },
         isBusy,
-        () => void sendAnswer()
+        () =>
+            void (session && savesAnswerOnScreen(session)
+                ? saveAnswerOnScreen()
+                : sendAnswer())
     )
 
     async function skipQuestion() {
         if (!session?.question || !participantToken) return
         const { join_code, question } = session
         setError(null)
-        // What the student entered stays a draft of the question: skipping it
-        // to come back later must not lose it.
-        await runSessionRequest(
+        // What the student entered is saved first: the server holds what
+        // the screen showed, and the question is answered rather than skipped.
+        await leaveQuestion(
             () => skipStudentQuestion(join_code, participantToken, question.id),
             "student-answer-error",
             (caught) => showServerQuestionOnMismatch(caught, join_code)
@@ -435,5 +559,7 @@ export function useStudentQuizSession(
         submitQuiz,
         submitAnswer,
         skipQuestion,
+        goToNextQuestion,
+        offersNextQuestion: session !== null && offersNextQuestion(session),
     }
 }
