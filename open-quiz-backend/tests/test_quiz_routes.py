@@ -221,6 +221,19 @@ def test_deleting_quizzes_keeps_results_and_makeups(environment) -> None:
     )
     assert makeup_refusal.status_code == 409
     assert makeup_refusal.json()["detail"]["code"] == "QUIZ_USED_BY_MAKEUP"
+    # Once the make-up is over, offering the quiz no longer holds it.
+    with client.app.state.session_factory() as session:
+        session.execute(
+            update(MakeupSession)
+            .where(MakeupSession.join_code == "MAKEUP03")
+            .values(status="finished")
+        )
+        session.commit()
+    assert (
+        client.delete(f"/api/quizzes/{used_by_makeup['id']}", headers=headers)
+    ).status_code == 204
+    with client.app.state.session_factory() as session:
+        assert session.scalar(select(MakeupSessionQuiz.quiz_id)) is None
 
     finished_exam(client, environment)
     results_refusal = client.delete(
