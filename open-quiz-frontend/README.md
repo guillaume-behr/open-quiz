@@ -132,6 +132,13 @@ tests/e2e/        parcours Playwright, un fichier par espace ou panneau
 
 Les fichiers sont nommés en kebab-case, pages comprises.
 
+Chaque dossier n’importe que les dossiers situés au-dessous de lui : `api/`,
+`lib/` et `hooks/`, puis `components/`, puis `features/`, puis `pages/`. Une
+fonctionnalité n’importe pas une autre fonctionnalité : ce dont deux d’entre
+elles ont besoin va dans `components/`, `lib/` ou `hooks/`. Les imports
+passent par l’alias `@/` plutôt que par `../`. `pnpm lint` vérifie ces règles
+(`eslint.config.js`).
+
 Les règles métier, les autorisations, les tirages et la notation restent côté
 backend. Le frontend conserve les jetons d’accès privilégiés en mémoire et les
 sessions élève dans `sessionStorage`. Les sessions longues des enseignants et
