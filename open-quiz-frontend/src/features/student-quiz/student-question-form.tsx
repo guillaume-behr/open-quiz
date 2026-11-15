@@ -1,12 +1,9 @@
 import { richTextToPlainText } from "@/lib/rich-text"
 import { RichText } from "@/components/ui/rich-text"
 import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
-import { CODE_LANGUAGES } from "@/features/question-banks/code-languages"
-import {
-    CodeBlock,
-    StaticCodeBlock,
-} from "@/features/question-banks/code-block"
-import { indentCode } from "@/features/question-banks/code-editor-utils"
+import { CODE_LANGUAGES } from "@/components/code/code-languages"
+import { CodeBlock, StaticCodeBlock } from "@/components/code/code-block"
+import { indentCode } from "@/components/code/code-editor-utils"
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
 import { cn } from "@/lib/utils"

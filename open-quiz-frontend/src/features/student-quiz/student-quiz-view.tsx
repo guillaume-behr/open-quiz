@@ -1,6 +1,6 @@
 import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
 import { LiveReconnectingNotice } from "@/components/shared/live-reconnecting-notice"
-import { QuizTimer } from "@/features/quizzes/quiz-timer"
+import { QuizTimer } from "@/components/shared/quiz-timer"
 import { Button } from "@/components/ui/button"
 import { ListChecks, LoaderCircle } from "lucide-react"
 import { type FormEvent, memo } from "react"

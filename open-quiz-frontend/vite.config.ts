@@ -113,7 +113,7 @@ export default defineConfig({
                         "src/features/quizzes/use-live-quiz-sessions.ts",
                         "src/features/quizzes/session-display.ts",
                         "src/features/question-banks/use-bank-transfer.ts",
-                        "src/features/question-banks/python-runner.ts",
+                        "src/components/code/python-runner.ts",
                     ].map((file) => [file, { lines: 90, statements: 90 }])
                 ),
             },

@@ -1,10 +1,10 @@
 import { expect, test } from "./fixtures"
 
-type PythonRunner = typeof import("@/features/question-banks/python-runner")
+type PythonRunner = typeof import("@/components/code/python-runner")
 
 // The dev server serves source modules by path, so the browser imports the
 // runner directly; the type above keeps the call checked.
-const RUNNER_PATH = "/src/features/question-banks/python-runner.ts"
+const RUNNER_PATH = "/src/components/code/python-runner.ts"
 
 test("Python execution cannot forge worker responses", async ({ page }) => {
     await page.goto("/student/login")

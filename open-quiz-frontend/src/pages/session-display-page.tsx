@@ -1,4 +1,4 @@
-import { QuizTimer } from "@/features/quizzes/quiz-timer"
+import { QuizTimer } from "@/components/shared/quiz-timer"
 import {
     isSessionDisplayKey,
     readSessionDisplay,

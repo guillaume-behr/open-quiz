@@ -2,7 +2,7 @@
 import type { KeyboardEvent } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { indentCode } from "@/features/question-banks/code-editor-utils"
+import { indentCode } from "@/components/code/code-editor-utils"
 
 function keydown(
     key: string,
