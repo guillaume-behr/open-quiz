@@ -1,5 +1,5 @@
 import type { GradeLevel, StudentClass } from "@/api/types"
-import { DialogFormActions } from "@/components/forms/dialog-form-actions"
+import { DialogFormActions } from "@/components/ui/dialog-form-actions"
 import { GradeLevelField } from "@/components/grade-levels/grade-level-field"
 import { Dialog } from "@/components/ui/dialog"
 import {
