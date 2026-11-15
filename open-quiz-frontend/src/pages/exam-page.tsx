@@ -6,8 +6,8 @@ import {
     restoreStudent,
 } from "@/api/student-auth"
 import type { StudentAccount } from "@/api/types"
-import { StudentQuiz } from "@/components/student-quiz/student-quiz"
-import { readStoredQuizSession } from "@/components/student-quiz/student-quiz-session"
+import { StudentQuiz } from "@/features/student-quiz/student-quiz"
+import { readStoredQuizSession } from "@/features/student-quiz/student-quiz-session"
 import { PageLoader } from "@/components/ui/page-loader"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"

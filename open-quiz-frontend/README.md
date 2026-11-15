@@ -122,10 +122,15 @@ Toute route inconnue affiche la page 404.
 ```text
 src/
 ├── api/          client HTTP, types et rotation des sessions
-├── components/   un dossier par fonctionnalité (classes/, quizzes/, results/…)
+├── components/   composants communs à toute l’application
+│   ├── forms/        connexion, double authentification et accès élève
+│   ├── language/     choix et sens de la langue
 │   ├── navigation/   structure commune des pages et navigation
 │   ├── shared/       composants utilisés par plusieurs fonctionnalités
+│   ├── theme/        thème clair ou sombre
 │   └── ui/           composants d’interface génériques
+├── features/     un dossier par fonctionnalité (classes/, quizzes/, results/…) :
+│                 ses composants, ses hooks et sa logique
 ├── hooks/        chargement de données et actions asynchrones partagés
 ├── lib/          traduction, mises à jour temps réel et utilitaires
 ├── pages/        points d’entrée chargés à la demande (legal/ : pages légales)

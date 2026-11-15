@@ -6,9 +6,9 @@ import type {
     StudentQuizSession,
     TrainingFeedback,
 } from "@/api/types"
-import { StudentQuestionForm } from "@/components/student-quiz/student-question-form"
-import { TranslationNotice } from "@/components/student-quiz/translation-notice"
-import { useQuizTranslation } from "@/components/student-quiz/use-quiz-translation"
+import { StudentQuestionForm } from "@/features/student-quiz/student-question-form"
+import { TranslationNotice } from "@/features/student-quiz/translation-notice"
+import { useQuizTranslation } from "@/features/student-quiz/use-quiz-translation"
 import { Button } from "@/components/ui/button"
 import { Popover } from "@base-ui/react/popover"
 import { Grade } from "@/components/ui/grade"

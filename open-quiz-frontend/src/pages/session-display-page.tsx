@@ -1,10 +1,10 @@
-import { QuizTimer } from "@/components/quizzes/quiz-timer"
+import { QuizTimer } from "@/features/quizzes/quiz-timer"
 import {
     isSessionDisplayKey,
     readSessionDisplay,
     subscribeSessionDisplay,
     type SessionDisplayPayload,
-} from "@/components/quizzes/session-display"
+} from "@/features/quizzes/session-display"
 import { Button } from "@/components/ui/button"
 import { Maximize, Minimize, Pause, UsersRound } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"

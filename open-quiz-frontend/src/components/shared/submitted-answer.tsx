@@ -1,5 +1,5 @@
 import type { CodeLanguage } from "@/api/types"
-import { StaticCodeBlock } from "@/components/question-banks/code-block"
+import { StaticCodeBlock } from "@/features/question-banks/code-block"
 
 /**
  * The values of an answer, as a student submitted them or as expected: code
