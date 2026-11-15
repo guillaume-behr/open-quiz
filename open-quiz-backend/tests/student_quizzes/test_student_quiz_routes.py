@@ -3274,7 +3274,7 @@ def test_a_saved_answer_is_recorded_without_moving_on(environment) -> None:
 def test_saving_checks_the_question_and_the_quiz(environment) -> None:
     client = environment["client"]
     environment = two_question_quiz(client, environment)
-    _, headers, url = started(client, environment)
+    launched, headers, url = started(client, environment)
     question = client.get(url, headers=headers).json()["question"]
 
     stale = client.post(
@@ -3287,6 +3287,27 @@ def test_saving_checks_the_question_and_the_quiz(environment) -> None:
     invalid = save_current(client, url, headers, selected_choice_ids=["unknown"])
     assert invalid.status_code == 422
     assert invalid.json()["detail"]["code"] == "ANSWER_CHOICE_INVALID"
+
+    # On the review, no question is current: nothing to save.
+    answer_current(client, url, headers)
+    reviewing = answer_current(client, url, headers)
+    assert reviewing.json()["awaiting_final_submission"] is True
+    no_question = client.post(
+        f"{url}/save",
+        headers=headers,
+        json={"question_id": question["id"], "selected_choice_ids": []},
+    )
+    assert no_question.status_code == 409
+    assert no_question.json()["detail"]["code"] == "QUIZ_NO_CURRENT_QUESTION"
+    # Once the session is over, nothing is saved any more.
+    assert hand_in_quiz(client, launched["join_code"], headers)["status"] == "finished"
+    finished = client.post(
+        f"{url}/save",
+        headers=headers,
+        json={"question_id": question["id"], "selected_choice_ids": []},
+    )
+    assert finished.status_code == 409
+    assert finished.json()["detail"]["code"] == "QUIZ_NOT_ACCEPTING_ANSWERS"
 
 
 def test_saving_needs_an_exam_that_allows_going_back(environment) -> None:
