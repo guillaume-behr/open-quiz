@@ -6,7 +6,10 @@ version: 2
 
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    # The workflows, and the local actions they share.
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: weekly
     groups:

@@ -1,0 +1,24 @@
+name: Set up the frontend
+description: >-
+  Install Node 24, the pnpm version open-quiz-frontend/package.json pins,
+  and the frontend's locked dependencies, with pnpm's store cached.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
+      with:
+        node-version: 24
+    # Node 24's Corepack installs the pnpm version package.json pins.
+    - shell: bash
+      working-directory: open-quiz-frontend
+      run: corepack enable && corepack install
+    # Again, now that pnpm exists, to restore and save its store.
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
+      with:
+        node-version: 24
+        cache: pnpm
+        cache-dependency-path: open-quiz-frontend/pnpm-lock.yaml
+    - shell: bash
+      working-directory: open-quiz-frontend
+      run: pnpm install --frozen-lockfile
