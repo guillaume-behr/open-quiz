@@ -25,6 +25,7 @@ import {
     storeQuizSession,
 } from "./student-quiz-session"
 import { useAnswerDrafts } from "./use-answer-drafts"
+import { useDeadlineSubmission } from "./use-deadline-submission"
 
 /**
  * A student's exam participation: the session restored from this tab, its
@@ -331,6 +332,10 @@ export function useStudentQuizSession(
 
     async function submitAnswer(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
+        await sendAnswer()
+    }
+
+    async function sendAnswer() {
         if (!session?.question || !participantToken) return
         const { join_code, question } = session
         setError(null)
@@ -360,6 +365,15 @@ export function useStudentQuizSession(
             (caught) => showServerQuestionOnMismatch(caught, join_code)
         )
     }
+
+    // Time running out ends the exam with the answers validated so far: what
+    // is entered on screen is sent as it stands just before.
+    useDeadlineSubmission(
+        session,
+        { selectedChoiceIds, writtenAnswer },
+        isBusy,
+        () => void sendAnswer()
+    )
 
     async function skipQuestion() {
         if (!session?.question || !participantToken) return

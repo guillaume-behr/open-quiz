@@ -64,6 +64,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   where every prompt is listed and the student may still go back: leaving
   full screen or switching tabs there warned no one. Only a handed-in paper
   is no longer watched.
+- An answer entered but not yet validated is no longer lost when an exam's
+  time runs out: three seconds before the end, the exam page sends the
+  answer on screen as it stands, as a paper is collected as it is. Only an
+  answer the server does not already hold is sent, and only while no other
+  request is under way.
 - Stopping the API waits for queries still running for a live feed before
   closing the database pool, so their connections are closed too.
 

@@ -90,6 +90,43 @@ describe("useStudentQuizSession", () => {
         live.connectLiveUpdates.mockReturnValue(() => undefined)
     })
 
+    it("sends the answer on screen just before the exam's time runs out", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+        try {
+            const now = Date.now()
+            api.joinQuiz.mockResolvedValue({
+                ...quizSession({
+                    status: "in_progress",
+                    server_now: new Date(now).toISOString(),
+                    ends_at: new Date(now + 60_000).toISOString(),
+                    question: { id: 1, answer_mode: "written" } as never,
+                }),
+                participant_token: "participant",
+            })
+            api.submitStudentQuizAnswer.mockResolvedValue(
+                quizSession({ status: "finished", question: null })
+            )
+            const hook = renderHook(() => useStudentQuizSession("student"))
+            act(() => hook.result.current.updateJoinCode("ABC123"))
+            await act(() => hook.result.current.join(formEvent()))
+            act(() => hook.result.current.setWrittenAnswer("Half of my answer"))
+
+            await act(() => vi.advanceTimersByTimeAsync(59_000))
+
+            expect(api.submitStudentQuizAnswer).toHaveBeenCalledWith(
+                "ABC123",
+                "participant",
+                {
+                    question_id: 1,
+                    selected_choice_ids: undefined,
+                    written_answer: "Half of my answer",
+                }
+            )
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it("joins an exam, stores it and opens its live connection", async () => {
         const { hook } = await joined()
 
