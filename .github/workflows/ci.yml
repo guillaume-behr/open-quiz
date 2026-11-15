@@ -111,18 +111,7 @@ jobs:
         working-directory: open-quiz-frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
-        with:
-          node-version: 24
-      # Node 24's Corepack installs the pnpm version package.json pins.
-      - run: corepack enable && corepack install
-      # Again, now that pnpm exists, to restore and save its store.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: open-quiz-frontend/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-frontend
       - run: pnpm lint
       - run: pnpm format:check
       # The API types follow the schema the backend exports (its tests check
@@ -145,18 +134,7 @@ jobs:
         working-directory: open-quiz-frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
-        with:
-          node-version: 24
-      # Node 24's Corepack installs the pnpm version package.json pins.
-      - run: corepack enable && corepack install
-      # Again, now that pnpm exists, to restore and save its store.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: open-quiz-frontend/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-frontend
       # The browser build has to match the locked @playwright/test version.
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
@@ -324,14 +302,10 @@ jobs:
           expect /robots.txt "$robots" '^http/1.1 200'
           expect /robots.txt "$robots" '^content-type: text/plain'
           expect /does-not-exist.js "$(headers /does-not-exist.js)" '^http/1.1 404'
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.3.0
-        with:
-          node-version: 24
+      - uses: ./.github/actions/setup-frontend
       - name: Run the browser smoke tests against the built images
         working-directory: open-quiz-frontend
         run: |
-          corepack enable && corepack install
-          pnpm install --frozen-lockfile
           # The browser builds have to match the locked @playwright/test version.
           pnpm exec playwright install --with-deps chromium webkit
           pnpm test:e2e:production
