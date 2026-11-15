@@ -7,6 +7,7 @@ from app.core.config import Settings, get_settings
 from app.core.database import database_sessions
 from app.core.rate_limit import build_credential_rate_limiters
 from app.models import User
+from app.records.users import username_matches
 from app.services.credentials import reset_two_factor
 
 
@@ -18,7 +19,7 @@ def reset(username: str, settings: Settings | None = None) -> bool:
         database_sessions(settings.database_url, migrate=False) as session_factory,
         session_factory() as session,
     ):
-        user = session.scalar(select(User).where(User.username == username))
+        user = session.scalar(select(User).where(username_matches(username)))
         if user is None:
             return False
         reset_two_factor(

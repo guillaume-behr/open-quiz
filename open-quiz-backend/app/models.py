@@ -34,9 +34,13 @@ def utc_now() -> datetime:
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        # Sign-in ignores case: "Alice" and "alice" are one name.
+        Index("uq_users_username", func.lower(text("username")), unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    username: Mapped[str] = mapped_column(String(80))
     display_name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
     access_token_generation: Mapped[int] = mapped_column(Integer, default=0)
