@@ -21,8 +21,7 @@ from app.models import (
     User,
 )
 from app.responses.teacher_sessions import active_makeup_session_responses
-from app.routers.quizzes import makeup as makeup_routes
-from app.services import maintenance
+from app.services import maintenance, makeup_sessions
 
 from support import (
     choice_answer,
@@ -204,14 +203,14 @@ def test_cancelling_a_makeup_holds_its_lock_until_the_delete(
     headers = environment["teacher_headers"]
     makeup = create_makeup(client, environment)
     locked_at_delete: list[bool] = []
-    delete_records = makeup_routes.delete_makeup_session_records
+    delete_records = makeup_sessions.delete_makeup_session_records
 
     def probe_then_delete(makeup_id: int, session: Any) -> None:
         locked_at_delete.append(row_is_locked(client, MakeupSession, makeup["id"]))
         delete_records(makeup_id, session)
 
     monkeypatch.setattr(
-        makeup_routes, "delete_makeup_session_records", probe_then_delete
+        makeup_sessions, "delete_makeup_session_records", probe_then_delete
     )
 
     cancelled = client.post(
