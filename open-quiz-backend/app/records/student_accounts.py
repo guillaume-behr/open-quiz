@@ -5,7 +5,6 @@ from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import DbSession, ProfessorUser
 from app.core.errors import ApiError, ErrorCode
 from app.models import (
     Student,
@@ -80,13 +79,13 @@ def owned_student_account(
 
 def owned_class(
     class_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
+    owner_id: int,
+    session: Session,
 ) -> StudentClass:
     student_class = session.scalar(
         select(StudentClass).where(
             StudentClass.id == class_id,
-            StudentClass.owner_id == professor.id,
+            StudentClass.owner_id == owner_id,
         )
     )
     if student_class is None:

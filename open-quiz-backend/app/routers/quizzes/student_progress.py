@@ -15,6 +15,7 @@ from app.domain.choice_tokens import ChoiceTokens
 from app.enums import QuizMode, SessionStatus
 from app.live.updates import publish_quiz_update
 from app.responses.student_sessions import student_state_response
+from app.routers.quizzes.participant_dependencies import CurrentParticipant
 from app.schemas.student_quizzes import (
     StudentQuizAnswer,
     StudentQuizNavigation,
@@ -31,7 +32,6 @@ from app.services.answers import (
     store_answer,
     validated_answer,
 )
-from app.services.participants import CurrentParticipant
 from app.services.question_assignments import (
     accessible_question_positions,
     session_question_ids,

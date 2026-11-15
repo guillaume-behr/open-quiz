@@ -160,7 +160,7 @@ def list_student_accounts(
             | StudentAccount.identifier.ilike(term, escape=LIKE_ESCAPE_CHARACTER)
         )
     if class_id is not None:
-        owned_class(class_id, professor, session)
+        owned_class(class_id, professor.id, session)
         filters.append(
             StudentAccount.id.in_(
                 select(Student.account_id).where(Student.class_id == class_id)
@@ -214,7 +214,7 @@ def list_student_credentials(
 ) -> list[StudentCredentialResponse]:
     query = select(StudentAccount).where(StudentAccount.owner_id == professor.id)
     if class_id is not None:
-        owned_class(class_id, professor, session)
+        owned_class(class_id, professor.id, session)
         query = query.join(Student, Student.account_id == StudentAccount.id).where(
             Student.class_id == class_id
         )

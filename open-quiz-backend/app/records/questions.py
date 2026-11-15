@@ -10,7 +10,6 @@ from fastapi import (
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import DbSession, ProfessorUser
 from app.core.errors import ApiError, ErrorCode
 from app.domain.images import (
     MAX_IMAGE_BYTES,
@@ -40,8 +39,8 @@ from app.schemas.questions import (
 
 def owned_question_bank(
     question_bank_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
+    owner_id: int,
+    session: Session,
     *,
     for_update: bool = False,
 ) -> QuestionBank:
@@ -52,7 +51,7 @@ def owned_question_bank(
     """
     statement = select(QuestionBank).where(
         QuestionBank.id == question_bank_id,
-        QuestionBank.owner_id == professor.id,
+        QuestionBank.owner_id == owner_id,
     )
     if for_update:
         statement = statement.with_for_update()
@@ -68,7 +67,7 @@ def owned_question_bank(
 
 def discard_training_sessions_using_questions(
     question_ids: list[int],
-    session: DbSession,
+    session: Session,
 ) -> None:
     """Drop every training attempt that drew any of these questions."""
     common_session_ids = select(QuizSessionQuestion.session_id).where(
@@ -131,7 +130,7 @@ def choice_points(
 def add_question(
     question_bank_id: int,
     payload: QuestionCreate,
-    session: DbSession,
+    session: Session,
     *,
     image_data: bytes | None = None,
     image_content_type: str | None = None,
@@ -248,8 +247,8 @@ def load_question_records(
 
 def owned_question(
     question_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
+    owner_id: int,
+    session: Session,
     *,
     for_update: bool = False,
 ) -> Question:
@@ -262,7 +261,7 @@ def owned_question(
         .join(QuestionBank, QuestionBank.id == Question.question_bank_id)
         .where(
             Question.id == question_id,
-            QuestionBank.owner_id == professor.id,
+            QuestionBank.owner_id == owner_id,
         )
     )
     if for_update:

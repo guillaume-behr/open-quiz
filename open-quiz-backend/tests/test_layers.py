@@ -78,3 +78,30 @@ def test_modules_import_only_from_lower_layers(path: Path) -> None:
 )
 def test_every_form_of_import_is_seen(source: str, expected: set[str]) -> None:
     assert imported_packages(source) == expected
+
+
+# The request dependencies of FastAPI (an injected session, the signed-in
+# user): only the code that serves requests may declare them. Below it,
+# functions take a plain Session and an owner id.
+REQUEST_LAYERS = {"core", "routers", "application"}
+
+
+@pytest.mark.parametrize(
+    "path",
+    [path for path in MODULES if layer_of(path) not in REQUEST_LAYERS],
+    ids=lambda path: str(path.relative_to(APP)),
+)
+def test_only_request_layers_import_request_dependencies(path: Path) -> None:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    imported = {
+        node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    } | {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    assert "app.core.dependencies" not in imported, (
+        f"{path.relative_to(APP)} imports app.core.dependencies: take a Session "
+        "and an owner id instead"
+    )

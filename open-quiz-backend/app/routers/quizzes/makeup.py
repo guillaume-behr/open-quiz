@@ -157,7 +157,7 @@ def makeup_quiz_options(
     session: DbSession,
 ) -> list[QuizResponse]:
     """Quizzes a class may make up: only those the class has already taken."""
-    student_class = owned_class(class_id, professor, session)
+    student_class = owned_class(class_id, professor.id, session)
     finished_ids = class_finished_quiz_ids(student_class.id, professor, session)
     quizzes = list(
         session.scalars(
@@ -342,7 +342,7 @@ def control_makeup_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> MakeupSessionResponse | Response:
-    makeup = owned_makeup_session(session_id, professor, session)
+    makeup = owned_makeup_session(session_id, professor.id, session)
     if action == MakeupAction.CANCEL:
         # Every other action changes this row, so its lock keeps the make-up
         # session waiting, and its children without answers, until the

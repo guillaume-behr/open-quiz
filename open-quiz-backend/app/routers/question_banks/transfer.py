@@ -126,7 +126,7 @@ def export_questions(
     session: DbSession,
 ) -> Response:
     """Export every question in a bank as a versioned JSON document."""
-    question_bank = owned_question_bank(question_bank_id, professor, session)
+    question_bank = owned_question_bank(question_bank_id, professor.id, session)
     bank_id = question_bank.id
     grade_level = question_bank.grade_level
     chapter = question_bank.chapter
