@@ -144,7 +144,7 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 - In production the API now answers 400 to a request whose `Host` header is
   neither the name in `FRONTEND_ORIGIN` nor an internal one. Check that your
   reverse proxy forwards the name the browser asked for (`proxy_set_header
-Host $host` with Nginx; Caddy does by default). If the API is published
+  Host $host` with Nginx; Caddy does by default). If the API is published
   under another name than the interface (`VITE_API_URL`), list it in
   `TRUSTED_HOSTS` in `open-quiz-backend/.env`.
 - The API container is limited to 2 GB of memory and the proxy to 512 MB.
