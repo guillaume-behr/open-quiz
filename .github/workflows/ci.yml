@@ -30,7 +30,7 @@ jobs:
         run: |
           # POSIX sh scripts: parsed by dash (the runner's sh), then linted
           # as sh. shellcheck ships with the runner image.
-          scripts="install.sh install-dev.sh update.sh backup.sh restore.sh scripts/*.sh"
+          scripts="install.sh update.sh backup.sh restore.sh scripts/*.sh"
           for script in $scripts; do
             sh -n "$script"
           done

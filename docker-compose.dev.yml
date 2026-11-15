@@ -1,4 +1,4 @@
-# Development-only overrides, applied by install-dev.sh on top of
+# Development-only overrides, applied by scripts/install-dev.sh on top of
 # docker-compose.yml. Production never loads this file.
 #
 # The API runs on the host during development (uv run fastapi dev), so it needs

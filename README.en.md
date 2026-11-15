@@ -281,7 +281,7 @@ To install an instance for use, follow [Installation](#-installation). To work
 on the code, a script prepares development secrets and starts PostgreSQL:
 
 ```shell
-sh ./install-dev.sh
+sh scripts/install-dev.sh
 ```
 
 Then start the API with `uv run fastapi dev main.py` from `open-quiz-backend`,
