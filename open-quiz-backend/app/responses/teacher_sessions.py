@@ -10,7 +10,6 @@ from statistics import median
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import DbSession
 from app.domain.class_names import format_class_name
 from app.domain.session_status import ACTIVE_SESSION_STATUSES, took_part
 from app.enums import QuizMode, SessionStatus
@@ -66,7 +65,7 @@ def participant_has_finished(
 def session_response(
     quiz_session: QuizSession,
     quiz: Quiz,
-    session: DbSession,
+    session: Session,
 ) -> QuizSessionResponse:
     return session_responses([(quiz_session, quiz)], session)[0]
 
@@ -252,7 +251,7 @@ def session_responses(
 
 def active_session_responses(
     professor: User,
-    session: DbSession,
+    session: Session,
 ) -> list[QuizSessionResponse]:
     rows = session.execute(
         select(QuizSession, Quiz)
@@ -273,7 +272,7 @@ def active_session_responses(
 
 
 def makeup_session_response(
-    makeup: MakeupSession, session: DbSession
+    makeup: MakeupSession, session: Session
 ) -> MakeupSessionResponse:
     return makeup_responses([makeup], session)[0]
 

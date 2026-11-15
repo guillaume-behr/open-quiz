@@ -5,8 +5,8 @@ from fastapi import (
 )
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from app.core.dependencies import DbSession, ProfessorUser
 from app.core.errors import ApiError, ErrorCode
 from app.enums import QuizMode
 from app.models import (
@@ -17,9 +17,9 @@ from app.models import (
 )
 
 
-def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Quiz:
+def owned_quiz(quiz_id: int, owner_id: int, session: Session) -> Quiz:
     quiz = session.scalar(
-        select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
+        select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == owner_id)
     )
     if quiz is None:
         raise ApiError(
@@ -28,7 +28,7 @@ def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Qu
     return quiz
 
 
-def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
+def training_profile_quiz(owner_id: int, session: Session) -> Quiz:
     quiz = session.scalar(
         select(Quiz)
         .join(TrainingQuizProfile, TrainingQuizProfile.quiz_id == Quiz.id)
@@ -72,15 +72,15 @@ def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
 
 def owned_quiz_session(
     session_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
+    owner_id: int,
+    session: Session,
 ) -> tuple[QuizSession, Quiz]:
     row = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSession.id == session_id,
-            Quiz.owner_id == professor.id,
+            Quiz.owner_id == owner_id,
         )
     ).first()
     if row is None:
@@ -93,7 +93,7 @@ def owned_quiz_session(
 
 
 def owned_class_session(
-    session_id: int, professor: ProfessorUser, session: DbSession
+    session_id: int, owner_id: int, session: Session
 ) -> tuple[QuizSession, Quiz]:
     """A session the class session routes may control: not one student's make-up quiz.
 
@@ -101,7 +101,7 @@ def owned_class_session(
     changing one directly would desynchronise it, and cancelling one would
     strand its student's selection.
     """
-    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    quiz_session, quiz = owned_quiz_session(session_id, owner_id, session)
     if quiz_session.makeup_session_id is not None:
         raise ApiError(
             status.HTTP_409_CONFLICT,
@@ -112,12 +112,12 @@ def owned_class_session(
 
 
 def owned_makeup_session(
-    session_id: int, professor: ProfessorUser, session: DbSession
+    session_id: int, owner_id: int, session: Session
 ) -> MakeupSession:
     makeup = session.scalar(
         select(MakeupSession).where(
             MakeupSession.id == session_id,
-            MakeupSession.owner_id == professor.id,
+            MakeupSession.owner_id == owner_id,
         )
     )
     if makeup is None:

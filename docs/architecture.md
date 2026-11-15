@@ -40,6 +40,10 @@ superutilisateur ; `scripts/database-roles.sql` le crée.
 Le paquet `open-quiz-backend/app` est découpé en couches. Chacune n’importe
 que les couches situées au-dessous d’elle ; `tests/test_layers.py` le vérifie.
 Seuls `core/` et `models.py`, sur la même ligne, s’importent l’un l’autre.
+Les dépendances de requête de FastAPI (`app/core/dependencies.py` : session
+injectée, utilisateur connecté) ne servent qu’aux `routers/` ; les couches
+inférieures reçoivent une `Session` SQLAlchemy et l’identifiant du
+propriétaire.
 
 | Couche (de bas en haut) | Contenu                                                                                        |
 | ----------------------- | ---------------------------------------------------------------------------------------------- |

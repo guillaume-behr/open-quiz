@@ -1,14 +1,14 @@
 """Response bodies describing quizzes to their teacher."""
 
 from sqlalchemy import case, func, select
+from sqlalchemy.orm import Session
 
-from app.core.dependencies import DbSession
 from app.enums import Difficulty
 from app.models import Question, QuestionBank, Quiz, QuizQuestionBank
 from app.schemas.quizzes import QuizBankSummary, QuizResponse
 
 
-def quiz_responses(quizzes: list[Quiz], session: DbSession) -> list[QuizResponse]:
+def quiz_responses(quizzes: list[Quiz], session: Session) -> list[QuizResponse]:
     if not quizzes:
         return []
     banks_by_quiz: dict[int, list[QuizBankSummary]] = {quiz.id: [] for quiz in quizzes}

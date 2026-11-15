@@ -146,7 +146,7 @@ def list_questions(
     session: DbSession,
 ) -> list[QuestionResponse]:
     """Return the questions in one of the professor's banks."""
-    owned_question_bank(question_bank_id, professor, session)
+    owned_question_bank(question_bank_id, professor.id, session)
     question_ids = list(
         session.scalars(
             select(Question.id)
@@ -161,7 +161,7 @@ def lock_bank_with_room(
     question_bank_id: int, professor: ProfessorUser, session: Session
 ) -> None:
     """Lock the professor's bank until commit, if it can take one more question."""
-    owned_question_bank(question_bank_id, professor, session, for_update=True)
+    owned_question_bank(question_bank_id, professor.id, session, for_update=True)
     question_count = session.scalar(
         select(func.count())
         .select_from(Question)
@@ -503,7 +503,7 @@ def update_question(
     choice_images: Annotated[list[UploadFile] | None, File()] = None,
 ) -> QuestionUpdateResponse:
     """Update a professor's question and replace its answer configuration."""
-    owned_question(question_id, professor, session)
+    owned_question(question_id, professor.id, session)
     require_no_active_exam(question_id, session)
     question_payload = parsed_question_update(payload)
     # Decoding an image can take a while: end the transaction first, so that
@@ -513,7 +513,7 @@ def update_question(
     uploaded_image = normalized_uploaded_image(image)
     new_choice_images = decoded_choice_images(question_payload, choice_images)
     # Locked: two edits of one question would otherwise both freeze a copy.
-    question = owned_question(question_id, professor, session, for_update=True)
+    question = owned_question(question_id, professor.id, session, for_update=True)
     require_no_active_exam(question.id, session)
     # Answers to a choice question carry automatic marks: once it is written,
     # a teacher has to mark them.
@@ -563,7 +563,7 @@ def delete_question(
 
     Exam sessions that drew it keep it, detached from the bank.
     """
-    owned_question(question_id, professor, session)
+    owned_question(question_id, professor.id, session)
     require_no_active_exam(question_id, session)
     remove_questions([question_id], session)
     session.commit()
@@ -577,7 +577,7 @@ def get_question_image(
     session: DbSession,
 ) -> Response:
     """Return a private image attached to one of the professor's questions."""
-    question = owned_question(question_id, professor, session)
+    question = owned_question(question_id, professor.id, session)
     if question.image_sha256 is None:
         raise ApiError(
             status.HTTP_404_NOT_FOUND,

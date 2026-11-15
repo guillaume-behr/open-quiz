@@ -139,7 +139,7 @@ def update_question_bank(
     A new grade level withdraws the bank from the training of the classes of
     another level.
     """
-    question_bank = owned_question_bank(question_bank_id, professor, session)
+    question_bank = owned_question_bank(question_bank_id, professor.id, session)
     grade_level = ensure_grade_level(professor.id, payload.grade_level, session)
     if question_bank.grade_level != grade_level:
         mismatched_class_ids = select(StudentClass.id).where(
@@ -179,7 +179,7 @@ def delete_question_bank(
     drew, detached from it (app/records/question_history.py). Refused while an open
     exam drew from it or an open make-up may still draw from it.
     """
-    owned_question_bank(question_bank_id, professor, session)
+    owned_question_bank(question_bank_id, professor.id, session)
     question_ids = list(
         session.scalars(
             select(Question.id).where(Question.question_bank_id == question_bank_id)

@@ -348,7 +348,7 @@ def delete_class(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    owned_class(class_id, professor, session)
+    owned_class(class_id, professor.id, session)
     if class_has_active_exam_session(class_id, session):
         raise ApiError(
             status.HTTP_409_CONFLICT,
@@ -389,7 +389,7 @@ def assign_student_account(
     professor: ProfessorUser,
     session: DbSession,
 ) -> StudentClassResponse:
-    student_class = owned_class(class_id, professor, session)
+    student_class = owned_class(class_id, professor.id, session)
     account = owned_student_account(account_id, professor.id, session)
     membership = session.scalar(select(Student).where(Student.account_id == account.id))
     if membership is not None:
@@ -446,7 +446,7 @@ def unassign_student_account(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    owned_class(class_id, professor, session)
+    owned_class(class_id, professor.id, session)
     membership = session.scalar(
         select(Student)
         .join(StudentAccount, StudentAccount.id == Student.account_id)
@@ -482,7 +482,7 @@ def update_class(
     professor: ProfessorUser,
     session: DbSession,
 ) -> StudentClassResponse:
-    student_class = owned_class(class_id, professor, session)
+    student_class = owned_class(class_id, professor.id, session)
     grade_level = ensure_grade_level(professor.id, payload.grade_level, session)
     if student_class.grade_level != grade_level:
         mismatched_bank_ids = (

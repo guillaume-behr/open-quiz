@@ -1,9 +1,9 @@
 """Publish quiz changes to the live views of teachers and students."""
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
-from app.core.dependencies import DbSession
 from app.enums import SessionStatus
 from app.live.hub import (
     LiveQuizHub,
@@ -24,7 +24,7 @@ from app.models import (
 def publish_quiz_update(
     request: HTTPConnection,
     quiz_session: QuizSession,
-    session: DbSession,
+    session: Session,
     *,
     active_sessions_changed: bool = True,
     makeup_sessions_changed: bool = True,
@@ -43,7 +43,7 @@ def publish_quiz_update(
 def publish_session_change(
     hub: LiveQuizHub,
     quiz_session: QuizSession,
-    session: DbSession,
+    session: Session,
     *,
     active_sessions_changed: bool = True,
     makeup_sessions_changed: bool = True,

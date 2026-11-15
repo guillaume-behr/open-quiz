@@ -152,10 +152,10 @@ def export_quiz_results(
     class_id: Annotated[int, Query(ge=1)],
     quiz_id: Annotated[int | None, Query(ge=1)] = None,
 ) -> StreamingResponse:
-    student_class = owned_class(class_id, professor, session)
+    student_class = owned_class(class_id, professor.id, session)
 
     if quiz_id is not None:
-        owned_quiz(quiz_id, professor, session)
+        owned_quiz(quiz_id, professor.id, session)
     safe_class_id = student_class.id
     safe_quiz = f"-quiz-{quiz_id}" if quiz_id is not None else "-tous-les-quiz"
     filename = f"resultats-classe-{safe_class_id}{safe_quiz}.csv"
@@ -234,7 +234,7 @@ def list_participant_answers(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuizAnswerReview]:
-    quiz_session, _ = owned_quiz_session(session_id, professor, session)
+    quiz_session, _ = owned_quiz_session(session_id, professor.id, session)
     if quiz_session.status != SessionStatus.FINISHED:
         raise ApiError(
             status.HTTP_409_CONFLICT,
@@ -601,7 +601,7 @@ def publish_quiz_grades(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    quiz_session, quiz = owned_quiz_session(session_id, professor.id, session)
     if quiz_session.status != SessionStatus.FINISHED:
         raise ApiError(
             status.HTTP_409_CONFLICT,
@@ -643,7 +643,7 @@ def grade_written_answer(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizAnswerReview:
-    quiz_session, _ = owned_quiz_session(session_id, professor, session)
+    quiz_session, _ = owned_quiz_session(session_id, professor.id, session)
     if quiz_session.status != SessionStatus.FINISHED:
         raise ApiError(
             status.HTTP_409_CONFLICT,

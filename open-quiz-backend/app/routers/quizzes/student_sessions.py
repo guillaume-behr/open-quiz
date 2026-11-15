@@ -18,10 +18,10 @@ from app.enums import AnswerMode, SessionStatus
 from app.live.updates import publish_quiz_update
 from app.models import Question, QuestionChoice, QuizParticipant, QuizSession
 from app.responses.images import image_response
+from app.routers.quizzes.participant_dependencies import ReportingParticipant
 from app.schemas.student_quizzes import StudentQuizViolation
 from app.services.participants import (
     VIOLATION_DEDUPLICATION_SECONDS,
-    ReportingParticipant,
     rate_limited_participant,
 )
 from app.services.question_assignments import current_question_id
