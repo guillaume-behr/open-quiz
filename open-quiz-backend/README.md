@@ -18,46 +18,13 @@ Consultez aussi le [README principal](../README.md), le
 
 ## 💻 Développement local
 
-Cette procédure lance uniquement l’API en mode développement. Elle ne remplace
-pas l’installation Docker Compose recommandée pour utiliser une instance.
+Le [guide de contribution](../CONTRIBUTING.md#-préparer-lenvironnement-de-développement)
+décrit la préparation de l’environnement : PostgreSQL et secrets
+(`scripts/install-dev.sh`), puis l’API et l’interface. Il ne remplace pas
+l’installation Docker Compose recommandée pour utiliser une instance.
 
-### Prérequis
-
-- Python 3.14 ou supérieur ;
-- [uv](https://docs.astral.sh/uv/) ;
-- PostgreSQL 17, par exemple le service `open-quiz-database` de Docker Compose.
-
-Depuis la racine du dépôt, créez la configuration locale et démarrez PostgreSQL :
-
-```shell
-sh ./install-dev.sh
-```
-
-Le script génère automatiquement :
-
-- `JWT_SECRET` ;
-- `TOTP_ENCRYPTION_KEY` ;
-- `STUDENT_CREDENTIAL_ENCRYPTION_KEY` ;
-- `ADMIN_PASSWORD` ;
-- `POSTGRES_PASSWORD`.
-
-Les trois secrets cryptographiques sont distincts et suffisamment longs. Le
-script protège `open-quiz-backend/.env`, affiche les identifiants administrateur
-une seule fois et conserve une configuration de développement existante et
-compatible sans l’écraser. Après le démarrage, il vérifie une connexion
-PostgreSQL authentifiée afin de détecter un ancien volume utilisant un autre
-mot de passe.
-
-Installez les dépendances et démarrez l’API :
-
-```shell
-cd open-quiz-backend
-uv sync
-uv run fastapi dev main.py
-```
-
-L’API répond sur `http://localhost:8000`. En développement, les interfaces
-OpenAPI sont disponibles sur :
+Une fois l’API lancée (`uv run fastapi dev main.py`), ses interfaces OpenAPI
+répondent sur :
 
 - Swagger UI : `http://localhost:8000/docs` ;
 - ReDoc : `http://localhost:8000/redoc` ;
@@ -88,8 +55,8 @@ sur les systèmes POSIX.
 Quand `DATABASE_URL` ne contient pas de mot de passe, l’API utilise
 `DATABASE_PASSWORD`, sinon `POSTGRES_PASSWORD`. En production, elle se connecte
 avec le rôle non privilégié `open_quiz_app` ; en développement, avec le
-superutilisateur, dont `install-dev.sh` recopie le mot de passe dans
-`open-quiz-backend/.env.database`, lu par le conteneur PostgreSQL.
+superutilisateur, dont `scripts/install-dev.sh` recopie le mot de passe
+dans `open-quiz-backend/.env.database`, lu par le conteneur PostgreSQL.
 
 En production, `FRONTEND_ORIGIN` doit utiliser HTTPS. Le compte administrateur
 est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` et
@@ -426,8 +393,8 @@ l’ancienne copie puis recréez le service.
 ## ✅ Vérifications
 
 Les tests ont besoin du rôle et de la base `open_quiz_test`, créés par
-`sh ./install-dev.sh` depuis la racine du dépôt. Définissez `TEST_DATABASE_URL`
-pour viser un autre serveur PostgreSQL.
+`sh scripts/install-dev.sh` depuis la racine du dépôt. Définissez
+`TEST_DATABASE_URL` pour viser un autre serveur PostgreSQL.
 
 Lancez la suite seule pendant le développement :
 

@@ -1,24 +1,21 @@
 """Quiz participants: join codes, participant tokens and public rate limits."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from random import SystemRandom
 from string import ascii_uppercase, digits
-from typing import Annotated, NoReturn
+from typing import NoReturn
 
 from fastapi import (
-    Depends,
-    Header,
     HTTPException,
     Request,
     status,
 )
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
-from app.core.dependencies import DbSession
 from app.core.errors import ApiError, ErrorCode
 from app.models import (
     Quiz,
@@ -81,7 +78,7 @@ def participant_token_hash(token: str) -> str:
 def public_session_subject(
     join_code: str,
     purpose: str,
-    session: DbSession,
+    session: Session,
 ) -> str:
     normalized_join_code = join_code.strip().upper()
     session_id = session.scalar(
@@ -98,7 +95,7 @@ def authenticated_participant(
     join_code: str,
     token: str | None,
     request: HTTPConnection,
-    session: DbSession,
+    session: Session,
 ) -> tuple[QuizSession, Quiz, QuizParticipant]:
     if not token:
         enforce_public_rate_limit(
@@ -178,7 +175,7 @@ def rate_limited_participant(
     join_code: str,
     quiz_token: str | None,
     request: Request,
-    session: DbSession,
+    session: Session,
     limiter_name: str,
 ) -> ParticipantContext:
     """Authenticate the participant, then count the request against them."""
@@ -189,36 +186,7 @@ def rate_limited_participant(
     return ParticipantContext(participant, quiz_session, quiz)
 
 
-def participant_context(
-    limiter_name: str,
-) -> Callable[[str, Request, DbSession, str | None], ParticipantContext]:
-    """A dependency on the participant a request's X-Quiz-Token opens."""
-
-    def dependency(
-        join_code: str,
-        request: Request,
-        session: DbSession,
-        quiz_token: Annotated[str | None, Header(alias="X-Quiz-Token")] = None,
-    ) -> ParticipantContext:
-        return rate_limited_participant(
-            join_code, quiz_token, request, session, limiter_name
-        )
-
-    return dependency
-
-
-CurrentParticipant = Annotated[
-    ParticipantContext,
-    Depends(participant_context("quiz_participant_rate_limiter")),
-]
-# Anti-cheating reports count against a limiter of their own.
-ReportingParticipant = Annotated[
-    ParticipantContext,
-    Depends(participant_context("quiz_violation_rate_limiter")),
-]
-
-
-def generate_join_code(session: DbSession) -> str:
+def generate_join_code(session: Session) -> str:
     for _ in range(20):
         code = "".join(randomizer.choice(JOIN_CODE_ALPHABET) for _ in range(6))
         reserved_code = session.scalar(

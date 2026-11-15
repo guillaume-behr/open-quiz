@@ -290,7 +290,7 @@ Pour installer une instance à utiliser, suivez la procédure
 les secrets de développement et démarre PostgreSQL :
 
 ```shell
-sh ./install-dev.sh
+sh scripts/install-dev.sh
 ```
 
 L’API se lance ensuite avec `uv run fastapi dev main.py` depuis

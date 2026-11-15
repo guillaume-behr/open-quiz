@@ -62,7 +62,7 @@ def list_class_training_question_banks(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuestionBankResponse]:
-    student_class = owned_class(class_id, professor, session)
+    student_class = owned_class(class_id, professor.id, session)
     assignments = list(
         session.execute(
             select(
@@ -97,7 +97,7 @@ def update_class_training_question_banks(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuestionBankResponse]:
-    student_class = owned_class(class_id, professor, session)
+    student_class = owned_class(class_id, professor.id, session)
     bank_ids = [item.question_bank_id for item in payload.question_banks]
     banks = list(
         session.scalars(

@@ -53,11 +53,13 @@ installer une instance à utiliser, suivez la procédure Docker du
 Depuis la racine du dépôt :
 
 ```shell
-sh ./install-dev.sh
+sh scripts/install-dev.sh
 ```
 
-Le script crée `open-quiz-backend/.env` avec des secrets distincts, affiche les
-identifiants administrateur une seule fois et lance uniquement le service Docker
+Le script crée `open-quiz-backend/.env` avec des secrets distincts
+(`JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `STUDENT_CREDENTIAL_ENCRYPTION_KEY`,
+`ADMIN_PASSWORD` et `POSTGRES_PASSWORD`), affiche les identifiants
+administrateur une seule fois et lance uniquement le service Docker
 `open-quiz-database`. Il conserve un `.env` de développement existant et
 compatible, refuse les valeurs d’exemple et les configurations de production,
 puis vérifie que PostgreSQL accepte réellement les identifiants.
@@ -147,6 +149,11 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
   qui préserve les données des instances en service, et des tests
   correspondants (voir
   [Faire évoluer le schéma](open-quiz-backend/README.md#faire-évoluer-le-schéma)) ;
+- après un changement de route ou de corps de requête ou de réponse,
+  régénérez le schéma OpenAPI puis les types du frontend :
+  `uv run python -m scripts.export_openapi` dans `open-quiz-backend`, puis
+  `pnpm generate:api-types` dans `open-quiz-frontend` ; un test backend et
+  `pnpm check:api-types` échouent sinon ;
 - documentez les changements d’API, de configuration, de conservation ou de
   sécurité ;
 - ajoutez tout changement visible ou incompatible à la section
@@ -184,6 +191,12 @@ Toute nouvelle chaîne visible doit exister dans les huit catalogues de
 - `README.md` et `README.en.md` couvrent le même contenu : modifiez les deux
   dans la même pull request. La CI vérifie qu’ils ont les mêmes sections, dans
   le même ordre.
+- le reste de la documentation est en français : ce guide, `docs/` et les
+  README de `open-quiz-backend/` et `open-quiz-frontend/`. Seuls
+  `README.en.md` et `CHANGELOG.md` sont en anglais ;
+- la préparation de l’environnement de développement n’est décrite qu’ici ;
+  les README des composants y renvoient et ne gardent que ce qui leur est
+  propre (configuration, API, organisation du code, tests).
 
 ## ✅ Vérifications
 
@@ -260,6 +273,11 @@ docker compose build
 
 N’utilisez ces valeurs d’exemple que pour valider la structure. Une instance
 réelle exige des secrets robustes et distincts.
+
+Les scripts d’administration (`install.sh`, `update.sh`, `backup.sh`,
+`restore.sh`) restent à la racine : les instances en service les appellent par
+`sh ./…`, jusque dans leur crontab. Les autres scripts shell vont dans
+`scripts/`, avec les fonctions communes de `scripts/common.sh`.
 
 ## 🔀 Ouvrir une pull request
 

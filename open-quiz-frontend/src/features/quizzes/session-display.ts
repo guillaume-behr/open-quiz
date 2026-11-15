@@ -126,7 +126,7 @@ export function sessionDisplayPayload(
         joinCode: session.join_code,
         status: session.status,
         endsAt: "ends_at" in session ? session.ends_at : null,
-        serverNow: "server_now" in session ? session.server_now : null,
+        serverNow: ("server_now" in session && session.server_now) || null,
         participantCount: session.participant_count,
         finishedCount: participants.filter(
             (participant) => participant.has_finished

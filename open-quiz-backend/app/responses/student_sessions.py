@@ -9,8 +9,8 @@ from hashlib import sha256
 
 from fastapi import status
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.core.dependencies import DbSession
 from app.core.errors import ApiError, ErrorCode
 from app.domain.choice_tokens import ChoiceTokens
 from app.domain.class_names import format_class_name
@@ -54,7 +54,7 @@ def student_session_response(
     quiz_session: QuizSession,
     quiz: Quiz,
     participant: QuizParticipant,
-    session: DbSession,
+    session: Session,
 ) -> StudentQuizSessionResponse:
     return StudentQuizSessionResponse(
         quiz_title=quiz_session.quiz_title or quiz.title,
@@ -69,7 +69,7 @@ def student_session_response(
     )
 
 
-def quiz_session_class_name(quiz_session: QuizSession, session: DbSession) -> str:
+def quiz_session_class_name(quiz_session: QuizSession, session: Session) -> str:
     if quiz_session.class_id is None:
         return quiz_session.class_name
     student_class = session.get(StudentClass, quiz_session.class_id)
@@ -96,7 +96,7 @@ def student_answer_summaries(
     quiz_session: QuizSession,
     participant: QuizParticipant,
     question_ids: list[int],
-    session: DbSession,
+    session: Session,
 ) -> list[StudentAnswerSummary]:
     """What a participant answered, for the review before final submission.
 
@@ -155,7 +155,7 @@ def student_question_response(
     question_id: int,
     quiz_session: QuizSession,
     participant: QuizParticipant,
-    session: DbSession,
+    session: Session,
     *,
     include_points: bool = False,
 ) -> StudentQuizQuestionResponse:
@@ -213,7 +213,7 @@ def student_state_response(
     quiz_session: QuizSession,
     quiz: Quiz,
     participant: QuizParticipant,
-    session: DbSession,
+    session: Session,
 ) -> StudentQuizStateResponse:
     question_ids = session_question_ids(quiz_session, session, participant)
     question_id = current_question_id(quiz_session, participant, session)

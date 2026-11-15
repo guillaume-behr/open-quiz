@@ -1,24 +1,25 @@
-"""Load a teacher's quizzes and sessions, refusing those of anyone else."""
+"""Load a teacher's quizzes, sessions and make-ups, refusing anyone else's."""
 
 from fastapi import (
     status,
 )
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from app.core.dependencies import DbSession, ProfessorUser
 from app.core.errors import ApiError, ErrorCode
 from app.enums import QuizMode
 from app.models import (
+    MakeupSession,
     Quiz,
     QuizSession,
     TrainingQuizProfile,
 )
 
 
-def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Quiz:
+def owned_quiz(quiz_id: int, owner_id: int, session: Session) -> Quiz:
     quiz = session.scalar(
-        select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == professor.id)
+        select(Quiz).where(Quiz.id == quiz_id, Quiz.owner_id == owner_id)
     )
     if quiz is None:
         raise ApiError(
@@ -27,7 +28,7 @@ def owned_quiz(quiz_id: int, professor: ProfessorUser, session: DbSession) -> Qu
     return quiz
 
 
-def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
+def training_profile_quiz(owner_id: int, session: Session) -> Quiz:
     quiz = session.scalar(
         select(Quiz)
         .join(TrainingQuizProfile, TrainingQuizProfile.quiz_id == Quiz.id)
@@ -71,15 +72,15 @@ def training_profile_quiz(owner_id: int, session: DbSession) -> Quiz:
 
 def owned_quiz_session(
     session_id: int,
-    professor: ProfessorUser,
-    session: DbSession,
+    owner_id: int,
+    session: Session,
 ) -> tuple[QuizSession, Quiz]:
     row = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(
             QuizSession.id == session_id,
-            Quiz.owner_id == professor.id,
+            Quiz.owner_id == owner_id,
         )
     ).first()
     if row is None:
@@ -89,3 +90,40 @@ def owned_quiz_session(
             "Session de quiz introuvable",
         )
     return row
+
+
+def owned_class_session(
+    session_id: int, owner_id: int, session: Session
+) -> tuple[QuizSession, Quiz]:
+    """A session the class session routes may control: not one student's make-up quiz.
+
+    A make-up's children follow the make-up session's own state machine;
+    changing one directly would desynchronise it, and cancelling one would
+    strand its student's selection.
+    """
+    quiz_session, quiz = owned_quiz_session(session_id, owner_id, session)
+    if quiz_session.makeup_session_id is not None:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_IS_MAKEUP,
+            "Cette session se pilote depuis sa session de rattrapage",
+        )
+    return quiz_session, quiz
+
+
+def owned_makeup_session(
+    session_id: int, owner_id: int, session: Session
+) -> MakeupSession:
+    makeup = session.scalar(
+        select(MakeupSession).where(
+            MakeupSession.id == session_id,
+            MakeupSession.owner_id == owner_id,
+        )
+    )
+    if makeup is None:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.MAKEUP_NOT_FOUND,
+            "Session de rattrapage introuvable",
+        )
+    return makeup

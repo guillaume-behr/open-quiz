@@ -34,17 +34,14 @@ from app.models import (
     QuizParticipant,
     QuizSession,
 )
-from app.routers.auth import (
-    REFRESH_COOKIE,
-    REFRESH_PROOF_HEADER,
-    TWO_FACTOR_TRUST_COOKIE,
-)
 from app.services import maintenance
 from app.services.participants import participant_token_hash
 from app.services.question_assignments import (
     current_question_id,
     last_answered_question_id,
 )
+from app.services.refresh_sessions import REFRESH_COOKIE, REFRESH_PROOF_HEADER
+from app.services.two_factor import TWO_FACTOR_TRUST_COOKIE
 
 JWT_SECRET = "test-secret-that-is-at-least-32-bytes-long"
 
@@ -72,8 +69,8 @@ VALID_PNG = b64decode(
 TEST_CLIENT_BACKEND_OPTIONS = {"use_uvloop": True} if find_spec("uvloop") else {}
 
 
-# install-dev.sh creates the role and database of this default; keep both in
-# step when changing it.
+# scripts/install-dev.sh creates the role and database of this default; keep
+# both in step when changing it.
 # Defaulted by conftest.py.
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
 

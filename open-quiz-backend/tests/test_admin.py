@@ -23,7 +23,7 @@ from app.models import (
     StudentClass,
     User,
 )
-from app.routers.auth import REFRESH_COOKIE, REFRESH_PROOF_HEADER
+from app.services.refresh_sessions import REFRESH_COOKIE, REFRESH_PROOF_HEADER
 
 from support import (
     ADMIN_PASSWORD,

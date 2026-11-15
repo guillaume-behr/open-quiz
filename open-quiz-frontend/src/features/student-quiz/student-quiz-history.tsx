@@ -137,8 +137,8 @@ export function StudentQuizHistory({ token }: { token: string }) {
                                             {t("grades-not-published")}
                                         </span>
                                     )}
-                                    {item.score !== null &&
-                                        item.maximum_score !== null && (
+                                    {item.score != null &&
+                                        item.maximum_score != null && (
                                             <span className="mt-2 flex flex-wrap items-center gap-2">
                                                 <Grade
                                                     className="font-bold text-primary"

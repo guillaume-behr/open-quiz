@@ -90,10 +90,10 @@ export default defineConfig({
             thresholds: {
                 // A floor under the whole frontend, to raise as tests are
                 // added: never lower it.
-                lines: 32,
-                statements: 32,
-                functions: 25,
-                branches: 23,
+                lines: 42,
+                statements: 42,
+                functions: 33,
+                branches: 33,
                 // The API client, live updates, hooks and the exam logic
                 // stay covered on their own.
                 ...Object.fromEntries(

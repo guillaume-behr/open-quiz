@@ -18,26 +18,10 @@ Consultez aussi le [README principal](../README.md), le
 
 ## 💻 Développement local
 
-Cette procédure lance le serveur Vite pour modifier et tester l’interface. Elle
-ne remplace pas l’installation Docker Compose recommandée pour utiliser une
-instance.
-
-### Prérequis
-
-- Node.js 24 ;
-- pnpm 11.15.1 ;
-- le backend lancé sur `http://localhost:8000` pour utiliser l’application
-  manuellement.
-
-Depuis le dossier `open-quiz-frontend` :
-
-```shell
-pnpm install --frozen-lockfile
-pnpm dev
-```
-
-Ouvrez `http://localhost:5173`. Vite transmet les requêtes HTTP et WebSocket
-commençant par `/api` au backend local.
+Le [guide de contribution](../CONTRIBUTING.md#-préparer-lenvironnement-de-développement)
+décrit la préparation de l’environnement, backend compris. Le serveur Vite
+(`pnpm dev`) répond sur `http://localhost:5173` et transmet au backend local
+les requêtes HTTP et WebSocket commençant par `/api`.
 
 ## ⚙️ Configuration
 
@@ -72,6 +56,8 @@ Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 | `pnpm test:coverage`       | `pnpm test` avec la couverture et ses seuils                  |
 | `pnpm typecheck`           | vérifie `src/`, les tests e2e et la configuration Vite        |
 | `pnpm check:bundle-size`   | contrôle la taille du bundle initial, après `pnpm build`      |
+| `pnpm generate:api-types`  | régénère `src/api/openapi.ts` depuis `src/api/openapi.json`   |
+| `pnpm check:api-types`     | vérifie que `src/api/openapi.ts` suit `src/api/openapi.json`  |
 | `pnpm test:e2e`            | lance les parcours Playwright dans Chromium                   |
 | `pnpm test:e2e:ui`         | ouvre l’interface Playwright                                  |
 | `pnpm test:e2e:production` | smoke tests contre les conteneurs (`docker compose up`)       |

@@ -1,15 +1,11 @@
-import type { QuizSession } from "@/api/types"
-
-type SessionStatus = QuizSession["status"]
-
-const ACTIVE_SESSION_STATUSES = new Set<SessionStatus>([
+const ACTIVE_SESSION_STATUSES = new Set<string>([
     "waiting",
     "in_progress",
     "paused",
 ])
 
 export function isActiveSessionStatus(
-    status: SessionStatus | null | undefined
+    status: string | null | undefined
 ): boolean {
     return (
         status !== null &&

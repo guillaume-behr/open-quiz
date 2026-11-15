@@ -283,7 +283,7 @@ class Quiz(Base):
     allow_previous_questions: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_answer_review: Mapped[bool] = mapped_column(Boolean, default=True)
     # Whether students see the correction, as provisional, before the grades
-    # are published (app/routers/quizzes/results.py, history_item).
+    # are published (app/responses/student_history.py, history_item).
     show_provisional_grades: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true"
     )

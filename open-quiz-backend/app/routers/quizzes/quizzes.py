@@ -46,6 +46,7 @@ from app.records.quiz_sessions import (
     delete_quiz_session_records,
 )
 from app.records.quizzes import (
+    owned_class_session,
     owned_quiz,
     owned_quiz_session,
 )
@@ -191,25 +192,6 @@ def create_quiz(
     return quiz_response(quiz, session)
 
 
-def owned_class_session(
-    session_id: int, professor: ProfessorUser, session: DbSession
-) -> tuple[QuizSession, Quiz]:
-    """A session these routes may control: not one student's make-up quiz.
-
-    A make-up's children follow the make-up session's own state machine;
-    changing one directly would desynchronise it, and cancelling one would
-    strand its student's selection.
-    """
-    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
-    if quiz_session.makeup_session_id is not None:
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.QUIZ_SESSION_IS_MAKEUP,
-            "Cette session se pilote depuis sa session de rattrapage",
-        )
-    return quiz_session, quiz
-
-
 # This route and the next are kept on purpose: the interface follows sessions
 # on their WebSocket feeds (live.py), and these read-only views stay as a
 # polling fallback for API clients and the backend tests.
@@ -230,7 +212,7 @@ def get_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    quiz_session, quiz = owned_quiz_session(session_id, professor.id, session)
     return session_response(quiz_session, quiz, session)
 
 
@@ -243,7 +225,7 @@ def delete_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    quiz_session, _ = owned_quiz_session(session_id, professor, session)
+    quiz_session, _ = owned_quiz_session(session_id, professor.id, session)
     if quiz_session.status != SessionStatus.FINISHED:
         raise ApiError(
             status.HTTP_409_CONFLICT,
@@ -269,7 +251,7 @@ def start_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz_session, quiz = owned_class_session(session_id, professor, session)
+    quiz_session, quiz = owned_class_session(session_id, professor.id, session)
     if quiz_session.status == SessionStatus.WAITING:
         started_at = datetime.now(UTC)
         transition = session.execute(
@@ -319,7 +301,7 @@ def delete_quiz(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    quiz = owned_quiz(quiz_id, professor, session)
+    quiz = owned_quiz(quiz_id, professor.id, session)
     active_session_id = session.scalar(
         select(QuizSession.id)
         .where(
@@ -407,7 +389,7 @@ def pause_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz_session, quiz = owned_class_session(session_id, professor, session)
+    quiz_session, quiz = owned_class_session(session_id, professor.id, session)
     expire_quiz_session(quiz_session, quiz, session)
     if quiz_session.status != SessionStatus.IN_PROGRESS:
         raise not_running_error()
@@ -440,7 +422,7 @@ def resume_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz_session, quiz = owned_class_session(session_id, professor, session)
+    quiz_session, quiz = owned_class_session(session_id, professor.id, session)
     if quiz_session.status != SessionStatus.PAUSED or quiz_session.paused_at is None:
         raise not_paused_error()
     transition = session.execute(
@@ -480,7 +462,7 @@ def cancel_quiz_session(
     professor: ProfessorUser,
     session: DbSession,
 ) -> None:
-    quiz_session, quiz = owned_class_session(session_id, professor, session)
+    quiz_session, quiz = owned_class_session(session_id, professor.id, session)
     expire_quiz_session(quiz_session, quiz, session)
     # Answers lock this row (lock_for_participant_write), so holding its
     # lock until the delete commits means no answer can land between the
@@ -524,7 +506,7 @@ def preview_quiz(
     professor: ProfessorUser,
     session: DbSession,
 ) -> list[QuestionResponse]:
-    quiz = owned_quiz(quiz_id, professor, session)
+    quiz = owned_quiz(quiz_id, professor.id, session)
     if quiz.mode != QuizMode.EXAM:
         raise ApiError(
             status.HTTP_404_NOT_FOUND, ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"
@@ -542,7 +524,7 @@ def update_quiz(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizResponse:
-    quiz = owned_quiz(quiz_id, professor, session)
+    quiz = owned_quiz(quiz_id, professor.id, session)
     if quiz.mode != QuizMode.EXAM:
         raise ApiError(
             status.HTTP_404_NOT_FOUND, ErrorCode.QUIZ_NOT_FOUND, "Quiz introuvable"
@@ -597,7 +579,7 @@ def launch_quiz(
     professor: ProfessorUser,
     session: DbSession,
 ) -> QuizSessionResponse:
-    quiz = owned_quiz(quiz_id, professor, session)
+    quiz = owned_quiz(quiz_id, professor.id, session)
     if quiz.mode != QuizMode.EXAM:
         raise ApiError(
             status.HTTP_409_CONFLICT,
