@@ -13,7 +13,8 @@ from app.core import auth_guards, security
 from app.core.security import create_access_token
 from app.models import RefreshSession, StudentAccount, User
 from app.routers import auth, student_auth
-from app.routers.auth import REFRESH_COOKIE
+from app.services import refresh_sessions
+from app.services.refresh_sessions import REFRESH_COOKIE
 
 from support import (
     ADMIN_PASSWORD,
@@ -68,7 +69,9 @@ def test_a_session_evicted_by_the_cap_is_not_reported_as_reuse(
             )
         newest = client.cookies.get(REFRESH_COOKIE)
         events: list[str] = []
-        monkeypatch.setattr(auth, "audit_event", lambda name, **_: events.append(name))
+        monkeypatch.setattr(
+            refresh_sessions, "audit_event", lambda name, **_: events.append(name)
+        )
 
         client.cookies.clear()
         client.cookies.set(REFRESH_COOKIE, oldest, path="/api/auth")
@@ -91,7 +94,9 @@ def test_a_session_evicted_while_it_is_refreshed_gets_a_plain_401(
     with make_client(settings_for(tmp_path / "evicted-race")) as client:
         complete_first_login(client, "root-admin", ADMIN_PASSWORD)
         events: list[str] = []
-        monkeypatch.setattr(auth, "audit_event", lambda name, **_: events.append(name))
+        monkeypatch.setattr(
+            refresh_sessions, "audit_event", lambda name, **_: events.append(name)
+        )
         presented = auth.presented_refresh_session
 
         def evicted_meanwhile(request: Any, session: Any, now: int) -> Any:
