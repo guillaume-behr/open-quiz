@@ -96,8 +96,6 @@ def sessions_left_on_revocation(
     password the student may sign in again and rejoin, so theirs stays open.
     """
     session_ids = revoke_student_participations(membership_id, session)
-    if not session_ids:
-        return []
     left = [
         (quiz_session, quiz)
         for quiz_session, quiz in session.execute(
