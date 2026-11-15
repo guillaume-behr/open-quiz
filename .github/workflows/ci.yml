@@ -125,6 +125,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
+      # The API types follow the schema the backend exports (its tests check
+      # that schema against the routes).
+      - run: pnpm check:api-types
       # The locale and error-code checks, then the unit tests with their
       # coverage thresholds (vite.config.ts).
       - run: pnpm test:coverage

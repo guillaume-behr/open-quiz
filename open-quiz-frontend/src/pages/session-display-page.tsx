@@ -16,7 +16,6 @@ const statusKeys: Record<SessionDisplayPayload["status"], string> = {
     in_progress: "quiz-started",
     paused: "quiz-paused",
     finished: "quiz-finished",
-    cancelled: "quiz-cancelled",
 }
 
 export function SessionDisplayPage() {

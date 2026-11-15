@@ -72,6 +72,8 @@ Vite. `VITE_API_URL` est intégré au bundle client : comme toute variable
 | `pnpm test:coverage`       | `pnpm test` avec la couverture et ses seuils                  |
 | `pnpm typecheck`           | vérifie `src/`, les tests e2e et la configuration Vite        |
 | `pnpm check:bundle-size`   | contrôle la taille du bundle initial, après `pnpm build`      |
+| `pnpm generate:api-types`  | régénère `src/api/openapi.ts` depuis `src/api/openapi.json`   |
+| `pnpm check:api-types`     | vérifie que `src/api/openapi.ts` suit `src/api/openapi.json`  |
 | `pnpm test:e2e`            | lance les parcours Playwright dans Chromium                   |
 | `pnpm test:e2e:ui`         | ouvre l’interface Playwright                                  |
 | `pnpm test:e2e:production` | smoke tests contre les conteneurs (`docker compose up`)       |

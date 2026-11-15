@@ -179,3 +179,27 @@ def test_container_network_smoke_checks(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(smoke, "check_websocket_proxy", websocket_check)
     smoke.main()
     assert calls == ["http", "websocket"]
+
+
+def test_the_frontend_has_the_current_openapi_schema() -> None:
+    from scripts.export_openapi import SCHEMA_FILE, openapi_schema
+
+    assert SCHEMA_FILE.read_text(encoding="utf-8") == openapi_schema(), (
+        "The routes changed: run `uv run python -m scripts.export_openapi`, "
+        "then `pnpm generate:api-types` in open-quiz-frontend"
+    )
+
+
+def test_export_openapi_writes_then_checks_the_schema(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import scripts.export_openapi as export
+
+    schema_file = tmp_path / "openapi.json"
+    monkeypatch.setattr(export, "SCHEMA_FILE", schema_file)
+
+    assert export.main(["--check"]) == 1
+    assert "out of date" in capsys.readouterr().err
+    assert export.main([]) == 0
+    assert json.loads(schema_file.read_text(encoding="utf-8"))["paths"]
+    assert export.main(["--check"]) == 0

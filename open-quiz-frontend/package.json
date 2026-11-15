@@ -10,8 +10,10 @@
     "scripts": {
         "dev": "node scripts/copy-pyodide.mjs && vite",
         "build": "node scripts/copy-pyodide.mjs && tsc -b && vite build",
+        "check:api-types": "openapi-typescript src/api/openapi.json -o src/api/openapi.ts --check",
         "check:bundle-size": "node scripts/check-bundle-size.mjs",
         "lint": "eslint . --max-warnings 0",
+        "generate:api-types": "openapi-typescript src/api/openapi.json -o src/api/openapi.ts",
         "format": "prettier --write \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"public/locales/*/translation.json\" \"*.{js,json,ts}\" \"index.html\"",
         "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"public/locales/*/translation.json\" \"*.{js,json,ts}\" \"index.html\"",
         "test:coverage": "pnpm test --coverage",
@@ -59,6 +61,7 @@
         "eslint-plugin-react-refresh": "^0.5.2",
         "globals": "^17",
         "jsdom": "^31.0.0",
+        "openapi-typescript": "^7.13.0",
         "prettier": "^3.8.3",
         "prettier-plugin-tailwindcss": "^0.8.0",
         "pyodide": "314.0.7",
