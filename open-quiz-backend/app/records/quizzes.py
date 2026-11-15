@@ -1,4 +1,4 @@
-"""Load a teacher's quizzes and sessions, refusing those of anyone else."""
+"""Load a teacher's quizzes, sessions and make-ups, refusing anyone else's."""
 
 from fastapi import (
     status,
@@ -10,6 +10,7 @@ from app.core.dependencies import DbSession, ProfessorUser
 from app.core.errors import ApiError, ErrorCode
 from app.enums import QuizMode
 from app.models import (
+    MakeupSession,
     Quiz,
     QuizSession,
     TrainingQuizProfile,
@@ -89,3 +90,40 @@ def owned_quiz_session(
             "Session de quiz introuvable",
         )
     return row
+
+
+def owned_class_session(
+    session_id: int, professor: ProfessorUser, session: DbSession
+) -> tuple[QuizSession, Quiz]:
+    """A session the class session routes may control: not one student's make-up quiz.
+
+    A make-up's children follow the make-up session's own state machine;
+    changing one directly would desynchronise it, and cancelling one would
+    strand its student's selection.
+    """
+    quiz_session, quiz = owned_quiz_session(session_id, professor, session)
+    if quiz_session.makeup_session_id is not None:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_IS_MAKEUP,
+            "Cette session se pilote depuis sa session de rattrapage",
+        )
+    return quiz_session, quiz
+
+
+def owned_makeup_session(
+    session_id: int, professor: ProfessorUser, session: DbSession
+) -> MakeupSession:
+    makeup = session.scalar(
+        select(MakeupSession).where(
+            MakeupSession.id == session_id,
+            MakeupSession.owner_id == professor.id,
+        )
+    )
+    if makeup is None:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.MAKEUP_NOT_FOUND,
+            "Session de rattrapage introuvable",
+        )
+    return makeup

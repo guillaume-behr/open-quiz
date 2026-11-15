@@ -49,6 +49,7 @@ from app.models import (
     StudentAccount,
     StudentClass,
 )
+from app.records.quizzes import owned_makeup_session
 from app.records.student_accounts import owned_class
 from app.responses.quizzes import quiz_responses
 from app.responses.student_sessions import student_state_response
@@ -107,24 +108,6 @@ MAKEUP_TRANSITIONS: dict[
 }
 # Cancelling deletes the make-up session instead of changing its status.
 CANCELLABLE_STATUSES = (SessionStatus.WAITING,)
-
-
-def owned_makeup_session(
-    session_id: int, professor: ProfessorUser, session: DbSession
-) -> MakeupSession:
-    makeup = session.scalar(
-        select(MakeupSession).where(
-            MakeupSession.id == session_id,
-            MakeupSession.owner_id == professor.id,
-        )
-    )
-    if makeup is None:
-        raise ApiError(
-            status.HTTP_404_NOT_FOUND,
-            ErrorCode.MAKEUP_NOT_FOUND,
-            "Session de rattrapage introuvable",
-        )
-    return makeup
 
 
 # Kept on purpose: the interface follows make-up sessions on their WebSocket

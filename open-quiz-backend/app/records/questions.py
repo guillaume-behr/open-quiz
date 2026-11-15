@@ -244,3 +244,38 @@ def load_question_records(
     ):
         choices_by_question[choice.question_id].append(choice)
     return questions_by_id, choices_by_question
+
+
+def owned_question(
+    question_id: int,
+    professor: ProfessorUser,
+    session: DbSession,
+    *,
+    for_update: bool = False,
+) -> Question:
+    """One of the professor's questions, locked until commit if asked.
+
+    A detached question belongs to no bank, so it is never found here.
+    """
+    statement = (
+        select(Question)
+        .join(QuestionBank, QuestionBank.id == Question.question_bank_id)
+        .where(
+            Question.id == question_id,
+            QuestionBank.owner_id == professor.id,
+        )
+    )
+    if for_update:
+        # populate_existing: a question read earlier in the request is
+        # reloaded under the lock rather than kept as it was read.
+        statement = statement.with_for_update(of=Question).execution_options(
+            populate_existing=True
+        )
+    question = session.scalar(statement)
+    if question is None:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.QUESTION_NOT_FOUND,
+            "Question introuvable",
+        )
+    return question
