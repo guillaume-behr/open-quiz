@@ -100,6 +100,22 @@ class StudentQuizAnswer(BaseModel):
     written_answer: str | None = Field(default=None, max_length=20000)
 
 
+class StudentQuizAnswerSave(BaseModel):
+    """The answer on screen, saved without moving on.
+
+    Unlike StudentQuizAnswer, an empty answer is allowed: it removes the
+    answer the student cleared, so the server keeps what the screen shows.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    question_id: int
+    selected_choice_ids: list[StudentChoiceToken] | None = Field(
+        default=None, max_length=12
+    )
+    written_answer: str | None = Field(default=None, max_length=20000)
+
+
 class StudentQuizSkip(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

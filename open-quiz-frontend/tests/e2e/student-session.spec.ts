@@ -954,58 +954,34 @@ const writtenExamState = (
     ),
 })
 
-test("student keeps a written answer when stepping back to an earlier question", async ({
+test("leaving a question saves the answer on screen, which it shows again", async ({
     page,
 }) => {
-    await page.addInitScript(() => {
-        Object.defineProperty(document, "fullscreenElement", {
-            configurable: true,
-            get: () => document.documentElement,
-        })
-    })
-    await page.routeWebSocket(
-        /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
-        (socket) => socket.onMessage(() => {})
-    )
-    await page.route("**/api/quizzes/join", async (route) => {
-        await route.fulfill({
-            json: {
-                ...writtenExamState(2, null),
-                participant_token: "participant-token",
-            },
-        })
-    })
-    await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
-        await route.fulfill({ json: writtenExamState(2, null) })
-    })
-    await page.route(
-        "**/api/quizzes/student/sessions/ABCD/navigate",
-        async (route) => {
-            const { question_number: target } = route
-                .request()
-                .postDataJSON() as { question_number: number }
-            await route.fulfill({
-                json:
-                    target === 1
-                        ? writtenExamState(1, "Chlorophyll captures light.")
-                        : writtenExamState(2, null),
-            })
-        }
-    )
+    const saves: unknown[] = []
+    await mockWrittenExam(page, "Chlorophyll captures light.", saves)
 
     await joinExamViaDashboard(page, "ABCD")
     const writtenAnswer = page.getByLabel("Written answer")
     await writtenAnswer.fill("An essay that is still being written")
 
-    // Reading an earlier question shows the answer recorded for it.
+    // Reading an earlier question first saves the essay in progress, then
+    // shows the answer recorded for that question.
     await page.getByRole("button", { name: "Question 1 on 2" }).click()
     await expect(writtenAnswer).toHaveValue("Chlorophyll captures light.")
+    expect(saves).toEqual([
+        {
+            question_id: 43,
+            written_answer: "An essay that is still being written",
+        },
+    ])
 
-    // Coming back must not throw away the essay left in progress.
+    // Coming back shows the essay as the server holds it.
     await page.getByRole("button", { name: "Question 2 on 2" }).click()
     await expect(writtenAnswer).toHaveValue(
         "An essay that is still being written"
     )
+    // Nothing changed on the first question: nothing more was sent.
+    expect(saves).toHaveLength(1)
 })
 
 test("a submitted written answer replaces the draft kept for its question", async ({
@@ -1188,7 +1164,21 @@ test("the countdown follows the server's clock, not the computer's", async ({
     await expect(page.getByRole("timer")).toHaveText(/^(10:00|9:5\d)$/)
 })
 
-async function mockWrittenExam(page: Page, recordedFirstAnswer: string | null) {
+/**
+ * A two-question written exam, opened on the second question. `/save`
+ * records what it is sent, in `saves` and in the answers the next
+ * navigation returns.
+ */
+async function mockWrittenExam(
+    page: Page,
+    recordedFirstAnswer: string | null,
+    saves: unknown[] = []
+) {
+    const recorded: Record<number, string | null> = {
+        1: recordedFirstAnswer,
+        2: null,
+    }
+    let current = 2
     await page.addInitScript(() => {
         Object.defineProperty(document, "fullscreenElement", {
             configurable: true,
@@ -1216,11 +1206,22 @@ async function mockWrittenExam(page: Page, recordedFirstAnswer: string | null) {
             const { question_number: target } = route
                 .request()
                 .postDataJSON() as { question_number: number }
+            current = target
             await route.fulfill({
-                json:
-                    target === 1
-                        ? writtenExamState(1, recordedFirstAnswer)
-                        : writtenExamState(2, null),
+                json: writtenExamState(target, recorded[target] ?? null),
+            })
+        }
+    )
+    await page.route(
+        "**/api/quizzes/student/sessions/ABCD/save",
+        async (route) => {
+            const body = route.request().postDataJSON() as {
+                written_answer: string
+            }
+            saves.push(body)
+            recorded[current] = body.written_answer.trim() || null
+            await route.fulfill({
+                json: writtenExamState(current, recorded[current] ?? null),
             })
         }
     )
@@ -1254,8 +1255,11 @@ test("an unsubmitted answer survives a reload of the exam page", async ({
     )
 })
 
-test("an answer the student cleared stays cleared", async ({ page }) => {
-    await mockWrittenExam(page, "Chlorophyll captures light.")
+test("an answer the student cleared is cleared on the server too", async ({
+    page,
+}) => {
+    const saves: unknown[] = []
+    await mockWrittenExam(page, "Chlorophyll captures light.", saves)
     await joinExamViaDashboard(page, "ABCD")
     const writtenAnswer = page.getByLabel("Written answer")
 
@@ -1265,7 +1269,7 @@ test("an answer the student cleared stays cleared", async ({ page }) => {
     await page.getByRole("button", { name: "Question 2 on 2" }).click()
     await page.getByRole("button", { name: "Question 1 on 2" }).click()
 
-    // The empty draft wins over the answer the server still holds.
+    expect(saves).toEqual([{ question_id: 42, written_answer: "" }])
     await expect(writtenAnswer).toHaveValue("")
 })
 

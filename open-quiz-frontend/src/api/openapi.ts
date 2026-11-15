@@ -930,6 +930,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/quizzes/student/sessions/{join_code}/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Student Answer
+         * @description Record the answer on screen for the current question, without moving on.
+         *
+         *     In an exam the student may go back in, the server holds what the screen
+         *     shows: a change to a question, or what is entered when leaving it, is
+         *     saved as it is. An empty answer removes the one recorded; the question
+         *     then stays within reach as a skipped one.
+         */
+        post: operations["save_student_answer_api_quizzes_student_sessions__join_code__save_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/quizzes/student/sessions/{join_code}/skip": {
         parameters: {
             query?: never;
@@ -2357,6 +2382,21 @@ export interface components {
         };
         /** StudentQuizAnswer */
         StudentQuizAnswer: {
+            /** Question Id */
+            question_id: number;
+            /** Selected Choice Ids */
+            selected_choice_ids?: string[] | null;
+            /** Written Answer */
+            written_answer?: string | null;
+        };
+        /**
+         * StudentQuizAnswerSave
+         * @description The answer on screen, saved without moving on.
+         *
+         *     Unlike StudentQuizAnswer, an empty answer is allowed: it removes the
+         *     answer the student cleared, so the server keeps what the screen shows.
+         */
+        StudentQuizAnswerSave: {
             /** Question Id */
             question_id: number;
             /** Selected Choice Ids */
@@ -4477,6 +4517,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StudentQuizAnswer"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentQuizStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_student_answer_api_quizzes_student_sessions__join_code__save_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Quiz-Token"?: string | null;
+            };
+            path: {
+                join_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentQuizAnswerSave"];
             };
         };
         responses: {

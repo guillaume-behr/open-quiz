@@ -12,12 +12,13 @@ from fastapi import APIRouter, Request, status
 from app.core.dependencies import DbSession
 from app.core.errors import ApiError, ErrorCode
 from app.domain.choice_tokens import ChoiceTokens
-from app.enums import QuizMode, SessionStatus
+from app.enums import AnswerMode, QuizMode, SessionStatus
 from app.live.updates import publish_quiz_update
 from app.responses.student_sessions import student_state_response
 from app.routers.quizzes.participant_dependencies import CurrentParticipant
 from app.schemas.student_quizzes import (
     StudentQuizAnswer,
+    StudentQuizAnswerSave,
     StudentQuizNavigation,
     StudentQuizSkip,
     StudentQuizStateResponse,
@@ -25,6 +26,7 @@ from app.schemas.student_quizzes import (
 from app.services.answers import (
     advance_participant,
     answered_question,
+    clear_answer,
     require_answer_accepted,
     require_answer_review_offered,
     require_reviewable_participant,
@@ -34,6 +36,7 @@ from app.services.answers import (
 )
 from app.services.question_assignments import (
     accessible_question_positions,
+    current_question_id,
     session_question_ids,
 )
 from app.services.session_lifecycle import (
@@ -113,6 +116,90 @@ def submit_student_answer(
     if feedback is not None:
         state.training_feedback = feedback
     return state
+
+
+@router.post(
+    "/student/sessions/{join_code}/save",
+    response_model=StudentQuizStateResponse,
+)
+def save_student_answer(
+    payload: StudentQuizAnswerSave,
+    context: CurrentParticipant,
+    request: Request,
+    session: DbSession,
+) -> StudentQuizStateResponse:
+    """Record the answer on screen for the current question, without moving on.
+
+    In an exam the student may go back in, the server holds what the screen
+    shows: a change to a question, or what is entered when leaving it, is
+    saved as it is. An empty answer removes the one recorded; the question
+    then stays within reach as a skipped one.
+    """
+    quiz_session, quiz, participant = (
+        context.session,
+        context.quiz,
+        context.participant,
+    )
+    expire_quiz_session(quiz_session, quiz, session)
+    lock_for_participant_write(quiz_session, participant, session)
+    require_answer_accepted(quiz_session, participant, session)
+    if quiz.mode != QuizMode.EXAM or not previous_questions_allowed(quiz_session, quiz):
+        # A training gives feedback on each answer, and an exam without going
+        # back only takes an answer as the student moves on.
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.ANSWER_SAVE_UNAVAILABLE,
+            "La réponse ne peut pas être enregistrée sans être validée",
+        )
+    if quiz_session.status != SessionStatus.IN_PROGRESS:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_NOT_ACCEPTING_ANSWERS,
+            "Le quiz n’accepte pas de réponses actuellement",
+        )
+    question_id = current_question_id(quiz_session, participant, session)
+    if question_id is None:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_NO_CURRENT_QUESTION,
+            "Aucune question en cours",
+        )
+    if payload.question_id != question_id:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.ANSWER_QUESTION_MISMATCH,
+            "La réponse concerne une autre question que la question en cours",
+        )
+    question, choices, _ = answered_question(quiz_session, participant, session)
+    is_blank = (
+        not (payload.written_answer or "").strip()
+        if question.answer_mode == AnswerMode.WRITTEN
+        else not payload.selected_choice_ids
+    )
+    if is_blank:
+        clear_answer(quiz_session, participant, question.id, session)
+    else:
+        answer_data, _ = validated_answer(
+            StudentQuizAnswer(
+                question_id=payload.question_id,
+                selected_choice_ids=payload.selected_choice_ids or None,
+                written_answer=payload.written_answer,
+            ),
+            question,
+            choices,
+            quiz,
+            ChoiceTokens(session, quiz_session, participant),
+        )
+        store_answer(quiz_session, participant, question.id, answer_data, session)
+    session.commit()
+    publish_quiz_update(
+        request,
+        quiz_session,
+        session,
+        makeup_sessions_changed=False,
+        participant=participant,
+    )
+    return student_state_response(quiz_session, quiz, participant, session)
 
 
 @router.post(

@@ -32,6 +32,8 @@ type StudentQuizViewProps = {
     onNavigate: (questionNumber: number) => void
     onSubmitAnswer: (event: FormEvent<HTMLFormElement>) => void
     onSkipQuestion: () => void
+    /** Without it, every question offers to submit its answer. */
+    onNextQuestion?: () => void
     onBackToReview: () => void
     onSubmitQuiz: () => void
     onReturnHome: () => void
@@ -55,6 +57,7 @@ export function StudentQuizView({
     onNavigate,
     onSubmitAnswer,
     onSkipQuestion,
+    onNextQuestion,
     onBackToReview,
     onSubmitQuiz,
     onReturnHome,
@@ -149,6 +152,7 @@ export function StudentQuizView({
                                         ? onSkipQuestion
                                         : undefined
                                 }
+                                onNext={onNextQuestion}
                             />
                         </>
                     )}

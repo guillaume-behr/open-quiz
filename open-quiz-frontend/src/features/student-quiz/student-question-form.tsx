@@ -28,6 +28,11 @@ type StudentQuestionFormProps = {
     onSubmit: (event: FormEvent<HTMLFormElement>) => void
     /** Skips the question; without it, no skip button is offered. */
     onSkip?: () => void
+    /**
+     * Moves on from a question already handed in, whose answer is saved as
+     * it changes: the main button then reads "Next question".
+     */
+    onNext?: () => void
 }
 
 export function StudentQuestionForm({
@@ -44,6 +49,7 @@ export function StudentQuestionForm({
     onNavigate,
     onSubmit,
     onSkip,
+    onNext,
 }: StudentQuestionFormProps) {
     const { t } = useTranslation()
     const questionNumber = session.question_number ?? 1
@@ -129,7 +135,7 @@ export function StudentQuestionForm({
                 className="flex min-w-0 items-center justify-between gap-3 border-t pt-5"
                 dir="ltr"
             >
-                {onSkip ? (
+                {onSkip && !onNext ? (
                     <Button
                         className="shrink-0"
                         size="lg"
@@ -145,23 +151,39 @@ export function StudentQuestionForm({
                     // Keeps the submit button on the right.
                     <span />
                 )}
-                <Button
-                    className="shrink-0 sm:min-w-64"
-                    size="lg"
-                    type="submit"
-                    dir="auto"
-                    disabled={
-                        isBusy ||
-                        (question.answer_mode === "written"
-                            ? writtenAnswer.trim().length === 0
-                            : selectedChoiceIds.length === 0)
-                    }
-                >
-                    {isBusy && (
-                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                    )}
-                    {t("student-submit-answer")}
-                </Button>
+                {onNext ? (
+                    <Button
+                        className="shrink-0 sm:min-w-64"
+                        size="lg"
+                        type="button"
+                        dir="auto"
+                        disabled={isBusy}
+                        onClick={onNext}
+                    >
+                        {isBusy && (
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                        )}
+                        {t("student-next-question")}
+                    </Button>
+                ) : (
+                    <Button
+                        className="shrink-0 sm:min-w-64"
+                        size="lg"
+                        type="submit"
+                        dir="auto"
+                        disabled={
+                            isBusy ||
+                            (question.answer_mode === "written"
+                                ? writtenAnswer.trim().length === 0
+                                : selectedChoiceIds.length === 0)
+                        }
+                    >
+                        {isBusy && (
+                            <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                        )}
+                        {t("student-submit-answer")}
+                    </Button>
+                )}
             </div>
             {session.allow_previous_questions && (
                 <QuestionNavigation

@@ -44,6 +44,15 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- In an exam the student may go back in, the server holds what the student
+  sees: leaving a question (numbered bar, “Skip the question”, back to the
+  summary) first saves the answer on screen, and a change to a question
+  already answered or skipped is saved by itself, without submitting it
+  again. Such a question offers “Next question” instead of “Submit my
+  answer”, except the last one. Clearing an answer removes it; the question
+  then counts as skipped. Before, an answer entered but not submitted stayed
+  in the browser only, and was lost when time ran out while the student was
+  on another question.
 - The numbered question navigation sits in a bar centred at the bottom of
   the screen, outside the question card. It numbers every question, ten at a
   time with arrows beyond that, and turns the page by itself with a slide:
