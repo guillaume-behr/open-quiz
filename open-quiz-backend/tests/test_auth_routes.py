@@ -55,14 +55,11 @@ from app.models import (
     TwoFactorCredential,
     User,
 )
-from app.routers.auth import (
-    REFRESH_COOKIE,
-    REFRESH_PROOF_HEADER,
-    TWO_FACTOR_TRUST_COOKIE,
-)
 from app.schemas.accounts import LoginRequest
 from app.schemas.classes import StudentLoginRequest
 from app.services import maintenance, security_state
+from app.services.refresh_sessions import REFRESH_COOKIE, REFRESH_PROOF_HEADER
+from app.services.two_factor import TWO_FACTOR_TRUST_COOKIE
 from scripts.reset_two_factor import reset
 
 from support import (

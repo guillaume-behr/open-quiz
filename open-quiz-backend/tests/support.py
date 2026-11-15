@@ -34,17 +34,14 @@ from app.models import (
     QuizParticipant,
     QuizSession,
 )
-from app.routers.auth import (
-    REFRESH_COOKIE,
-    REFRESH_PROOF_HEADER,
-    TWO_FACTOR_TRUST_COOKIE,
-)
 from app.services import maintenance
 from app.services.participants import participant_token_hash
 from app.services.question_assignments import (
     current_question_id,
     last_answered_question_id,
 )
+from app.services.refresh_sessions import REFRESH_COOKIE, REFRESH_PROOF_HEADER
+from app.services.two_factor import TWO_FACTOR_TRUST_COOKIE
 
 JWT_SECRET = "test-secret-that-is-at-least-32-bytes-long"
 
