@@ -1,6 +1,6 @@
 import type { TwoFactorChallenge } from "@/api/types"
-import { DashboardLogin } from "@/components/forms/dashboard-login"
-import { TwoFactorForm } from "@/components/forms/two-factor-form"
+import { DashboardLogin } from "@/features/auth/dashboard-login"
+import { TwoFactorForm } from "@/features/auth/two-factor-form"
 
 type DashboardAuthenticationProps = {
     challenge: TwoFactorChallenge | null

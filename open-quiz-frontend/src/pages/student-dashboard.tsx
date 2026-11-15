@@ -9,12 +9,12 @@ import {
 } from "@/api/student-auth"
 import { joinQuiz } from "@/api/quizzes"
 import type { StudentAccount } from "@/api/types"
-import { StudentLogin } from "@/components/forms/student-login"
-import { JoinQuizForm } from "@/components/forms/join-quiz-form"
+import { StudentLogin } from "@/features/auth/student-login"
+import { JoinQuizForm } from "@/features/student-quiz/join-quiz-form"
 import {
     STUDENT_ACCESS_CARD_CLASS_NAME,
     StudentAccessHeader,
-} from "@/components/forms/student-access-card"
+} from "@/components/shared/student-access-card"
 import {
     DashboardShell,
     type DashboardEntry,

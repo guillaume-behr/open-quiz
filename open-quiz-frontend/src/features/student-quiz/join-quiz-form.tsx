@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next"
 import {
     STUDENT_ACCESS_CARD_CLASS_NAME,
     StudentAccessHeader,
-} from "./student-access-card"
+} from "@/components/shared/student-access-card"
 
 type JoinQuizFormProps = {
     joinCode: string

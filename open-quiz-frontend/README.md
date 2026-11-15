@@ -25,10 +25,10 @@ les requêtes HTTP et WebSocket commençant par `/api`.
 
 ## ⚙️ Configuration
 
-| Variable                | Portée                        | Défaut                  | Usage                                       |
-| ----------------------- | ----------------------------- | ----------------------- | ------------------------------------------- |
-| `VITE_API_URL`          | navigateur, à la compilation  | vide                    | développement : origine absolue d’une API   |
-| `VITE_API_PROXY_TARGET` | serveur Vite de développement | `http://localhost:8000` | cible du proxy HTTP et WebSocket            |
+| Variable                | Portée                        | Défaut                  | Usage                                     |
+| ----------------------- | ----------------------------- | ----------------------- | ----------------------------------------- |
+| `VITE_API_URL`          | navigateur, à la compilation  | vide                    | développement : origine absolue d’une API |
+| `VITE_API_PROXY_TARGET` | serveur Vite de développement | `http://localhost:8000` | cible du proxy HTTP et WebSocket          |
 
 Laissez `VITE_API_URL` vide avec le proxy Vite. Le déploiement Docker fourni
 ne la lit pas : il sert toujours l’API sous l’origine de l’interface.
@@ -110,14 +110,13 @@ src/
 ├── api/          client HTTP, types et rotation des sessions
 ├── components/   composants communs à toute l’application
 │   ├── code/         affichage, édition et exécution du code des questions
-│   ├── forms/        connexion, double authentification et accès élève
 │   ├── grade-levels/ choix et création des niveaux
 │   ├── language/     choix et sens de la langue
 │   ├── navigation/   structure commune des pages et navigation
 │   ├── shared/       composants utilisés par plusieurs fonctionnalités
 │   ├── theme/        thème clair ou sombre
 │   └── ui/           composants d’interface génériques
-├── features/     un dossier par fonctionnalité (classes/, quizzes/, results/…) :
+├── features/     un dossier par fonctionnalité (auth/, classes/, quizzes/…) :
 │                 ses composants, ses hooks et sa logique
 ├── hooks/        chargement de données et actions asynchrones partagés
 ├── lib/          traduction, mises à jour temps réel et utilitaires

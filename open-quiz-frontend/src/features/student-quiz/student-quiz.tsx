@@ -1,5 +1,5 @@
 import { isRtlLanguage } from "@/lib/utils"
-import { JoinQuizForm } from "@/components/forms/join-quiz-form"
+import { JoinQuizForm } from "@/features/student-quiz/join-quiz-form"
 import { NavbarAction } from "@/components/navigation/navbar-action"
 import { isActiveSessionStatus } from "@/lib/session-status"
 import { Button } from "@/components/ui/button"

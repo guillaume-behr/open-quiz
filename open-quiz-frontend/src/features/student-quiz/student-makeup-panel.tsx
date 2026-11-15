@@ -14,7 +14,7 @@ import { LoaderCircle } from "lucide-react"
 import {
     STUDENT_ACCESS_CARD_CLASS_NAME,
     StudentAccessHeader,
-} from "@/components/forms/student-access-card"
+} from "@/components/shared/student-access-card"
 import { storeQuizSession } from "./student-quiz-session"
 import { useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"

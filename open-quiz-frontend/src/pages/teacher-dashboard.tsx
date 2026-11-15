@@ -6,7 +6,7 @@ import {
     getGradeLevels,
 } from "@/api/classes"
 import type { GradeLevel } from "@/api/types"
-import { DashboardAuthentication } from "@/components/forms/dashboard-authentication"
+import { DashboardAuthentication } from "@/features/auth/dashboard-authentication"
 import {
     DashboardShell,
     type DashboardEntry,
