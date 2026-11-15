@@ -4,3 +4,6 @@ coverage/
 pnpm-lock.yaml
 package-lock.json
 yarn.lock
+# Generated: scripts/export_openapi.py (backend), pnpm generate:api-types.
+src/api/openapi.json
+src/api/openapi.ts

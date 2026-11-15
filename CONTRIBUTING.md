@@ -147,6 +147,11 @@ Préfixes suggérés : `fix/`, `feat/`, `docs/`, `test/`, `refactor/` ou `chore/
   qui préserve les données des instances en service, et des tests
   correspondants (voir
   [Faire évoluer le schéma](open-quiz-backend/README.md#faire-évoluer-le-schéma)) ;
+- après un changement de route ou de corps de requête ou de réponse,
+  régénérez le schéma OpenAPI puis les types du frontend :
+  `uv run python -m scripts.export_openapi` dans `open-quiz-backend`, puis
+  `pnpm generate:api-types` dans `open-quiz-frontend` ; un test backend et
+  `pnpm check:api-types` échouent sinon ;
 - documentez les changements d’API, de configuration, de conservation ou de
   sécurité ;
 - ajoutez tout changement visible ou incompatible à la section

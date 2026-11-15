@@ -7,3 +7,9 @@ overrides:
 
 allowBuilds:
     esbuild: true
+
+peerDependencyRules:
+    allowedVersions:
+        # openapi-typescript 7 asks for TypeScript 5, which it only uses to
+        # print the types it generates; TypeScript 6 prints them the same.
+        openapi-typescript>typescript: "6"
