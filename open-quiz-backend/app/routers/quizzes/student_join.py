@@ -140,12 +140,14 @@ def rejoin_quiz(
     # Starting a session places only present participants on their first
     # question. Someone who left the waiting room and comes back after the
     # start has no position, which reads as "finished" everywhere: they
-    # would see no question and could never answer.
+    # would see no question and could never answer. A skip counts as taking a
+    # question: someone who skipped everything is on their review, not new.
     resume_position = existing.current_position
     if (
         resume_position is None
         and quiz_session.status != SessionStatus.WAITING
         and existing.submitted_at is None
+        and not existing.skipped_question_ids
         and session.scalar(
             select(QuizAnswer.id)
             .where(

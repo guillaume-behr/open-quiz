@@ -1046,6 +1046,32 @@ def test_a_participant_reviewing_their_answers_rejoins_the_review(
     assert client.get(url, headers=headers).json()["question_number"] == 1
 
 
+def test_a_participant_who_skipped_everything_rejoins_the_review(
+    environment,
+) -> None:
+    client = environment["client"]
+    environment = two_question_quiz(client, environment, allow_answer_review=False)
+    account_headers = add_classmate(client, environment)
+    launched, headers = launch_and_join(client, environment)
+    code = launched["join_code"]
+    url = f"/api/quizzes/student/sessions/{code}"
+    classmate_headers = participant_headers_of(join(client, account_headers, code))
+    client.post(
+        f"/api/quizzes/sessions/{launched['id']}/start",
+        headers=environment["teacher_headers"],
+    )
+    for _ in range(2):
+        assert skip_current(client, url, classmate_headers).status_code == 200
+    assert client.post(f"{url}/leave", headers=classmate_headers).status_code == 204
+
+    # Skipping is handing a question in too: with no answer given, rejoining
+    # must still bring them back to the review, not to the first question.
+    rejoined = join(client, account_headers, code)
+    assert rejoined["question_number"] is None
+    assert rejoined["awaiting_final_submission"] is True
+    assert client.get(url, headers=headers).json()["question_number"] == 1
+
+
 def test_students_without_a_class_have_no_history_or_training(environment) -> None:
     client = environment["client"]
     loner = client.post(
