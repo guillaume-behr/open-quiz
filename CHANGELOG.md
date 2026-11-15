@@ -47,11 +47,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 - The numbered question navigation sits in a bar centred at the bottom of
   the screen, outside the question card. It numbers every question, ten at a
   time with arrows beyond that, and turns the page by itself with a slide:
-  skipped questions are light orange (even once answered), reached but
+  skipped questions are light orange until answered, reached but
   unanswered ones grey, and those not seen yet dark grey and out of reach.
   Each number's state is also part of its accessible name.
-- The answer review marks skipped questions the same way: an orange card
-  and a “skipped” badge, whether answered since or not.
+- The answer review marks skipped questions still unanswered the same way:
+  an orange card and a “skipped” badge. Answering one takes the orange away.
 - The exam screen no longer shows the class name, and the time left sits in
   the top corner of the question card.
 
@@ -144,7 +144,7 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 - In production the API now answers 400 to a request whose `Host` header is
   neither the name in `FRONTEND_ORIGIN` nor an internal one. Check that your
   reverse proxy forwards the name the browser asked for (`proxy_set_header
-  Host $host` with Nginx; Caddy does by default). If the API is published
+Host $host` with Nginx; Caddy does by default). If the API is published
   under another name than the interface (`VITE_API_URL`), list it in
   `TRUSTED_HOSTS` in `open-quiz-backend/.env`.
 - The API container is limited to 2 GB of memory and the proxy to 512 MB.

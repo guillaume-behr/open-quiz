@@ -18,9 +18,10 @@ const session = {
     allow_previous_questions: true,
     total_questions: 3,
     skipped_question_numbers: [2, 3],
+    answered_question_numbers: [1, 2],
     answer_summaries: [
         summary(1, ["one"]),
-        // Skipped, then answered: still orange.
+        // Skipped, then answered: no longer orange.
         summary(2, ["two"]),
         // Skipped and left unanswered.
         summary(3, []),
@@ -28,7 +29,7 @@ const session = {
 } as unknown as StudentQuizSession
 
 describe("AnswerReview", () => {
-    it("shows the skipped questions in orange, answered since or not", () => {
+    it("shows in orange only the skipped questions left unanswered", () => {
         render(
             <AnswerReview
                 session={session}
@@ -42,10 +43,10 @@ describe("AnswerReview", () => {
         const items = screen.getAllByRole("listitem")
 
         expect(items[0]).not.toHaveClass("bg-orange-50")
-        expect(items[1]).toHaveClass("bg-orange-50")
+        expect(items[1]).not.toHaveClass("bg-orange-50")
         expect(items[2]).toHaveClass("bg-orange-50")
         expect(
             screen.getAllByText("student-question-state-skipped")
-        ).toHaveLength(2)
+        ).toHaveLength(1)
     })
 })

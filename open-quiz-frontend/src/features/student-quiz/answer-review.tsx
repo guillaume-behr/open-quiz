@@ -27,9 +27,10 @@ export function AnswerReview({
 }) {
     const { t } = useTranslation()
     const canEdit = session.allow_previous_questions
-    // Skipped questions stay orange, answered since or not, as in the
-    // question navigation.
+    // Skipped questions still unanswered are orange, as in the question
+    // navigation: answering one takes the orange away.
     const skipped = new Set(session.skipped_question_numbers)
+    const answered = new Set(session.answered_question_numbers)
 
     return (
         <section className="space-y-5" aria-labelledby="answer-review-title">
@@ -47,7 +48,9 @@ export function AnswerReview({
             </div>
             <ol className="space-y-3">
                 {session.answer_summaries.map((summary) => {
-                    const isSkipped = skipped.has(summary.question_number)
+                    const isSkipped =
+                        skipped.has(summary.question_number) &&
+                        !answered.has(summary.question_number)
                     return (
                         <li
                             key={summary.question_id}

@@ -183,8 +183,8 @@ const QUESTION_NAVIGATION_PAGE_SIZE = 10
  * Portalled to the body so no ancestor's transform can unpin it.
  *
  * Every question is numbered, ten at a time with arrows beyond that: the
- * current one in the primary colour, skipped ones in orange (even once
- * answered), answered ones plain, the ones reached but unanswered in grey,
+ * current one in the primary colour, skipped ones still unanswered in
+ * orange, answered ones plain (skipped first or not), the ones reached but unanswered in grey,
  * and those not seen yet in dark grey, disabled.
  *
  * Reaching a question on another page of ten turns the page by itself, and
@@ -286,7 +286,11 @@ function QuestionNavigation({
                     {numbers.map((number) => {
                         const isCurrent = number === questionNumber
                         const isSeen = accessible.has(number)
-                        const isSkipped = !isCurrent && skipped.has(number)
+                        // Answering a skipped question takes the orange away.
+                        const isSkipped =
+                            !isCurrent &&
+                            skipped.has(number) &&
+                            !answered.has(number)
                         return (
                             <Button
                                 key={number}
