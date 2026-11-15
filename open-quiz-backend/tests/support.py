@@ -72,8 +72,8 @@ VALID_PNG = b64decode(
 TEST_CLIENT_BACKEND_OPTIONS = {"use_uvloop": True} if find_spec("uvloop") else {}
 
 
-# install-dev.sh creates the role and database of this default; keep both in
-# step when changing it.
+# scripts/install-dev.sh creates the role and database of this default; keep
+# both in step when changing it.
 # Defaulted by conftest.py.
 TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
 

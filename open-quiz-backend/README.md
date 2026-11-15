@@ -30,7 +30,7 @@ pas l’installation Docker Compose recommandée pour utiliser une instance.
 Depuis la racine du dépôt, créez la configuration locale et démarrez PostgreSQL :
 
 ```shell
-sh ./install-dev.sh
+sh scripts/install-dev.sh
 ```
 
 Le script génère automatiquement :
@@ -88,8 +88,8 @@ sur les systèmes POSIX.
 Quand `DATABASE_URL` ne contient pas de mot de passe, l’API utilise
 `DATABASE_PASSWORD`, sinon `POSTGRES_PASSWORD`. En production, elle se connecte
 avec le rôle non privilégié `open_quiz_app` ; en développement, avec le
-superutilisateur, dont `install-dev.sh` recopie le mot de passe dans
-`open-quiz-backend/.env.database`, lu par le conteneur PostgreSQL.
+superutilisateur, dont `scripts/install-dev.sh` recopie le mot de passe
+dans `open-quiz-backend/.env.database`, lu par le conteneur PostgreSQL.
 
 En production, `FRONTEND_ORIGIN` doit utiliser HTTPS. Le compte administrateur
 est créé au premier démarrage, puis reste synchronisé avec `ADMIN_USERNAME` et
@@ -426,8 +426,8 @@ l’ancienne copie puis recréez le service.
 ## ✅ Vérifications
 
 Les tests ont besoin du rôle et de la base `open_quiz_test`, créés par
-`sh ./install-dev.sh` depuis la racine du dépôt. Définissez `TEST_DATABASE_URL`
-pour viser un autre serveur PostgreSQL.
+`sh scripts/install-dev.sh` depuis la racine du dépôt. Définissez
+`TEST_DATABASE_URL` pour viser un autre serveur PostgreSQL.
 
 Lancez la suite seule pendant le développement :
 

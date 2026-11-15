@@ -3,7 +3,8 @@
 set -eu
 
 # shellcheck disable=SC1007 # "CDPATH= cd" empties CDPATH for this cd only.
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# The repository root, which scripts/common.sh expects in SCRIPT_DIR.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$SCRIPT_DIR/scripts/common.sh"
 
 ENV_TEMPLATE="$SCRIPT_DIR/open-quiz-backend/.env.example"
@@ -43,7 +44,7 @@ database_value() {
 }
 
 usage() {
-    printf 'Usage: sh ./install-dev.sh [--help]\n\n'
+    printf 'Usage: sh scripts/install-dev.sh [--help]\n\n'
     printf 'Create development credentials and start PostgreSQL with Docker Compose.\n\n'
     printf '  --help, -h  Show this message.\n'
 }

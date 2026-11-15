@@ -53,7 +53,7 @@ installer une instance à utiliser, suivez la procédure Docker du
 Depuis la racine du dépôt :
 
 ```shell
-sh ./install-dev.sh
+sh scripts/install-dev.sh
 ```
 
 Le script crée `open-quiz-backend/.env` avec des secrets distincts, affiche les
@@ -260,6 +260,11 @@ docker compose build
 
 N’utilisez ces valeurs d’exemple que pour valider la structure. Une instance
 réelle exige des secrets robustes et distincts.
+
+Les scripts d’administration (`install.sh`, `update.sh`, `backup.sh`,
+`restore.sh`) restent à la racine : les instances en service les appellent par
+`sh ./…`, jusque dans leur crontab. Les autres scripts shell vont dans
+`scripts/`, avec les fonctions communes de `scripts/common.sh`.
 
 ## 🔀 Ouvrir une pull request
 
