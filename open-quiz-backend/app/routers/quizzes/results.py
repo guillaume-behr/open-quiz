@@ -264,6 +264,8 @@ def publish_quiz_grades(
     session: DbSession,
 ) -> QuizSessionResponse:
     quiz_session, quiz = owned_quiz_session(session_id, professor.id, session)
+    # Grading locks this row too: a mark being saved is in before publication.
+    session.refresh(quiz_session, with_for_update=True)
     if quiz_session.status != SessionStatus.FINISHED:
         raise ApiError(
             status.HTTP_409_CONFLICT,
@@ -306,6 +308,9 @@ def grade_written_answer(
     session: DbSession,
 ) -> QuizAnswerReview:
     quiz_session, _ = owned_quiz_session(session_id, professor.id, session)
+    # Held until the commit, so publication cannot slip in between the check
+    # below and the new mark, which would change grades already published.
+    session.refresh(quiz_session, with_for_update=True)
     if quiz_session.status != SessionStatus.FINISHED:
         raise ApiError(
             status.HTTP_409_CONFLICT,

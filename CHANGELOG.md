@@ -98,6 +98,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   student who had already left keeps the time they left at.
 - Stopping the API waits for queries still running for a live feed before
   closing the database pool, so their connections are closed too.
+- A student who skipped every question of an exam, then left and joined
+  again, comes back to the final review step. The rejoin only looked for
+  answers given, and sent them back to the first question.
+- Publishing grades waits for a mark being saved at that moment. A mark
+  saved alongside the publication could otherwise change grades already
+  published.
 
 ### Security
 

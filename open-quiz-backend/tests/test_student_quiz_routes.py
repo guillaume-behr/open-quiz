@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from threading import Barrier, BrokenBarrierError
+from threading import Barrier, BrokenBarrierError, Thread
 from typing import Any
 
 import pytest
@@ -26,6 +26,7 @@ from app.models import (
     StudentAccount,
 )
 from app.records.stored_images import store_image
+from app.routers.quizzes import results as results_router
 from app.routers.quizzes import student_join
 from app.schemas.student_quizzes import StudentQuizAnswer
 from app.services import question_draws
@@ -740,6 +741,74 @@ def test_a_skipped_written_question_needs_no_marking(environment) -> None:
         # Nothing to mark: the blank answer is graded zero at once.
         assert answer.is_graded is True
         assert answer.score == 0
+
+
+def test_publishing_waits_for_a_grade_being_saved(environment, monkeypatch) -> None:
+    client = environment["client"]
+    add_question(
+        client,
+        environment,
+        prompt="Explain why",
+        difficulty="hard",
+        answer_mode="written",
+        choices=[{"label": "Because", "is_correct": True, "points": 2}],
+    )
+    quiz = client.post(
+        "/api/quizzes",
+        headers=environment["teacher_headers"],
+        json={
+            "title": "Written",
+            "question_bank_ids": [environment["question"]["question_bank_id"]],
+            "easy_question_count": 0,
+            "medium_question_count": 0,
+            "hard_question_count": 1,
+        },
+    )
+    assert quiz.status_code == 201
+    environment = {**environment, "quiz": quiz.json()}
+    launched, headers, url = started(client, environment)
+    assert answer_current(client, url, headers, written_answer="Since").is_success
+    hand_in_quiz(client, launched["join_code"], headers)
+    with client.app.state.session_factory() as session:
+        answer_id = session.scalars(
+            select(QuizAnswer.id).where(QuizAnswer.session_id == launched["id"])
+        ).one()
+    session_url = f"/api/quizzes/sessions/{launched['id']}"
+    grade_url = f"{session_url}/answers/{answer_id}/grade"
+    teacher_headers = environment["teacher_headers"]
+    assert client.post(grade_url, headers=teacher_headers, json={"score": 1}).is_success
+
+    # A publication sent while a second mark is being saved: it must wait for
+    # that mark, or the mark would land on grades already published.
+    published: list[int] = []
+    published_during_grade: list[bool] = []
+    original_points = results_router.session_question_points
+
+    def points_while_publishing(*args: Any, **kwargs: Any) -> dict[int, float]:
+        publisher = Thread(
+            target=lambda: published.append(
+                client.post(
+                    f"{session_url}/publish-grades", headers=teacher_headers
+                ).status_code
+            )
+        )
+        publisher.start()
+        publisher.join(timeout=1)
+        published_during_grade.append(not publisher.is_alive())
+        points_while_publishing.publisher = publisher  # type: ignore[attr-defined]
+        return original_points(*args, **kwargs)
+
+    monkeypatch.setattr(
+        results_router, "session_question_points", points_while_publishing
+    )
+    regraded = client.post(grade_url, headers=teacher_headers, json={"score": 2})
+    points_while_publishing.publisher.join(timeout=10)  # type: ignore[attr-defined]
+
+    assert regraded.status_code == 200
+    assert published_during_grade == [False]
+    assert published == [200]
+    with client.app.state.session_factory() as session:
+        assert session.get(QuizAnswer, answer_id).score == 2
 
 
 def test_student_images_require_a_running_session_and_an_image(environment) -> None:
