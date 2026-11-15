@@ -18,46 +18,13 @@ Consultez aussi le [README principal](../README.md), le
 
 ## 💻 Développement local
 
-Cette procédure lance uniquement l’API en mode développement. Elle ne remplace
-pas l’installation Docker Compose recommandée pour utiliser une instance.
+Le [guide de contribution](../CONTRIBUTING.md#-préparer-lenvironnement-de-développement)
+décrit la préparation de l’environnement : PostgreSQL et secrets
+(`scripts/install-dev.sh`), puis l’API et l’interface. Il ne remplace pas
+l’installation Docker Compose recommandée pour utiliser une instance.
 
-### Prérequis
-
-- Python 3.14 ou supérieur ;
-- [uv](https://docs.astral.sh/uv/) ;
-- PostgreSQL 17, par exemple le service `open-quiz-database` de Docker Compose.
-
-Depuis la racine du dépôt, créez la configuration locale et démarrez PostgreSQL :
-
-```shell
-sh scripts/install-dev.sh
-```
-
-Le script génère automatiquement :
-
-- `JWT_SECRET` ;
-- `TOTP_ENCRYPTION_KEY` ;
-- `STUDENT_CREDENTIAL_ENCRYPTION_KEY` ;
-- `ADMIN_PASSWORD` ;
-- `POSTGRES_PASSWORD`.
-
-Les trois secrets cryptographiques sont distincts et suffisamment longs. Le
-script protège `open-quiz-backend/.env`, affiche les identifiants administrateur
-une seule fois et conserve une configuration de développement existante et
-compatible sans l’écraser. Après le démarrage, il vérifie une connexion
-PostgreSQL authentifiée afin de détecter un ancien volume utilisant un autre
-mot de passe.
-
-Installez les dépendances et démarrez l’API :
-
-```shell
-cd open-quiz-backend
-uv sync
-uv run fastapi dev main.py
-```
-
-L’API répond sur `http://localhost:8000`. En développement, les interfaces
-OpenAPI sont disponibles sur :
+Une fois l’API lancée (`uv run fastapi dev main.py`), ses interfaces OpenAPI
+répondent sur :
 
 - Swagger UI : `http://localhost:8000/docs` ;
 - ReDoc : `http://localhost:8000/redoc` ;

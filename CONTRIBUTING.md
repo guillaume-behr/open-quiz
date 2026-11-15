@@ -56,8 +56,10 @@ Depuis la racine du dépôt :
 sh scripts/install-dev.sh
 ```
 
-Le script crée `open-quiz-backend/.env` avec des secrets distincts, affiche les
-identifiants administrateur une seule fois et lance uniquement le service Docker
+Le script crée `open-quiz-backend/.env` avec des secrets distincts
+(`JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `STUDENT_CREDENTIAL_ENCRYPTION_KEY`,
+`ADMIN_PASSWORD` et `POSTGRES_PASSWORD`), affiche les identifiants
+administrateur une seule fois et lance uniquement le service Docker
 `open-quiz-database`. Il conserve un `.env` de développement existant et
 compatible, refuse les valeurs d’exemple et les configurations de production,
 puis vérifie que PostgreSQL accepte réellement les identifiants.
@@ -184,6 +186,12 @@ Toute nouvelle chaîne visible doit exister dans les huit catalogues de
 - `README.md` et `README.en.md` couvrent le même contenu : modifiez les deux
   dans la même pull request. La CI vérifie qu’ils ont les mêmes sections, dans
   le même ordre.
+- le reste de la documentation est en français : ce guide, `docs/` et les
+  README de `open-quiz-backend/` et `open-quiz-frontend/`. Seuls
+  `README.en.md` et `CHANGELOG.md` sont en anglais ;
+- la préparation de l’environnement de développement n’est décrite qu’ici ;
+  les README des composants y renvoient et ne gardent que ce qui leur est
+  propre (configuration, API, organisation du code, tests).
 
 ## ✅ Vérifications
 

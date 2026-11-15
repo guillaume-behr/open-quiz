@@ -18,26 +18,10 @@ Consultez aussi le [README principal](../README.md), le
 
 ## 💻 Développement local
 
-Cette procédure lance le serveur Vite pour modifier et tester l’interface. Elle
-ne remplace pas l’installation Docker Compose recommandée pour utiliser une
-instance.
-
-### Prérequis
-
-- Node.js 24 ;
-- pnpm 11.15.1 ;
-- le backend lancé sur `http://localhost:8000` pour utiliser l’application
-  manuellement.
-
-Depuis le dossier `open-quiz-frontend` :
-
-```shell
-pnpm install --frozen-lockfile
-pnpm dev
-```
-
-Ouvrez `http://localhost:5173`. Vite transmet les requêtes HTTP et WebSocket
-commençant par `/api` au backend local.
+Le [guide de contribution](../CONTRIBUTING.md#-préparer-lenvironnement-de-développement)
+décrit la préparation de l’environnement, backend compris. Le serveur Vite
+(`pnpm dev`) répond sur `http://localhost:5173` et transmet au backend local
+les requêtes HTTP et WebSocket commençant par `/api`.
 
 ## ⚙️ Configuration
 
