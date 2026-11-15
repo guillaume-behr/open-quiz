@@ -4,6 +4,43 @@ import reactHooks from "eslint-plugin-react-hooks"
 import reactRefresh from "eslint-plugin-react-refresh"
 import tseslint from "typescript-eslint"
 import { defineConfig, globalIgnores } from "eslint/config"
+import { readdirSync } from "node:fs"
+
+// The folders of src/ form layers: each may import only from the layers
+// below it. api/, lib/ and hooks/ sit at the bottom, then components/, then
+// features/, then pages/. A feature also stays out of the other features:
+// what two of them need belongs in components/, lib/ or hooks/.
+const PAGES = {
+    group: ["@/pages", "@/pages/**"],
+    message: "Only pages import other pages.",
+}
+const FEATURES = {
+    group: ["@/features", "@/features/**"],
+    message:
+        "Only pages import features; move what is shared to components/, lib/ or hooks/.",
+}
+const COMPONENTS = {
+    group: ["@/components", "@/components/**"],
+    message: "Components sit above api/, lib/ and hooks/.",
+}
+const PARENT_FOLDERS = {
+    group: ["../*"],
+    message: "Import from another folder through the @/ alias.",
+}
+const FEATURE_NAMES = readdirSync(new URL("./src/features", import.meta.url), {
+    withFileTypes: true,
+})
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+
+function restrictImports(...patterns) {
+    return {
+        "no-restricted-imports": [
+            "error",
+            { patterns: [PARENT_FOLDERS, ...patterns] },
+        ],
+    }
+}
 
 export default defineConfig([
     globalIgnores([
@@ -37,6 +74,26 @@ export default defineConfig([
         ],
         languageOptions: { globals: globals.browser },
     },
+    {
+        files: ["src/{api,lib,hooks,test}/**/*.{ts,tsx}"],
+        rules: restrictImports(PAGES, FEATURES, COMPONENTS),
+    },
+    {
+        files: ["src/components/**/*.{ts,tsx}"],
+        rules: restrictImports(PAGES, FEATURES),
+    },
+    {
+        files: ["src/pages/**/*.{ts,tsx}"],
+        rules: restrictImports(),
+    },
+    ...FEATURE_NAMES.map((feature) => ({
+        files: [`src/features/${feature}/**/*.{ts,tsx}`],
+        rules: restrictImports(PAGES, {
+            group: ["@/features/*/**", `!@/features/${feature}/**`],
+            message:
+                "A feature does not import another feature; move what both need to components/, lib/ or hooks/.",
+        }),
+    })),
     {
         // Assertions read mocked methods off their objects
         // (expect(window.print).toHaveBeenCalled()), which this rule takes
