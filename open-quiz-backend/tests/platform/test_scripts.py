@@ -20,7 +20,7 @@ def test_reset_two_factor_script_entry_point(
 ) -> None:
     settings = settings_for(tmp_path / "reset-script")
     monkeypatch.setattr(app.core.config, "get_settings", lambda: settings)
-    script = Path(__file__).resolve().parent.parent / "scripts/reset_two_factor.py"
+    script = Path(__file__).resolve().parents[2] / "scripts/reset_two_factor.py"
 
     from app.models import User
 

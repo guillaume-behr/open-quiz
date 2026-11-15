@@ -225,9 +225,9 @@ la suite sur les cœurs disponibles ; un avertissement `ResourceWarning`
 
 La suite backend doit couvrir 100 % des lignes et des branches de `app`,
 `main.py` et `scripts` : la commande de tests échoue en dessous. Les tests
-sont rangés par domaine (`test_auth_routes.py`, `test_class_routes.py`,
-`test_makeup_routes.py`…) : ajoutez un test au fichier de son domaine, et
-lancez ce seul fichier pendant le développement. Les aides partagées des tests
+sont rangés par domaine dans les sous-dossiers de `tests/` (`accounts/`,
+`quizzes/`, `student_quizzes/`…) : ajoutez un test au fichier de son domaine,
+et lancez ce seul fichier ou ce seul dossier pendant le développement. Les aides partagées des tests
 se trouvent dans `tests/support.py`.
 
 ### Frontend

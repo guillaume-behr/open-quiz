@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-APP = Path(__file__).resolve().parents[1] / "app"
+APP = Path(__file__).resolve().parents[2] / "app"
 # One entry per layer, lowest first. Packages listed together import each
 # other: the tables of models need the declarative base of core, whose
 # guards load the users those tables describe.

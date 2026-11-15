@@ -505,7 +505,8 @@ def test_lists_show_only_the_teachers_own_records(world: dict[str, Any]) -> None
 
 # Routes that take an id but are not teacher records: an administrator's,
 # or a quiz participant's, which a join code and a participant token guard
-# (tests/test_student_quiz_routes.py, tests/test_participant_resume.py).
+# (tests/student_quizzes/test_student_quiz_routes.py and
+# tests/student_quizzes/test_participant_resume.py).
 NOT_TEACHER_RECORDS = ("/api/admin/", "/api/problem-reports/", "{join_code}")
 
 

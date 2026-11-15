@@ -232,7 +232,7 @@ def test_concurrent_startups_migrate_the_database_once(tmp_path: Path) -> None:
     workers = [
         subprocess.Popen(
             [sys.executable, "-c", script, database_url],
-            cwd=Path(__file__).resolve().parent.parent,
+            cwd=Path(__file__).resolve().parents[2],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )

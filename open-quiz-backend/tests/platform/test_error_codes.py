@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from app.core.errors import ApiError, ErrorCode, api_error
 
-BACKEND = Path(__file__).resolve().parents[1]
+BACKEND = Path(__file__).resolve().parents[2]
 
 
 def error_calls(name: str) -> list[tuple[str, str, ast.Call]]:
