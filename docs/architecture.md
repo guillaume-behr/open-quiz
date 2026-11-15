@@ -38,7 +38,8 @@ superutilisateur ; `scripts/database-roles.sql` le crée.
 ## Organisation du code de l’API
 
 Le paquet `open-quiz-backend/app` est découpé en couches. Chacune n’importe
-que les couches situées au-dessous d’elle ; `tests/test_layers.py` le vérifie.
+que les couches situées au-dessous d’elle ; `tests/platform/test_layers.py` le
+vérifie.
 Seuls `core/` et `models.py`, sur la même ligne, s’importent l’un l’autre.
 Les dépendances de requête de FastAPI (`app/core/dependencies.py` : session
 injectée, utilisateur connecté) ne servent qu’aux `routers/` ; les couches
@@ -59,5 +60,19 @@ propriétaire.
 | `application.py`        | assemblage de l’application : routes, middleware et tâches de fond                             |
 
 `app/data/` contient les fichiers fournis avec l’API, comme l’exemple de
-banque de questions téléchargeable. Les tests de `tests/` sont rangés par
-domaine ; leurs aides communes se trouvent dans `tests/support.py`.
+banque de questions téléchargeable.
+
+Les tests de `tests/` sont rangés par domaine ; leurs aides communes se
+trouvent dans `tests/support.py`.
+
+| Dossier            | Contenu                                                                                  |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `accounts/`        | connexion, double authentification, déconnexion des élèves, administration               |
+| `classes/`         | classes, comptes élèves, imports et niveaux                                              |
+| `question_banks/`  | banques, questions et images                                                             |
+| `quizzes/`         | quiz côté enseignant : lancement, tirages, notation, rattrapages, temps réel, expiration |
+| `student_quizzes/` | quiz côté élève : rejoindre, répondre, reprendre, historique                             |
+| `records/`         | règles communes aux ressources : propriété, noms uniques, limites                        |
+| `platform/`        | configuration, journaux, migrations, schémas, contrat OpenAPI, couches, scripts          |
+
+`test_end_to_end.py`, à la racine, suit un parcours complet de l’application.

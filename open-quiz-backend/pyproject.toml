@@ -40,7 +40,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+# tests/ holds support.py, which the test modules of its subfolders import.
+pythonpath = [".", "tests"]
 addopts = "--strict-markers --strict-config"
 # Every warning fails the test that raised it, a connection or file left
 # open included.

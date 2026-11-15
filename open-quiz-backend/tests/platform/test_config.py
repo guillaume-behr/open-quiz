@@ -427,7 +427,7 @@ def test_the_version_has_one_source_per_package() -> None:
     version at build time. A release that bumps only one of them ships an API
     reporting one version and an interface built as another.
     """
-    repository = Path(__file__).resolve().parent.parent.parent
+    repository = Path(__file__).resolve().parents[3]
     frontend_root = repository / "open-quiz-frontend"
     backend = tomllib.loads(
         (repository / "open-quiz-backend" / "pyproject.toml").read_text()
