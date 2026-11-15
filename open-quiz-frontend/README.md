@@ -109,7 +109,9 @@ Toute route inconnue affiche la page 404.
 src/
 ├── api/          client HTTP, types et rotation des sessions
 ├── components/   composants communs à toute l’application
+│   ├── code/         affichage, édition et exécution du code des questions
 │   ├── forms/        connexion, double authentification et accès élève
+│   ├── grade-levels/ choix et création des niveaux
 │   ├── language/     choix et sens de la langue
 │   ├── navigation/   structure commune des pages et navigation
 │   ├── shared/       composants utilisés par plusieurs fonctionnalités

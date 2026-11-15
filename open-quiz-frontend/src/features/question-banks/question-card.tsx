@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { ImageIcon, ChevronDown, Pencil, Settings2, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ChoiceImage } from "./choice-image"
-import { CodeBlock } from "./code-block"
-import { CODE_LANGUAGES } from "./code-languages"
+import { CodeBlock } from "@/components/code/code-block"
+import { CODE_LANGUAGES } from "@/components/code/code-languages"
 import { QuestionImage } from "./question-image"
 
 /** One question of a bank: its summary, and its details once expanded. */

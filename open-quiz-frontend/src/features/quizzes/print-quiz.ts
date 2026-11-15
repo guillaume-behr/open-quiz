@@ -1,4 +1,4 @@
-import { CODE_LANGUAGES } from "@/features/question-banks/code-languages"
+import { CODE_LANGUAGES } from "@/components/code/code-languages"
 import {
     getChoiceImage,
     getQuestionImage,

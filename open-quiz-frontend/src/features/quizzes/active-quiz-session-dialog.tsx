@@ -1,6 +1,6 @@
 import type { MakeupSession, QuizParticipant, QuizSession } from "@/api/types"
 import { LiveReconnectingNotice } from "@/components/shared/live-reconnecting-notice"
-import { QuizTimer } from "@/features/quizzes/quiz-timer"
+import { QuizTimer } from "@/components/shared/quiz-timer"
 import {
     publishSessionDisplay,
     sessionDisplayKey,

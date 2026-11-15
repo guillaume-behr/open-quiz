@@ -7,7 +7,7 @@ import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
 import { StudentQuizView } from "./student-quiz-view"
 
 const timerRenders = vi.hoisted(() => ({ count: 0 }))
-vi.mock("@/features/quizzes/quiz-timer", () => ({
+vi.mock("@/components/shared/quiz-timer", () => ({
     QuizTimer: () => {
         timerRenders.count += 1
         return <p>timer</p>

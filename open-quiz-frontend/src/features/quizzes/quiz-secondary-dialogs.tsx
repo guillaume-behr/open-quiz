@@ -11,7 +11,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
-import { StaticCodeBlock } from "@/features/question-banks/code-block"
+import { StaticCodeBlock } from "@/components/code/code-block"
 import {
     CircleCheck,
     LoaderCircle,

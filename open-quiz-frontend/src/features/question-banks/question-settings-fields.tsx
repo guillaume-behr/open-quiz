@@ -1,6 +1,6 @@
 import type { AnswerMode, CodeLanguage, QuestionDifficulty } from "@/api/types"
 import { NATIVE_SELECT_CLASS_NAME } from "@/components/ui/native-select"
-import { CODE_LANGUAGES } from "./code-languages"
+import { CODE_LANGUAGES } from "@/components/code/code-languages"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Switch } from "@/components/ui/switch"
 import { useTranslation } from "react-i18next"

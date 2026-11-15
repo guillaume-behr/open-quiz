@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import {
     describePythonFailure,
     runPython as executePython,
-} from "@/features/question-banks/python-runner"
+} from "@/components/code/python-runner"
 import { LoaderCircle, Play } from "lucide-react"
 import { Highlight, themes } from "prism-react-renderer"
 import {

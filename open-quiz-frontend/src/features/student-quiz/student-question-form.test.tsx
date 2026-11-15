@@ -8,7 +8,7 @@ import type { StudentQuizQuestion, StudentQuizSession } from "@/api/types"
 import { StudentQuestionForm } from "./student-question-form"
 
 // The code editor and protected images load browser-only machinery.
-vi.mock("@/features/question-banks/code-block", () => ({
+vi.mock("@/components/code/code-block", () => ({
     CodeBlock: (props: {
         code: string
         editable?: boolean
