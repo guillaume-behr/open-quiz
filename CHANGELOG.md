@@ -50,6 +50,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   skipped questions are light orange (even once answered), reached but
   unanswered ones grey, and those not seen yet dark grey and out of reach.
   Each number's state is also part of its accessible name.
+- The answer review marks skipped questions the same way: an orange card
+  and a “skipped” badge, whether answered since or not.
 - The exam screen no longer shows the class name, and the time left sits in
   the top corner of the question card.
 
