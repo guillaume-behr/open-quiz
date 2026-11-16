@@ -32,30 +32,16 @@ export function FullscreenPrompt({
     )
 }
 
-/**
- * The events reported to the teacher are named before the exam starts: the
- * footer, and with it the privacy page, is hidden once the student is in the
- * exam, so this screen is the last place the information can be given.
- */
+/** The events reported to the teacher are named before the exam starts. */
 function MonitoringNotice() {
     const { t } = useTranslation()
 
     return (
         <div className="flex gap-3 rounded-lg border bg-background/60 p-4 text-start">
             <Eye className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
-            <div className="space-y-2 text-sm text-muted-foreground">
-                <p>{t("exam-monitoring-notice")}</p>
-                <p>
-                    <a
-                        className="font-medium text-primary underline underline-offset-4"
-                        href="/privacy"
-                        target="_blank"
-                        rel="noreferrer"
-                    >
-                        {t("privacy")}
-                    </a>
-                </p>
-            </div>
+            <p className="text-sm text-muted-foreground">
+                {t("exam-monitoring-notice")}
+            </p>
         </div>
     )
 }
