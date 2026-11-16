@@ -241,10 +241,14 @@ describe("StudentQuestionForm", () => {
         // Answered: plain and reachable.
         expect(number(1)).toBeEnabled()
         expect(number(1)).not.toHaveClass("bg-muted")
-        // Skipped, then answered or not: orange, reachable.
+        // Skipped and unanswered: orange, reachable.
         expect(number(2)).toBeEnabled()
         expect(number(2)).toHaveClass("bg-orange-200")
-        expect(number(5)).toHaveClass("bg-orange-200")
+        // Skipped, then answered: plain, like any answered question.
+        expect(number(5)).not.toHaveClass("bg-orange-200")
+        expect(number(5)).toHaveAccessibleName(
+            /student-question-state-answered$/
+        )
         // The current question.
         expect(number(3)).toHaveAttribute("aria-current", "step")
         // Reached but unanswered: grey, reachable.
