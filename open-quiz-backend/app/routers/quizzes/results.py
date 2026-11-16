@@ -5,7 +5,6 @@ participant's answers, grade written answers and publish the grades; students
 list the results of their own finished exams, provisional until published.
 """
 
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, cast
 
@@ -28,6 +27,7 @@ from app.core.pagination import (
     Paging,
     contains_pattern,
 )
+from app.domain.session_status import took_part
 from app.enums import AnswerMode, QuizMode, SessionStatus
 from app.models import (
     Question,
@@ -39,9 +39,10 @@ from app.models import (
     QuizSession,
     StudentAccount,
 )
+from app.records.questions import load_question_records
 from app.records.quizzes import owned_quiz, owned_quiz_session
 from app.records.student_accounts import owned_class
-from app.responses.answer_reviews import answer_review
+from app.responses.answer_reviews import answer_review, unanswered_review
 from app.responses.student_history import student_quiz_history
 from app.responses.teacher_sessions import session_response
 from app.schemas.quizzes import QuizSessionResponse
@@ -185,62 +186,52 @@ def list_participant_answers(
             ErrorCode.PARTICIPANT_NOT_FOUND,
             "Participant introuvable",
         )
-    rows = list(
-        session.execute(
-            select(QuizAnswer, Question)
-            .join(Question, Question.id == QuizAnswer.question_id)
-            .where(
+    answers_by_question = {
+        answer.question_id: answer
+        for answer in session.scalars(
+            select(QuizAnswer).where(
                 QuizAnswer.session_id == quiz_session.id,
                 QuizAnswer.participant_id == participant.id,
             )
         )
-    )
-    if (
-        participant.left_at is not None
-        and (
-            quiz_session.started_at is None
-            or participant.left_at <= quiz_session.started_at
-        )
-        and len(rows) == 0
-    ):
+    }
+    if not took_part(participant, quiz_session, len(answers_by_question)):
         raise ApiError(
             status.HTTP_404_NOT_FOUND,
             ErrorCode.PARTICIPANT_NOT_FOUND,
             "Participant introuvable",
         )
-    question_order = {
-        question_id: position
-        for position, question_id in enumerate(
-            session_question_ids(quiz_session, session, participant)
-        )
-    }
+    # Every question the student was given, answered or not, in their order;
+    # then any answer to a question no longer among them.
+    assigned_ids = session_question_ids(quiz_session, session, participant)
+    question_ids = list(dict.fromkeys([*assigned_ids, *sorted(answers_by_question)]))
+    questions_by_id, choices_by_question = load_question_records(question_ids, session)
     question_points = session_question_points(quiz_session, session, participant)
-    rows.sort(key=lambda row: question_order.get(row[1].id, len(question_order)))
-    question_ids = [question.id for _, question in rows]
-    choices_by_question: dict[int, list[QuestionChoice]] = defaultdict(list)
-    codes_by_question: dict[int, QuestionCode] = {}
-    if question_ids:
-        for choice in session.scalars(
-            select(QuestionChoice)
-            .where(QuestionChoice.question_id.in_(question_ids))
-            .order_by(QuestionChoice.position, QuestionChoice.id)
-        ):
-            choices_by_question[choice.question_id].append(choice)
+    codes_by_question = {
+        code.question_id: code
         for code in session.scalars(
             select(QuestionCode).where(QuestionCode.question_id.in_(question_ids))
-        ):
-            codes_by_question[code.question_id] = code
-    return [
-        answer_review(
-            answer,
-            question,
-            question_order.get(question.id, 0),
-            choices_by_question[question.id],
-            question_points.get(question.id, 0),
-            codes_by_question.get(question.id),
         )
-        for answer, question in rows
-    ]
+    }
+    reviews: list[QuizAnswerReview] = []
+    for position, question_id in enumerate(question_ids):
+        question = questions_by_id.get(question_id)
+        if question is None:
+            continue
+        answer = answers_by_question.get(question_id)
+        review_parts = (
+            question,
+            position,
+            choices_by_question.get(question_id, []),
+            question_points.get(question_id, 0),
+            codes_by_question.get(question_id),
+        )
+        reviews.append(
+            answer_review(answer, *review_parts)
+            if answer is not None
+            else unanswered_review(*review_parts)
+        )
+    return reviews
 
 
 @router.get(

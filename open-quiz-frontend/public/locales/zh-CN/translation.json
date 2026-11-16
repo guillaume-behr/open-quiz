@@ -871,5 +871,9 @@
     "delete-class-named": "删除班级“{{name}}”",
     "edit-student-named": "编辑学生“{{name}}”",
     "delete-student-named": "删除学生“{{name}}”",
-    "delete-result-named": "删除“{{title}}”的结果"
+    "delete-result-named": "删除“{{title}}”的结果",
+    "finish-quiz-help": "要立即结束此测验吗？学生将无法继续作答，已提交的答案将被评分。",
+    "error-makeup-already-chosen": "你已经为此补考选择了一个测验。",
+    "error-question-used-by-makeup": "仍在进行的补考可能会抽到此题。请在补考结束后再删除它或更改其难度。",
+    "error-quiz-session-not-finishable": "只有进行中或已暂停的测验才能结束。"
 }

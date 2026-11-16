@@ -145,20 +145,22 @@ export function ActiveQuizSessionDialog({
                                 {t("resume-quiz")}
                             </Button>
                         )}
-                        {session.status === "in_progress" && onFinish && (
-                            <Button
-                                type="button"
-                                disabled={action !== null}
-                                onClick={onFinish}
-                            >
-                                {action === "finish" ? (
-                                    <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-                                ) : (
-                                    <CircleCheck />
-                                )}
-                                {t("finish-quiz")}
-                            </Button>
-                        )}
+                        {(session.status === "in_progress" ||
+                            session.status === "paused") &&
+                            onFinish && (
+                                <Button
+                                    type="button"
+                                    disabled={action !== null}
+                                    onClick={onFinish}
+                                >
+                                    {action === "finish" ? (
+                                        <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                                    ) : (
+                                        <CircleCheck />
+                                    )}
+                                    {t("finish-quiz")}
+                                </Button>
+                            )}
                         {isActiveSessionStatus(session.status) && (
                             <Button
                                 type="button"

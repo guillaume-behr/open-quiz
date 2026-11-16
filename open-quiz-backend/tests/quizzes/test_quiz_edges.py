@@ -169,7 +169,11 @@ def test_results_cover_common_draws_and_silent_participants(environment) -> None
         headers=headers,
     )
     assert silent.status_code == 200
-    assert silent.json() == []
+    # The question they were given is listed, unanswered, with nothing to grade.
+    assert [
+        (answer["id"], answer["submitted_answers"], answer["score"])
+        for answer in silent.json()
+    ] == [(None, [], 0.0)]
 
     # A participant who left before the start is not part of the results.
     with client.app.state.session_factory() as session:

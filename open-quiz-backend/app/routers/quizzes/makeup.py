@@ -22,6 +22,7 @@ from app.core.dependencies import DbSession, ProfessorUser, current_student
 from app.core.errors import ApiError, ErrorCode
 from app.core.pagination import Paging
 from app.domain.class_names import format_class_name
+from app.domain.session_status import ACTIVE_SESSION_STATUSES
 from app.enums import QuizMode, SessionStatus
 from app.live.updates import (
     publish_active_quiz_sessions_update,
@@ -63,6 +64,7 @@ from app.services.makeup_sessions import (
     delete_unanswered_makeup_session,
     draw_makeup_questions,
     makeup_child_session,
+    student_makeup_child,
     transition_makeup_session,
 )
 from app.services.participants import (
@@ -263,10 +265,18 @@ def join_makeup_session(
     makeup = session.scalar(
         select(MakeupSession).where(
             MakeupSession.join_code == payload.join_code,
-            MakeupSession.status == SessionStatus.WAITING,
+            MakeupSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
     )
-    if makeup is None:
+    if makeup is not None and student_makeup_child(makeup, account, session):
+        # The student chose already, then lost the tab: the exam join takes
+        # their quiz back with this same code (student_join.joinable_session).
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.MAKEUP_ALREADY_CHOSEN,
+            "Un quiz a déjà été choisi pour ce rattrapage",
+        )
+    if makeup is None or makeup.status != SessionStatus.WAITING:
         # Bound join-code brute-force per student account, never per IP.
         enforce_public_rate_limit(
             request,
@@ -340,6 +350,7 @@ def select_makeup_quiz(
     participant = QuizParticipant(
         session_id=child.id,
         student_id=membership.id,
+        student_account_id=membership.account_id,
         student_identifier=membership.identifier,
         student_display_name=membership.display_name,
         access_token_hash=participant_token_hash(token),

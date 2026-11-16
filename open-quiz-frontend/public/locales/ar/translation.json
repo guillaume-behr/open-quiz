@@ -939,5 +939,9 @@
     "delete-class-named": "حذف الفصل «{{name}}»",
     "edit-student-named": "تحرير الطالب «{{name}}»",
     "delete-student-named": "حذف الطالب «{{name}}»",
-    "delete-result-named": "حذف نتيجة «{{title}}»"
+    "delete-result-named": "حذف نتيجة «{{title}}»",
+    "finish-quiz-help": "هل تريد إنهاء هذا الاختبار الآن؟ لن يتمكن الطلاب من الإجابة، وسيتم تصحيح إجاباتهم المقدمة حتى الآن.",
+    "error-makeup-already-chosen": "لقد اخترت بالفعل اختبارًا لهذا الاستدراك.",
+    "error-question-used-by-makeup": "قد يسحب استدراك مفتوح هذا السؤال بعد. احذفه أو غيّر صعوبته بعد انتهاء الاستدراك.",
+    "error-quiz-session-not-finishable": "لا يمكن إنهاء إلا اختبار جارٍ أو متوقف مؤقتًا."
 }

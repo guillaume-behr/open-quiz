@@ -871,5 +871,9 @@
     "delete-class-named": "Delete class “{{name}}”",
     "edit-student-named": "Edit student “{{name}}”",
     "delete-student-named": "Delete student “{{name}}”",
-    "delete-result-named": "Delete the result of “{{title}}”"
+    "delete-result-named": "Delete the result of “{{title}}”",
+    "finish-quiz-help": "Finish this quiz now? Students can no longer answer, and their answers so far are graded.",
+    "error-makeup-already-chosen": "You already chose a quiz for this make-up session.",
+    "error-question-used-by-makeup": "An open make-up session may still draw this question. Delete it, or change its difficulty, once the make-up has finished.",
+    "error-quiz-session-not-finishable": "Only a quiz in progress or paused can be finished."
 }

@@ -872,5 +872,9 @@
     "delete-class-named": "Excluir a turma “{{name}}”",
     "edit-student-named": "Editar o aluno “{{name}}”",
     "delete-student-named": "Excluir o aluno “{{name}}”",
-    "delete-result-named": "Excluir o resultado de “{{title}}”"
+    "delete-result-named": "Excluir o resultado de “{{title}}”",
+    "finish-quiz-help": "Encerrar este teste agora? Os alunos não poderão mais responder, e as respostas dadas até agora serão corrigidas.",
+    "error-makeup-already-chosen": "Você já escolheu um teste para esta recuperação.",
+    "error-question-used-by-makeup": "Uma recuperação aberta ainda pode sortear esta pergunta. Exclua-a, ou altere sua dificuldade, quando a recuperação terminar.",
+    "error-quiz-session-not-finishable": "Apenas um teste em andamento ou pausado pode ser encerrado."
 }

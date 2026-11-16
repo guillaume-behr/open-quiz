@@ -51,6 +51,7 @@ from app.models import (
 from app.records.question_history import (
     active_exam_uses_questions,
     freeze_for_published_sessions,
+    open_makeup_draws_from_bank,
     remove_questions,
     sessions_using_questions,
 )
@@ -242,6 +243,23 @@ def require_no_active_exam(question_id: int, session: DbSession) -> None:
             status.HTTP_409_CONFLICT,
             ErrorCode.QUESTION_IN_ACTIVE_SESSION,
             "Cette question est utilisée par une session en cours",
+        )
+
+
+def require_no_open_makeup(question: Question, session: DbSession) -> None:
+    """Refuse to take a question from what an open make-up may still draw.
+
+    A make-up draws each student's questions when they pick a quiz: one
+    question fewer of a difficulty could leave the quiz short of questions,
+    and the students who have not picked yet unable to.
+    """
+    if question.question_bank_id is not None and open_makeup_draws_from_bank(
+        question.question_bank_id, session
+    ):
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUESTION_USED_BY_MAKEUP,
+            "Un rattrapage ouvert peut encore tirer cette question",
         )
 
 
@@ -515,6 +533,9 @@ def update_question(
     # Locked: two edits of one question would otherwise both freeze a copy.
     question = owned_question(question_id, professor.id, session, for_update=True)
     require_no_active_exam(question.id, session)
+    if question.difficulty != question_payload.difficulty:
+        # Each difficulty is drawn by count: moving one is taking one out.
+        require_no_open_makeup(question, session)
     # Answers to a choice question carry automatic marks: once it is written,
     # a teacher has to mark them.
     became_written = (
@@ -563,8 +584,9 @@ def delete_question(
 
     Exam sessions that drew it keep it, detached from the bank.
     """
-    owned_question(question_id, professor.id, session)
+    question = owned_question(question_id, professor.id, session)
     require_no_active_exam(question_id, session)
+    require_no_open_makeup(question, session)
     remove_questions([question_id], session)
     session.commit()
 

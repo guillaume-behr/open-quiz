@@ -794,6 +794,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/quizzes/sessions/{session_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish Quiz Session
+         * @description End a running or paused class session now, as its timer would.
+         *
+         *     Its answers are kept and graded; a session with answers can no longer be
+         *     cancelled, so this is how a teacher closes one early, for instance when a
+         *     student who never handed in holds it open.
+         */
+        post: operations["finish_quiz_session_api_quizzes_sessions__session_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/quizzes/sessions/{session_id}/cancel": {
         parameters: {
             query?: never;
@@ -1988,7 +2012,7 @@ export interface components {
         /** QuizAnswerReview */
         QuizAnswerReview: {
             /** Id */
-            id: number;
+            id: number | null;
             /** Question Id */
             question_id: number;
             /** Position */
@@ -4246,6 +4270,37 @@ export interface operations {
         };
     };
     resume_quiz_session_api_quizzes_sessions__session_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finish_quiz_session_api_quizzes_sessions__session_id__finish_post: {
         parameters: {
             query?: never;
             header?: never;

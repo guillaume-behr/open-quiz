@@ -490,6 +490,13 @@ class QuizParticipant(Base):
     student_id: Mapped[int | None] = mapped_column(
         ForeignKey("students.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # The account that took part: it outlives the class membership above, so
+    # the student's history keeps exams of a class they left.
+    student_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("student_accounts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     student_identifier: Mapped[str] = mapped_column(String(80))
     student_display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     access_token_hash: Mapped[str | None] = mapped_column(

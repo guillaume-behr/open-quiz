@@ -5,6 +5,7 @@ they read the session state and leave. A student who lost their token takes
 their participation back by joining again.
 """
 
+from collections import defaultdict
 from datetime import UTC, datetime
 from secrets import token_urlsafe
 from typing import Annotated
@@ -21,6 +22,7 @@ from app.domain.session_status import ACTIVE_SESSION_STATUSES
 from app.enums import QuizMode, SessionStatus
 from app.live.updates import publish_quiz_update
 from app.models import (
+    MakeupSession,
     Quiz,
     QuizAnswer,
     QuizParticipant,
@@ -36,10 +38,15 @@ from app.schemas.student_quizzes import (
     StudentQuizJoinResponse,
     StudentQuizStateResponse,
 )
+from app.services.makeup_sessions import student_makeup_child
 from app.services.participants import (
     SESSION_RESUMED_VIOLATION,
     participant_token_hash,
     reject_quiz_join,
+)
+from app.services.question_draws import (
+    draw_unique_question_ids,
+    question_draw_pool,
 )
 from app.services.session_lifecycle import (
     finish_when_nobody_can_answer,
@@ -47,6 +54,26 @@ from app.services.session_lifecycle import (
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
+
+
+def makeup_quiz_of(
+    join_code: str, account: StudentAccount, session: Session
+) -> tuple[QuizSession, Quiz] | None:
+    """The quiz a student chose in the make-up of this code, to take it back.
+
+    A make-up student is only ever given the make-up's code: after losing
+    their tab, they join again with it and resume their own quiz session.
+    """
+    makeup = session.scalar(
+        select(MakeupSession).where(MakeupSession.join_code == join_code)
+    )
+    if makeup is None:
+        return None
+    child = student_makeup_child(makeup, account, session)
+    if child is None:
+        return None
+    quiz = session.get(Quiz, child.quiz_id)
+    return (child, quiz) if quiz is not None else None
 
 
 def joinable_session(
@@ -60,11 +87,17 @@ def joinable_session(
     Every refusal looks the same and counts against the join limit, so the
     answers never tell an unknown code from a session of another class.
     """
-    row = session.execute(
+    exam = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(QuizSession.join_code == payload.join_code, Quiz.mode == QuizMode.EXAM)
     ).first()
+    row: tuple[QuizSession, Quiz] | None
+    if exam is not None:
+        exam_session, exam_quiz = exam
+        row = (exam_session, exam_quiz)
+    else:
+        row = makeup_quiz_of(payload.join_code, account, session)
     if row is None:
         reject_quiz_join(request, f"join:unknown:{account.id}")
     quiz_session, quiz = row
@@ -89,7 +122,9 @@ def joinable_session(
             .limit(1)
         )
         if assigned_question_id is None:
-            reject_quiz_join(request, join_subject)
+            draw_for_late_student(
+                quiz_session, quiz, student, join_subject, request, session
+            )
         session.execute(
             update(QuizSessionStudentQuestion)
             .where(
@@ -99,6 +134,56 @@ def joinable_session(
             .values(student_identifier=student.identifier)
         )
     return quiz_session, quiz, student, join_subject
+
+
+def draw_for_late_student(
+    quiz_session: QuizSession,
+    quiz: Quiz,
+    student: Student,
+    join_subject: str,
+    request: Request,
+    session: Session,
+) -> None:
+    """Draw the questions of a student added to the class after the launch.
+
+    A launch draws for the class as it stands, so a student added since has
+    no questions. While the session still waits, they get a draw of their
+    own, distinct from their classmates' while unused combinations remain;
+    once it has started, nobody new may join anyway.
+    """
+    if quiz_session.status != SessionStatus.WAITING:
+        reject_quiz_join(request, join_subject)
+    existing_rows = session.execute(
+        select(
+            QuizSessionStudentQuestion.student_identifier,
+            QuizSessionStudentQuestion.question_id,
+        ).where(QuizSessionStudentQuestion.session_id == quiz_session.id)
+    ).all()
+    questions_by_student: dict[str, list[int]] = defaultdict(list)
+    for identifier, question_id in existing_rows:
+        questions_by_student[identifier].append(question_id)
+    used_draws = {
+        tuple(sorted(question_ids)) for question_ids in questions_by_student.values()
+    }
+    question_ids = draw_unique_question_ids(
+        question_draw_pool(quiz, session), used_draws
+    )
+    session.add_all(
+        QuizSessionStudentQuestion(
+            session_id=quiz_session.id,
+            student_id=student.id,
+            student_identifier=student.identifier,
+            question_id=question_id,
+            position=position,
+        )
+        for position, question_id in enumerate(question_ids)
+    )
+    try:
+        session.flush()
+    except IntegrityError:
+        # The same student joining twice at once: the other request drew.
+        session.rollback()
+        reject_quiz_join(request, join_subject)
 
 
 def rejoin_quiz(
@@ -273,6 +358,7 @@ def first_join(
     participant = QuizParticipant(
         session_id=quiz_session.id,
         student_id=student.id,
+        student_account_id=student.account_id,
         student_identifier=student.identifier,
         student_display_name=student.display_name,
         access_token_hash=participant_token_hash(participant_token),

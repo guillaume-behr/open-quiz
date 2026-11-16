@@ -178,7 +178,7 @@ def test_joining_rejects_unknown_codes_classes_and_draws(environment) -> None:
     )
     assert not_in_class.status_code == 403
 
-    # Joining the class after the draw leaves the newcomer without questions.
+    # Joining the class after the draw: the waiting room draws for them.
     newcomer = client.post(
         "/api/students",
         headers=headers,
@@ -207,7 +207,8 @@ def test_joining_rejects_unknown_codes_classes_and_draws(environment) -> None:
         headers=newcomer_headers,
         json={"join_code": launched["join_code"]},
     )
-    assert late.status_code == 403
+    assert late.status_code == 201
+    assert late.json()["total_questions"] == launched["total_questions"]
 
     with client.app.state.session_factory() as session:
         session.execute(
@@ -909,7 +910,8 @@ def test_teacher_views_tolerate_departed_and_legacy_participants(environment) ->
         headers=teacher_headers,
     )
     assert detached.status_code == 200
-    assert len(detached.json()) == 1
+    # The answered question, and the one left unanswered with nothing to grade.
+    assert [answer["id"] is None for answer in detached.json()] == [False, True]
     results = client.get("/api/quizzes/sessions/results", headers=teacher_headers)
     assert results.json()[0]["participants"][0]["id"] == participant_id
 

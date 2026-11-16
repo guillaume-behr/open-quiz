@@ -872,5 +872,9 @@
     "delete-class-named": "Supprimer la classe « {{name}} »",
     "edit-student-named": "Modifier l’élève « {{name}} »",
     "delete-student-named": "Supprimer l’élève « {{name}} »",
-    "delete-result-named": "Supprimer le résultat de « {{title}} »"
+    "delete-result-named": "Supprimer le résultat de « {{title}} »",
+    "finish-quiz-help": "Terminer ce quiz maintenant ? Les élèves ne pourront plus répondre, et leurs réponses déjà données seront corrigées.",
+    "error-makeup-already-chosen": "Vous avez déjà choisi un quiz pour ce rattrapage.",
+    "error-question-used-by-makeup": "Un rattrapage ouvert peut encore tirer cette question. Supprimez-la, ou changez sa difficulté, une fois le rattrapage terminé.",
+    "error-quiz-session-not-finishable": "Seul un quiz en cours ou en pause peut être terminé."
 }
