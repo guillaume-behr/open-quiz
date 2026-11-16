@@ -8,8 +8,8 @@ type LiveSessionDialogsProps =
     | { kind: "makeup"; live: LiveSessions<MakeupSession> }
 
 /**
- * The supervision dialog of the open session, and its confirmations. A
- * make-up session can be finished early but not deleted.
+ * The supervision dialog of the open session, and its confirmations. Either
+ * kind can be finished early; a make-up session cannot be deleted.
  */
 export function LiveSessionDialogs({ kind, live }: LiveSessionDialogsProps) {
     return (
@@ -23,11 +23,7 @@ export function LiveSessionDialogs({ kind, live }: LiveSessionDialogsProps) {
                 onStart={() => void live.runAction("start")}
                 onPause={() => void live.runAction("pause")}
                 onResume={() => void live.runAction("resume")}
-                onFinish={
-                    kind === "makeup"
-                        ? () => live.askToConfirm("finish")
-                        : undefined
-                }
+                onFinish={() => live.askToConfirm("finish")}
                 onConfirmCancel={() => live.askToConfirm("cancel")}
                 onConfirmDelete={
                     kind === "class"

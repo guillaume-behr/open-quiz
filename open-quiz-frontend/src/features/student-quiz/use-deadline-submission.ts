@@ -9,6 +9,9 @@ import { millisecondsLeft, serverClockAnchor } from "@/lib/server-clock"
  */
 export const DEADLINE_SUBMISSION_LEAD_MS = 3_000
 
+/** How soon the deadline submission is tried again when the page is busy. */
+export const DEADLINE_RETRY_MS = 250
+
 /** The answer entered on screen, as the question form holds it. */
 export type EnteredAnswer = {
     selectedChoiceIds: string[]
@@ -45,7 +48,7 @@ export function hasUnsentAnswer(
  * written answer still being typed at 00:00 would be lost entirely, so it is
  * sent as it stands a few seconds before, as a paper is collected as it is.
  * `submit` is called only when there is something unsent and no other
- * request is under way.
+ * request is under way; while one is, it is tried again until the deadline.
  */
 export function useDeadlineSubmission(
     session: StudentQuizSession | null,
@@ -66,24 +69,30 @@ export function useDeadlineSubmission(
     const questionId = session?.question?.id
     useEffect(() => {
         if (!endsAt) return
+        const anchor = serverClockAnchor(serverNow)
         const delay =
-            millisecondsLeft(endsAt, serverClockAnchor(serverNow)) -
-            DEADLINE_SUBMISSION_LEAD_MS
+            millisecondsLeft(endsAt, anchor) - DEADLINE_SUBMISSION_LEAD_MS
         // Already past: the server has ended the exam, or is about to.
         if (delay <= -DEADLINE_SUBMISSION_LEAD_MS) return
-        const timer = window.setTimeout(
-            () => {
-                const current = latest.current
-                if (
-                    !current.isBusy &&
-                    current.session?.status === "in_progress" &&
-                    current.session.question?.id === questionId &&
-                    hasUnsentAnswer(current.session, current.entered)
-                )
-                    current.submit()
-            },
-            Math.max(0, delay)
-        )
+        let timer: number
+        const attempt = () => {
+            const current = latest.current
+            if (
+                current.session?.status !== "in_progress" ||
+                current.session.question?.id !== questionId ||
+                !hasUnsentAnswer(current.session, current.entered)
+            )
+                return
+            if (!current.isBusy) {
+                current.submit()
+                return
+            }
+            // Another request is under way (a save, a navigation): try again
+            // shortly, for as long as the exam is still open.
+            if (millisecondsLeft(endsAt, anchor) > 0)
+                timer = window.setTimeout(attempt, DEADLINE_RETRY_MS)
+        }
+        timer = window.setTimeout(attempt, Math.max(0, delay))
         return () => window.clearTimeout(timer)
     }, [endsAt, questionId, serverNow])
 }

@@ -1,4 +1,5 @@
-import { joinMakeupSession, selectMakeupQuiz } from "@/api/quizzes"
+import { ApiError } from "@/api/client"
+import { joinMakeupSession, joinQuiz, selectMakeupQuiz } from "@/api/quizzes"
 import { formatMinutes, useLocale } from "@/lib/locale"
 import { apiErrorMessage } from "@/lib/errors"
 import type { MakeupJoin } from "@/api/types"
@@ -33,8 +34,32 @@ export function StudentMakeupPanel({ token }: { token: string }) {
         event.preventDefault()
         setBusy(true)
         setError(null)
+        const joinCode = code.trim().toUpperCase()
         try {
-            setLobby(await joinMakeupSession(code.trim().toUpperCase(), token))
+            setLobby(await joinMakeupSession(joinCode, token))
+        } catch (caught) {
+            if (
+                caught instanceof ApiError &&
+                caught.code === "MAKEUP_ALREADY_CHOSEN"
+            ) {
+                // The quiz was chosen in a tab since lost: take it back.
+                await resumeChosenQuiz(joinCode)
+                return
+            }
+            setError(apiErrorMessage(caught, t, t("makeup-join-error")))
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    async function resumeChosenQuiz(joinCode: string) {
+        try {
+            const joined = await joinQuiz(joinCode, token)
+            storeQuizSession({
+                joinCode: joined.join_code,
+                participantToken: joined.participant_token,
+            })
+            void navigate("/student/exam")
         } catch (caught) {
             setError(apiErrorMessage(caught, t, t("makeup-join-error")))
         } finally {

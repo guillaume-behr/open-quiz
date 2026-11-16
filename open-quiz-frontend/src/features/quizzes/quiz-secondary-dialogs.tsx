@@ -297,7 +297,7 @@ export function SessionActionDialog({
         },
         finish: {
             title: "finish-quiz",
-            help: "makeup-finish-help",
+            help: kind === "makeup" ? "makeup-finish-help" : "finish-quiz-help",
             confirm: "finish-quiz",
         },
     }[actionToConfirm ?? "cancel"]

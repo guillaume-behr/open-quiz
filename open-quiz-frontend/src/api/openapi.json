@@ -2450,6 +2450,54 @@
         }
       }
     },
+    "/api/quizzes/sessions/{session_id}/finish": {
+      "post": {
+        "tags": [
+          "quizzes"
+        ],
+        "summary": "Finish Quiz Session",
+        "description": "End a running or paused class session now, as its timer would.\n\nIts answers are kept and graded; a session with answers can no longer be\ncancelled, so this is how a teacher closes one early, for instance when a\nstudent who never handed in holds it open.",
+        "operationId": "finish_quiz_session_api_quizzes_sessions__session_id__finish_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/quizzes/sessions/{session_id}/cancel": {
       "post": {
         "tags": [
@@ -6076,7 +6124,14 @@
       "QuizAnswerReview": {
         "properties": {
           "id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Id"
           },
           "question_id": {

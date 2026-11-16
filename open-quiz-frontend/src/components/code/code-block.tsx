@@ -184,7 +184,13 @@ export function CodeBlock({
 }: CodeBlockProps) {
     const { t } = useTranslation()
     const [isRunning, setIsRunning] = useState(false)
-    const [result, setResult] = useState<string | null>(null)
+    // The output remembers the program it came from: when the code changes
+    // under it (the next question reuses this block), it is no longer shown.
+    const [execution, setExecution] = useState<{
+        source: string
+        output: string
+    } | null>(null)
+    const result = execution?.source === code ? execution.output : null
     const highlightedCodeRef = useRef<HTMLPreElement>(null)
     const currentCodeRef = useRef(code)
     const mountedRef = useRef(true)
@@ -220,18 +226,19 @@ export function CodeBlock({
     async function runPython() {
         const source = code
         setIsRunning(true)
-        setResult(null)
+        setExecution(null)
         try {
             const output = await serializePythonExecution(async () => {
                 return (await executePython(source)) || t("python-no-output")
             })
             if (mountedRef.current && currentCodeRef.current === source)
-                setResult(output)
+                setExecution({ source, output })
         } catch (error) {
             if (mountedRef.current && currentCodeRef.current === source) {
-                setResult(
-                    `${t("python-run-error")}\n${describePythonFailure(error, t)}`
-                )
+                setExecution({
+                    source,
+                    output: `${t("python-run-error")}\n${describePythonFailure(error, t)}`,
+                })
             }
         } finally {
             if (mountedRef.current) setIsRunning(false)
@@ -240,7 +247,7 @@ export function CodeBlock({
 
     function changeCode(value: string) {
         currentCodeRef.current = value
-        setResult(null)
+        setExecution(null)
         onCodeChange?.(value)
     }
 

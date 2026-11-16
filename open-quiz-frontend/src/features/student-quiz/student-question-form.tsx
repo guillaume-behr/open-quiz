@@ -110,6 +110,7 @@ export function StudentQuestionForm({
             )}
             {question.code_content && question.code_language && (
                 <CodeBlock
+                    key={question.id}
                     code={question.code_content}
                     language={question.code_language}
                 />
@@ -407,6 +408,9 @@ function WrittenAnswer({
             {responseLanguage ? (
                 <div className="w-full">
                     <CodeBlock
+                        // A new question starts with a fresh block, even when
+                        // its starting code matches the previous answer.
+                        key={question.id}
                         code={answer}
                         language={responseLanguage}
                         editable

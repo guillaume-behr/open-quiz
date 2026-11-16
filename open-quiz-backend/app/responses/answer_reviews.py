@@ -61,3 +61,30 @@ def answer_review(
         is_correct=is_correct,
         feedback=answer.feedback,
     )
+
+
+def unanswered_review(
+    question: Question,
+    position: int,
+    choices: list[QuestionChoice],
+    max_score: float,
+    code: QuestionCode | None = None,
+) -> QuizAnswerReview:
+    """A question the student was given and never answered: no mark, no row."""
+    return QuizAnswerReview(
+        id=None,
+        question_id=question.id,
+        position=position + 1,
+        prompt=question.prompt,
+        difficulty=question.difficulty,
+        answer_mode=question.answer_mode,
+        code_content=code.content if code else None,
+        code_language=code.language if code else None,
+        response_language=question.response_language,
+        submitted_answers=[],
+        expected_answers=[choice.label for choice in choices if choice.is_correct],
+        score=0.0,
+        max_score=max_score,
+        is_graded=True,
+        is_correct=False,
+    )

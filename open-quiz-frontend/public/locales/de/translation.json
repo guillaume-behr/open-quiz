@@ -871,5 +871,9 @@
     "delete-class-named": "Klasse „{{name}}“ löschen",
     "edit-student-named": "Schüler „{{name}}“ bearbeiten",
     "delete-student-named": "Schüler „{{name}}“ löschen",
-    "delete-result-named": "Ergebnis von „{{title}}“ löschen"
+    "delete-result-named": "Ergebnis von „{{title}}“ löschen",
+    "finish-quiz-help": "Dieses Quiz jetzt beenden? Die Schüler können nicht mehr antworten, und ihre bisherigen Antworten werden bewertet.",
+    "error-makeup-already-chosen": "Du hast für diese Nachprüfung bereits ein Quiz gewählt.",
+    "error-question-used-by-makeup": "Eine offene Nachprüfung kann diese Frage noch ziehen. Lösche sie oder ändere ihre Schwierigkeit, sobald die Nachprüfung beendet ist.",
+    "error-quiz-session-not-finishable": "Nur ein laufendes oder pausiertes Quiz kann beendet werden."
 }

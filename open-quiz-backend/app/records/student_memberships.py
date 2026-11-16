@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.session_status import ACTIVE_SESSION_STATUSES
@@ -78,7 +78,9 @@ def delete_student_membership(membership_id: int, session: Session) -> None:
             student_id=None,
             access_token_hash=None,
             current_position=None,
-            left_at=datetime.now(UTC),
+            # Kept when already set: someone who left a waiting room for good
+            # must not turn into a participant by leaving the class later.
+            left_at=func.coalesce(QuizParticipant.left_at, datetime.now(UTC)),
         )
     )
     session.execute(delete(Student).where(Student.id == membership_id))

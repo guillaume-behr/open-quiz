@@ -336,6 +336,13 @@ FOREIGN_REQUESTS: list[tuple[str, str, str, Any, str]] = [
     ),
     (
         "POST",
+        "/api/quizzes/sessions/{session_id}/finish",
+        "/api/quizzes/sessions/{session_id}/finish",
+        no_body,
+        "teacher",
+    ),
+    (
+        "POST",
         "/api/quizzes/sessions/{session_id}/cancel",
         "/api/quizzes/sessions/{session_id}/cancel",
         no_body,

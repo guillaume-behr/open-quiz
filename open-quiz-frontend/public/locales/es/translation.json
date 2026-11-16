@@ -872,5 +872,9 @@
     "delete-class-named": "Eliminar la clase “{{name}}”",
     "edit-student-named": "Editar al estudiante “{{name}}”",
     "delete-student-named": "Eliminar al estudiante “{{name}}”",
-    "delete-result-named": "Eliminar el resultado de “{{title}}”"
+    "delete-result-named": "Eliminar el resultado de “{{title}}”",
+    "finish-quiz-help": "¿Terminar este cuestionario ahora? Los estudiantes ya no podrán responder y se calificarán las respuestas dadas hasta ahora.",
+    "error-makeup-already-chosen": "Ya elegiste un cuestionario para esta recuperación.",
+    "error-question-used-by-makeup": "Una recuperación abierta todavía puede sortear esta pregunta. Elimínala, o cambia su dificultad, cuando la recuperación haya terminado.",
+    "error-quiz-session-not-finishable": "Solo se puede terminar un cuestionario en curso o en pausa."
 }
