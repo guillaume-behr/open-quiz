@@ -25,6 +25,7 @@ from app.models import (
     QuizSession,
 )
 from app.records.questions import load_question_records
+from app.schemas.common import trim_text_block
 from app.schemas.student_quizzes import StudentQuizAnswer, TrainingFeedback
 from app.services.grading import decoded_answer_data
 from app.services.question_assignments import (
@@ -124,7 +125,7 @@ def validated_answer(
     """
     feedback: TrainingFeedback | None = None
     if question.answer_mode == AnswerMode.WRITTEN:
-        written_answer = (payload.written_answer or "").strip()
+        written_answer = trim_text_block(payload.written_answer or "")
         if not written_answer or payload.selected_choice_ids is not None:
             raise ApiError(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,

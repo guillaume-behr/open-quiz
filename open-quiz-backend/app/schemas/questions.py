@@ -6,7 +6,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.enums import AnswerMode, Difficulty
-from app.schemas.common import MAX_QUESTIONS_PER_BANK, normalize_optional_code
+from app.schemas.common import (
+    MAX_QUESTIONS_PER_BANK,
+    normalize_optional_code,
+    trim_text_block,
+)
 
 
 class QuestionBankCreate(BaseModel):
@@ -108,7 +112,7 @@ class QuestionChoiceCreate(BaseModel):
     @field_validator("label")
     @classmethod
     def normalize_label(cls, value: str) -> str:
-        return value.replace("\r\n", "\n").replace("\r", "\n").strip()
+        return trim_text_block(value)
 
     @field_validator("code_content")
     @classmethod
@@ -149,7 +153,7 @@ class QuestionCreate(BaseModel):
     @field_validator("prompt")
     @classmethod
     def normalize_prompt(cls, value: str) -> str:
-        normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
+        normalized = trim_text_block(value)
         if not normalized:
             raise ValueError("La question ne peut pas être vide")
         return normalized

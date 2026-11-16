@@ -1,3 +1,4 @@
+import { trimTextBlock } from "@/lib/text-block"
 import type { NewQuestion } from "@/api/types"
 
 import type { EditableChoice } from "./question-form-types"
@@ -27,7 +28,7 @@ export function choicePayloads(choices: EditableChoice[]): {
         }
         return {
             id: choice.id,
-            label: choice.label.trim(),
+            label: trimTextBlock(choice.label),
             is_correct: choice.is_correct,
             points: choice.points,
             image_file: imageFile,
