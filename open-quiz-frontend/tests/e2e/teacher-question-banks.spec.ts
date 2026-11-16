@@ -343,14 +343,36 @@ test("editing a question returns to the same place in the question list", async 
         .filter({ hasText: "Question number 16" })
         .getByRole("button", { name: "Edit", exact: true })
     await editButton.scrollIntoViewIfNeeded()
-    const listScrollTop = await list.evaluate((element) => element.scrollTop)
-    const dialogScrollTop = await dialogBody.evaluate(
-        (element) => element.scrollTop
-    )
-    expect(listScrollTop).toBeGreaterThan(0)
-    expect(dialogScrollTop).toBeGreaterThan(0)
+    // The place to return to is the one at the click: read earlier, a late
+    // layout change (a font swapping in) could still move the list before it.
+    await list.evaluate((element) => {
+        const body = element.closest<HTMLElement>("[data-dialog-body]")
+        document.addEventListener(
+            "click",
+            () => {
+                Object.assign(window, {
+                    scrollAtClick: {
+                        list: element.scrollTop,
+                        dialog: body?.scrollTop ?? 0,
+                    },
+                })
+            },
+            { capture: true, once: true }
+        )
+    })
 
     await editButton.click()
+    const { list: listScrollTop, dialog: dialogScrollTop } =
+        await page.evaluate(
+            () =>
+                (
+                    window as unknown as {
+                        scrollAtClick: { list: number; dialog: number }
+                    }
+                ).scrollAtClick
+        )
+    expect(listScrollTop).toBeGreaterThan(0)
+    expect(dialogScrollTop).toBeGreaterThan(0)
     const formDialog = page.getByRole("dialog", {
         name: "Edit question",
         exact: true,
