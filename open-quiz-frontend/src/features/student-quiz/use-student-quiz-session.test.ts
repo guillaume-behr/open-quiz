@@ -448,7 +448,7 @@ describe("useStudentQuizSession", () => {
     it("leaves a question unanswered as it is until the student moves on", async () => {
         vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
         try {
-            const hook = await joinedExam()
+            const hook = await joinedExam({ accessible_question_numbers: [1] })
             expect(hook.result.current.offersNextQuestion).toBe(false)
             act(() => hook.result.current.setSelectedChoiceIds(["a"]))
             await act(() =>
@@ -523,11 +523,94 @@ describe("useStudentQuizSession", () => {
         )
     })
 
-    it("offers to submit, not to move on, on the last question", async () => {
+    it("offers to submit, not to move on, on the last question reached", async () => {
+        // The second of three, answered, the third not reached yet.
         const hook = await joinedExam({
             question_number: 2,
+            total_questions: 3,
             answered_question_numbers: [1, 2],
+            accessible_question_numbers: [1, 2],
         })
+        expect(hook.result.current.offersNextQuestion).toBe(false)
+
+        // Once the third is within reach, the second only moves on.
+        act(() =>
+            liveOptions().onData(
+                examSession({
+                    question_number: 2,
+                    total_questions: 3,
+                    answered_question_numbers: [1, 2],
+                    accessible_question_numbers: [1, 2, 3],
+                })
+            )
+        )
+        expect(hook.result.current.offersNextQuestion).toBe(true)
+    })
+
+    it("submits only once the change being saved has reached the server", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+        try {
+            const hook = await joinedExam({
+                question_number: 2,
+                answered_question_numbers: [1, 2],
+                selected_choice_ids: ["a"],
+            })
+            let saved: (value: StudentQuizSession) => void = () => undefined
+            api.saveStudentQuizAnswer.mockReturnValue(
+                new Promise<StudentQuizSession>((done) => {
+                    saved = done
+                })
+            )
+            api.submitStudentQuizAnswer.mockResolvedValue(
+                examSession({ question: null, question_number: null })
+            )
+
+            act(() => hook.result.current.setSelectedChoiceIds(["b"]))
+            await act(() => vi.advanceTimersByTimeAsync(ANSWER_SAVE_DELAY_MS))
+            expect(api.saveStudentQuizAnswer).toHaveBeenCalledOnce()
+
+            // The student submits while the save is still on its way.
+            let submitted: Promise<void> = Promise.resolve()
+            act(() => {
+                submitted = hook.result.current.submitAnswer(formEvent())
+            })
+            await act(() => vi.advanceTimersByTimeAsync(0))
+            expect(api.submitStudentQuizAnswer).not.toHaveBeenCalled()
+            expect(hook.result.current.isBusy).toBe(true)
+
+            await act(async () => {
+                saved(
+                    examSession({
+                        question_number: 2,
+                        answered_question_numbers: [1, 2],
+                        selected_choice_ids: ["b"],
+                    })
+                )
+                await submitted
+            })
+            expect(api.submitStudentQuizAnswer).toHaveBeenCalledOnce()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it("goes through the questions in order when coming back from the review", async () => {
+        // Every question answered or skipped; the student chose the first
+        // one from the review.
+        const review = {
+            total_questions: 3,
+            allow_answer_review: true,
+            answered_question_numbers: [2, 3],
+            skipped_question_numbers: [1],
+            accessible_question_numbers: [1, 2, 3],
+        }
+        const hook = await joinedExam({ ...review, question_number: 1 })
+        expect(hook.result.current.offersNextQuestion).toBe(true)
+
+        act(() =>
+            liveOptions().onData(examSession({ ...review, question_number: 3 }))
+        )
+        // The last one submits, which leads to the review.
         expect(hook.result.current.offersNextQuestion).toBe(false)
     })
 })

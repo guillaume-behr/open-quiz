@@ -27,14 +27,18 @@ export function isHandedIn(session: StudentQuizSession): boolean {
 
 /**
  * Whether the question on screen offers "Next question" rather than
- * submitting: it is handed in already and is not the last one, whose
- * submission still hands the paper in or opens the review.
+ * submitting: a later question is already within reach. Only the last
+ * question the student can reach (the last one not greyed out in the
+ * navigation) keeps "Submit my answer", which moves them on, to the review,
+ * or hands the paper in. Coming back from the review, the student goes
+ * through the questions in order and reaches it again from the last one.
  */
 export function offersNextQuestion(session: StudentQuizSession): boolean {
+    const questionNumber = session.question_number
     return (
         savesAnswerOnScreen(session) &&
-        isHandedIn(session) &&
-        (session.question_number ?? 0) < session.total_questions
+        questionNumber != null &&
+        questionNumber < Math.max(0, ...session.accessible_question_numbers)
     )
 }
 

@@ -380,6 +380,16 @@ export function useStudentQuizSession(
     }, [savesChanges, isBusy, selectedChoiceIds, writtenAnswer])
 
     /**
+     * Waits for the saves already sent: a request that moves the student on
+     * must reach the server after them, or a late save would land on a
+     * question the student has left. The page is busy meanwhile.
+     */
+    async function afterPendingSaves() {
+        setIsBusy(true)
+        await saveQueueRef.current
+    }
+
+    /**
      * Leaves the question on screen: what it shows is saved first, and the
      * student stays on it when that fails.
      */
@@ -441,6 +451,7 @@ export function useStudentQuizSession(
         if (!session || !participantToken) return
         const { join_code } = session
         setError(null)
+        await afterPendingSaves()
         await runSessionRequest(async () => {
             const updated = await submitStudentQuiz(join_code, participantToken)
             // The paper is handed in: nothing is left to draft.
@@ -458,6 +469,7 @@ export function useStudentQuizSession(
         if (!session?.question || !participantToken) return
         const { join_code, question } = session
         setError(null)
+        await afterPendingSaves()
         await runSessionRequest(
             async () => {
                 const updated = await submitStudentQuizAnswer(
