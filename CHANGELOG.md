@@ -50,13 +50,12 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   already answered or skipped is saved by itself, without submitting it
   again. Such a question offers “Next question” instead of “Submit my
   answer”, except the last one the student can reach (the last one not
-  greyed out in the navigation). Once every question is answered or
-  skipped, submitting or skipping a question leads back to the summary
-  instead of on to the next question, skipped or not. Clearing an answer
+  greyed out in the navigation). Coming back from the summary to a
+  question, the student goes on through the next ones in order and gets
+  back to the summary by submitting the last one. Clearing an answer
   removes it; the question then counts as skipped. Before, an answer
-  entered but not submitted stayed
-  in the browser only, and was lost when time ran out while the student was
-  on another question.
+  entered but not submitted stayed in the browser only, and was lost when
+  time ran out while the student was on another question.
 - The numbered question navigation sits in a bar centred at the bottom of
   the screen, outside the question card. It numbers every question, ten at a
   time with arrows beyond that, and turns the page by itself with a slide:

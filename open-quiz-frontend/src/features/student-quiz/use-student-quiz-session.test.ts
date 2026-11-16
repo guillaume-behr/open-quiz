@@ -594,17 +594,23 @@ describe("useStudentQuizSession", () => {
         }
     })
 
-    it("offers to submit, which leads back to the review, once it awaits", async () => {
-        // Every question answered or skipped: the student came back to the
-        // first one from the review.
-        const hook = await joinedExam({
-            question_number: 1,
-            total_questions: 2,
+    it("goes through the questions in order when coming back from the review", async () => {
+        // Every question answered or skipped; the student chose the first
+        // one from the review.
+        const review = {
+            total_questions: 3,
             allow_answer_review: true,
-            answered_question_numbers: [2],
+            answered_question_numbers: [2, 3],
             skipped_question_numbers: [1],
-            accessible_question_numbers: [1, 2],
-        })
+            accessible_question_numbers: [1, 2, 3],
+        }
+        const hook = await joinedExam({ ...review, question_number: 1 })
+        expect(hook.result.current.offersNextQuestion).toBe(true)
+
+        act(() =>
+            liveOptions().onData(examSession({ ...review, question_number: 3 }))
+        )
+        // The last one submits, which leads to the review.
         expect(hook.result.current.offersNextQuestion).toBe(false)
     })
 })

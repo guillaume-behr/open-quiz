@@ -275,21 +275,11 @@ def advance_participant(
     participant: QuizParticipant,
     session: Session,
 ) -> None:
-    """Move to the next question, or past the last one.
-
-    Once every question is answered or skipped, the student goes back to the
-    review rather than on to a later question, skipped or not: the review
-    lists them all and leads to each.
-    """
-    question_ids = session_question_ids(quiz_session, session, participant)
-    total_questions = len(question_ids)
-    reviewing_next = final_review_offered(quiz_session, quiz, participant) and set(
-        question_ids
-    ).issubset(handed_in_question_ids(quiz_session, participant, session))
+    """Move to the next question, or past the last one."""
+    total_questions = len(session_question_ids(quiz_session, session, participant))
     if (
         participant.current_position is not None
         and participant.current_position + 1 < total_questions
-        and not reviewing_next
     ):
         participant.current_position += 1
     else:

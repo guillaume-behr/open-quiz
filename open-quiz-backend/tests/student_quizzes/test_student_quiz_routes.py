@@ -636,12 +636,11 @@ def test_without_review_skipped_questions_are_reviewed_before_handing_in(
     assert back.json()["question_number"] == 1
     assert client.post(f"{url}/review", headers=headers).status_code == 200
     client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
-    # Everything is answered or skipped: answering what was skipped leads
-    # back to the review, not on to the next question.
-    reviewing = answer_current(client, url, headers)
+    assert answer_current(client, url, headers).json()["question_number"] == 2
+    # Answering what was skipped does not take the review away: the student
+    # goes straight back to it and hands the paper in from there.
+    reviewing = client.post(f"{url}/review", headers=headers)
     assert reviewing.status_code == 200
-    assert reviewing.json()["question_number"] is None
-    assert reviewing.json()["awaiting_final_submission"] is True
     assert reviewing.json()["allow_answer_review"] is True
     assert reviewing.json()["awaiting_final_submission"] is True
     # Every question answered, but the paper is not in: not finished yet.
@@ -3323,44 +3322,3 @@ def test_saving_needs_an_exam_that_allows_going_back(environment) -> None:
     assert refused.status_code == 409
     assert refused.json()["detail"]["code"] == "ANSWER_SAVE_UNAVAILABLE"
     assert client.get(url, headers=headers).json()["answered_question_numbers"] == []
-
-
-def test_once_everything_is_handed_in_questions_lead_back_to_the_review(
-    environment,
-) -> None:
-    client = environment["client"]
-    environment = two_question_quiz(client, environment)
-    _, headers, url = started(client, environment)
-
-    # First round: skip the first question, answer the last one.
-    first = skip_current(client, url, headers)
-    assert first.json()["question_number"] == 2
-    review = answer_current(client, url, headers)
-    assert review.json()["awaiting_final_submission"] is True
-
-    # Answering the skipped question goes back to the review.
-    client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
-    answered = answer_current(client, url, headers)
-    assert answered.json()["question_number"] is None
-    assert answered.json()["awaiting_final_submission"] is True
-    assert answered.json()["answered_question_numbers"] == [1, 2]
-
-    # So does skipping one, answered or not.
-    client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
-    skipped = skip_current(client, url, headers)
-    assert skipped.json()["question_number"] is None
-    assert skipped.json()["awaiting_final_submission"] is True
-
-
-def test_before_everything_is_handed_in_answering_moves_on(environment) -> None:
-    client = environment["client"]
-    environment = two_question_quiz(client, environment)
-    _, headers, url = started(client, environment)
-
-    # The first question skipped, the second not reached: answering the first
-    # still moves on to the second, which is not handed in yet.
-    skip_current(client, url, headers)
-    client.post(f"{url}/navigate", headers=headers, json={"question_number": 1})
-    moved = answer_current(client, url, headers)
-    assert moved.json()["question_number"] == 2
-    assert moved.json()["awaiting_final_submission"] is False
