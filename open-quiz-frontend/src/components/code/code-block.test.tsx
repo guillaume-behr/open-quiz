@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -15,6 +15,11 @@ vi.mock("prism-react-renderer", async (importOriginal) => {
         },
     }
 })
+
+vi.mock("@/components/code/python-runner", () => ({
+    runPython: vi.fn((source: string) => Promise.resolve(`ran ${source}`)),
+    describePythonFailure: () => "failure",
+}))
 
 import { CodeBlock } from "./code-block"
 
@@ -63,5 +68,19 @@ describe("CodeBlock", () => {
         rerender(<CodeBlock code={questionCode} language="python" />)
 
         expect(highlighted.codes).toEqual([questionCode])
+    })
+
+    it("hides the output of a previous program when the code changes", async () => {
+        const { rerender } = render(
+            <CodeBlock code="print(1)" language="python" runnable />
+        )
+        fireEvent.click(screen.getByRole("button", { name: "run-python" }))
+        await waitFor(() =>
+            expect(screen.getByRole("status")).toHaveTextContent("ran print(1)")
+        )
+
+        rerender(<CodeBlock code="print(2)" language="python" runnable />)
+
+        expect(screen.queryByRole("status")).not.toBeInTheDocument()
     })
 })

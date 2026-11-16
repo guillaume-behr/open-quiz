@@ -88,6 +88,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- When two code questions follow each other, the output of a program run on
+  the first one no longer shows under the second one.
 - A choice image larger than about 750 KB can be saved again in the question
   editor. The editor sent each choice image in base64 inside the `payload`
   form field, which a multipart request caps at 1 MiB; it now sends them as
