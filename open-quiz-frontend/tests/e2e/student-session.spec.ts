@@ -98,9 +98,10 @@ test("joining a waiting quiz immediately requests full screen", async ({
             /switch window or tab, move the pointer out of the page, open the right-click menu/
         )
     ).toBeVisible()
+    // No link to the legal pages: the student must stay on the exam page.
     await expect(
         page.getByRole("link", { name: "Personal data" })
-    ).toHaveAttribute("href", "/privacy")
+    ).toHaveCount(0)
     await expect
         .poll(() =>
             page.evaluate(

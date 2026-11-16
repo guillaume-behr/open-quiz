@@ -55,6 +55,9 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Changed
 
+- The full-screen screen shown to a student joining a quiz no longer links
+  to the personal data page; it still names the events reported to the
+  teacher.
 - In an exam the student may go back in, the server holds what the student
   sees: leaving a question (numbered bar, “Skip the question”, back to the
   summary) first saves the answer on screen, and a change to a question
