@@ -76,6 +76,7 @@ from app.services.question_draws import (
 from app.services.session_lifecycle import (
     discard_active_training_sessions,
     expire_quiz_session,
+    finish_session,
 )
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
@@ -449,6 +450,53 @@ def resume_quiz_session(
     session.commit()
     session.refresh(quiz_session)
     publish_quiz_update(request, quiz_session, session)
+    return session_response(quiz_session, quiz, session)
+
+
+@router.post(
+    "/sessions/{session_id}/finish",
+    response_model=QuizSessionResponse,
+)
+def finish_quiz_session(
+    session_id: int,
+    request: Request,
+    professor: ProfessorUser,
+    session: DbSession,
+) -> QuizSessionResponse:
+    """End a running or paused class session now, as its timer would.
+
+    Its answers are kept and graded; a session with answers can no longer be
+    cancelled, so this is how a teacher closes one early, for instance when a
+    student who never handed in holds it open.
+    """
+    quiz_session, quiz = owned_class_session(session_id, professor.id, session)
+    expire_quiz_session(quiz_session, quiz, session)
+    # Every transition updates this row: holding its lock until the commit,
+    # the status read below stays true, and finish_session cannot miss.
+    session.refresh(quiz_session, with_for_update=True)
+    if quiz_session.status == SessionStatus.FINISHED:
+        # A second click, or the timer just before: nothing left to do.
+        return session_response(quiz_session, quiz, session)
+    if quiz_session.status == SessionStatus.WAITING:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.QUIZ_SESSION_NOT_FINISHABLE,
+            "Seul un quiz en cours ou en pause peut être terminé",
+        )
+    finish_session(
+        quiz_session,
+        quiz,
+        session,
+        from_statuses=(SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
+    )
+    session.commit()
+    session.refresh(quiz_session)
+    publish_quiz_update(request, quiz_session, session)
+    audit_event(
+        "quiz.session_finished_early",
+        professor_id=professor.id,
+        session_id=quiz_session.id,
+    )
     return session_response(quiz_session, quiz, session)
 
 

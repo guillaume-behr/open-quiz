@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ApiError } from "@/api/client"
 import type { StudentQuizSession } from "@/api/types"
 
+import { draftKey } from "./answer-drafts"
 import {
     ANSWER_SAVE_DELAY_MS,
     useStudentQuizSession,
@@ -167,6 +168,51 @@ describe("useStudentQuizSession", () => {
 
         await waitFor(() => expect(result.current.session).not.toBeNull())
         expect(result.current.selectedChoiceIds).toEqual(["a"])
+    })
+
+    it("brings back the draft of a tab reloaded during a pause", async () => {
+        sessionStorage.setItem(
+            draftKey("ABC123", 1),
+            JSON.stringify({
+                selectedChoiceIds: [],
+                writtenAnswer: "Typed before the reload",
+            })
+        )
+        stored.readStoredQuizSession.mockReturnValue({
+            joinCode: "ABC123",
+            participantToken: "participant",
+        })
+        api.getStudentQuizSession.mockResolvedValue(
+            quizSession({ status: "paused", question: null })
+        )
+        const { result } = renderHook(() => useStudentQuizSession("student"))
+        await waitFor(() => expect(result.current.session).not.toBeNull())
+
+        // The teacher resumes: the question comes back with its draft.
+        act(() =>
+            liveOptions().onData(
+                quizSession({
+                    status: "in_progress",
+                    question: { id: 1, answer_mode: "written" } as never,
+                })
+            )
+        )
+
+        expect(result.current.writtenAnswer).toBe("Typed before the reload")
+    })
+
+    it("keeps the answer on screen through a pause", async () => {
+        const { hook } = await joined()
+        act(() => hook.result.current.setSelectedChoiceIds(["b"]))
+
+        act(() =>
+            liveOptions().onData(
+                quizSession({ status: "paused", question: null })
+            )
+        )
+        act(() => liveOptions().onData(quizSession({ status: "in_progress" })))
+
+        expect(hook.result.current.selectedChoiceIds).toEqual(["b"])
     })
 
     it("forgets a stored session the server no longer knows", async () => {

@@ -292,6 +292,12 @@ export function resumeQuizSession(sessionId: number): Promise<QuizSession> {
     })
 }
 
+export function finishQuizSession(sessionId: number): Promise<QuizSession> {
+    return request<QuizSession>(`/api/quizzes/sessions/${sessionId}/finish`, {
+        method: "POST",
+    })
+}
+
 export function cancelQuizSession(sessionId: number): Promise<void> {
     return request<void>(`/api/quizzes/sessions/${sessionId}/cancel`, {
         method: "POST",

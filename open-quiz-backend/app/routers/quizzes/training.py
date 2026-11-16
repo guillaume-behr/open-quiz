@@ -330,6 +330,7 @@ def start_training_quiz(
     participant = QuizParticipant(
         session_id=quiz_session.id,
         student_id=class_student.id,
+        student_account_id=student.id,
         student_identifier=student.identifier,
         student_display_name=student.display_name,
         access_token_hash=participant_token_hash(participant_token),

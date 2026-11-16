@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { StudentQuizSession } from "@/api/types"
 
 import {
+    DEADLINE_RETRY_MS,
     DEADLINE_SUBMISSION_LEAD_MS,
     hasUnsentAnswer,
     useDeadlineSubmission,
@@ -121,6 +122,29 @@ describe("useDeadlineSubmission", () => {
         expect(sent.submit).not.toHaveBeenCalled()
         expect(busy.submit).not.toHaveBeenCalled()
         expect(late.submit).not.toHaveBeenCalled()
+    })
+
+    it("sends it once the request under way at the deadline is over", () => {
+        const submit = vi.fn()
+        const current = session("written")
+        const { rerender } = renderHook(
+            (props: { isBusy: boolean }) =>
+                useDeadlineSubmission(
+                    current,
+                    written("Draft"),
+                    props.isBusy,
+                    submit
+                ),
+            { initialProps: { isBusy: true } }
+        )
+        vi.advanceTimersByTime(60_000 - DEADLINE_SUBMISSION_LEAD_MS + 100)
+        expect(submit).not.toHaveBeenCalled()
+
+        rerender({ isBusy: false })
+        vi.advanceTimersByTime(DEADLINE_RETRY_MS)
+        expect(submit).toHaveBeenCalledOnce()
+        vi.advanceTimersByTime(10_000)
+        expect(submit).toHaveBeenCalledOnce()
     })
 
     it("follows the question on screen and stops when unmounted", () => {

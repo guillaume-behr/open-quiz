@@ -59,10 +59,16 @@ export function useWrittenAnswerGrading(
     }
 
     async function grade(answer: QuizAnswerReview): Promise<void> {
-        if (!selectedResult || selectedResult.grades_published_at !== null)
+        if (
+            !selectedResult ||
+            selectedResult.grades_published_at !== null ||
+            // A question never answered has no answer to grade.
+            answer.id === null
+        )
             return
+        const answerId = answer.id
         // Number("") is 0: an emptied field must not save a zero.
-        const draft = (scoreDrafts[answer.id] ?? String(answer.score)).trim()
+        const draft = (scoreDrafts[answerId] ?? String(answer.score)).trim()
         const score = Number(draft)
         if (
             draft === "" ||
@@ -77,13 +83,13 @@ export function useWrittenAnswerGrading(
             )
             return
         }
-        const feedback = feedbackDrafts[answer.id] ?? answer.feedback ?? ""
-        setGradingAnswerId(answer.id)
+        const feedback = feedbackDrafts[answerId] ?? answer.feedback ?? ""
+        setGradingAnswerId(answerId)
         setGradeError(null)
         try {
             const graded = await gradeWrittenAnswer(
                 selectedResult.id,
-                answer.id,
+                answerId,
                 score,
                 feedback
             )
@@ -129,17 +135,32 @@ export function useWrittenAnswerGrading(
             (answerList.error
                 ? apiErrorMessage(answerList.error, t, t("answers-load-error"))
                 : null),
+        // Questions never answered have no answer, so no draft.
         scoreDrafts: Object.fromEntries(
-            answers.map((answer) => [
-                answer.id,
-                scoreDrafts[answer.id] ?? String(answer.score),
-            ])
+            answers.flatMap((answer) =>
+                answer.id === null
+                    ? []
+                    : [
+                          [
+                              answer.id,
+                              scoreDrafts[answer.id] ?? String(answer.score),
+                          ] as const,
+                      ]
+            )
         ),
         feedbackDrafts: Object.fromEntries(
-            answers.map((answer) => [
-                answer.id,
-                feedbackDrafts[answer.id] ?? answer.feedback ?? "",
-            ])
+            answers.flatMap((answer) =>
+                answer.id === null
+                    ? []
+                    : [
+                          [
+                              answer.id,
+                              feedbackDrafts[answer.id] ??
+                                  answer.feedback ??
+                                  "",
+                          ] as const,
+                      ]
+            )
         ),
         gradingAnswerId,
         setScoreDraft: (answerId: number, score: string) =>

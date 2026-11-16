@@ -198,6 +198,23 @@ def chosen_makeup_quiz(
     return makeup, membership, quiz
 
 
+def student_makeup_child(
+    makeup: MakeupSession, account: StudentAccount, session: Session
+) -> QuizSession | None:
+    """The quiz session a student account chose in a make-up, if any."""
+    return session.scalar(
+        select(QuizSession)
+        .join(QuizParticipant, QuizParticipant.session_id == QuizSession.id)
+        .join(Student, Student.id == QuizParticipant.student_id)
+        .where(
+            QuizSession.makeup_session_id == makeup.id,
+            Student.account_id == account.id,
+            Student.class_id == makeup.class_id,
+        )
+        .limit(1)
+    )
+
+
 def claim_makeup_selection(
     makeup: MakeupSession, membership: Student, session: Session
 ) -> None:

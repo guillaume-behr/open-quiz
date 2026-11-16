@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
     resumeQuizSession: vi.fn(),
     cancelQuizSession: vi.fn(),
     deleteQuizSession: vi.fn(),
+    finishQuizSession: vi.fn(),
     controlMakeupSession: vi.fn(),
 }))
 
@@ -161,17 +162,19 @@ describe("useLiveQuizSessions", () => {
 })
 
 describe("useLiveQuizSessions actions", () => {
-    it("resumes, deletes, and refuses to finish a class session", async () => {
+    it("resumes, finishes early and deletes a class session", async () => {
         api.resumeQuizSession.mockResolvedValue(classSession("in_progress"))
+        api.finishQuizSession.mockResolvedValue(classSession("finished"))
         api.deleteQuizSession.mockResolvedValue(undefined)
         const live = mount<LiveQuizSessions>(useLiveQuizSessions)
         act(() => live.current.openSession(classSession("paused")))
         await act(() => live.current.runAction("resume"))
         expect(live.current.activeSession?.status).toBe("in_progress")
-        // A class session ends with its timer: there is no finish request.
+        // Finishing ends it before its timer; its dialog shows the outcome.
         await act(() => live.current.runAction("finish"))
-        expect(live.current.activeSessionError).toBeTruthy()
-        expect(live.current.activeSession?.id).toBe(5)
+        expect(api.finishQuizSession).toHaveBeenCalledWith(5)
+        expect(live.current.activeSession?.status).toBe("finished")
+        expect(live.current.sessions).toEqual([])
         await act(() => live.current.runAction("delete"))
         expect(api.deleteQuizSession).toHaveBeenCalledWith(5)
         expect(live.current.activeSession).toBeNull()

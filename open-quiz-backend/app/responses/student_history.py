@@ -16,7 +16,6 @@ from app.models import (
     QuizAnswer,
     QuizParticipant,
     QuizSession,
-    Student,
     StudentClass,
 )
 from app.records.questions import load_question_records
@@ -47,11 +46,6 @@ def student_exam_participations(
     account_id: int, session: Session
 ) -> list[tuple[QuizSession, QuizParticipant]]:
     """A student account's finished exams they took part in, most recent first."""
-    membership_ids = list(
-        session.scalars(select(Student.id).where(Student.account_id == account_id))
-    )
-    if not membership_ids:
-        return []
     rows = [
         (quiz_session, participant)
         for quiz_session, participant in session.execute(
@@ -62,7 +56,9 @@ def student_exam_participations(
             )
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
             .where(
-                QuizParticipant.student_id.in_(membership_ids),
+                # By account: an exam stays in the history of a student who
+                # has since left its class.
+                QuizParticipant.student_account_id == account_id,
                 QuizSession.status == SessionStatus.FINISHED,
                 QuizSession.started_at.is_not(None),
                 Quiz.mode == QuizMode.EXAM,

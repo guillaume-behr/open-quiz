@@ -130,7 +130,8 @@ class QuizAnswerGrade(BaseModel):
 
 
 class QuizAnswerReview(BaseModel):
-    id: int
+    # None for a question the student never answered: nothing to grade.
+    id: int | None
     question_id: int
     position: int
     prompt: str

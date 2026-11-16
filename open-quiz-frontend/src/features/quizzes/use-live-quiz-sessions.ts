@@ -3,6 +3,7 @@ import {
     cancelQuizSession,
     controlMakeupSession,
     deleteQuizSession,
+    finishQuizSession,
     pauseQuizSession,
     resumeQuizSession,
     startQuizSession,
@@ -40,7 +41,7 @@ async function runClassAction(
             await deleteQuizSession(session.id)
             return undefined
         case "finish":
-            throw new Error("A class session finishes when its time is up")
+            return finishQuizSession(session.id)
     }
 }
 

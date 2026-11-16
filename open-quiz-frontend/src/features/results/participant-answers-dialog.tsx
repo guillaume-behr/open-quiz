@@ -67,24 +67,46 @@ export function ParticipantAnswersDialog({
                             {error}
                         </p>
                     )}
-                    {answers.map((answer) => (
-                        <AnswerReview
-                            key={answer.id}
-                            answer={answer}
-                            scoreDraft={scoreDrafts[answer.id] ?? ""}
-                            feedbackDraft={feedbackDrafts[answer.id] ?? ""}
-                            isGrading={gradingAnswerId === answer.id}
-                            isReadOnly={isReadOnly}
-                            locale={locale}
-                            onScoreDraftChange={(score) =>
-                                onScoreDraftChange(answer.id, score)
-                            }
-                            onFeedbackDraftChange={(feedback) =>
-                                onFeedbackDraftChange(answer.id, feedback)
-                            }
-                            onGrade={() => onGrade(answer)}
-                        />
-                    ))}
+                    {answers.map((answer) => {
+                        // A question never answered has no answer to grade.
+                        const answerId = answer.id
+                        return (
+                            <AnswerReview
+                                key={
+                                    answerId ?? `question-${answer.question_id}`
+                                }
+                                answer={answer}
+                                scoreDraft={
+                                    answerId === null
+                                        ? ""
+                                        : (scoreDrafts[answerId] ?? "")
+                                }
+                                feedbackDraft={
+                                    answerId === null
+                                        ? ""
+                                        : (feedbackDrafts[answerId] ?? "")
+                                }
+                                isGrading={
+                                    answerId !== null &&
+                                    gradingAnswerId === answerId
+                                }
+                                isReadOnly={isReadOnly}
+                                locale={locale}
+                                onScoreDraftChange={(score) => {
+                                    if (answerId !== null)
+                                        onScoreDraftChange(answerId, score)
+                                }}
+                                onFeedbackDraftChange={(feedback) => {
+                                    if (answerId !== null)
+                                        onFeedbackDraftChange(
+                                            answerId,
+                                            feedback
+                                        )
+                                }}
+                                onGrade={() => onGrade(answer)}
+                            />
+                        )
+                    })}
                 </div>
             )}
         </Dialog>
@@ -160,7 +182,7 @@ function AnswerReview({
                     />
                 </AnswerText>
             </div>
-            {answer.answer_mode === "written" && (
+            {answer.answer_mode === "written" && answer.id !== null && (
                 <div className="mt-3 space-y-3 border-t pt-3">
                     <label className="block text-sm font-medium">
                         {t("teacher-feedback")}

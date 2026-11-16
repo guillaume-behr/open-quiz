@@ -909,7 +909,8 @@ def test_teacher_views_tolerate_departed_and_legacy_participants(environment) ->
         headers=teacher_headers,
     )
     assert detached.status_code == 200
-    assert len(detached.json()) == 1
+    # The answered question, and the one left unanswered with nothing to grade.
+    assert [answer["id"] is None for answer in detached.json()] == [False, True]
     results = client.get("/api/quizzes/sessions/results", headers=teacher_headers)
     assert results.json()[0]["participants"][0]["id"] == participant_id
 

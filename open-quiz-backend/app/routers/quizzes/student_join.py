@@ -21,6 +21,7 @@ from app.domain.session_status import ACTIVE_SESSION_STATUSES
 from app.enums import QuizMode, SessionStatus
 from app.live.updates import publish_quiz_update
 from app.models import (
+    MakeupSession,
     Quiz,
     QuizAnswer,
     QuizParticipant,
@@ -36,6 +37,7 @@ from app.schemas.student_quizzes import (
     StudentQuizJoinResponse,
     StudentQuizStateResponse,
 )
+from app.services.makeup_sessions import student_makeup_child
 from app.services.participants import (
     SESSION_RESUMED_VIOLATION,
     participant_token_hash,
@@ -49,6 +51,26 @@ from app.services.session_lifecycle import (
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
 
+def makeup_quiz_of(
+    join_code: str, account: StudentAccount, session: Session
+) -> tuple[QuizSession, Quiz] | None:
+    """The quiz a student chose in the make-up of this code, to take it back.
+
+    A make-up student is only ever given the make-up's code: after losing
+    their tab, they join again with it and resume their own quiz session.
+    """
+    makeup = session.scalar(
+        select(MakeupSession).where(MakeupSession.join_code == join_code)
+    )
+    if makeup is None:
+        return None
+    child = student_makeup_child(makeup, account, session)
+    if child is None:
+        return None
+    quiz = session.get(Quiz, child.quiz_id)
+    return (child, quiz) if quiz is not None else None
+
+
 def joinable_session(
     payload: QuizJoin,
     account: StudentAccount,
@@ -60,11 +82,17 @@ def joinable_session(
     Every refusal looks the same and counts against the join limit, so the
     answers never tell an unknown code from a session of another class.
     """
-    row = session.execute(
+    exam = session.execute(
         select(QuizSession, Quiz)
         .join(Quiz, Quiz.id == QuizSession.quiz_id)
         .where(QuizSession.join_code == payload.join_code, Quiz.mode == QuizMode.EXAM)
     ).first()
+    row: tuple[QuizSession, Quiz] | None
+    if exam is not None:
+        exam_session, exam_quiz = exam
+        row = (exam_session, exam_quiz)
+    else:
+        row = makeup_quiz_of(payload.join_code, account, session)
     if row is None:
         reject_quiz_join(request, f"join:unknown:{account.id}")
     quiz_session, quiz = row
@@ -273,6 +301,7 @@ def first_join(
     participant = QuizParticipant(
         session_id=quiz_session.id,
         student_id=student.id,
+        student_account_id=student.account_id,
         student_identifier=student.identifier,
         student_display_name=student.display_name,
         access_token_hash=participant_token_hash(participant_token),

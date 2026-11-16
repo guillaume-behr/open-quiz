@@ -168,6 +168,10 @@ def test_migrations_adopt_a_database_created_before_them(tmp_path: Path) -> None
             connection.exec_driver_sql(
                 "ALTER TABLE quiz_participants DROP COLUMN skipped_question_ids"
             )
+            # Added by 0015.
+            connection.exec_driver_sql(
+                "ALTER TABLE quiz_participants DROP COLUMN student_account_id"
+            )
             connection.exec_driver_sql(
                 "ALTER TABLE quiz_participants DROP COLUMN submitted_at"
             )
@@ -811,5 +815,100 @@ def test_upgrade_to_0014_renames_usernames_differing_by_case(tmp_path: Path) -> 
                         "VALUES ('BOB', 'U', 'x', 0, false, true, now())"
                     )
                 )
+    finally:
+        engine.dispose()
+
+
+def test_upgrade_to_0015_ties_participations_to_their_accounts(
+    tmp_path: Path,
+) -> None:
+    """A participation gets the account of its membership; one without keeps none."""
+    database_url = database_url_for(tmp_path / "upgrade-0015")
+    engine = create_engine(postgres_url(database_url))
+    try:
+        config = migration_config()
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "0014")
+            # Raw SQL: the models already carry the 0015 column.
+            teacher_id = connection.execute(
+                text(
+                    "INSERT INTO users (username, display_name, password_hash, "
+                    "access_token_generation, is_admin, is_active, created_at) "
+                    "VALUES ('teacher', 'T', 'x', 0, false, true, now()) "
+                    "RETURNING id"
+                )
+            ).scalar_one()
+            class_id = connection.execute(
+                text(
+                    "INSERT INTO student_classes (owner_id, name, grade_level, "
+                    "created_at) VALUES (:owner, 'A', '5e', now()) RETURNING id"
+                ),
+                {"owner": teacher_id},
+            ).scalar_one()
+            account_id = connection.execute(
+                text(
+                    "INSERT INTO student_accounts (owner_id, identifier, "
+                    "display_name, password_hash, access_token_generation, "
+                    "is_active, created_at) VALUES (:owner, 'pupil', 'P', 'x', "
+                    "0, true, now()) RETURNING id"
+                ),
+                {"owner": teacher_id},
+            ).scalar_one()
+            student_id = connection.execute(
+                text(
+                    "INSERT INTO students (class_id, account_id, identifier, "
+                    "display_name, created_at) VALUES (:class_id, :account, "
+                    "'pupil', 'P', now()) RETURNING id"
+                ),
+                {"class_id": class_id, "account": account_id},
+            ).scalar_one()
+            quiz_id = connection.execute(
+                text(
+                    "INSERT INTO quizzes (owner_id, mode, title, source_language, "
+                    "question_count, duration_seconds, allow_previous_questions, "
+                    "allow_answer_review, show_provisional_grades, "
+                    "allow_negative_points, same_questions_for_all, "
+                    "easy_question_count, medium_question_count, "
+                    "hard_question_count, created_at) VALUES (:owner, 'exam', "
+                    "'Quiz', 'fr', 1, 900, false, true, true, false, true, 1, "
+                    "0, 0, now()) RETURNING id"
+                ),
+                {"owner": teacher_id},
+            ).scalar_one()
+            session_id = connection.execute(
+                text(
+                    "INSERT INTO quiz_sessions (quiz_id, class_name, join_code, "
+                    "status, created_at, paused_duration_seconds) VALUES "
+                    "(:quiz, 'A', 'OLD015', 'finished', now(), 0) RETURNING id"
+                ),
+                {"quiz": quiz_id},
+            ).scalar_one()
+            for identifier, member in (("pupil", student_id), ("gone", None)):
+                connection.execute(
+                    text(
+                        "INSERT INTO quiz_participants (session_id, student_id, "
+                        "student_identifier, violation_count, joined_at) "
+                        "VALUES (:session_id, :student_id, :identifier, 0, now())"
+                    ),
+                    {
+                        "session_id": session_id,
+                        "student_id": member,
+                        "identifier": identifier,
+                    },
+                )
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        assert_schema_matches_models(database_url)
+
+        with engine.begin() as connection:
+            assert connection.execute(
+                text(
+                    "SELECT student_identifier, student_account_id "
+                    "FROM quiz_participants ORDER BY id"
+                )
+            ).all() == [("pupil", account_id), ("gone", None)]
     finally:
         engine.dispose()

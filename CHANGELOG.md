@@ -22,6 +22,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   managed administrator, or else the oldest account, keeps its name; the
   other is renamed with a suffix (`Alice-2`), shown on the administration
   page: tell that teacher their new username. Other accounts are unchanged.
+- Migration 0015 adds `quiz_participants.student_account_id`, filled from
+  each participation's class membership. It changes no other data. Exams
+  of students who already left their class before the update stay out of
+  their history: their membership, the only link, is gone.
 
 ### Added
 
@@ -41,6 +45,13 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   `POST /api/quizzes/student/sessions/{join_code}/skip` takes the
   `question_id` shown, like an answer. It answers `QUIZ_SKIP_UNAVAILABLE` in
   a training, or when the quiz does not allow going back.
+- A teacher can finish a class exam early, running or paused, as they
+  could a make-up: “Finish quiz” asks for confirmation, then grades the
+  answers given so far as the timer would. Before, a session holding
+  answers could neither be cancelled nor ended, so one student who never
+  handed in kept the whole class's exam open until its time ran out.
+  `POST /api/quizzes/sessions/{session_id}/finish` answers
+  `QUIZ_SESSION_NOT_FINISHABLE` for a session still waiting.
 
 ### Changed
 
@@ -66,6 +77,14 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   an orange card and a “skipped” badge. Answering one takes the orange away.
 - The exam screen no longer shows the class name, and the time left sits in
   the top corner of the question card.
+- The teacher's view of a student's answers lists every question the
+  student was given, those left unanswered included, as the student's own
+  history does. `QuizAnswerReview.id` is `null` for such a question, which
+  has nothing to grade.
+- A question cannot be deleted, nor moved to another difficulty, while an
+  open make-up session may still draw from its bank
+  (`QUESTION_USED_BY_MAKEUP`): a student choosing a quiz afterwards could
+  find it short of questions.
 
 ### Fixed
 
@@ -88,6 +107,17 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   answer on screen as it stands, as a paper is collected as it is. Only an
   answer the server does not already hold is sent, and only while no other
   request is under way.
+  If a request is under way three seconds before the end, it is sent as
+  soon as that request is over, rather than not at all.
+- A make-up student who lost their tab, or changed computer, takes their
+  quiz back by entering the make-up code again, in the make-up or the
+  exam tab. Before, the make-up refused them once started, and choosing
+  again was refused too (`MAKEUP_ALREADY_CHOSEN` now says why).
+- An exam stays in the history of a student removed from its class, or
+  whose class was deleted: the history follows the student account rather
+  than the class membership.
+- Reloading the exam page while the teacher had paused the exam no longer
+  loses the answer typed before: it comes back when the exam resumes.
 - Make-up sessions no longer stay forever. The hourly maintenance settles
   one its teacher never finished after `ABANDONED_SESSION_RETENTION_DAYS`,
   with its students' sessions: those that collected answers or skips are

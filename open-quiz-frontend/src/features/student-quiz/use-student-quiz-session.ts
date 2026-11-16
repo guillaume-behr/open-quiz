@@ -199,10 +199,12 @@ export function useStudentQuizSession(
                 liveRevisionRef.current += 1
                 setError(null)
                 const current = liveSessionRef.current
+                // A pause hides the question but keeps its answer on screen:
+                // only a question other than the one the form holds, or one
+                // shown for the first time since a reload, is loaded anew.
                 if (
                     updated.question &&
-                    updated.question.id !== current?.question?.id &&
-                    current?.status !== "paused"
+                    updated.question.id !== draftedQuestionIdRef.current
                 )
                     applyAnswerState(updated)
                 const next =
