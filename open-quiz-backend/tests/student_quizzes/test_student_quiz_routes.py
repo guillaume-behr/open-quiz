@@ -178,7 +178,7 @@ def test_joining_rejects_unknown_codes_classes_and_draws(environment) -> None:
     )
     assert not_in_class.status_code == 403
 
-    # Joining the class after the draw: the waiting room draws for them.
+    # Joining the class after the draw leaves the newcomer without questions.
     newcomer = client.post(
         "/api/students",
         headers=headers,
@@ -207,8 +207,7 @@ def test_joining_rejects_unknown_codes_classes_and_draws(environment) -> None:
         headers=newcomer_headers,
         json={"join_code": launched["join_code"]},
     )
-    assert late.status_code == 201
-    assert late.json()["total_questions"] == launched["total_questions"]
+    assert late.status_code == 403
 
     with client.app.state.session_factory() as session:
         session.execute(

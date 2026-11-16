@@ -170,11 +170,11 @@ describe("useLiveQuizSessions actions", () => {
         act(() => live.current.openSession(classSession("paused")))
         await act(() => live.current.runAction("resume"))
         expect(live.current.activeSession?.status).toBe("in_progress")
-        // Finishing ends it before its timer, and closes its dialog.
+        // Finishing ends it before its timer; its dialog shows the outcome.
         await act(() => live.current.runAction("finish"))
         expect(api.finishQuizSession).toHaveBeenCalledWith(5)
-        expect(live.current.activeSession).toBeNull()
-        act(() => live.current.openSession(classSession("finished")))
+        expect(live.current.activeSession?.status).toBe("finished")
+        expect(live.current.sessions).toEqual([])
         await act(() => live.current.runAction("delete"))
         expect(api.deleteQuizSession).toHaveBeenCalledWith(5)
         expect(live.current.activeSession).toBeNull()

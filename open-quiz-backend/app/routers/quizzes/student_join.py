@@ -5,7 +5,6 @@ they read the session state and leave. A student who lost their token takes
 their participation back by joining again.
 """
 
-from collections import defaultdict
 from datetime import UTC, datetime
 from secrets import token_urlsafe
 from typing import Annotated
@@ -43,10 +42,6 @@ from app.services.participants import (
     SESSION_RESUMED_VIOLATION,
     participant_token_hash,
     reject_quiz_join,
-)
-from app.services.question_draws import (
-    draw_unique_question_ids,
-    question_draw_pool,
 )
 from app.services.session_lifecycle import (
     finish_when_nobody_can_answer,
@@ -122,9 +117,7 @@ def joinable_session(
             .limit(1)
         )
         if assigned_question_id is None:
-            draw_for_late_student(
-                quiz_session, quiz, student, join_subject, request, session
-            )
+            reject_quiz_join(request, join_subject)
         session.execute(
             update(QuizSessionStudentQuestion)
             .where(
@@ -134,56 +127,6 @@ def joinable_session(
             .values(student_identifier=student.identifier)
         )
     return quiz_session, quiz, student, join_subject
-
-
-def draw_for_late_student(
-    quiz_session: QuizSession,
-    quiz: Quiz,
-    student: Student,
-    join_subject: str,
-    request: Request,
-    session: Session,
-) -> None:
-    """Draw the questions of a student added to the class after the launch.
-
-    A launch draws for the class as it stands, so a student added since has
-    no questions. While the session still waits, they get a draw of their
-    own, distinct from their classmates' while unused combinations remain;
-    once it has started, nobody new may join anyway.
-    """
-    if quiz_session.status != SessionStatus.WAITING:
-        reject_quiz_join(request, join_subject)
-    existing_rows = session.execute(
-        select(
-            QuizSessionStudentQuestion.student_identifier,
-            QuizSessionStudentQuestion.question_id,
-        ).where(QuizSessionStudentQuestion.session_id == quiz_session.id)
-    ).all()
-    questions_by_student: dict[str, list[int]] = defaultdict(list)
-    for identifier, question_id in existing_rows:
-        questions_by_student[identifier].append(question_id)
-    used_draws = {
-        tuple(sorted(question_ids)) for question_ids in questions_by_student.values()
-    }
-    question_ids = draw_unique_question_ids(
-        question_draw_pool(quiz, session), used_draws
-    )
-    session.add_all(
-        QuizSessionStudentQuestion(
-            session_id=quiz_session.id,
-            student_id=student.id,
-            student_identifier=student.identifier,
-            question_id=question_id,
-            position=position,
-        )
-        for position, question_id in enumerate(question_ids)
-    )
-    try:
-        session.flush()
-    except IntegrityError:
-        # The same student joining twice at once: the other request drew.
-        session.rollback()
-        reject_quiz_join(request, join_subject)
 
 
 def rejoin_quiz(

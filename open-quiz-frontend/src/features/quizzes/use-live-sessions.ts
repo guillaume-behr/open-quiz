@@ -143,6 +143,13 @@ export function useLiveSessions<S extends LiveSession>(
                         item.id === updated.id ? updated : item
                     )
                 )
+            } else if (updated && sessionPath) {
+                // Finished early: its dialog stays on the finished state,
+                // as when its timer ends it.
+                setActiveSession(updated)
+                setSessions((current) =>
+                    current.filter((item) => item.id !== updated.id)
+                )
             } else {
                 setSessions((current) =>
                     current.filter((item) => item.id !== session.id)

@@ -109,9 +109,6 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   request is under way.
   If a request is under way three seconds before the end, it is sent as
   soon as that request is over, rather than not at all.
-- A student added to a class after an exam was launched with a draw per
-  student can join its waiting room: they get a draw of their own. Before,
-  they were refused with no explanation.
 - A make-up student who lost their tab, or changed computer, takes their
   quiz back by entering the make-up code again, in the make-up or the
   exam tab. Before, the make-up refused them once started, and choosing

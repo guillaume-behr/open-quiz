@@ -268,7 +268,11 @@ def join_makeup_session(
             MakeupSession.status.in_(ACTIVE_SESSION_STATUSES),
         )
     )
-    if makeup is not None and student_makeup_child(makeup, account, session):
+    chosen = (
+        student_makeup_child(makeup, account, session) if makeup is not None else None
+    )
+    # A quiz already finished has nothing to take back: refused as below.
+    if chosen is not None and chosen.status in ACTIVE_SESSION_STATUSES:
         # The student chose already, then lost the tab: the exam join takes
         # their quiz back with this same code (student_join.joinable_session).
         raise ApiError(
