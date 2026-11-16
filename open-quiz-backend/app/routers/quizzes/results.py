@@ -215,9 +215,8 @@ def list_participant_answers(
     }
     reviews: list[QuizAnswerReview] = []
     for position, question_id in enumerate(question_ids):
-        question = questions_by_id.get(question_id)
-        if question is None:
-            continue
+        # Drawn questions and answers hold a foreign key: the row exists.
+        question = questions_by_id[question_id]
         answer = answers_by_question.get(question_id)
         review_parts = (
             question,

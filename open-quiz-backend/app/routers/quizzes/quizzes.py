@@ -471,24 +471,24 @@ def finish_quiz_session(
     """
     quiz_session, quiz = owned_class_session(session_id, professor.id, session)
     expire_quiz_session(quiz_session, quiz, session)
+    # Every transition updates this row: holding its lock until the commit,
+    # the status read below stays true, and finish_session cannot miss.
+    session.refresh(quiz_session, with_for_update=True)
     if quiz_session.status == SessionStatus.FINISHED:
+        # A second click, or the timer just before: nothing left to do.
         return session_response(quiz_session, quiz, session)
-    if not finish_session(
-        quiz_session,
-        quiz,
-        session,
-        from_statuses=(SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
-    ):
-        # Still waiting, or another request finished it since it was read.
-        session.rollback()
-        session.refresh(quiz_session)
-        if quiz_session.status == SessionStatus.FINISHED:
-            return session_response(quiz_session, quiz, session)
+    if quiz_session.status == SessionStatus.WAITING:
         raise ApiError(
             status.HTTP_409_CONFLICT,
             ErrorCode.QUIZ_SESSION_NOT_FINISHABLE,
             "Seul un quiz en cours ou en pause peut être terminé",
         )
+    finish_session(
+        quiz_session,
+        quiz,
+        session,
+        from_statuses=(SessionStatus.IN_PROGRESS, SessionStatus.PAUSED),
+    )
     session.commit()
     session.refresh(quiz_session)
     publish_quiz_update(request, quiz_session, session)
