@@ -1,3 +1,4 @@
+import { trimTextBlock } from "@/lib/text-block"
 import type { StudentQuizSession } from "@/api/types"
 
 import type { EnteredAnswer } from "./use-deadline-submission"
@@ -51,7 +52,10 @@ export function differsFromServer(
     if (!question) return false
     if (question.answer_mode === "written")
         // The server keeps the answer trimmed.
-        return entered.writtenAnswer.trim() !== (session.written_answer ?? "")
+        return (
+            trimTextBlock(entered.writtenAnswer) !==
+            (session.written_answer ?? "")
+        )
     const selected = new Set(entered.selectedChoiceIds)
     const saved = new Set(session.selected_choice_ids ?? [])
     return (

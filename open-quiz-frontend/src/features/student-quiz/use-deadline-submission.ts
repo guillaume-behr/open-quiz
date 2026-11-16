@@ -1,3 +1,4 @@
+import { trimTextBlock } from "@/lib/text-block"
 import { useEffect, useRef } from "react"
 
 import type { StudentQuizSession } from "@/api/types"
@@ -29,7 +30,7 @@ export function hasUnsentAnswer(
     const question = session.question
     if (!question) return false
     if (question.answer_mode === "written") {
-        const written = entered.writtenAnswer.trim()
+        const written = trimTextBlock(entered.writtenAnswer)
         return written !== "" && written !== (session.written_answer ?? "")
     }
     const selected = new Set(entered.selectedChoiceIds)

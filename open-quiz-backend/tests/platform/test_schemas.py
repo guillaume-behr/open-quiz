@@ -176,3 +176,19 @@ def test_questions_accept_a_python_code_execution_answer() -> None:
     )
     with pytest.raises(ValidationError):
         TrainingQuestionBankSelection.model_validate({"question_bank_ids": [1, 2]})
+
+
+def test_pasted_code_keeps_its_indentation_and_line_breaks() -> None:
+    code = "\r\n    def f():\r\n        return 1\r\n\r\n"
+    question = QuestionCreate.model_validate(
+        written_question(prompt=code, choices=[{"label": code, "is_correct": True}])
+    )
+
+    assert question.prompt == "    def f():\n        return 1"
+    assert question.choices[0].label == "    def f():\n        return 1"
+
+
+def test_text_on_one_line_is_stripped() -> None:
+    question = QuestionCreate.model_validate(valid_question(prompt="\n  Pick one  \n"))
+
+    assert question.prompt == "Pick one"

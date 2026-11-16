@@ -358,7 +358,7 @@ function TrainingCorrection({
             )}
             <div className="mt-4 rounded-lg bg-background/80 p-4">
                 <p className="text-sm font-semibold">{t("correct-answer")}</p>
-                <p className="mt-1" dir={contentDirection}>
+                <p className="mt-1 whitespace-pre-wrap" dir={contentDirection}>
                     {feedback.expected_answer ?? correctLabels.join(", ")}
                 </p>
             </div>

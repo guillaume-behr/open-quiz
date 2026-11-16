@@ -1,3 +1,4 @@
+import { trimTextBlock } from "@/lib/text-block"
 import { ApiError } from "@/api/client"
 import { createQuestion, updateQuestion } from "@/api/question-banks"
 import type {
@@ -187,7 +188,7 @@ export function QuestionForm({
             const { payloads: choicePayload, images: choiceImages } =
                 choicePayloads(choices)
             const payload: NewQuestion = {
-                prompt: prompt.trim(),
+                prompt: trimTextBlock(prompt),
                 difficulty,
                 answer_mode: answerMode,
                 answer_mode_disclosed: answerModeDisclosed,

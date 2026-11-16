@@ -96,7 +96,7 @@ export function QuizPreviewDialog({
                                 {question.choices.map((choice) => (
                                     <li
                                         key={choice.id}
-                                        className="rounded-lg bg-muted/60 px-3 py-2 text-sm"
+                                        className="rounded-lg bg-muted/60 px-3 py-2 text-sm whitespace-pre-wrap"
                                     >
                                         {choice.is_correct ? "✓ " : "○ "}
                                         {choice.label}
