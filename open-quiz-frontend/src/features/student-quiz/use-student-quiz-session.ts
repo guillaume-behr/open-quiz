@@ -37,7 +37,7 @@ import { useDeadlineSubmission } from "./use-deadline-submission"
 type SaveOutcome = "unchanged" | "saved" | "failed"
 
 /** How long after the last change a handed-in answer is saved. */
-export const ANSWER_SAVE_DELAY_MS = 800
+export const ANSWER_SAVE_DELAY_MS = 2_000
 
 /**
  * A student's exam participation: the session restored from this tab, its

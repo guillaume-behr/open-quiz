@@ -58,8 +58,8 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 - In an exam the student may go back in, the server holds what the student
   sees: leaving a question (numbered bar, “Skip the question”, back to the
   summary) first saves the answer on screen, and a change to a question
-  already answered or skipped is saved by itself, without submitting it
-  again. Such a question offers “Next question” instead of “Submit my
+  already answered or skipped is saved by itself two seconds after the
+  student stops changing it, without submitting it again. Such a question offers “Next question” instead of “Submit my
   answer”, except the last one the student can reach (the last one not
   greyed out in the navigation). Coming back from the summary to a
   question, the student goes on through the next ones in order and gets
