@@ -88,6 +88,11 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
 
 ### Fixed
 
+- Code pasted in a question prompt, a choice or a written answer keeps its
+  indentation and line breaks. Text on several lines no longer loses the
+  indentation of its first line when saved, and the student's question, the
+  quiz preview, the training feedback and the printed quiz show choices and
+  expected answers with their line breaks.
 - When two code questions follow each other, the output of a program run on
   the first one no longer shows under the second one.
 - A choice image larger than about 750 KB can be saved again in the question
