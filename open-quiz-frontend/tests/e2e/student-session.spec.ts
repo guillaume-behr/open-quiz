@@ -997,16 +997,21 @@ test("a submitted written answer replaces the draft kept for its question", asyn
         /\/api\/quizzes\/live\/student\/sessions\/ABCD$/,
         (socket) => socket.onMessage(() => {})
     )
+    // The second question is out of reach until the first is submitted.
+    const firstQuestionOnly = {
+        ...writtenExamState(1, null),
+        accessible_question_numbers: [1],
+    }
     await page.route("**/api/quizzes/join", async (route) => {
         await route.fulfill({
             json: {
-                ...writtenExamState(1, null),
+                ...firstQuestionOnly,
                 participant_token: "participant-token",
             },
         })
     })
     await page.route("**/api/quizzes/student/sessions/ABCD", async (route) => {
-        await route.fulfill({ json: writtenExamState(1, null) })
+        await route.fulfill({ json: firstQuestionOnly })
     })
     await page.route(
         "**/api/quizzes/student/sessions/ABCD/answer",

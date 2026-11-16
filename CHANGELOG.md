@@ -49,7 +49,10 @@ any update; since 1.0.0, `update.sh` backs up the database itself (before
   summary) first saves the answer on screen, and a change to a question
   already answered or skipped is saved by itself, without submitting it
   again. Such a question offers “Next question” instead of “Submit my
-  answer”, except the last one. Clearing an answer removes it; the question
+  answer”, except the last one the student can reach (the last one not
+  greyed out in the navigation). Once every question is answered or
+  skipped, submitting or skipping a question leads back to the summary
+  instead of on to the next question, skipped or not. Clearing an answer removes it; the question
   then counts as skipped. Before, an answer entered but not submitted stayed
   in the browser only, and was lost when time ran out while the student was
   on another question.

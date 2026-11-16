@@ -26,15 +26,36 @@ export function isHandedIn(session: StudentQuizSession): boolean {
 }
 
 /**
+ * Whether the student is past the first round: every question is answered
+ * or skipped and the review awaits them. Submitting or skipping a question
+ * then leads back to the review.
+ */
+export function reviewAwaits(session: StudentQuizSession): boolean {
+    return (
+        session.allow_answer_review &&
+        session.total_questions > 0 &&
+        new Set([
+            ...session.answered_question_numbers,
+            ...session.skipped_question_numbers,
+        ]).size >= session.total_questions
+    )
+}
+
+/**
  * Whether the question on screen offers "Next question" rather than
- * submitting: it is handed in already and is not the last one, whose
- * submission still hands the paper in or opens the review.
+ * submitting: a later question is already within reach. The last question
+ * the student can reach (the last one not greyed out in the navigation)
+ * keeps "Submit my answer", which moves them on, to the review, or hands
+ * the paper in; so does every question once the review awaits, since
+ * submitting then leads back to it.
  */
 export function offersNextQuestion(session: StudentQuizSession): boolean {
+    const questionNumber = session.question_number
     return (
         savesAnswerOnScreen(session) &&
-        isHandedIn(session) &&
-        (session.question_number ?? 0) < session.total_questions
+        !reviewAwaits(session) &&
+        questionNumber != null &&
+        questionNumber < Math.max(0, ...session.accessible_question_numbers)
     )
 }
 
