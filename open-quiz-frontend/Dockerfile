@@ -16,7 +16,7 @@ COPY . .
 RUN pnpm build
 
 
-FROM caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1
+FROM caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
 
 RUN setcap -r /usr/bin/caddy \
     && addgroup -S -g 10001 openquiz \
